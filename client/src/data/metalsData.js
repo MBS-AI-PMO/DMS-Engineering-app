@@ -38,6 +38,7 @@ import about316 from '../assets/metals/316-about.png';
 import aboutMetal1 from '../assets/metals/about-metal-1.jpg';
 import aboutMetal2 from '../assets/metals/about-metal-2.jpg';
 import about6061 from '../assets/metals/6061-about-enhanced.png';
+import titaniumAbout from '../assets/metals/titanium-about.png';
 
 // 5052-H32 Aluminum Showcase Images
 import h32_1 from '../assets/metals/5052-h32-1.png';
@@ -4433,8 +4434,7 @@ export const metalsData = [
                 { label: "Elongation at Break", value: "10%" },
                 { label: "Elastic Modulus", value: "29000 ksi" },
                 { label: "Poisson’s Ratio", value: ".29" },
-                { label: "Thermal Conductivity", value: "26 BTU/h-ft °F" },
-                { label: "Melting Point", value: "2600 °F" },
+                { label: "Thermal Conductivity", value: "26 BTU/h-ft F" }, { label: "Melting Point", value: "2600 °F" },
                 { label: "Magnetic", value: "Yes" },
                 { label: "Does it Rust", value: "Yes, prone to rust without coating" }
             ]
@@ -6364,7 +6364,7 @@ export const metalsData = [
             ],
             capabilities: {
                 title: "What can you make with 316 Stainless Steel parts?",
-                text: "Our 316 stainless steel is very similar to 304 in application, but this material differs in one major area: corrosion resistance. By alloying molybdenum into its composition, 316 circumvents 304's common pitfalls when it comes to rusting. Specifically, 316 is adept at resisting corrosion caused by chloride exposure. This means that it's great for holding tanks that could come into contact with corrosive liquids, such as sea water, or chlorine.\n\nSendCutSend's laser cut 316 stainless steel will live up to your highest expectations regarding strength and corrosion resistance. While it's not as easy to machine as 304 stainless steel, it makes up for that in the durability it will bring to your next project. And machining is our wheelhouse, so you just sit back while we laser cut all your 316 stainless steel parts.",
+                text: "Our 316 stainless steel is very similar to 304 in application, but this material differs in one major area: corrosion resistance. By alloying molybdenum into its composition, 316 circumvents 304's common pitfalls when it comes to rusting. Specifically, 316 is adept at resisting corrosion caused by chloride exposure. This means that it's great for holding tanks that could come into contact with corrosive liquids, such as sea water, or chlorine.\n\nDMS Engineering's laser cut 316 stainless steel will live up to your highest expectations regarding strength and corrosion resistance. While it's not as easy to machine as 304 stainless steel, it makes up for that in the durability it will bring to your next project. And machining is our wheelhouse, so you just sit back while we laser cut all your 316 stainless steel parts.",
                 items: [
                     "Appliances",
                     "Screws",
@@ -6393,7 +6393,252 @@ export const metalsData = [
             }
         ]
     },
-    { id: 17, name: "TITANIUM (GRADE 5)", thickness: "Multiple thicknesses available", image: metal17, description: "High strength, low weight, and excellent corrosion resistance. Biomedical and aerospace use.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } },
+    {
+        id: 17,
+        name: "TITANIUM (GRADE 5)",
+        thickness: "5 thicknesses: .040\" - .250\"",
+        image: metal17,
+        description: "High strength, low weight, and excellent corrosion resistance. Biomedical and aerospace use.",
+        services: [9, 7],
+        aboutSection: {
+            title: "What is Grade 5 Titanium?",
+            text: "Our titanium is non-magnetic, non-toxic, and non-allergenic, which has led to its increasing use in the medical field. Despite being as strong as steel, titanium is about 40 percent lighter, which, along with its resistance to erosion, makes it an essential structural metal for aerospace engineers. Titanium is also formidable in its resistance to corrosion by both water and most chemicals. This resistance is achieved by forming a thin layer of titanium dioxide on its surface that is extremely difficult for these materials to penetrate. Ensuring that when you use it in your next project, corrosion will be the last thing on your mind.",
+            image: titaniumAbout,
+            featureChart: [
+                { label: "Strength", rating: 5 },
+                { label: "Corrosion Resistance", rating: 5 },
+                { label: "Weldability", rating: 2 },
+                { label: "Toughness", rating: 4 },
+                { label: "Formability", rating: 2 },
+                { label: "Machinability", rating: 2 },
+                { label: "Heat Treating", rating: 5 },
+                { label: "Strength-to-Weight Ratio", rating: 5 }
+            ],
+            capabilities: {
+                title: "What can you make with Grade 5 Titanium parts?",
+                text: "The strength of titanium is twice that of low-carbon \"mild\" steel, and about 3x the strength of aluminum (assuming similar thicknesses). That's why it's our strongest metal in-house and why our aerospace engineers turn to it for their more advanced projects. Couple that with DMS Engineering's proprietary fabrication methods and you've got one of the strongest metals in the known universe in your corner, for less.",
+                items: [
+                    "Aircraft structure",
+                    "Aerospace components",
+                    "Medical implants",
+                    "Heat exchangers",
+                    "Gears",
+                    "Automotive suspension",
+                    "Fasteners",
+                    "Marine equipment",
+                    "And so much more!"
+                ]
+            }
+        },
+        quickLook: {
+            cutSizes: [
+                { label: "A", size: ".25\" x .375\" min", action: "Instant Pricing", type: "solid" },
+                { label: "B", size: "30\" x 44\" max", action: "Instant Pricing", type: "solid" },
+                { label: "C", size: "30\" x 56\" max", action: "Custom Quote", type: "outline" }
+            ],
+            thicknesses: [
+                { value: ".040\"", metric: "1.02mm" },
+                { value: ".063\"", metric: "1.60mm" },
+                { value: ".125\"", metric: "3.18mm" },
+                { value: ".187\"", metric: "4.75mm" },
+                { value: ".250\"", metric: "6.35mm" }
+            ],
+            tolerance: "+/- .005\""
+        },
+        specifications: {
+            availableServices: ["Deburring", "Tumbling"],
+            generalDetails: [],
+            laserCuttingSpecs: [
+                { label: "Cut Tolerance", value: "+/- .005\"" }
+            ],
+            properties: [
+                { label: "Material Composition", value: "Titanium (Ti): 87.5 – 91% Aluminum (Al): 5.5 – 6.8% Vanadium (V): 3.5 – 4.5% Iron (Fe): 0 – 0.4% Oxygen (O): 0 – 0.25% Carbon (C): 0 – 0.1% Nickel (Ni): 0 – 0.050% Hydrogen (H): 0 – 0.015% Residuals: 0 – 0.4%" },
+                { label: "Density", value: "283.39 lb/ft^3" },
+                { label: "Heat treatments process", value: "N/A" },
+                { label: "ASTM", value: "B265-20 Gr.5" },
+                { label: "Tensile Strength (Ultimate)", value: "134 ksi" },
+                { label: "Tensile Strength (Yield)", value: "128 ksi" },
+                { label: "Shear Strength", value: "79.8 ksi" },
+                { label: "Shear Modulus", value: "6.4 ksi" },
+                { label: "Fatigue Strength", value: "63 ksi" },
+                { label: "Brinell Hardness", value: "334" },
+                { label: "Elongation at Break", value: "14%" },
+                { label: "Elastic Modulus", value: "16500 ksi" },
+                { label: "Poisson’s Ratio", value: ".34" },
+                { label: "Thermal Conductivity", value: "4.65 BTU/h-ft °F" },
+                { label: "Melting Point", value: "3020 °F" },
+                { label: "Magnetic", value: "No" },
+                { label: "Does it Rust", value: "No" }
+            ]
+        },
+        thicknessSpecs: {
+            ".040\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.040\"", mm: "1.02 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Mill Finish", inch: "N/A", mm: "N/A" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Min bridge size", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Min hole to edge distance", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Tab and slot tolerance", inch: ".010\"", mm: "0.254 mm" }
+                ]
+            },
+            ".063\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Deburring"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.063\"", mm: "1.60 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Mill Finish", inch: "N/A", mm: "N/A" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".024\"", mm: "0.610 mm" },
+                    { label: "Min bridge size", inch: ".022\"", mm: "0.559 mm" },
+                    { label: "Min hole to edge distance", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Tab and slot tolerance", inch: ".010\"", mm: "0.254 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 5\"", mm: "25.4 mm x 127 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ]
+            },
+            ".125\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Deburring", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.125\"", mm: "3.175 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.010\"", mm: "0.254 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.010\"", mm: "0.254 mm" },
+                    { label: "Mill Finish", inch: "N/A", mm: "N/A" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".500\" x .500\"", mm: "12.7 mm x 12.7 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".040\"", mm: "1.016 mm" },
+                    { label: "Min bridge size", inch: ".030\"", mm: "0.762 mm" },
+                    { label: "Min hole to edge distance", inch: ".038\"", mm: "0.965 mm" },
+                    { label: "Tab and slot tolerance", inch: ".015\"", mm: "0.381 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".187\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Deburring", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.187\"", mm: "4.75 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.045\"", mm: "1.143 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.010\"", mm: "0.254 mm" },
+                    { label: "Mill Finish", inch: "N/A", mm: "N/A" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".500\" x .750\"", mm: "12.7 mm x 19.05 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".075\"", mm: "1.905 mm" },
+                    { label: "Min bridge size", inch: ".094\"", mm: "2.388 mm" },
+                    { label: "Min hole to edge distance", inch: ".056\"", mm: "1.422 mm" },
+                    { label: "Tab and slot tolerance", inch: ".020\"", mm: "0.508 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 36\"", mm: "914.4 mm x 914.4 mm" }
+                ]
+            },
+            ".250\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Deburring", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.250\"", mm: "6.35 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.045\"", mm: "1.143 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.045\"", mm: "1.143 mm" },
+                    { label: "Mill Finish", inch: "N/A", mm: "N/A" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".500\" x .750\"", mm: "12.7 mm x 19.05 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".100\"", mm: "2.54 mm" },
+                    { label: "Min bridge size", inch: ".125\"", mm: "3.175 mm" },
+                    { label: "Min hole to edge distance", inch: ".075\"", mm: "1.905 mm" },
+                    { label: "Tab and slot tolerance", inch: ".050\"", mm: "1.27 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            }
+        },
+        faqs: [
+            {
+                question: "What thicknesses does DMS Engineering offer Grade 5 Titanium in?",
+                answer: "This material is available in five thickness option: .040\" (1.02mm), .063\" (1.60mm), .125\" (3.18mm), .187\" (4.75mm), and .250\" (6.35mm)."
+            },
+            {
+                question: "What are the minimum and maximum sizes for cutting Grade 5 Titanium?",
+                answer: "DMS Engineering cuts Grade 5 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+            },
+            {
+                question: "What additional services are available for Grade 5 Titanium?",
+                answer: "You can add the following services to your Grade 5 Titanium parts: Deburring and Tumbling"
+            }
+        ]
+    },
     { id: 18, name: "TITANIUM (GRADE 2)", thickness: "Multiple thicknesses available", image: metal18, description: "High corrosion resistance and excellent formability. Common in chemical processing.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } }
 ];
 

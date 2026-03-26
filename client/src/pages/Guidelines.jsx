@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Info, Loader2 } from 'lucide-react';
 import { guidelinesData as staticGuidelines } from '../data/guidelinesData';
 import { fetchGuidelines } from '../utils/api';
+import { normalizeGuideline } from '../utils/guidelineUtils';
 
 const Guidelines = () => {
   const [activeTab, setActiveTab] = useState(null);
@@ -17,17 +18,19 @@ const Guidelines = () => {
         setLoading(true);
         const data = await fetchGuidelines();
         if (data && data.length > 0) {
-          setGuidelines(data);
-          setActiveTab(data[0].service_id);
+          const normalized = data.map(g => normalizeGuideline(g));
+          setGuidelines(normalized);
+          setActiveTab(normalized[0].service_id || normalized[0].id);
         } else {
           // If API returns empty, use static data
-          setGuidelines(staticGuidelines.map(g => ({ ...g, service_id: g.id })));
-          setActiveTab(staticGuidelines[0].id);
+          const mappedStatic = staticGuidelines.map(g => normalizeGuideline({ ...g, service_id: g.id }));
+          setGuidelines(mappedStatic);
+          setActiveTab(mappedStatic[0].service_id || mappedStatic[0].id);
         }
       } catch (err) {
         console.error('Failed to fetch guidelines:', err);
         // Fallback to static data on error
-        const mappedStatic = staticGuidelines.map(g => ({ ...g, service_id: g.id }));
+        const mappedStatic = staticGuidelines.map(g => normalizeGuideline({ ...g, service_id: g.id }));
         setGuidelines(mappedStatic);
         setActiveTab(mappedStatic[0].service_id || mappedStatic[0].id);
         setError('Using offline guidelines data.');
@@ -112,59 +115,19 @@ const Guidelines = () => {
                           <table className="guideline-table">
                             <thead>
                               <tr>
-                                {table.headers ? (
-                                  table.headers.map((header, hIdx) => (
-                                    <th key={hIdx}>{header}</th>
-                                  ))
-                                ) : (
-                                  <>
-                                    <th>Thickness</th>
-                                    <th>Min Flat Part Size</th>
-                                    <th>Max Flat Part Size</th>
-                                  </>
-                                )}
+                                {(table.headers || []).map((header, hIdx) => (
+                                  <th key={hIdx}>{header}</th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {table.rows.map((row, rIdx) => {
-                                // Define the expected order of standard keys
-                                const standardKeys = [
-                                  'thickness', 't',
-                                  'min_flat_part_size', 'minF', 'min',
-                                  'max_flat_part_size', 'maxF', 'max'
-                                ];
-
-                                // Group values: first standard columns, then any extra columns
-                                let values = [];
-
-                                if (table.headers) {
-                                  // If headers are provided, we'll try to match by index if row is array,
-                                  // or just use Object.values if we can't be sure.
-                                  // But if it's an object, we should try to be smart.
-                                  values = Object.values(row);
-                                } else {
-                                  // Standard 3-column fallback: [Thickness, Min, Max]
-                                  const t = row.thickness || row.t || '';
-                                  const min = row.min || row.minF || row.min_flat_part_size || '';
-                                  const max = row.max || row.maxF || row.max_flat_part_size || '';
-                                  values = [t, min, max];
-
-                                  // Add any extra keys that aren't the standard ones
-                                  Object.keys(row).forEach(k => {
-                                    if (!standardKeys.includes(k)) {
-                                      values.push(row[k]);
-                                    }
-                                  });
-                                }
-
-                                return (
-                                  <tr key={rIdx}>
-                                    {values.map((val, vIdx) => (
-                                      <td key={vIdx}>{val}</td>
-                                    ))}
-                                  </tr>
-                                );
-                              })}
+                              {(table.rows || []).map((row, rIdx) => (
+                                <tr key={rIdx}>
+                                  {(table.headers || []).map((header, hIdx) => (
+                                    <td key={hIdx}>{row[header] || '-'}</td>
+                                  ))}
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
