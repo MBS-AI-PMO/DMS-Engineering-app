@@ -112,7 +112,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Radius @ 90°', 'Max Length', 'Flange (Before)', 'Flange (After)'],
         rows: [
           { t: '.030"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.045"', maxL: '44"', fBefore: '.255"', fAfter: '.286"' },
@@ -121,9 +121,24 @@ export const guidelinesData = [
           { t: '.074"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.063"', maxL: '44"', fBefore: '.255"', fAfter: '.320"' },
           { t: '.104"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.063"', maxL: '44"', fBefore: '.368"', fAfter: '.459"' },
           { t: '.119"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.063"', maxL: '44"', fBefore: '.368"', fAfter: '.466"' },
-          { t: '.135"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.100"', maxL: '44"', fBefore: '.620"', fAfter: '.742"' },
+          { t: '.135"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.100"', maxL: '44"', fBefore: '.620"', fAfter: '.742"' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Radius @ 90°', 'Max Length', 'Flange (Before)', 'Flange (After)'],
+        rows: [
           { t: '.187"', minF: '.375" x 1.5"', maxF: '30" x 44"', radius: '.125"', maxL: '22"', fBefore: '.620"', fAfter: '.781"' },
           { t: '.250"', minF: '.375" x 2.5"', maxF: '30" x 44"', radius: '.150"', maxL: '20"', fBefore: '1.150"', fAfter: '1.361"' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Radius @ 90°', 'Max Length', 'Flange (Before)', 'Flange (After)'],
+        rows: [
+          { t: '.313"', minF: 'N/A', maxF: 'N/A', radius: 'N/A', maxL: 'N/A', fBefore: 'N/A', fAfter: 'N/A' },
+          { t: '.375"', minF: 'N/A', maxF: 'N/A', radius: 'N/A', maxL: 'N/A', fBefore: 'N/A', fAfter: 'N/A' },
+          { t: '.500"', minF: 'N/A', maxF: 'N/A', radius: 'N/A', maxL: 'N/A', fBefore: 'N/A', fAfter: 'N/A' }
         ]
       },
       {
@@ -373,7 +388,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Min Dimple', 'Max Dimple'],
         rows: [
           { t: '.030"', minF: '1.2" x 5.2"', maxF: '26" x 56"', minD: '.500"', maxD: '3.000"' },
@@ -382,9 +397,22 @@ export const guidelinesData = [
           { t: '.074"', minF: '1.2" x 5.2"', maxF: '26" x 56"', minD: '1.000"', maxD: '3.000"' },
           { t: '.104"', minF: '1.2" x 5.2"', maxF: '26" x 56"', minD: '1.250"', maxD: '3.000"' },
           { t: '.119"', minF: '1.2" x 5.2"', maxF: '26" x 56"', minD: '1.250"', maxD: '3.000"' },
-          { t: '.135"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' },
+          { t: '.135"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Min Dimple', 'Max Dimple'],
+        rows: [
           { t: '.187"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' },
-          { t: '.250"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' },
+          { t: '.250"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Min Dimple', 'Max Dimple'],
+        rows: [
+          { t: '.313"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' },
           { t: '.375"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' },
           { t: '.500"', minF: 'N/A', maxF: 'N/A', minD: 'N/A', maxD: 'N/A' }
         ]
@@ -482,7 +510,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Max 4-Sided Flange'],
         rows: [
           { t: '.030"', minF: 'N/A', maxF: 'N/A', maxH: 'N/A' },
@@ -491,9 +519,21 @@ export const guidelinesData = [
           { t: '.074"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
           { t: '.104"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
           { t: '.119"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
-          { t: '.135"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
+          { t: '.135"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Max 4-Sided Flange'],
+        rows: [
           { t: '.187"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
-          { t: '.250"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' },
+          { t: '.250"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: '3"' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Max 4-Sided Flange'],
+        rows: [
           { t: '.313"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: 'N/A' },
           { t: '.375"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: 'N/A' },
           { t: '.500"', minF: '1" x 1.5"', maxF: '36" x 46"', maxH: 'N/A' }
@@ -555,11 +595,30 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel (zinc plating or nickel plating)',
+        material: 'Cold Rolled Steel (1008) (zinc/nickel plating)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
+        rows: [
+          { t: '.030"', min: 'N/A', max: 'N/A' },
+          { t: '.048"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.059"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.074"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.104"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.119"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.135"', min: '1" x 3"', max: '23" x 23"' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018) (zinc/nickel plating)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
         rows: [
           { t: '.187"', min: '1" x 3"', max: '23" x 23"' },
-          { t: '.250"', min: '1" x 3"', max: '23" x 23"' },
+          { t: '.250"', min: '1" x 3"', max: '23" x 23"' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36) (zinc/nickel plating)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
+        rows: [
           { t: '.313"', min: '1" x 3"', max: '23" x 23"' },
           { t: '.375"', min: '1" x 3"', max: '23" x 23"' },
           { t: '.500"', min: '1" x 3"', max: '23" x 23"' }
@@ -645,7 +704,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
         rows: [
           { t: '.030"', min: 'N/A', max: 'N/A' },
@@ -654,9 +713,21 @@ export const guidelinesData = [
           { t: '.074"', min: '1" x 3"', max: '30" x 36"' },
           { t: '.104"', min: '1" x 3"', max: '30" x 36"' },
           { t: '.119"', min: '1" x 3"', max: '30" x 36"' },
-          { t: '.135"', min: '1" x 3"', max: '30" x 36"' },
+          { t: '.135"', min: '1" x 3"', max: '30" x 36"' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
+        rows: [
           { t: '.187"', min: '1" x 3"', max: '30" x 36"' },
-          { t: '.250"', min: '1" x 3"', max: '30" x 36"' },
+          { t: '.250"', min: '1" x 3"', max: '30" x 36"' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part'],
+        rows: [
           { t: '.313"', min: '1" x 3"', max: '30" x 36"' },
           { t: '.375"', min: '1" x 3"', max: '30" x 36"' },
           { t: '.500"', min: '1" x 3"', max: '30" x 36"' }
@@ -779,7 +850,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Smallest Inch', 'Smallest Metric', 'Largest Inch', 'Largest Metric'],
         rows: [
           { t: '.030"', min: 'N/A', max: 'N/A', smInch: 'N/A', smMetric: 'N/A', lgInch: 'N/A', lgMetric: 'N/A' },
@@ -788,9 +859,21 @@ export const guidelinesData = [
           { t: '.074"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '10-32', lgMetric: 'M6 x 1.0' },
           { t: '.104"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '1/4-28', lgMetric: 'M6 x 1.0' },
           { t: '.119"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '5/16-24', lgMetric: 'M8 x 1.25' },
-          { t: '.135"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '3/8-24', lgMetric: 'M10 x 1.5' },
+          { t: '.135"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '3/8-24', lgMetric: 'M10 x 1.5' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Smallest Inch', 'Smallest Metric', 'Largest Inch', 'Largest Metric'],
+        rows: [
           { t: '.187"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' },
-          { t: '.250"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' },
+          { t: '.250"', min: '1" x 1.5"', max: '36" x 46"', smInch: '4-40', smMetric: 'M2 x 0.4', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Flat Part', 'Max Flat Part', 'Smallest Inch', 'Smallest Metric', 'Largest Inch', 'Largest Metric'],
+        rows: [
           { t: '.313"', min: '.950" x 1.5"', max: '36" x 46"', smInch: '1/4-20', smMetric: 'M4 x 0.7', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' },
           { t: '.375"', min: '1" x 1.5"', max: '36" x 46"', smInch: '1/4-20', smMetric: 'M6 x 1.0', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' },
           { t: '.500"', min: '1" x 1.5"', max: '36" x 46"', smInch: '1/4-20', smMetric: 'M6 x 1.0', lgInch: '1/2-20', lgMetric: 'M10 x 1.5' }
@@ -920,7 +1003,7 @@ export const guidelinesData = [
         ]
       },
       {
-        material: 'Mild Steel',
+        material: 'Cold Rolled Steel (1008)',
         headers: ['Thickness', 'Min Part Size', 'Max Part Size'],
         rows: [
           { t: '.030"', min: 'N/A', max: 'N/A' },
@@ -929,9 +1012,21 @@ export const guidelinesData = [
           { t: '.074"', min: 'N/A', max: 'N/A' },
           { t: '.104"', min: 'N/A', max: 'N/A' },
           { t: '.119"', min: '0.5" x 1.5"', max: '4" x 7"' },
-          { t: '.135"', min: '0.5" x 1.5"', max: '4" x 7"' },
+          { t: '.135"', min: '0.5" x 1.5"', max: '4" x 7"' }
+        ]
+      },
+      {
+        material: 'HRP&O Steel (A36/A1018)',
+        headers: ['Thickness', 'Min Part Size', 'Max Part Size'],
+        rows: [
           { t: '.187"', min: '0.5" x 1.5"', max: '4" x 7"' },
-          { t: '.250"', min: '0.5" x 1.5"', max: '4" x 7"' },
+          { t: '.250"', min: '0.5" x 1.5"', max: '4" x 7"' }
+        ]
+      },
+      {
+        material: 'Hot Rolled Steel (A36)',
+        headers: ['Thickness', 'Min Part Size', 'Max Part Size'],
+        rows: [
           { t: '.313"', min: '0.5" x 1.5"', max: '4" x 7"' },
           { t: '.375"', min: '0.5" x 1.5"', max: '4" x 7"' },
           { t: '.500"', min: '0.5" x 1.5"', max: '4" x 7"' }
