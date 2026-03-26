@@ -39,6 +39,7 @@ import aboutMetal1 from '../assets/metals/about-metal-1.jpg';
 import aboutMetal2 from '../assets/metals/about-metal-2.jpg';
 import about6061 from '../assets/metals/6061-about-enhanced.png';
 import titaniumAbout from '../assets/metals/titanium-about.png';
+import titaniumGrade2About from '../assets/metals/titanium-grade2-about.png';
 
 // 5052-H32 Aluminum Showcase Images
 import h32_1 from '../assets/metals/5052-h32-1.png';
@@ -6639,6 +6640,150 @@ export const metalsData = [
             }
         ]
     },
-    { id: 18, name: "TITANIUM (GRADE 2)", thickness: "Multiple thicknesses available", image: metal18, description: "High corrosion resistance and excellent formability. Common in chemical processing.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } }
+    {
+        id: 18,
+        name: "TITANIUM (GRADE 2)",
+        thickness: "1 thickness: .040\"",
+        image: metal18,
+        description: "High corrosion resistance and excellent formability. Common in chemical processing.",
+        aboutSection: {
+            title: "What is Grade 2 Titanium?",
+            text: "Our Grade 2 titanium is commercially pure, meaning that it is not an alloy. It's non-magnetic, non-toxic, and non-allergenic, which has led to its increasing use in the medical field. Despite being as strong as steel, titanium is about 40 percent lighter, which, along with its resistance to erosion, makes it an essential structural metal for aerospace engineers. Titanium is also formidable in its resistance to corrosion by both water and most chemicals. This resistance is achieved by forming a thin layer of titanium dioxide on its surface that is extremely difficult for these materials to penetrate. Ensuring that when you use it in your next project, corrosion will be the last thing on your mind.",
+            image: titaniumGrade2About,
+            featureChart: [
+                { label: "Strength", rating: 3 },
+                { label: "Corrosion Resistance", rating: 5 },
+                { label: "Weldability", rating: 4 },
+                { label: "Toughness", rating: 3 },
+                { label: "Formability", rating: 4 },
+                { label: "Machinability", rating: 2 },
+                { label: "Heat Treating", rating: 2 },
+                { label: "Strength-to-Weight Ratio", rating: 4 }
+            ],
+            capabilities: {
+                title: "What can you make with Grade 2 Titanium parts?",
+                text: "Grade 2 titanium is often the superior choice when looking at usages that are more concerned with its corrosion resistance than the strength it offers. Able to be formed and welded with ease, titanium remains a critical part of the aerospace and chemical processing industries. We like to mention that commercially pure titanium grades do not have the same strength as their alloyed cousins. This is, of course, true for most alloys, but don't be fooled, Grade 2 titanium is still very strong. While categorized as only moderate in overall strength for this material, it's important to remember that it's still very much used in high-stress applications and can get your job done. For more strength, look at our Grade 5.",
+                items: [
+                    "Aircraft structure",
+                    "Aerospace engine parts",
+                    "Fuel tanks",
+                    "Ducts",
+                    "Fasteners",
+                    "Gears",
+                    "Springs",
+                    "Most anywhere steel is found",
+                    "And so much more!"
+                ]
+            }
+        },
+        services: [3],
+        quickLook: {
+            cutSizes: [
+                { label: "A", size: ".25\" x .375\" min", action: "Instant Pricing", type: "solid" },
+                { label: "B", size: "30\" x 44\" max", action: "Instant Pricing", type: "solid" },
+                { label: "C", size: "30\" x 56\" max", action: "Custom Quote", type: "outline" }
+            ],
+            thicknesses: [
+                { value: ".040\"", metric: "1.02mm" }
+            ],
+            tolerance: "+/- .005\""
+        },
+        specifications: {
+            availableServices: ["Laser Cutting", "Bending"],
+            generalDetails: [
+                { label: "Material Type", value: "Titanium" },
+                { label: "Grade", value: "2" },
+                { label: "Finish", value: "Vacuum annealed" }
+            ],
+            laserCuttingSpecs: [
+                { label: "Cut Tolerance", value: "+/- .005\"" },
+                { label: "Smallest Hole", value: "Material Thickness" },
+                { label: "Finishing", value: "Deburring included" }
+            ],
+            properties: [
+                { label: "Material Composition", value: "Titanium (Ti): 98.8 – 100 Oxygen (O): 0 – 0.4 Iron (Fe): 0 – 0.2 Carbon (C): 0 – 0.1 Nickel (Ni): 0 – 0.050 Hydrogen (H): 0 – 0.015 Residuals: 0 – 0.4" },
+                { label: "Density", value: "283.39 lb/ft^3" },
+                { label: "Heat treatments process", value: "Vacuum annealed" },
+                { label: "ASTM", value: "B265-20 Gr.2" },
+                { label: "Tensile Strength (Ultimate)", value: "50 ksi" },
+                { label: "Tensile Strength (Yield)", value: "40 ksi" },
+                { label: "Shear Strength", value: "30 ksi" },
+                { label: "Shear Modulus", value: "11.5 ksi" },
+                { label: "Fatigue Strength", value: "20 ksi" },
+                { label: "Brinell Hardness", value: "70" },
+                { label: "Elongation at Break", value: "20%" },
+                { label: "Elastic Modulus", value: "15000 ksi" },
+                { label: "Poisson’s Ratio", value: ".34" },
+                { label: "Thermal Conductivity", value: "10 BTU/h-ft F" },
+                { label: "Melting Point", value: "3020 F" },
+                { label: "Magnetic", value: "No" },
+                { label: "Does it Rust", value: "No" }
+            ]
+        },
+        thicknessSpecs: {
+            ".040\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Bending", "Dimple Forming"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.040\"", mm: "1.02 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.004\"", mm: "0.102 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Mill Finish", inch: "Vacuum annealed", mm: "Vacuum annealed" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per foot" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Min bridge size", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Min hole to edge distance", inch: ".020\"", mm: "0.508 mm" },
+                    { label: "Tab and slot tolerance", inch: ".010\"", mm: "0.254 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "44\"", mm: "1117.6 mm" },
+                    { label: "Min flange length (before bend/Flat Pattern) 90° or less (obtuse)", inch: "0.255\"", mm: "6.477 mm" },
+                    { label: "Min flange length (after bend) 90° or less (obtuse)", inch: "0.295\"", mm: "7.493 mm" },
+                    { label: "Minimum Length Center of bend line 91-130* (Acute)", inch: "0.281\"", mm: "7.137 mm" },
+                    { label: "Die width", inch: "0.472\"", mm: "11.989 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.045\"", mm: "1.143 mm" },
+                    { label: "Max bend angle", inch: "90°", mm: "90°" },
+                    { label: "Bend angle tolerance (bend length up to 24\")", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (bend length over 24\")", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.079\"", mm: "2.007 mm" },
+                    { label: "K Factor", inch: "0.38", mm: "0.38" },
+                    { label: "Bend relief depth", inch: "0.105\"", mm: "2.667 mm" },
+                    { label: "Minimum joggle. Bend line to bend line @90° max flange", inch: "0.299\"", mm: "7.595 mm" },
+                    { label: "Maximum joggle. Bend line to bend line @90° max flange", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                dimpleSpecs: [
+                    { label: "Min dimple part size", inch: "1.200\" x 5.200\"", mm: "30.48 mm x 132.08 mm" },
+                    { label: "Max dimple part size", inch: "26\" x 56\"", mm: "660.4 mm x 1422.4 mm" },
+                    { label: "Smallest dimple", inch: ".500\"", mm: "12.7 mm" },
+                    { label: "Largest dimple", inch: "3.000\"", mm: "76.2 mm" }
+                ]
+            }
+        },
+        faqs: [
+            {
+                question: "What thicknesses does DMS Engineering offer Grade 2 Titanium in?",
+                answer: "This material is available in one thickness option: .040\" (1.02mm)."
+            },
+            {
+                question: "What are the minimum and maximum sizes for cutting Grade 2 Titanium?",
+                answer: "DMS Engineering cuts Grade 2 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+            },
+            {
+                question: "What additional services are available for Grade 2 Titanium?",
+                answer: "You can add the following services to your Grade 2 Titanium parts: Bending"
+            }
+        ]
+    }
 ];
 
