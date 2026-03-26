@@ -1,0 +1,98 @@
+[
+  {
+    "id": 1,
+    "title": "Laser Cutting",
+    "description": "Precision sheet cutting using fiber laser, waterjet, and CNC routing.",
+    "image_path": "/assets/services/service-1.png",
+    "display_order": 1,
+    "created_at": "2026-03-26T04:38:56.833Z"
+  },
+  {
+    "id": 2,
+    "title": "CNC Machining",
+    "description": "Multiaxis CNC machining in billet stock.",
+    "image_path": "/assets/services/service-2.png",
+    "display_order": 2,
+    "created_at": "2026-03-26T04:38:56.854Z"
+  },
+  {
+    "id": 3,
+    "title": "Bending",
+    "description": "Add dimension to your projects with our precision CNC bending services.",
+    "image_path": "/assets/services/service-3.png",
+    "display_order": 3,
+    "created_at": "2026-03-26T04:38:56.856Z"
+  },
+  {
+    "id": 4,
+    "title": "Countersinking",
+    "description": "Allow hardware to sit flush on your parts to reduce wear and tear.",
+    "image_path": "/assets/services/service-4.png",
+    "display_order": 4,
+    "created_at": "2026-03-26T04:38:56.857Z"
+  },
+  {
+    "id": 5,
+    "title": "Dimple Forming",
+    "description": "Strengthen material with aesthetically pleasing dimples.",
+    "image_path": "/assets/services/service-5.png",
+    "display_order": 5,
+    "created_at": "2026-03-26T04:38:56.859Z"
+  },
+  {
+    "id": 6,
+    "title": "Hardware",
+    "description": "Select from our catalog of PEM press-fit hardware to add nuts, studs, and standoffs.",
+    "image_path": "/assets/services/service-6.png",
+    "display_order": 6,
+    "created_at": "2026-03-26T04:38:56.860Z"
+  },
+  {
+    "id": 7,
+    "title": "Tapping",
+    "description": "Easily add threading to allow for the addition of hardware to your parts.",
+    "image_path": "/assets/services/service-7.png",
+    "display_order": 7,
+    "created_at": "2026-03-26T04:38:56.861Z"
+  },
+  {
+    "id": 8,
+    "title": "Anodizing",
+    "description": "Increase durability with Class II anodizing services available in 5 colors.",
+    "image_path": "/assets/services/service-8.png",
+    "display_order": 8,
+    "created_at": "2026-03-26T04:38:56.863Z"
+  },
+  {
+    "id": 9,
+    "title": "Deburring",
+    "description": "Remove small imperfections, scratches, and burr left over from the cutting process.",
+    "image_path": "/assets/services/service-9.png",
+    "display_order": 9,
+    "created_at": "2026-03-26T04:38:56.864Z"
+  },
+  {
+    "id": 10,
+    "title": "Plating",
+    "description": "Increase rust prevention, wear resistance, and strength with zinc and nickel plating.",
+    "image_path": "/assets/services/service-10.png",
+    "display_order": 10,
+    "created_at": "2026-03-26T04:38:56.865Z"
+  },
+  {
+    "id": 11,
+    "title": "Powder Coating",
+    "description": "Give your custom cut parts a bold, long-lasting protective layer in one of 10 options.",
+    "image_path": "/assets/services/service-11.png",
+    "display_order": 11,
+    "created_at": "2026-03-26T04:38:56.866Z"
+  },
+  {
+    "id": 12,
+    "title": "Tumbling",
+    "description": "Reduce the surface blemishes and handling scratches found in raw materials.",
+    "image_path": "/assets/services/service-12.png",
+    "display_order": 12,
+    "created_at": "2026-03-26T04:38:56.867Z"
+  }
+]

@@ -1,0 +1,26 @@
+--- Services Table ---
+id: integer
+title: character varying
+description: text
+image_path: character varying
+display_order: integer
+created_at: timestamp without time zone
+
+--- Metals Table ---
+id: integer
+slug: character varying
+name: character varying
+category_id: integer
+thickness: character varying
+description: text
+image_path: character varying
+quick_look: jsonb
+services: jsonb
+specifications: jsonb
+thickness_specs: jsonb
+about_section: jsonb
+faqs: jsonb
+custom_fields: jsonb
+display_order: integer
+created_at: timestamp without time zone
+updated_at: timestamp without time zone
