@@ -38,6 +38,7 @@ const MetalDetail = () => {
             const lookupSlug = slug || id;
 
             try {
+                /* 
                 // Try API first
                 const data = await fetchMetalBySlug(lookupSlug);
                 // Transform DB format to match component expectations
@@ -63,8 +64,10 @@ const MetalDetail = () => {
                 } catch {
                     setResolvedServices({ metalLevel: [], thicknessLevel: [] });
                 }
+                */
+                throw new Error('API fetching disabled manually');
             } catch (err) {
-                console.warn('API unavailable, falling back to static data:', err.message);
+                console.warn('API disabled, using static data:', err.message);
                 // Fallback: try slug match then numeric ID match
                 let found = metalsData.find(m => {
                     const mSlug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');

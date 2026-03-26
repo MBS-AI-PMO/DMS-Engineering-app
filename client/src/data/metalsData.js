@@ -31,6 +31,7 @@ import aboutG90 from '../assets/metals/g90-about.png';
 import about1095 from '../assets/metals/metal13_about.png';
 import coldRolledParts from '../assets/metals/cold-rolled-parts.png';
 import aboutStainless from '../assets/metals/about-stainless.png';
+import about316 from '../assets/metals/316-about.png';
 
 
 // About images
@@ -5998,7 +5999,400 @@ export const metalsData = [
             }
         ]
     },
-    { id: 16, name: "STAINLESS STEEL (316)", thickness: "Multiple thicknesses available", image: metal16, description: "Superior corrosion resistance, particularly against chlorides and industrial solvents.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } },
+    {
+        id: 16,
+        name: "STAINLESS STEEL (316)",
+        thickness: "4 thicknesses: .060\" - .250\"",
+        image: metal16,
+        description: "Superior corrosion resistance, particularly against chlorides and industrial solvents.",
+        services: [3, 5, 6, 7, 9, 11, 12],
+        quickLook: {
+            cutSizes: [
+                { label: "A", size: ".25\" x .375\" min", action: "Instant Pricing", type: "solid" },
+                { label: "B", size: "30\" x 44\" max", action: "Instant Pricing", type: "solid" },
+                { label: "C", size: "30\" x 56\" max", action: "Custom Quote", type: "outline" }
+            ],
+            thicknesses: [
+                { value: ".060\"", metric: "1.52mm" },
+                { value: ".125\"", metric: "3.18mm" },
+                { value: ".187\"", metric: "4.75mm" },
+                { value: ".250\"", metric: "6.35mm" }
+            ],
+            tolerance: "+/- .005\""
+        },
+        specifications: {
+            availableServices: ["Laser Cutting", "Bending", "Deburring", "Dimple Forming", "Hardware Insertion", "Powder Coating", "Tapping", "Tumbling"],
+            generalDetails: [
+                { label: "Material Type", value: "Stainless Steel" },
+                { label: "Grade", value: "316" },
+                { label: "Finish", value: "2B (Cold Rolled, Annealed, Pickled, and Passivated)" }
+            ],
+            laserCuttingSpecs: [
+                { label: "Cut Tolerance", value: "+/- .005\"" },
+                { label: "Smallest Hole", value: "Material Thickness" },
+                { label: "Finishing", value: "Deburring included" }
+            ],
+            properties: [
+                { label: "Material Composition", value: "Iron (Fe): 65 – 74%, Chromium (Cr): 18 – 20%, Nickel (Ni): 8.0 – 12%, Manganese (Mn): 0 – 2.0%, Silicon (Si): 0 – 0.75%, Nitrogen (N): 0 – 0.1%, Phosphorus (P): 0 – 0.045%, Carbon (C): 0 – 0.030%, Sulfur (S): 0 – 0.030%" },
+                { label: "Density", value: "494.208 lb/ft^3" },
+                { label: "Heat treatments process", value: "N/A" },
+                { label: "ASTM", value: "A240M-20a/A480M-20a" },
+                { label: "Tensile Strength (Ultimate)", value: "75 ksi" },
+                { label: "Tensile Strength (Yield)", value: "30 ksi" },
+                { label: "Shear Strength", value: "30 ksi" },
+                { label: "Shear Modulus", value: "11.5 ksi" },
+                { label: "Fatigue Strength", value: "30 ksi" },
+                { label: "Brinell Hardness", value: "149" },
+                { label: "Elongation at Break", value: "40-50%" },
+                { label: "Elastic Modulus", value: "29000 ksi" },
+                { label: "Poisson's Ratio", value: ".29" },
+                { label: "Thermal Conductivity", value: "8.4 BTU/h-ft °F" },
+                { label: "Melting Point", value: "2550 °F" },
+                { label: "Magnetic", value: "No" },
+                { label: "Does it Rust", value: "No" }
+            ]
+        },
+        thicknessSpecs: {
+            ".060\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Bending", "Deburring", "Dimple Forming", "Hardware", "Powder Coating", "Tapping"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.060\"", mm: "1.524 mm" },
+                    { label: "Gauge", inch: "16", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.006\"", mm: "0.152 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.006\"", mm: "0.152 mm" },
+                    { label: "Mill Finish", inch: "2B", mm: "2B" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".024\"", mm: "0.610 mm" },
+                    { label: "Min bridge size", inch: ".024\"", mm: "0.610 mm" },
+                    { label: "Min hole to edge distance", inch: ".018\"", mm: "0.457 mm" },
+                    { label: "Tab and slot tolerance", inch: ".010\"", mm: "0.254 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "44\"", mm: "1117.6 mm" },
+                    { label: "Min flange length (before bend/Flat Pattern) 90° or less (obtuse)", inch: "0.255\"", mm: "6.477 mm" },
+                    { label: "Min flange length (after bend) 90° or less (obtuse)", inch: "0.314\"", mm: "7.976 mm" },
+                    { label: "Minimum Length Center of bend line 91-130* (Acute)", inch: "0.332\"", mm: "8.433 mm" },
+                    { label: "Die width", inch: "0.472\"", mm: "11.989 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.070\"", mm: "1.778 mm" },
+                    { label: "Max bend angle", inch: "130°", mm: "130°" },
+                    { label: "Bend angle tolerance (bend length up to 24\")", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (bend length over 24\")", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.119\"", mm: "3.023 mm" },
+                    { label: "K Factor", inch: "0.34", mm: "0.34" },
+                    { label: "Bend relief depth", inch: "0.118\"", mm: "2.997 mm" },
+                    { label: "Minimum joggle. Bend line to bend line @90° max flange", inch: "0.321\"", mm: "8.153 mm" },
+                    { label: "Maximum joggle. Bend line to bend line @90° max flange", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                dimpleSpecs: [
+                    { label: "Min dimple part size", inch: "1.450\" x 5.200\"", mm: "36.83 mm x 132.08 mm" },
+                    { label: "Max dimple part size", inch: "26\" x 56\"", mm: "660.4 mm x 1422.4 mm" },
+                    { label: "Smallest dimple", inch: ".750\"", mm: "19.05 mm" },
+                    { label: "Largest dimple", inch: "3.000\"", mm: "76.2 mm" },
+                    { label: "Dimple overall height (.750\" dimple)", inch: ".158\"", mm: "4.013 mm" },
+                    { label: "Dimple overall height (1.000\" dimple)", inch: ".200\"", mm: "5.08 mm" },
+                    { label: "Dimple overall height (1.250\" dimple)", inch: ".212\"", mm: "5.385 mm" },
+                    { label: "Dimple overall height (1.500\" dimple)", inch: ".234\"", mm: "5.944 mm" },
+                    { label: "Dimple overall height (1.750\" dimple)", inch: ".343\"", mm: "8.712 mm" },
+                    { label: "Dimple overall height (2.000\" dimple)", inch: ".285\"", mm: "7.239 mm" },
+                    { label: "Dimple overall height (2.500\" dimple)", inch: ".320\"", mm: "8.128 mm" },
+                    { label: "Dimple overall height (3.000\" dimple)", inch: ".405\"", mm: "10.287 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height (hardware)", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "See Catalog", mm: "See Catalog" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "M6 x 1.0", mm: "M6 x 1.0" },
+                    { label: "Smallest Tap", inch: "M2 x 0.4", mm: "M2 x 0.4" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.018\"", mm: "0.457 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.018\"", mm: "Tap hole size/2 +0.457 mm" }
+                ]
+            },
+            ".125\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Bending", "Deburring", "Dimple Forming", "Hardware", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.125\"", mm: "3.175 mm" },
+                    { label: "Gauge", inch: "11", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.001\"", mm: "0.0254 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.010\"", mm: "0.254 mm" },
+                    { label: "Mill Finish", inch: "2B", mm: "2B" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".050\"", mm: "1.27 mm" },
+                    { label: "Min bridge size", inch: ".050\"", mm: "1.27 mm" },
+                    { label: "Min hole to edge distance", inch: ".038\"", mm: "0.965 mm" },
+                    { label: "Tab and slot tolerance", inch: ".010\"", mm: "0.254 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "40\"", mm: "1016 mm" },
+                    { label: "Min flange length (before bend/Flat Pattern) 90° or less (obtuse)", inch: "0.620\"", mm: "15.748 mm" },
+                    { label: "Min flange length (after bend) 90° or less (obtuse)", inch: "0.740\"", mm: "18.796 mm" },
+                    { label: "Minimum Length Center of bend line 91-130* (Acute)", inch: "0.806\"", mm: "20.472 mm" },
+                    { label: "Die width", inch: "0.984\"", mm: "24.994 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.150\"", mm: "3.81 mm" },
+                    { label: "Max bend angle", inch: "120°", mm: "120°" },
+                    { label: "Bend angle tolerance (bend length up to 24\")", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (bend length over 24\")", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.240\"", mm: "6.096 mm" },
+                    { label: "K Factor", inch: "0.38", mm: "0.38" },
+                    { label: "Bend relief depth", inch: "0.295\"", mm: "7.493 mm" },
+                    { label: "Minimum joggle. Bend line to bend line @90° max flange", inch: "0.758\"", mm: "19.253 mm" },
+                    { label: "Maximum joggle. Bend line to bend line @90° max flange", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                dimpleSpecs: [
+                    { label: "Min dimple part size", inch: "2.450\" x 5.200\"", mm: "62.23 mm x 132.08 mm" },
+                    { label: "Max dimple part size", inch: "26\" x 56\"", mm: "660.4 mm x 1422.4 mm" },
+                    { label: "Smallest dimple", inch: "1.250\"", mm: "31.75 mm" },
+                    { label: "Largest dimple", inch: "3.000\"", mm: "76.2 mm" },
+                    { label: "Dimple overall height (1.250\" dimple)", inch: ".270\"", mm: "6.858 mm" },
+                    { label: "Dimple overall height (1.500\" dimple)", inch: ".285\"", mm: "7.239 mm" },
+                    { label: "Dimple overall height (1.750\" dimple)", inch: ".315\"", mm: "8.001 mm" },
+                    { label: "Dimple overall height (2.000\" dimple)", inch: ".320\"", mm: "8.128 mm" },
+                    { label: "Dimple overall height (2.500\" dimple)", inch: ".380\"", mm: "9.652 mm" },
+                    { label: "Dimple overall height (3.000\" dimple)", inch: ".440\"", mm: "11.176 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height (hardware)", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "See Catalog", mm: "See Catalog" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "M10 x 1.5", mm: "M10 x 1.5" },
+                    { label: "Smallest Tap", inch: "M2 x 0.4", mm: "M2 x 0.4" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.038\"", mm: "0.965 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.038\"", mm: "Tap hole size/2 +0.965 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".187\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Bending", "Deburring", "Hardware", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.187\"", mm: "4.75 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.009\"", mm: "0.2286 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.009\"", mm: "0.2286 mm" },
+                    { label: "Mill Finish", inch: "#1 HRAP", mm: "#1 HRAP" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".075\"", mm: "1.905 mm" },
+                    { label: "Min bridge size", inch: ".055\"", mm: "1.397 mm" },
+                    { label: "Min hole to edge distance", inch: ".055\"", mm: "1.397 mm" },
+                    { label: "Tab and slot tolerance", inch: ".050\"", mm: "1.27 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "36\"", mm: "914.4 mm" },
+                    { label: "Min flange length (before bend/Flat Pattern) 90° or less (obtuse)", inch: "0.620\"", mm: "15.748 mm" },
+                    { label: "Min flange length (after bend) 90° or less (obtuse)", inch: "0.784\"", mm: "19.914 mm" },
+                    { label: "Minimum Length Center of bend line 91-130* (Acute)", inch: "N/A", mm: "N/A" },
+                    { label: "Die width", inch: "0.984\"", mm: "24.994 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.130\"", mm: "3.302 mm" },
+                    { label: "Max bend angle", inch: "90°", mm: "90°" },
+                    { label: "Bend angle tolerance (bend length up to 24\")", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (bend length over 24\")", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.329\"", mm: "8.357 mm" },
+                    { label: "K Factor", inch: "0.35", mm: "0.35" },
+                    { label: "Bend relief depth", inch: "0.337\"", mm: "8.56 mm" },
+                    { label: "Minimum joggle. Bend line to bend line @90° max flange", inch: "0.826\"", mm: "20.98 mm" },
+                    { label: "Maximum joggle. Bend line to bend line @90° max flange", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height (hardware)", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "See Catalog", mm: "See Catalog" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M3 x 0.5", mm: "M3 x 0.5" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.055\"", mm: "1.397 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.055\"", mm: "Tap hole size/2 +1.397 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".250\"": {
+                showcaseImages: [],
+                availableServices: ["Laser Cutting", "Bending", "Deburring", "Hardware", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.250\"", mm: "6.35 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.012\"", mm: "0.3048 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.012\"", mm: "0.3048 mm" },
+                    { label: "Mill Finish", inch: "#1 HRAP", mm: "#1 HRAP" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".25\" x .375\"", mm: "6.35 mm x 9.525 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Min hole size", inch: ".080\"", mm: "2.032 mm" },
+                    { label: "Min bridge size", inch: ".060\"", mm: "1.524 mm" },
+                    { label: "Min hole to edge distance", inch: ".060\"", mm: "1.524 mm" },
+                    { label: "Tab and slot tolerance", inch: ".050\"", mm: "1.27 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "36\"", mm: "914.4 mm" },
+                    { label: "Min flange length (before bend/Flat Pattern) 90° or less (obtuse)", inch: "1.150\"", mm: "29.21 mm" },
+                    { label: "Min flange length (after bend) 90° or less (obtuse)", inch: "1.381\"", mm: "35.077 mm" },
+                    { label: "Minimum Length Center of bend line 91-130* (Acute)", inch: "N/A", mm: "N/A" },
+                    { label: "Die width", inch: "1.575\"", mm: "40.005 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.225\"", mm: "5.715 mm" },
+                    { label: "Max bend angle", inch: "90°", mm: "90°" },
+                    { label: "Bend angle tolerance (bend length up to 24\")", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (bend length over 24\")", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.462\"", mm: "11.735 mm" },
+                    { label: "K Factor", inch: "0.34", mm: "0.34" },
+                    { label: "Bend relief depth", inch: "0.495\"", mm: "12.573 mm" },
+                    { label: "Minimum joggle. Bend line to bend line @90° max flange", inch: "1.425\"", mm: "36.195 mm" },
+                    { label: "Maximum joggle. Bend line to bend line @90° max flange", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                deburringSpecs: [
+                    { label: "Min deburring part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max deburring part size", inch: "24\" x 46\"", mm: "609.6 mm x 1168.4 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height (hardware)", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "See Catalog", mm: "See Catalog" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M4 x 0.7", mm: "M4 x 0.7" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.060\"", mm: "1.524 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.060\"", mm: "Tap hole size/2 +1.524 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            }
+        },
+        aboutSection: {
+            title: "What is 316 Stainless Steel?",
+            text: "With high amounts of nickel and chromium and a lower carbon count than other stainless varieties, 316 is highly corrosion resistant. Able to remain corrosion resistant across many different environments makes this steel an important material in modern industries.",
+            image: about316,
+            featureChart: [
+                { label: "Strength", rating: 3 },
+                { label: "Corrosion Resistance", rating: 5 },
+                { label: "Weldability", rating: 4 },
+                { label: "Toughness", rating: 4 },
+                { label: "Formability", rating: 3 },
+                { label: "Machinability", rating: 2 },
+                { label: "Heat Treating", rating: 1 },
+                { label: "Strength-to-Weight Ratio", rating: 2 }
+            ],
+            capabilities: {
+                title: "What can you make with 316 Stainless Steel parts?",
+                text: "Our 316 stainless steel is very similar to 304 in application, but this material differs in one major area: corrosion resistance. By alloying molybdenum into its composition, 316 circumvents 304's common pitfalls when it comes to rusting. Specifically, 316 is adept at resisting corrosion caused by chloride exposure. This means that it's great for holding tanks that could come into contact with corrosive liquids, such as sea water, or chlorine.\n\nSendCutSend's laser cut 316 stainless steel will live up to your highest expectations regarding strength and corrosion resistance. While it's not as easy to machine as 304 stainless steel, it makes up for that in the durability it will bring to your next project. And machining is our wheelhouse, so you just sit back while we laser cut all your 316 stainless steel parts.",
+                items: [
+                    "Appliances",
+                    "Screws",
+                    "Utensils",
+                    "Kitchen equipment",
+                    "Machinery parts",
+                    "Marine components",
+                    "Food processing equipment",
+                    "Architectural",
+                    "And so much more!"
+                ]
+            }
+        },
+        faqs: [
+            {
+                question: "What thicknesses does DMS Engineering offer 316 Stainless Steel in?",
+                answer: "DMS Engineering offers 316 Stainless Steel in four thickness options: .060\"(1.52), .125\"(3.18mm), .187\"(4.75mm), and .250(6.35mm)."
+            },
+            {
+                question: "What are the minimum and maximum sizes for cutting 316 Stainless Steel?",
+                answer: "With DMS Engineering's 316 Stainless Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". For larger parts, custom quotes are available for sizes up to 30\" x 56\"."
+            },
+            {
+                question: "What additional services are available for 316 Stainless Steel?",
+                answer: "You can add the following services to your 316 Stainless Steel parts: Bending, Deburring, Dimple Forming, Hardware Insertion, Powder Coating, Tapping, and Tumbling"
+            }
+        ]
+    },
     { id: 17, name: "TITANIUM (GRADE 5)", thickness: "Multiple thicknesses available", image: metal17, description: "High strength, low weight, and excellent corrosion resistance. Biomedical and aerospace use.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } },
     { id: 18, name: "TITANIUM (GRADE 2)", thickness: "Multiple thicknesses available", image: metal18, description: "High corrosion resistance and excellent formability. Common in chemical processing.", quickLook: { cutSizes: [], thicknesses: [], tolerance: "" }, specifications: { availableServices: ["Laser Cutting"], generalDetails: [], laserCuttingSpecs: [], properties: [] } }
 ];
