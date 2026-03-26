@@ -252,3 +252,19 @@ export async function fetchSettings() {
 export async function updateSetting(key, value) {
     return request(`/settings/${key}`, { method: 'PUT', body: { value } });
 }
+
+// ── Guidelines ─────────────────────────────────────────
+
+export async function fetchGuidelines() {
+    const { data } = await request('/guidelines');
+    return data;
+}
+
+export async function fetchGuideline(serviceId) {
+    const { data } = await request(`/guidelines/${serviceId}`);
+    return data;
+}
+
+export async function saveGuideline(data) {
+    return request('/guidelines/admin', { method: 'POST', body: data });
+}

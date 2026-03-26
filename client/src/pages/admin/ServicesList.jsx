@@ -1,10 +1,11 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit2, Save, X, Search, Upload } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, Search, Upload, FileText } from 'lucide-react';
 import { fetchServices, createService, updateService, deleteService, fetchServicesWithUsage, uploadServiceImage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
+import GuidelinesEditor from '../../components/admin/GuidelinesEditor';
 
 const empty = { title: '', description: '', image_path: '', display_order: 0 };
 
@@ -18,6 +19,7 @@ export default function ServicesList() {
     const [search, setSearch] = useState('');
     const [zoomedImage, setZoomedImage] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [guidelinesEditing, setGuidelinesEditing] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -150,6 +152,14 @@ export default function ServicesList() {
                                     <td>{svc.display_order}</td>
                                     <td>
                                         <div className="table-actions">
+                                            <button 
+                                                className="admin-icon-btn" 
+                                                title="Configure Guidelines"
+                                                onClick={() => setGuidelinesEditing(svc)}
+                                                style={{ color: '#0ea5e9' }}
+                                            >
+                                                <FileText size={16} />
+                                            </button>
                                             <button className="admin-icon-btn" onClick={() => openEdit(svc)}>
                                                 <Edit2 size={16} />
                                             </button>
@@ -272,6 +282,14 @@ export default function ServicesList() {
                 alt={zoomedImage?.title}
                 onClose={() => setZoomedImage(null)}
             />
+
+            {guidelinesEditing && (
+                <GuidelinesEditor 
+                    service={guidelinesEditing} 
+                    onClose={() => setGuidelinesEditing(null)}
+                    onSave={() => toast('Guidelines updated successfully', 'success')}
+                />
+            )}
         </div>
     );
 }

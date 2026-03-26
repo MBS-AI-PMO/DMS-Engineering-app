@@ -26,6 +26,8 @@ import EmailConfig from './pages/admin/EmailConfig';
 import SubscribersList from './pages/admin/SubscribersList';
 import ContactSettings from './pages/admin/ContactSettings';
 import AdminLayout from './components/admin/AdminLayout';
+import GuidelinesList from './pages/admin/GuidelinesList';
+import GuidelineEdit from './pages/admin/GuidelineEdit';
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -100,6 +102,12 @@ function App() {
             } />
             <Route path="/admin/contact" element={
               <ProtectedRoute><AdminLayout><ContactSettings /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/guidelines" element={
+              <ProtectedRoute><AdminLayout><GuidelinesList /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/guidelines/:serviceId" element={
+              <ProtectedRoute><AdminLayout><GuidelineEdit /></AdminLayout></ProtectedRoute>
             } />
           </Routes>
         </Router>
