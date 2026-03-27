@@ -41,7 +41,7 @@ const upload = multer({
 router.get('/', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT * FROM services ORDER BY display_order, id'
+            'SELECT * FROM services ORDER BY parent_id NULLS FIRST, display_order, id'
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -115,12 +115,24 @@ router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'),
 // POST /api/services/admin
 router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { title, description, image_path, display_order } = req.body;
+        const {
+            title, description, image_path, display_order, is_production, parent_id,
+            min_length, max_length, min_width, max_width, min_height, max_height,
+            dimensions_unit
+        } = req.body;
         if (!title) return res.status(400).json({ success: false, error: 'Title is required' });
 
         const result = await db.query(
-            'INSERT INTO services (title, description, image_path, display_order) VALUES ($1,$2,$3,$4) RETURNING *',
-            [title, description, image_path, display_order || 0]
+            `INSERT INTO services (
+                title, description, image_path, display_order, is_production, parent_id,
+                min_length, max_length, min_width, max_width, min_height, max_height,
+                dimensions_unit
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+            [
+                title, description, image_path, display_order || 0, is_production || false, parent_id || null,
+                min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
+                dimensions_unit || 'in'
+            ]
         );
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (err) {
@@ -132,17 +144,34 @@ router.post('/admin', authenticate, requireAdmin, async (req, res) => {
 // PUT /api/services/admin/:id
 router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { title, description, image_path, display_order } = req.body;
+        const {
+            title, description, image_path, display_order, is_production, parent_id,
+            min_length, max_length, min_width, max_width, min_height, max_height
+        } = req.body;
 
         const result = await db.query(`
             UPDATE services SET
                 title = COALESCE($1, title),
                 description = COALESCE($2, description),
                 image_path = COALESCE($3, image_path),
-                display_order = COALESCE($4, display_order)
-            WHERE id = $5
+                display_order = COALESCE($4, display_order),
+                is_production = COALESCE($5, is_production),
+                parent_id = $6,
+                min_length = COALESCE($7, min_length),
+                max_length = COALESCE($8, max_length),
+                min_width = COALESCE($9, min_width),
+                max_width = COALESCE($10, max_width),
+                min_height = COALESCE($11, min_height),
+                max_height = COALESCE($12, max_height),
+                dimensions_unit = COALESCE($13, dimensions_unit)
+            WHERE id = $14
             RETURNING *
-        `, [title, description, image_path, display_order, req.params.id]);
+        `, [
+            title, description, image_path, display_order, is_production, parent_id || null,
+            min_length, max_length, min_width, max_width, min_height, max_height,
+            dimensions_unit,
+            req.params.id
+        ]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Service not found' });
@@ -151,6 +180,73 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
     } catch (err) {
         console.error('Error updating service:', err);
         res.status(500).json({ success: false, error: 'Failed to update service' });
+    }
+});
+
+// PUT /api/services/admin/:id/metals — Bulk update metal/thickness assignments for this service
+router.put('/admin/:id/metals', authenticate, requireAdmin, async (req, res) => {
+    const serviceId = parseInt(req.params.id);
+    const { assignments } = req.body; // Array of { id, assigned, thicknesses: [value1, ...] }
+
+    if (!assignments || !Array.isArray(assignments)) {
+        return res.status(400).json({ success: false, error: 'Assignments array is required' });
+    }
+
+    try {
+        await db.query('BEGIN');
+        for (const ass of assignments) {
+            // 1. Fetch current metal
+            const metalRes = await db.query('SELECT id, services, quick_look FROM metals WHERE id = $1', [ass.id]);
+            if (metalRes.rows.length === 0) continue;
+
+            let { services, quick_look } = metalRes.rows[0];
+
+            // Normalize services array
+            if (!services) services = [];
+            else if (typeof services === 'string') {
+                try { services = JSON.parse(services); } catch (e) { services = []; }
+            }
+            if (!Array.isArray(services)) services = [];
+
+            // 2. Update metal-level services
+            const numServiceId = parseInt(serviceId);
+            if (ass.assigned) {
+                if (!services.some(id => Number(id) === numServiceId)) {
+                    services.push(numServiceId);
+                }
+            } else {
+                services = services.filter(id => Number(id) !== numServiceId);
+            }
+
+            // 3. Update thickness-level services
+            if (quick_look && Array.isArray(quick_look.thicknesses)) {
+                quick_look.thicknesses = quick_look.thicknesses.map(t => {
+                    let tServices = t.services || [];
+                    if (!Array.isArray(tServices)) tServices = [];
+
+                    if (ass.thicknesses && ass.thicknesses.includes(t.value)) {
+                        if (!tServices.some(id => Number(id) === numServiceId)) {
+                            tServices.push(numServiceId);
+                        }
+                    } else {
+                        tServices = tServices.filter(id => Number(id) !== numServiceId);
+                    }
+                    return { ...t, services: tServices };
+                });
+            }
+
+            // 4. Save back
+            await db.query(
+                'UPDATE metals SET services = $1, quick_look = $2 WHERE id = $3',
+                [JSON.stringify(services), JSON.stringify(quick_look), ass.id]
+            );
+        }
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Metal assignments updated successfully' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('Error updating metal assignments:', err);
+        res.status(500).json({ success: false, error: 'Failed to update metal assignments: ' + err.message });
     }
 });
 

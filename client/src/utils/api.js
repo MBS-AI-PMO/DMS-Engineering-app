@@ -175,6 +175,13 @@ export async function deleteService(id) {
     return request(`/services/admin/${id}`, { method: 'DELETE' });
 }
 
+export async function updateServiceMetals(serviceId, assignments) {
+    return request(`/services/admin/${serviceId}/metals`, {
+        method: 'PUT',
+        body: { assignments }
+    });
+}
+
 export async function uploadServiceImage(file) {
     const formData = new FormData();
     formData.append('image', file);
@@ -295,28 +302,6 @@ export async function saveGuideline(data) {
 
 // ── Configurations ──────────────────────────────────────
 
-export async function fetchCncConfig() {
-    const { data } = await request('/configurations/cnc-machining');
-    return data;
-}
-export async function saveCncConfig(data) {
-    return request('/configurations/cnc-machining', { method: 'PUT', body: data });
-}
-export async function fetchSheetCuttingConfig() {
-    const { data } = await request('/configurations/sheet-cutting');
-    return data;
-}
-export async function saveSheetCuttingConfig(data) {
-    return request('/configurations/sheet-cutting', { method: 'PUT', body: data });
-}
-export async function fetchMetalConfigs() {
-    const { data } = await request('/configurations/metals');
-    return data;
-}
-export async function saveMetalConfig(metalId, data) {
-    const { data: result } = await request(`/configurations/metals/${metalId}`, { method: 'PUT', body: data });
-    return result;
-}
 export async function fetchPricingSheetMetals() {
     const { data } = await request('/configurations/pricing/sheet-cutting-metals');
     return data;

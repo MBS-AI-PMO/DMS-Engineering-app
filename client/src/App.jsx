@@ -24,6 +24,7 @@ import CategoriesList from './pages/admin/CategoriesList';
 import FaqsList from './pages/admin/FaqsList';
 import FaqCategoriesList from './pages/admin/FaqCategoriesList';
 import ServicesList from './pages/admin/ServicesList';
+import ServiceEdit from './pages/admin/ServiceEdit';
 import AdminsList from './pages/admin/AdminsList';
 import EmailConfig from './pages/admin/EmailConfig';
 import SubscribersList from './pages/admin/SubscribersList';
@@ -31,11 +32,9 @@ import ContactSettings from './pages/admin/ContactSettings';
 import AdminLayout from './components/admin/AdminLayout';
 import GuidelinesList from './pages/admin/GuidelinesList';
 import GuidelineEdit from './pages/admin/GuidelineEdit';
+import ServiceMetalsConfig from './pages/admin/ServiceMetalsConfig';
 import Customers from './pages/admin/Customers';
-import ConfigurationsHub from './pages/admin/configurations/ConfigurationsHub';
-import CncMachiningConfig from './pages/admin/configurations/CncMachiningConfig';
-import SheetCuttingConfig from './pages/admin/configurations/SheetCuttingConfig';
-import MetalsConfig from './pages/admin/configurations/MetalsConfig';
+
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -104,6 +103,15 @@ function App() {
             <Route path="/admin/services" element={
               <ProtectedRoute><AdminLayout><ServicesList /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/services/new" element={
+              <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/services/:id" element={
+              <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/services/:id/metals" element={
+              <ProtectedRoute><AdminLayout><ServiceMetalsConfig /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/admins" element={
               <ProtectedRoute><AdminLayout><AdminsList /></AdminLayout></ProtectedRoute>
             } />
@@ -125,18 +133,7 @@ function App() {
             <Route path="/admin/customers" element={
               <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
             } />
-            <Route path="/admin/configurations" element={
-              <ProtectedRoute><AdminLayout><ConfigurationsHub /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/configurations/cnc-machining" element={
-              <ProtectedRoute><AdminLayout><CncMachiningConfig /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/configurations/sheet-cutting" element={
-              <ProtectedRoute><AdminLayout><SheetCuttingConfig /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/configurations/metals" element={
-              <ProtectedRoute><AdminLayout><MetalsConfig /></AdminLayout></ProtectedRoute>
-            } />
+
           </Routes>
         </Router>
       </ToastProvider>
