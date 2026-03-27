@@ -146,7 +146,8 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
     try {
         const {
             title, description, image_path, display_order, is_production, parent_id,
-            min_length, max_length, min_width, max_width, min_height, max_height
+            min_length, max_length, min_width, max_width, min_height, max_height,
+            dimensions_unit
         } = req.body;
 
         const result = await db.query(`

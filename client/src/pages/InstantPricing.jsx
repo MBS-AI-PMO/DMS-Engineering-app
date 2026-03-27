@@ -1,14 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler, Boxes, Wrench, Scissors, ChevronLeft, AlertCircle } from 'lucide-react';
+import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler, Boxes, Wrench, Scissors, ChevronLeft, AlertCircle, Loader2 } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
 import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
-import { fetchPricingSheetMetals, fetchPricingCncMetals, fetchCncPricingConfig, fetchMetalServices } from '../utils/api';
+import { fetchServices, fetchMetals } from '../utils/api';
 
 const BACKEND_URL = 'http://localhost:8000';
 
@@ -41,28 +41,37 @@ const InstantPricing = () => {
   const [showMesh, setShowMesh] = useState(false);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
 
-  // ── Quoting flow state ────────────────────────────────
-  const [selectedService, setSelectedService] = useState(null); // 'cnc_machining' | 'sheet_cutting'
-  const [sheetMetals, setSheetMetals] = useState([]);
+  // Dynamic data from DB
+  const [allServices, setAllServices] = useState([]);
+  const [allMetals, setAllMetals] = useState([]);
+  const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
-  const [selectedThickness, setSelectedThickness] = useState(null);
-  const [metalServices, setMetalServices] = useState(null); // { metalLevel, thicknessLevel }
-  const [cncMetals, setCncMetals] = useState([]);
-  const [cncConfig, setCncConfig] = useState(null);
-  const [loadingMetals, setLoadingMetals] = useState(false);
-  const [loadingServices, setLoadingServices] = useState(false);
-  const modelBaseThicknessRef = useRef(null);
+  const [selectedChildService, setSelectedChildService] = useState(null);
 
+  const modelBaseThicknessRef = useRef(null);
   const stepViewerRef = useRef(null);
   const dxfViewerRef = useRef(null);
   const viewerInstance = useRef(null);
-  const dxfViewerInstance = useRef(null);
   const dimensionsRef = useRef(null);
   const modelRef = useRef(null);
   const gridHelperRef = useRef(null);
   const pendingAxisRef = useRef(null);
 
   const navigate = useNavigate();
+
+  // ── Fetch dynamic services + metals on mount ───────────
+  useEffect(() => {
+    const loadAppData = async () => {
+      try {
+        const [svcs, mtls] = await Promise.all([fetchServices(), fetchMetals()]);
+        setAllServices(svcs || []);
+        setAllMetals(mtls || []);
+      } catch (err) {
+        console.error('Failed to fetch initial data:', err);
+      }
+    };
+    loadAppData();
+  }, []);
 
   // ── Check backend availability on mount ───────────────
   useEffect(() => {
@@ -72,78 +81,82 @@ const InstantPricing = () => {
 
   // ── Reset quoting flow when file changes ──────────────
   useEffect(() => {
-    if (isQuoteFlowActive) {
-      setViewMode('3d');
-    }
-  }, [isQuoteFlowActive]);
-
-  useEffect(() => {
     setIsQuoteFlowActive(false);
-    setSelectedService(null);
+    setSelectedProductionService(null);
     setSelectedMetal(null);
-    setSelectedThickness(null);
-    setMetalServices(null);
+    setSelectedChildService(null);
     modelBaseThicknessRef.current = null;
   }, [selectedFile]);
-
-  // ── Fetch CNC metals + config on mount ───────────────────
-  useEffect(() => {
-    fetchPricingCncMetals()
-      .then(data => setCncMetals(data || []))
-      .catch(() => setCncMetals([]));
-    fetchCncPricingConfig()
-      .then(data => setCncConfig(data || null))
-      .catch(() => setCncConfig(null));
-  }, []);
-
-  // ── Fetch sheet metals when Sheet Cutting selected ────
-  useEffect(() => {
-    if (selectedService !== 'sheet_cutting') return;
-    setLoadingMetals(true);
-    fetchPricingSheetMetals()
-      .then(data => setSheetMetals(data || []))
-      .catch(() => setSheetMetals([]))
-      .finally(() => setLoadingMetals(false));
-  }, [selectedService]);
-
-  // ── Fetch services when thickness selected ────────────
-  useEffect(() => {
-    if (!selectedThickness || !selectedMetal) return;
-    setLoadingServices(true);
-    fetchMetalServices(selectedMetal.slug)
-      .then(data => setMetalServices(data || null))
-      .catch(() => setMetalServices(null))
-      .finally(() => setLoadingServices(false));
-  }, [selectedThickness, selectedMetal]);
-
-  // ── Apply Z-scale to 3D viewer when thickness changes ─
-  useEffect(() => {
-    if (!selectedThickness || !dimensions) return;
-    const baseThickness = parseFloat(dimensions.mm.thickness);
-    if (!baseThickness || baseThickness === 0) return;
-
-    // Store original base on first selection
-    if (!modelBaseThicknessRef.current) {
-      modelBaseThicknessRef.current = baseThickness;
-    }
-
-    const scaleFactor = selectedThickness / modelBaseThicknessRef.current;
-
-    const v = viewerInstance.current?.GetViewer?.();
-    if (v?.scene) {
-      v.scene.traverse((child) => {
-        if (child.isMesh) {
-          child.scale.z = scaleFactor;
-        }
-      });
-      try { v.Render(); } catch { /* silent */ }
-    }
-  }, [selectedThickness, dimensions]);
 
   useEffect(() => {
     document.body.classList.add('light-mode');
     return () => document.body.classList.remove('light-mode');
   }, []);
+
+  // ── Dimension Validation Helper ────────────────────────
+  const validateServiceDimensions = (svc, dims) => {
+    if (!dims) return { valid: true, errorMsg: null };
+
+    // Normalization: Model dims are in MM. Service limits are in svc.dimensions_unit.
+    const unit = svc.dimensions_unit?.toLowerCase() || 'mm';
+    const toSvcUnit = unit === 'mm' ? 1.0 : (1 / 25.4);
+
+    const modelL = (parseFloat(dims.mm.l) || 0) * toSvcUnit;     // Largest Axis in Svc Unit
+    const modelW = (parseFloat(dims.mm.w) || 0) * toSvcUnit;    // Middle Axis in Svc Unit
+    const modelT = (parseFloat(dims.mm.t) || 0) * toSvcUnit;    // Smallest Axis (Thickness) in Svc Unit
+
+    const sMaxL = parseFloat(svc.max_length) || 0;
+    const sMaxW = parseFloat(svc.max_width) || 0;
+    const sMaxH = parseFloat(svc.max_height) || 0;
+
+    const sMinL = parseFloat(svc.min_length) || 0;
+    const sMinW = parseFloat(svc.min_width) || 0;
+    const sMinH = parseFloat(svc.min_height) || 0;
+
+    // Check Thickness (T) against Height (H) capacity rigidly
+    const hTooLarge = sMaxH > 0 && modelT > sMaxH;
+    const hTooSmall = sMinH > 0 && modelT < sMinH;
+    const hValid = !hTooLarge && !hTooSmall;
+
+    // Check Footprint (L/W) allowing for rotation
+    // Part fits if (L <= limit1 && W <= limit2) OR (L <= limit2 && W <= limit1)
+    const fitNormal = (sMaxL === 0 || modelL <= sMaxL) && (sMaxW === 0 || modelW <= sMaxW);
+    const fitRotated = (sMaxL === 0 || modelW <= sMaxL) && (sMaxW === 0 || modelL <= sMaxW);
+    const footprintMaxValid = fitNormal || fitRotated;
+
+    // For Min limits, it's a bit trickier but usually min is small enough that any direction fits.
+    // We'll just check if it meets the minimums in either orientation.
+    const minNormal = (modelL >= sMinL && modelW >= sMinW);
+    const minRotated = (modelW >= sMinL && modelL >= sMinW);
+    const footprintMinValid = (sMinL === 0 && sMinW === 0) || minNormal || minRotated;
+
+    const isCnc = svc.title?.toLowerCase().includes('cnc machining');
+    const isValid = footprintMaxValid && footprintMinValid && (isCnc || hValid);
+
+    let errorMsg = null;
+    if (!isValid) {
+      if (!footprintMaxValid) errorMsg = 'Part Too Large';
+      else if (!footprintMinValid) errorMsg = 'Part Too Small';
+      else if (!isCnc && hTooLarge) errorMsg = 'Too Thick';
+      else if (!isCnc && hTooSmall) errorMsg = 'Too Thin';
+      else errorMsg = 'Size Mismatch';
+    }
+
+    if (!isValid) {
+      console.log(`Validation Failed for "${svc.title}" [ID: ${svc.id}]:`, {
+        reason: errorMsg,
+        svc_unit: unit,
+        model_svc_units: { L: modelL.toFixed(4), W: modelW.toFixed(4), T: modelT.toFixed(4) },
+        svc_limits: {
+          max: { L: sMaxL, W: sMaxW, H: sMaxH },
+          min: { L: sMinL, W: sMinW, H: sMinH }
+        },
+        raw_svc: svc
+      });
+    }
+
+    return { valid: isValid, errorMsg };
+  };
 
   const onDrop = useCallback(acceptedFiles => {
     const newFiles = acceptedFiles.map(file => ({
@@ -187,8 +200,6 @@ const InstantPricing = () => {
   // ─── DXF Effect ───────────────────────────────────────
   useEffect(() => {
     if (!selectedFile || !is2DFile(selectedFile.file.name)) return;
-
-    // Reset DXF state
     setDxfSvg(null);
     setDxfError(null);
     setDimensions(null);
@@ -208,29 +219,23 @@ const InstantPricing = () => {
         const h = parsed?.header ?? {};
         let w = Math.abs((h.$EXTMAX?.x ?? 0) - (h.$EXTMIN?.x ?? 0));
         let ht = Math.abs((h.$EXTMAX?.y ?? 0) - (h.$EXTMIN?.y ?? 0));
-
-        let isInch = true; // Most US drawings without units are Imperial
+        let isInch = true;
         if (h.$INSUNITS === 4 || h.$MEASUREMENT === 1) isInch = false;
-
         if (w === 0 || ht === 0) {
           const match = svgStr.match(/viewBox="[^"]*?\s+[^"]*?\s+([-\d.]+)\s+([-\d.]+)"/);
-          if (match) {
-            w = parseFloat(match[1]);
-            ht = parseFloat(match[2]);
-          }
+          if (match) { w = parseFloat(match[1]); ht = parseFloat(match[2]); }
         }
-
         if (w > 0 || ht > 0) {
-          const w_in = isInch ? w : w / 25.4;
-          const h_in = isInch ? ht : ht / 25.4;
-          const w_mm = isInch ? w * 25.4 : w;
-          const h_mm = isInch ? ht * 25.4 : ht;
+          const w_raw = Math.max(w, ht);
+          const h_raw = Math.min(w, ht);
+          const w_mm = isInch ? w_raw * 25.4 : w_raw;
+          const h_mm = isInch ? h_raw * 25.4 : h_raw;
 
           const dimsObj = {
             is2D: false,
             isNativeInches: isInch,
-            mm: { width: w_mm.toFixed(2), height: h_mm.toFixed(2), thickness: '2.00', volume: '0.00' },
-            inches: { width: w_in.toFixed(3), height: h_in.toFixed(3), thickness: (2 / 25.4).toFixed(3), volume: '0.000' }
+            mm: { l: w_mm.toFixed(2), w: h_mm.toFixed(2), t: '2.00', volume: '0.00' },
+            inches: { l: (w_mm / 25.4).toFixed(3), w: (h_mm / 25.4).toFixed(3), t: (2.00 / 25.4).toFixed(3), volume: '0.000' }
           };
           dimensionsRef.current = dimsObj;
           setDimensions(dimsObj);
@@ -248,16 +253,6 @@ const InstantPricing = () => {
     loadDxf();
   }, [selectedFile]);
 
-  /*
-  // ─── Automated 2D Fetch Effect (for Top/Front/Side/Flat) ──
-  useEffect(() => {
-    // Only auto-fetch if we have a STEP file and no data yet
-    if (selectedFile && isStepFile(selectedFile.file.name) && !backendData && !isLoadingUnfold && !backendError) {
-      handleUnfold();
-    }
-  }, [selectedFile, backendData, isLoadingUnfold, backendError, handleUnfold]);
-  */
-
   // ─── DXF 3D Viewer Effect (Three JS Native) ────────────
   useEffect(() => {
     if (!selectedFile || !is2DFile(selectedFile.file.name)) return;
@@ -274,45 +269,29 @@ const InstantPricing = () => {
         currentRef.innerHTML = '';
         const w = currentRef.clientWidth || 600;
         const h = currentRef.clientHeight || 400;
-
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xfcfcfc);
-
         const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
-
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         renderer.setSize(w, h);
         currentRef.appendChild(renderer.domElement);
-
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableRotate = true;
         controls.enableDamping = true;
-
         const light = new THREE.DirectionalLight(0xffffff, 1.5);
         light.position.set(100, 200, 300);
         scene.add(light);
-
         const backLight = new THREE.DirectionalLight(0xffffff, 1.2);
         backLight.position.set(-100, -200, -300);
         scene.add(backLight);
-
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
         const loader = new SVGLoader();
         const svgData = loader.parse(dxfSvg);
         const group = new THREE.Group();
-
-        const dims = dimensionsRef.current;
-        const isInch = dims?.isNativeInches ?? false;
-        const thicknessNative = isInch ? (2 / 25.4) : 2;
-
+        const thicknessNative = dimensionsRef.current?.isNativeInches ? (2 / 25.4) : 2;
         const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
-        const extrudeMat = new THREE.MeshStandardMaterial({
-          color: 0x9ca3af,
-          roughness: 0.5,
-          metalness: 0.2,
-          side: THREE.DoubleSide
-        });
+        const extrudeMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide });
         const extrudeSettings = { depth: thicknessNative, bevelEnabled: false };
 
         const allShapes = [];
@@ -320,20 +299,14 @@ const InstantPricing = () => {
           try {
             const shapes = SVGLoader.createShapes(path);
             shapes.forEach(sh => allShapes.push(sh));
-          } catch (error) {
-            console.warn('SVG Shape Error:', error);
-          }
-
+          } catch (error) { console.warn('SVG Shape Error:', error); }
           path.subPaths.forEach((sub) => {
             const points = sub.getPoints();
             if (points && points.length > 0) {
-              // Top edges
               const geomTop = new THREE.BufferGeometry().setFromPoints(points);
               const lineTop = new THREE.Line(geomTop, lineMat);
               lineTop.position.z = thicknessNative + 0.01;
               group.add(lineTop);
-
-              // Bottom edges
               const geomBot = new THREE.BufferGeometry().setFromPoints(points);
               const lineBot = new THREE.Line(geomBot, lineMat);
               lineBot.position.z = -0.01;
@@ -342,419 +315,118 @@ const InstantPricing = () => {
           });
         });
 
-        // 1. Map bounding data
         const metaShapes = allShapes.map(shape => {
-          const points = shape.getPoints();
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          points.forEach(p => {
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-            if (p.y < minY) minY = p.y;
-            if (p.y > maxY) maxY = p.y;
+          let mlnX = Infinity, mlnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+          shape.getPoints().forEach(p => {
+            if (p.x < mlnX) mlnX = p.x; if (p.x > mxX) mxX = p.x;
+            if (p.y < mlnY) mlnY = p.y; if (p.y > mxY) mxY = p.y;
           });
-          const area = (maxX - minX) * (maxY - minY);
-          return { shape, points, minX, minY, maxX, maxY, area, parent: null, depth: 0 };
+          return { shape, minX: mlnX, minY: mlnY, maxX: mxX, maxY: mxY, area: (mxX - mlnX) * (mxY - mlnY), parent: null, depth: 0 };
         });
 
-        // 2. Sort from smallest to largest to find immediate parents
         metaShapes.sort((a, b) => a.area - b.area);
-
         for (let i = 0; i < metaShapes.length; i++) {
           const child = metaShapes[i];
           for (let j = i + 1; j < metaShapes.length; j++) {
             const parent = metaShapes[j];
-            if (child.minX >= parent.minX && child.maxX <= parent.maxX &&
-              child.minY >= parent.minY && child.maxY <= parent.maxY) {
-
-              let isInside = true;
-              if (THREE.ShapeUtils?.isPointInPolygon) {
-                isInside = THREE.ShapeUtils.isPointInPolygon(child.points[0], parent.points);
-                if (!isInside && child.points.length > 2) {
-                  isInside = THREE.ShapeUtils.isPointInPolygon(child.points[Math.floor(child.points.length / 2)], parent.points);
-                }
-              }
-              if (isInside) {
-                child.parent = parent;
-                break;
-              }
+            if (child.minX >= parent.minX && child.maxX <= parent.maxX && child.minY >= parent.minY && child.maxY <= parent.maxY) {
+              child.parent = parent; break;
             }
           }
         }
+        metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
+        metaShapes.forEach(m => { if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat)); else m.parent.shape.holes.push(m.shape); });
 
-        // 3. Extrude based on nesting depth (Odd = Hole)
-        const topLevelShapes = [];
-        metaShapes.forEach(m => {
-          let curr = m;
-          while (curr.parent) { m.depth++; curr = curr.parent; }
-        });
-
-        metaShapes.forEach(m => {
-          if (m.depth % 2 === 0) topLevelShapes.push(m.shape);
-          else m.parent.shape.holes.push(m.shape);
-        });
-
-        topLevelShapes.forEach((shape) => {
-          try {
-            const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-            group.add(new THREE.Mesh(geom, extrudeMat));
-          } catch {
-            const geom = new THREE.ShapeGeometry(shape);
-            group.add(new THREE.Mesh(geom, extrudeMat));
-          }
-        });
-
-        let totalAreaNative = 0;
-        topLevelShapes.forEach(shape => {
-          let area = 0;
-          try { area = Math.abs(THREE.ShapeUtils.area(shape.getPoints())); } catch (error) { console.warn("Error calculating shape area:", error); }
-          shape.holes.forEach(h => {
-            try { area -= Math.abs(THREE.ShapeUtils.area(h.getPoints())); } catch { /* Ignore hole area error */ }
-          });
-          totalAreaNative += area;
-        });
-
-        if (dims) {
-          const volNative = totalAreaNative * thicknessNative;
-          const volMm3 = isInch ? volNative * Math.pow(25.4, 3) : volNative;
-          const volIn3 = isInch ? volNative : volNative / Math.pow(25.4, 3);
-          dims.mm.volume = (volMm3 / 1000).toFixed(2);
-          dims.inches.volume = volIn3.toFixed(3);
-          setDimensions({ ...dims });
-        }
-
-        group.scale.y = -1; // SVG coordinates down, ThreeJS up
-
+        group.scale.y = -1;
         const box = new THREE.Box3().setFromObject(group);
-        if (!box.isEmpty()) {
-          const center = box.getCenter(new THREE.Vector3());
-          group.position.sub(center);
-        }
+        if (!box.isEmpty()) group.position.sub(box.getCenter(new THREE.Vector3()));
         scene.add(group);
-
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z, 20);
-        const viewDist = maxDim * 1.5;
-
-        // Initial perspective view - Isometric
-        camera.position.set(viewDist * 0.7, -viewDist * 0.7, viewDist * 0.7);
+        const maxDim = Math.max(box.getSize(new THREE.Vector3()).x, box.getSize(new THREE.Vector3()).y, 20);
+        camera.position.set(maxDim, -maxDim, maxDim);
         camera.up.set(0, 0, 1);
         camera.lookAt(0, 0, 0);
-        controls.target.set(0, 0, 0);
         controls.update();
 
-        dxfViewerInstance.current = { camera, controls, extents: viewDist };
-
-        const animate = () => {
-          reqId = requestAnimationFrame(animate);
-          controls.update();
-          renderer.render(scene, camera);
-        };
+        const animate = () => { reqId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
         animate();
-
-      } catch (err) {
-        console.error('Failed to load DXF in 3D:', err);
-      }
+      } catch (err) { console.error('DXF 3D Error:', err); }
     };
     initViewer();
-
-    return () => {
-      cancelAnimationFrame(reqId);
-      controls?.dispose();
-      renderer?.dispose();
-      if (currentRef) currentRef.innerHTML = '';
-      if (dxfViewerInstance.current?.camera === renderer?.camera) dxfViewerInstance.current = null;
-    };
+    return () => { cancelAnimationFrame(reqId); controls?.dispose(); renderer?.dispose(); if (currentRef) currentRef.innerHTML = ''; };
   }, [selectedFile, viewMode, dxfSvg]);
 
   // ─── STEP 3D Viewer Effect ────────────────────────────
   useEffect(() => {
     if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
     if (!stepViewerRef.current) return;
-
     stepViewerRef.current.innerHTML = '';
-
-    if (viewerInstance.current) {
-      try { viewerInstance.current.Destroy(); } catch (error) { console.warn("Error destroying previous viewer instance:", error); }
-      viewerInstance.current = null;
-    }
-
-    setIsImporting(true);
-    setImportProgress(0);
-
-    const progressTimer = setInterval(() => {
-      setImportProgress(p => {
-        if (p < 50) return p + 3;
-        if (p < 80) return p + 0.8;
-        if (p < 95) return p + 0.2;
-        if (p < 99) return p + 0.05;
-        return p;
-      });
-    }, 100);
-
+    if (viewerInstance.current) { try { viewerInstance.current.Destroy(); } catch (e) { console.error("Error destroying viewer instance:", e); } viewerInstance.current = null; }
+    setIsImporting(true); setImportProgress(0);
+    const progressTimer = setInterval(() => { setImportProgress(p => p < 99 ? p + 0.5 : p); }, 100);
     let checkInterval = null, localViewer = null;
 
     const extractDimensions = (model) => {
       if (dimensionsRef.current || !model) return;
       try {
-        const bb = OV.GetBoundingBox(model);
-        if (!bb?.min || !bb?.max) return;
-        const x = bb.max.x - bb.min.x, y = bb.max.y - bb.min.y, z = bb.max.z - bb.min.z;
-        // Sort so smallest axis = thickness, largest = width, middle = height
-        const sorted = [x, y, z].sort((a, b) => a - b);
-        const thicknessMm = sorted[0], heightMm = sorted[1], widthMm = sorted[2];
-        let vol = 0; try { vol = OV.CalculateVolume(model); } catch (error) { console.warn("Error calculating model volume:", error); }
+        const bb = OV.GetBoundingBox(model); if (!bb?.min) return;
+        const s = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].sort((a, b) => a - b);
+        let vol = 0; try { vol = OV.CalculateVolume(model); } catch (e) { console.warn("Error calculating volume:", e); }
         dimensionsRef.current = {
-          is2D: false,
-          mm: { width: widthMm.toFixed(2), height: heightMm.toFixed(2), thickness: thicknessMm.toFixed(2), volume: (vol / 1000).toFixed(2) },
-          inches: { width: (widthMm / 25.4).toFixed(3), height: (heightMm / 25.4).toFixed(3), thickness: (thicknessMm / 25.4).toFixed(3), volume: (vol / 16387.064).toFixed(3) }
+          mm: { l: s[2].toFixed(2), w: s[1].toFixed(2), t: s[0].toFixed(2), volume: (vol / 1000).toFixed(2) },
+          inches: { l: (s[2] / 25.4).toFixed(3), w: (s[1] / 25.4).toFixed(3), t: (s[0] / 25.4).toFixed(3), volume: (vol / 16387).toFixed(3) }
         };
         setDimensions(dimensionsRef.current);
         if (checkInterval) clearInterval(checkInterval);
-      } catch (error) { console.error("Error extracting dimensions:", error); }
+      } catch (e) { console.error("Error extracting dimensions:", e); }
     };
 
     try {
       const viewer = new OV.EmbeddedViewer(stepViewerRef.current, {
         backgroundColor: new OV.RGBAColor(252, 252, 252, 255),
         edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(0, 0, 0), 1),
-        environmentSettings: new OV.EnvironmentSettings([], true),
         onModelLoaded: () => {
-          clearInterval(progressTimer);
-          setImportProgress(100);
-          setTimeout(() => setIsImporting(false), 800);
-
-          const model = viewer.GetModel();
-          modelRef.current = model;
-          extractDimensions(model);
-
-          // Apply Metallic Material Override with Interaction Stability
-          const v = viewer.GetViewer();
-          if (v && v.scene) {
-            const metalMat = new THREE.MeshStandardMaterial({
-              color: 0x9ca3af,
-              roughness: 0.5,
-              metalness: 0.2,
-              envMap: v.scene.environment || null,
-              side: THREE.DoubleSide
-            });
-
-            const applyMetallicGlobal = () => {
-              v.scene.traverse((child) => {
-                if (child.isMesh) child.material = metalMat;
-              });
-              try { v.Render(); } catch { /* silent fail */ }
-            };
-
-            applyMetallicGlobal();
-
-            // Intercept interaction events to re-apply (since OV resets on mouse events)
-            const container = stepViewerRef.current;
-            if (container) {
-              container.addEventListener('mousedown', applyMetallicGlobal);
-              container.addEventListener('mouseup', applyMetallicGlobal);
-              container.addEventListener('mousemove', (ev) => {
-                if (ev.buttons > 0) applyMetallicGlobal();
-              });
-            }
-
-            // Add extra lights to help with the metallic look
-            const light1 = new THREE.DirectionalLight(0xffffff, 1.8);
-            light1.position.set(1000, 1000, 1000);
-            v.scene.add(light1);
-
-            const light2 = new THREE.DirectionalLight(0xffffff, 1.5);
-            light2.position.set(-1000, -1000, -1000);
-            v.scene.add(light2);
-
-            const amb = new THREE.AmbientLight(0xffffff, 0.9);
-            v.scene.add(amb);
-          }
-
-          if (viewer && typeof viewer.GetViewer === 'function' && viewer.GetViewer()) {
-            viewer.GetViewer().FitToWindow();
-          }
-
-          // Apply any pending axis camera requested while viewer was rebuilding
-          if (pendingAxisRef.current) {
-            const axis = pendingAxisRef.current;
-            pendingAxisRef.current = null;
-            setTimeout(() => setAxisCamera(axis), 100);
-          }
-        },
-        onModelLoadFailed: () => {
-          clearInterval(progressTimer);
-          setIsImporting(false);
-          console.error('Model load failed');
+          clearInterval(progressTimer); setImportProgress(100); setTimeout(() => setIsImporting(false), 800);
+          const m = viewer.GetModel(); modelRef.current = m; extractDimensions(m);
+          if (pendingAxisRef.current) { const a = pendingAxisRef.current; pendingAxisRef.current = null; setTimeout(() => setAxisCamera(a), 100); }
         }
       });
-      localViewer = viewer;
-      viewerInstance.current = viewer;
-      viewer.LoadModelFromFileList([selectedFile.file]);
-      checkInterval = setInterval(() => {
-        if (dimensionsRef.current) { clearInterval(checkInterval); return; }
-        const m = viewer.GetModel(); if (m) extractDimensions(m);
-      }, 2000);
-    } catch (e) {
-      clearInterval(progressTimer);
-      setIsImporting(false);
-      console.error('Viewer init error:', e);
-    }
-
-    return () => {
-      if (checkInterval) clearInterval(checkInterval);
-      gridHelperRef.current = null;
-      try { localViewer?.Destroy(); } catch (error) { console.warn("Error destroying local viewer:", error); }
-      if (viewerInstance.current === localViewer) viewerInstance.current = null;
-    };
-  }, [selectedFile, viewMode, dxfSvg, isQuoteFlowActive]);
+      localViewer = viewer; viewerInstance.current = viewer; viewer.LoadModelFromFileList([selectedFile.file]);
+      checkInterval = setInterval(() => { if (dimensionsRef.current) clearInterval(checkInterval); else { const m = viewer.GetModel(); if (m) extractDimensions(m); } }, 2000);
+    } catch (e) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", e); }
+    return () => { if (checkInterval) clearInterval(checkInterval); try { localViewer?.Destroy(); } catch (e) { console.error("Error destroying local viewer:", e); } };
+  }, [selectedFile, viewMode, isQuoteFlowActive]);
 
   const handleUnfold = useCallback(async () => {
-    if (!selectedFile) return;
-    if (is2DFile(selectedFile.file.name)) {
-      setBackendData(null);
-      setViewMode('2d');
-      setActiveAxis('flat');
-      return;
-    }
-    if (!isStepFile(selectedFile.file.name)) return;
-
-    if (backendData) {
-      setViewMode('2d');
-      return;
-    }
-
-    setIsLoadingUnfold(true);
-    setBackendError(null);
-
-    const formData = new FormData();
-    formData.append('file', selectedFile.file);
-
+    if (!selectedFile || is2DFile(selectedFile.file.name) || !isStepFile(selectedFile.file.name) || backendData) { if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); } return; }
+    setIsLoadingUnfold(true); setBackendError(null);
+    const fd = new FormData(); fd.append('file', selectedFile.file);
     try {
-      const response = await fetch(`${BACKEND_URL}/unfold`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || 'Failed to unfold model');
-      }
-
-      const data = await response.json();
-      if (data.flatVertices && data.flatVertices.length > 0) {
-        setBackendData(data);
-        setViewMode('2d');
-      } else {
-        throw new Error('No flat geometry data returned');
-      }
+      const r = await fetch(`${BACKEND_URL}/unfold`, { method: 'POST', body: fd });
+      if (!r.ok) throw new Error('Unfold failed');
+      const d = await r.json(); if (d.flatVertices?.length) { setBackendData(d); setViewMode('2d'); }
     } catch (err) {
-      console.error('Unfold error:', err);
-      setBackendError(err.message || 'Error connecting to backend for flattening.');
-    } finally {
-      setIsLoadingUnfold(false);
-    }
+      console.warn('Error during unfold stage:', err);
+      setBackendError(err.message);
+    } finally { setIsLoadingUnfold(false); }
   }, [selectedFile, backendData]);
 
   const setAxisCamera = (axis) => {
-    if (viewerInstance.current) {
-      const v = viewerInstance.current.GetViewer();
-      if (!v) return;
-      const c = { top: { eye: [0, 1000, 0], up: [0, 0, -1] }, front: { eye: [0, 0, 1000], up: [0, 1, 0] }, side: { eye: [1000, 0, 0], up: [0, 1, 0] } }[axis];
+    const v = viewerInstance.current?.GetViewer(); if (!v) return;
+    const c = { top: { eye: [0, 1000, 0], up: [0, 0, -1] }, front: { eye: [0, 0, 1000], up: [0, 1, 0] }, side: { eye: [1000, 0, 0], up: [0, 1, 0] } }[axis];
+    if (c) {
       v.SetCamera(new OV.Camera(new OV.Coord3D(...c.eye), new OV.Coord3D(0, 0, 0), new OV.Coord3D(...c.up), 45));
-      v.SetProjectionMode(OV.ProjectionMode.Orthographic);
-      viewerInstance.current.FitToWindow();
-    } else if (dxfViewerInstance.current) {
-      const { camera, controls, extents } = dxfViewerInstance.current;
-      const dist = extents;
-      const c = {
-        top: { pos: [0, 0, dist], up: [0, 1, 0] },
-        front: { pos: [0, -dist, 0], up: [0, 0, 1] },
-        side: { pos: [dist, 0, 0], up: [0, 0, 1] }
-      }[axis];
-      if (c) {
-        camera.position.set(...c.pos);
-        camera.up.set(...c.up);
-        camera.lookAt(0, 0, 0);
-        controls.target.set(0, 0, 0);
-        controls.update();
-      }
+      v.SetProjectionMode(OV.ProjectionMode.Orthographic); v.FitToWindow();
     }
   };
 
-  // ─── Toggle edge mesh (black outlines) on the 3D model ──
-  const toggleEdges = useCallback(() => {
-    setShowEdges(prev => {
-      const next = !prev;
-      const v = viewerInstance.current?.GetViewer?.();
-      if (v?.scene) {
-        v.scene.traverse((child) => {
-          if (child.isLineSegments) {
-            child.visible = next;
-          }
-        });
-        try { v.Render(); } catch { /* silent */ }
-      }
-      return next;
-    });
-  }, []);
+  const toggleEdges = useCallback(() => { setShowEdges(p => { const n = !p; const v = viewerInstance.current?.GetViewer(); if (v?.scene) { v.scene.traverse(c => { if (c.isLineSegments) c.visible = n; }); v.Render(); } return n; }); }, []);
+  const toggleMesh = useCallback(() => { setShowMesh(p => { const n = !p; const v = viewerInstance.current?.GetViewer(); if (v?.scene) { if (n) { if (!gridHelperRef.current) { gridHelperRef.current = new THREE.GridHelper(2000, 30, 0xaaaaaa, 0xcccccc); v.scene.add(gridHelperRef.current); } else gridHelperRef.current.visible = true; } else if (gridHelperRef.current) gridHelperRef.current.visible = false; v.Render(); } return n; }); }, []);
+  const toggleView = (m) => { setViewMode(m); if (m === '2d' && isStepFile(selectedFile?.file?.name)) { setActiveAxis('flat'); handleUnfold(); } };
 
-  const toggleMesh = useCallback(() => {
-    setShowMesh(prev => {
-      const next = !prev;
-      const v = viewerInstance.current?.GetViewer?.();
-      if (v?.scene) {
-        if (next) {
-          if (!gridHelperRef.current) {
-            const dims = dimensionsRef.current;
-            const size = dims
-              ? Math.max(parseFloat(dims.mm.width), parseFloat(dims.mm.height), parseFloat(dims.mm.thickness)) * 4
-              : 2000;
-            const grid = new THREE.GridHelper(Math.max(size, 200), 30, 0xaaaaaa, 0xcccccc);
-            gridHelperRef.current = grid;
-            v.scene.add(grid);
-          } else {
-            gridHelperRef.current.visible = true;
-          }
-        } else {
-          if (gridHelperRef.current) {
-            gridHelperRef.current.visible = false;
-          }
-        }
-        try { v.Render(); } catch { /* silent */ }
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleView = (mode) => {
-    setViewMode(mode);
-    if (!isStepFile(selectedFile?.file?.name ?? '')) return;
-    if (mode === '2d') {
-      setActiveAxis('flat');
-      handleUnfold();
-    }
-    // For '3d': the STEP viewer effect recreates the OV viewer with default perspective
-  };
-
-
-  const axisButtons = [
-    { label: 'TOP', key: 'top' },
-    { label: 'FRONT', key: 'front' },
-    { label: 'SIDE', key: 'side' },
-    { label: 'FLAT', key: 'flat' }
-  ];
+  const axisButtons = [{ label: 'TOP', key: 'top' }, { label: 'FRONT', key: 'front' }, { label: 'SIDE', key: 'side' }, { label: 'FLAT', key: 'flat' }];
   const currentIsDxf = is2DFile(selectedFile?.file?.name ?? '');
   const currentIsStep = isStepFile(selectedFile?.file?.name ?? '');
   const showViewer = currentIsStep || currentIsDxf;
-
-  // CNC size check — true when model dimensions are outside the configured limits
-  const cncOutOfBounds = (() => {
-    if (!dimensions || !cncConfig || !cncMetals.length) return false;
-    const modelDims = [parseFloat(dimensions.mm.width), parseFloat(dimensions.mm.height), parseFloat(dimensions.mm.thickness)].sort((a, b) => b - a);
-    const configMaxs = [parseFloat(cncConfig.max_x), parseFloat(cncConfig.max_y), parseFloat(cncConfig.max_z)].sort((a, b) => b - a);
-    const configMins = [parseFloat(cncConfig.min_x), parseFloat(cncConfig.min_y), parseFloat(cncConfig.min_z)].sort((a, b) => a - b);
-    return modelDims.some((d, i) => d > configMaxs[i] || d < configMins[i]);
-  })();
 
   return (
     <div className="instant-pricing-container">
@@ -780,43 +452,34 @@ const InstantPricing = () => {
       ) : (
         <div className={`viewer-layout ${isQuoteFlowActive ? 'quote-flow-layout' : ''}`}>
 
+          {/* SIDEBAR (Files) */}
           {!isQuoteFlowActive && (
             <div className="sidebar">
               <div className="sidebar-header">
                 <h3>Uploaded Files</h3>
-                <button onClick={() => { setFiles([]); setSelectedFile(null); setDxfSvg(null); setBackendData(null); setBackendError(null); modelRef.current = null; }} className="btn-clear">
-                  Clear all
-                </button>
+                <button onClick={() => { setFiles([]); setSelectedFile(null); setDxfSvg(null); setBackendData(null); setBackendError(null); modelRef.current = null; }} className="btn-clear">Clear all</button>
               </div>
               <div className="file-list">
-                {files.map((f, index) => (
-                  <div key={f.id} className={`file-item ${selectedFile?.id === f.id ? 'selected' : ''}`}
-                    onClick={() => { setSelectedFile(f); setViewMode(is2DFile(f.file.name) ? '2d' : '3d'); setActiveAxis('top'); modelRef.current = null; }}
-                    style={{ '--i': index }}>
+                {files.map((f, i) => (
+                  <div key={f.id} className={`file-item ${selectedFile?.id === f.id ? 'selected' : ''}`} onClick={() => setSelectedFile(f)} style={{ '--i': i }}>
                     <FileCode size={20} />
                     <span className="file-name">{f.file.name}</span>
                     <button onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} className="btn-remove"><X size={16} /></button>
                   </div>
                 ))}
               </div>
-              <div {...getRootProps()} className="add-more">
-                <input {...getInputProps()} /><Upload size={18} /><span>Add more files</span>
-              </div>
+              <div {...getRootProps()} className="add-more"><input {...getInputProps()} /><Upload size={18} /><span>Add more files</span></div>
             </div>
           )}
 
+          {/* QUOTE FLOW (Split View) */}
           {isQuoteFlowActive ? (
             <div className="quote-flow-step-container">
               <div className="qf-top-nav">
-                <button className="qf-nav-btn" onClick={() => { setIsQuoteFlowActive(false); setSelectedService(null); setSelectedMetal(null); setSelectedThickness(null); }} title="Close Quote Flow"><X size={20} /></button>
+                <button className="qf-nav-btn" onClick={() => setIsQuoteFlowActive(false)} title="Close"><X size={20} /></button>
                 <div className="qf-nav-right">
-                  <button className="qf-nav-btn" onClick={() => setAxisCamera('top')} title="Reset View"><Box size={20} /></button>
-                  <button className="qf-nav-btn" onClick={() => {
-                    if (selectedThickness) setSelectedThickness(null);
-                    else if (selectedMetal) setSelectedMetal(null);
-                    else if (selectedService) setSelectedService(null);
-                    else setIsQuoteFlowActive(false);
-                  }} title="Go Back"><ChevronLeft size={24} /></button>
+                  <button className="qf-nav-btn" onClick={() => setAxisCamera('top')} title="Reset"><Box size={20} /></button>
+                  <button className="qf-nav-btn" onClick={() => { if (selectedChildService) setSelectedChildService(null); else if (selectedMetal) setSelectedMetal(null); else if (selectedProductionService) setSelectedProductionService(null); else setIsQuoteFlowActive(false); }} title="Back"><ChevronLeft size={24} /></button>
                 </div>
               </div>
 
@@ -824,48 +487,23 @@ const InstantPricing = () => {
                 <div className="qf-left-side">
                   <div className="qf-model-box">
                     <div className="qf-viewer-wrapper">
-                      {viewMode === '3d' && isStepFile(selectedFile.file.name) && (
-                        <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />
-                      )}
-                      {viewMode === '2d' && isStepFile(selectedFile.file.name) && (
-                        backendData ? (
-                          <FlatPatternViewer
-                            geometries={[]}
-                            options={{}}
-                            backendData={backendData}
-                            sourceFlatData={null}
-                            formatKind="drawing"
-                          />
-                        ) : (
-                          <div className="qf-loading-viewer">Preparing flat model...</div>
-                        )
-                      )}
-                      {is2DFile(selectedFile.file.name) && (
-                        <div className="dxf-svg-wrapper">
-                          {dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}
-                        </div>
-                      )}
+                      {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
+                      {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{}} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div className="qf-loading-viewer"><div className="flat-loading-spinner" />Preparing flat model...</div>)}
+                      {currentIsDxf && <div className="dxf-svg-wrapper">{dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
                     </div>
                     <div className="qf-view-toggles-simple">
                       <button className={viewMode === '3d' ? 'active' : ''} onClick={() => setViewMode('3d')}>3D</button>
                       <button className={viewMode === '2d' ? 'active' : ''} onClick={() => { setViewMode('2d'); handleUnfold(); }}>2D (Flat)</button>
                     </div>
                   </div>
-
-                  <div className="qf-controls-simple">
-                    <div className="qf-unit-switch-simple">
-                      <button className={unit === 'mm' ? 'active' : ''} onClick={() => setUnit('mm')}>MM</button>
-                      <button className={unit === 'inch' ? 'active' : ''} onClick={() => setUnit('inch')}>INCH</button>
-                    </div>
-                  </div>
-
                   {dimensions && (
                     <div className="qf-dimensions-simple">
                       <h4>{unit === 'mm' ? 'Metric (mm)' : 'Imperial (inches)'}</h4>
                       <div className="qf-dim-grid">
-                        <div className="dim-row"><span>Width:</span> <strong>{unit === 'mm' ? dimensions.mm.width : dimensions.inches.width} {unit}</strong></div>
-                        <div className="dim-row"><span>Height:</span> <strong>{unit === 'mm' ? dimensions.mm.height : dimensions.inches.height} {unit}</strong></div>
-                        <div className="dim-row"><span>Thickness:</span> <strong>{unit === 'mm' ? (selectedThickness || dimensions.mm.thickness) : (selectedThickness ? (selectedThickness / 25.4).toFixed(3) : dimensions.inches.thickness)} {unit}</strong></div>
+                        <div className="dim-row"><span>Length (L):</span> <strong>{unit === 'mm' ? dimensions.mm.l : dimensions.inches.l} {unit}</strong></div>
+                        <div className="dim-row"><span>Width (W):</span> <strong>{unit === 'mm' ? dimensions.mm.w : dimensions.inches.w} {unit}</strong></div>
+                        <div className="dim-row"><span>Thickness (T):</span> <strong>{unit === 'mm' ? dimensions.mm.t : dimensions.inches.t} {unit}</strong></div>
+                        <div className="dim-row"><span>Volume:</span> <strong>{unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume} {unit}³</strong></div>
                       </div>
                     </div>
                   )}
@@ -873,133 +511,55 @@ const InstantPricing = () => {
 
                 <div className="qf-right-side">
                   <div className="qf-selection-panel">
-                    {!selectedService && (
-                      <>
-                        <h2>Select production method:</h2>
-                        <p>Please tell us which service you were intending to use with your file.</p>
+                    {!selectedProductionService && (
+                      <div className="qf-step-fade-in">
+                        <h2 className="qf-panel-title">Select production method:</h2>
                         <div className="qf-large-buttons">
-                          <button
-                            className={`qf-large-service-card${cncOutOfBounds ? ' disabled' : ''}`}
-                            onClick={() => !cncOutOfBounds && setSelectedService('cnc_machining')}
-                            disabled={cncOutOfBounds}
-                          >
-                            <div className="qf-card-main">
-                              <strong>CNC Machining</strong>
-                              <span>Precision milled parts</span>
-                            </div>
-                            {cncOutOfBounds ? (
-                              <div className="qf-card-status error">
-                                <span>Exceeds Size Limits</span> <AlertCircle size={16} />
-                              </div>
-                            ) : cncMetals.length > 0 ? (
-                              <div className="qf-card-status price">
-                                <span>Select Material</span> <ArrowRight size={16} />
-                              </div>
-                            ) : (
-                              <div className="qf-card-status error">
-                                <span>Coming Soon</span> <AlertCircle size={16} />
-                              </div>
-                            )}
-                          </button>
-                          <button className="qf-large-service-card" onClick={() => setSelectedService('sheet_cutting')}>
-                            <div className="qf-card-main">
-                              <strong>Sheet Cutting</strong>
-                              <span>Laser / plasma cut sheets</span>
-                            </div>
-                            <div className="qf-card-status price">
-                              <span>Select Material</span> <ArrowRight size={16} />
-                            </div>
-                          </button>
+                          {allServices.filter(s => s.is_production).map(svc => {
+                            const { valid, errorMsg } = validateServiceDimensions(svc, dimensions);
+                            return (
+                              <button key={svc.id} className={`qf-large-service-card ${!valid ? 'disabled' : ''}`} onClick={() => valid && setSelectedProductionService(svc)} disabled={!valid}>
+                                <div className="qf-card-image"><img src={svc.image_path ? `${BACKEND_URL}${svc.image_path}` : '/placeholder-service.png'} alt={svc.title} /></div>
+                                <div className="qf-card-content">
+                                  <div className="qf-card-top">
+                                    <h3>{svc.title}</h3>
+                                    {!valid ? <div className="qf-card-status error">{errorMsg} <AlertCircle size={14} /></div> : <div className="qf-card-status price">Select Material <ArrowRight size={14} /></div>}
+                                  </div>
+                                  <p>{svc.description}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      </>
-                    )}
-
-                    {selectedService === 'cnc_machining' && (
-                      <div className="qf-step-content">
-                        <h2>CNC Machining</h2>
-                        {cncMetals.length > 0 ? (
-                          <>
-                            <p style={{ color: '#6b7280', marginBottom: '16px' }}>Select material</p>
-                            <div className="qf-metal-grid">
-                              {cncMetals.map(metal => (
-                                <button key={metal.id} className="qf-metal-card" onClick={() => navigate('/quote')}>
-                                  {metal.image_path && <img src={metal.image_path} alt={metal.name} className="qf-metal-img" />}
-                                  <span className="qf-metal-name">{metal.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="qf-coming-soon">
-                              <AlertCircle size={32} />
-                              <p>CNC Machining pricing coming soon. You can still request a manual quote.</p>
-                            </div>
-                            <button className="btn-get-quote" style={{ marginTop: '30px', width: '100%' }} onClick={() => navigate('/quote')}>
-                              REQUEST MANUAL QUOTE <ArrowRight size={18} />
-                            </button>
-                          </>
-                        )}
                       </div>
                     )}
-
-                    {selectedService === 'sheet_cutting' && (
-                      <div className="qf-step-content">
-                        {!selectedMetal && (
-                          <>
-                            <h2>Select Material</h2>
-                            <p>Choose the material for your sheet cutting project.</p>
-                            {loadingMetals ? (
-                              <div className="qf-loading"><div className="qf-spinner" /></div>
-                            ) : (
-                              <div className="qf-metal-grid">
-                                {sheetMetals.map(metal => (
-                                  <button key={metal.id} className="qf-metal-card" onClick={() => setSelectedMetal(metal)}>
-                                    {metal.image_path && <img src={metal.image_path} alt={metal.name} className="qf-metal-img" />}
-                                    <span className="qf-metal-name">{metal.name}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {selectedMetal && !selectedThickness && (
-                          <>
-                            <h2>{selectedMetal.name}</h2>
-                            <p>Select the desired thickness for your parts.</p>
-                            <div className="qf-thickness-chips">
-                              {selectedMetal.available_thicknesses?.map(t => (
-                                <button key={t} className="qf-thickness-chip" onClick={() => setSelectedThickness(t)}>{t} mm</button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-
-                        {selectedMetal && selectedThickness && (
-                          <>
-                            <h2>Summary & Services</h2>
-                            <div className="qf-selected-summary">
-                              <div className="qf-summary-pill material">{selectedMetal.name}</div>
-                              <div className="qf-summary-pill thickness">{selectedThickness} mm</div>
-                            </div>
-                            {loadingServices ? (
-                              <div className="qf-loading">Loading services...</div>
-                            ) : (
-                              <div className="qf-services" style={{ marginTop: '20px' }}>
-                                {metalServices?.metalLevel?.map(s => (
-                                  <div key={s.id} className="qf-service-card">
-                                    <strong>{s.title}</strong>
-                                    <p>{s.description}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <button className="btn-get-quote" style={{ marginTop: '30px', width: '100%' }} onClick={() => navigate('/quote')}>
-                              PROCEED TO QUOTE <ArrowRight size={18} />
+                    {selectedProductionService && !selectedMetal && (
+                      <div className="qf-step-fade-in">
+                        <h2 className="qf-panel-title">Select Material</h2>
+                        <div className="qf-metal-grid">
+                          {allMetals.filter(m => m.services?.includes(selectedProductionService.id)).map(metal => (
+                            <button key={metal.id} className="qf-metal-card" onClick={() => setSelectedMetal(metal)}>
+                              {metal.image_path && <img src={metal.image_path} alt={metal.name} className="qf-metal-img" />}
+                              <div className="qf-metal-name-overlay"><span>{metal.name}</span></div>
                             </button>
-                          </>
-                        )}
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedMetal && (
+                      <div className="qf-step-fade-in">
+                        <div className="qf-selection-summary-bar"><div><strong>Method:</strong> {selectedProductionService.title}</div><div><strong>Material:</strong> {selectedMetal.name}</div></div>
+                        <h2 className="qf-panel-title">Additional Services</h2>
+                        <div className="qf-services-grid-v2">
+                          {allServices.filter(s => s.parent_id === selectedProductionService.id).map(svc => (
+                            <button key={svc.id} className={`qf-service-option ${selectedChildService?.id === svc.id ? 'active' : ''}`} onClick={() => setSelectedChildService(svc)}>
+                              <div className="qf-opt-check">{selectedChildService?.id === svc.id ? '✓' : ''}</div>
+                              <div className="qf-opt-content"><strong>{svc.title}</strong><p>{svc.description}</p></div>
+                            </button>
+                          ))}
+                          {allServices.filter(s => s.parent_id === selectedProductionService.id).length === 0 && <p className="qf-no-services-placeholder"><Info size={24} /> No additional services required.</p>}
+                        </div>
+                        <button className="qf-final-btn" onClick={() => navigate('/quote')}>PROCEED TO FINAL QUOTE <ArrowRight size={20} /></button>
                       </div>
                     )}
                   </div>
@@ -1008,454 +568,565 @@ const InstantPricing = () => {
             </div>
           ) : (
             <>
-              {/* ── Main Viewer ── */}
               <div className="main-viewer-area">
                 <div className="viewer-controls">
-                  {showViewer && (
-                    <div className="view-toggles">
-                      <button className={viewMode === '3d' ? 'active' : ''} onClick={() => toggleView('3d')}>
-                        <Box size={16} />
-                        <span>3D VIEW</span>
-                      </button>
-                      <button className={viewMode === '2d' ? 'active' : ''} onClick={() => toggleView('2d')}>
-                        <Square size={16} />
-                        <span>2D VIEW</span>
-                      </button>
-                    </div>
-                  )}
-                  {showViewer && (
-                    <div className="view-axis-toggles">
-                      {axisButtons.map(({ label, key }) => (
-                        <button key={key} className={activeAxis === key ? 'active' : ''}
-                          onClick={() => {
-                            if (key === 'flat') {
-                              setActiveAxis('flat');
-                              setViewMode('2d');
-                              handleUnfold();
-                            } else {
-                              setActiveAxis(key);
-                              if (currentIsStep && viewMode === '2d') {
-                                // Coming from flat/2D view — rebuild OV viewer then snap camera
-                                pendingAxisRef.current = key;
-                                setViewMode('3d');
-                              } else {
-                                setAxisCamera(key);
-                              }
-                            }
-                          }}>
-                          {key === 'flat' ? <Maximize2 size={14} /> : <Monitor size={14} />}
-                          <span>{label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {showViewer && <div className="view-toggles"><button className={viewMode === '3d' ? 'active' : ''} onClick={() => toggleView('3d')}><Box size={16} /><span>3D VIEW</span></button><button className={viewMode === '2d' ? 'active' : ''} onClick={() => toggleView('2d')}><Square size={16} /><span>2D VIEW</span></button></div>}
+                  {showViewer && <div className="view-axis-toggles">{axisButtons.map(({ label, key }) => (
+                    <button key={key} className={activeAxis === key ? 'active' : ''} onClick={() => { if (key === 'flat') { setActiveAxis('flat'); setViewMode('2d'); handleUnfold(); } else { setActiveAxis(key); if (currentIsStep && viewMode === '2d') { pendingAxisRef.current = key; setViewMode('3d'); } else setAxisCamera(key); } }}>
+                      {key === 'flat' ? <Maximize2 size={14} /> : <Monitor size={14} />}<span>{label}</span>
+                    </button>
+                  ))}</div>}
                   <div className="viewer-actions">
-                    {showViewer && currentIsStep && viewMode === '3d' && (
-                      <button
-                        className={`btn-wireframe ${showMesh ? 'active' : ''}`}
-                        onClick={toggleMesh}
-                        title={showMesh ? 'Hide mesh' : 'Show mesh'}
-                      >
-                        <Boxes size={20} />
-                        <span>Show Mesh</span>
-                      </button>
-                    )}
-                    {showViewer && currentIsStep && (
-                      <button
-                        className={`btn-wireframe ${showEdges ? 'active' : ''}`}
-                        onClick={toggleEdges}
-                        title={showEdges ? 'Hide edge mesh' : 'Show edge mesh'}
-                      >
-                        <Grid3x3 size={20} />
-                        <span>Highlight Bends</span>
-                      </button>
-                    )}
-                    <div className="unit-switch-container">
-                      <span className={`label mm ${unit === 'mm' ? 'active' : ''}`}>MM</span>
-                      <label className="switch">
-                        <input type="checkbox" checked={unit === 'inch'} onChange={() => setUnit(p => p === 'mm' ? 'inch' : 'mm')} />
-                        <span className="slider round"></span>
-                      </label>
-                      <span className={`label inch ${unit === 'inch' ? 'active' : ''}`}>INCH</span>
-                    </div>
+                    {showViewer && currentIsStep && viewMode === '3d' && <button className={`btn-wireframe ${showMesh ? 'active' : ''}`} onClick={toggleMesh}><Boxes size={20} /><span>Show Mesh</span></button>}
+                    {showViewer && currentIsStep && <button className={`btn-wireframe ${showEdges ? 'active' : ''}`} onClick={toggleEdges}><Grid3x3 size={20} /><span>Highlight Bends</span></button>}
+                    <div className="unit-switch-container"><span className={unit === 'mm' ? 'active' : ''}>MM</span><label className="switch"><input type="checkbox" checked={unit === 'inch'} onChange={() => setUnit(p => p === 'mm' ? 'inch' : 'mm')} /><span className="slider round"></span></label><span className={unit === 'inch' ? 'active' : ''}>INCH</span></div>
                   </div>
                 </div>
-
                 <div className="viewer-container">
-                  {isLoadingUnfold ? (
-                    <div className="viewer-placeholder">
-                      <div className="flat-loading-spinner" />
-                      Drawing flat pattern...
-                    </div>
-                  ) : viewMode === '2d' ? (
-                    // In 2D mode, we ALWAYS want the FlatPatternViewer (or loading state)
-                    backendData ? (
-                      <FlatPatternViewer
-                        geometries={[]}
-                        options={{}}
-                        backendData={activeAxis === 'flat' ? backendData : {
-                          flatVertices: [],
-                          cutEdges: activeAxis === 'top' ? backendData.topEdges :
-                            activeAxis === 'front' ? backendData.frontEdges :
-                              activeAxis === 'side' ? backendData.sideEdges : [],
-                          bendEdges: []
-                        }}
-                        sourceFlatData={null}
-                        formatKind="drawing"
-                      />
-                    ) : (
-                      <div className="viewer-placeholder">
-                        <div className="flat-loading-spinner" />
-                        Preparing 2D views...
-                      </div>
-                    )
-                  ) : activeAxis === 'flat' && backendError ? (
-                    <div className="viewer-error">
-                      {backendError}
-                      <button className="btn-retry" onClick={handleUnfold} style={{ marginTop: '12px', padding: '6px 12px', background: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                        Retry Flattening
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {currentIsStep && (
-                        <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />
+                  {isLoadingUnfold ? <div className="viewer-placeholder"><div className="flat-loading-spinner" />Drawing...</div>
+                    : backendError ? <div className="viewer-error">{backendError} <button className="btn-retry" onClick={handleUnfold}>Retry</button></div>
+                      : viewMode === '2d' ? (backendData ? <FlatPatternViewer geometries={[]} options={{}} backendData={activeAxis === 'flat' ? backendData : { flatVertices: [], cutEdges: activeAxis === 'top' ? backendData.topEdges : activeAxis === 'front' ? backendData.frontEdges : backendData.sideEdges, bendEdges: [] }} formatKind="drawing" /> : <div className="viewer-placeholder">Preparing 2D...</div>) : (
+                        <> {currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
+                          {currentIsDxf && viewMode === '3d' && <div ref={dxfViewerRef} style={{ width: '100%', height: '100%' }} />}
+                          {currentIsDxf && viewMode === '2d' && <div className="dxf-svg-wrapper">
+                            {dxfError ? <div className="viewer-error">{dxfError}</div>
+                              : dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} />
+                                : <div className="viewer-placeholder">Parsing...</div>}
+                          </div>}
+                        </>
                       )}
-
-                      {currentIsDxf && viewMode === '3d' && (
-                        <div ref={dxfViewerRef} style={{ width: '100%', height: '100%' }} />
-                      )}
-
-                      {currentIsDxf && viewMode === '2d' && (
-                        <div className="dxf-svg-wrapper">
-                          {dxfError ? <div className="viewer-error">{dxfError}</div>
-                            : dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} />
-                              : <div className="viewer-placeholder">Parsing DXF file...</div>}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* 2D View Mode Indicator */}
-                  {viewMode === '2d' && activeAxis !== 'flat' && currentIsStep && (
-                    <div style={{
-                      position: 'absolute', left: 12, top: 12, display: 'flex', alignItems: 'center', gap: 6,
-                      borderRadius: 6, border: '1px solid #d1d5db', backgroundColor: '#fff',
-                      padding: '4px 10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', zIndex: 10,
-                    }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#3b82f6' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: '#4b5563' }}>
-                        2D {activeAxis.charAt(0).toUpperCase() + activeAxis.slice(1)} View
-                      </span>
-                    </div>
-                  )}
-
-                  {!selectedFile && <div className="viewer-placeholder">Select a file to view</div>}
-
-                  {/* ── Loading Overlay ── */}
-                  {isImporting && (
-                    <div className="import-loading-overlay">
-                      <h2 className="import-status-text">Importing the model</h2>
-                      <div className="progress-circle-container">
-                        <svg className="progress-circle-svg" viewBox="0 0 200 200">
-                          <circle className="progress-circle-bg" cx="100" cy="100" r="90" />
-                          <circle
-                            className="progress-circle-bar"
-                            cx="100"
-                            cy="100"
-                            r="90"
-                            strokeDasharray="565.48"
-                            strokeDashoffset={565.48 - (importProgress / 100) * 565.48}
-                          />
-                        </svg>
-                        <div className="progress-percentage">
-                          {Math.round(importProgress)}<span>%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {isImporting && <div className="import-loading-overlay"><h2>Importing...</h2><div className="progress-percentage">{Math.round(importProgress)}%</div></div>}
                 </div>
               </div>
-
-              {/* ── Right Panel: Dimensions + Quote Flow ── */}
               <div className="dimensions-panel">
-
-                {/* Dimensions Section */}
                 <div className="panel-header"><Info size={18} /><h3>Model Dimensions</h3></div>
-                {dimensions ? (
-                  <div className="dimensions-content">
-                    <div className="dimension-group">
-                      <h4>{unit === 'mm' ? 'Metric (mm)' : 'Imperial (inches)'}</h4>
-                      {unit === 'mm' ? (
-                        <>
-                          <div className="dim-row"><span>Width:</span>  <strong>{dimensions.mm.width} mm</strong></div>
-                          <div className="dim-row"><span>Height:</span> <strong>{dimensions.mm.height} mm</strong></div>
-                          {!dimensions.is2D && <>
-                            <div className="dim-row"><span>Thickness:</span>
-                              <strong>
-                                {selectedThickness ? `${selectedThickness} mm` : `${dimensions.mm.thickness} mm`}
-                                {selectedThickness && <span className="qf-thickness-override"> (selected)</span>}
-                              </strong>
-                            </div>
-                            <div className="dim-row"><span>Volume:</span> <strong>{dimensions.mm.volume} cm³</strong></div>
-                          </>}
-                        </>
-                      ) : (
-                        <>
-                          <div className="dim-row"><span>Width:</span>  <strong>{dimensions.inches.width} in</strong></div>
-                          <div className="dim-row"><span>Height:</span> <strong>{dimensions.inches.height} in</strong></div>
-                          {!dimensions.is2D && <>
-                            <div className="dim-row"><span>Thickness:</span>
-                              <strong>
-                                {selectedThickness ? `${(selectedThickness / 25.4).toFixed(3)} in` : `${dimensions.inches.thickness} in`}
-                                {selectedThickness && <span className="qf-thickness-override"> (selected)</span>}
-                              </strong>
-                            </div>
-                            <div className="dim-row"><span>Volume:</span> <strong>{dimensions.inches.volume} in³</strong></div>
-                          </>}
-                        </>
-                      )}
-                    </div>
+                {dimensions ? (<div className="dimensions-content">
+                  <div className="dimension-group"><h4>{unit === 'mm' ? 'Metric (mm)' : 'Imperial (inches)'}</h4>
+                    <div className="dim-row"><span>Length (L):</span> <strong>{unit === 'mm' ? dimensions.mm.l : dimensions.inches.l} {unit}</strong></div>
+                    <div className="dim-row"><span>Width (W):</span> <strong>{unit === 'mm' ? dimensions.mm.w : dimensions.inches.w} {unit}</strong></div>
+                    <div className="dim-row"><span>Thickness (T):</span> <strong>{unit === 'mm' ? dimensions.mm.t : dimensions.inches.t} {unit}</strong></div>
+                    <div className="dim-row"><span>Volume:</span> <strong>{unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume} {unit}³</strong></div>
                   </div>
-                ) : (
-                  <div className="no-dimensions">
-                    <Layers size={40} />
-                    <p>{selectedFile ? 'Loading model data...' : 'Select a file to view'}</p>
+                  <div className="qf-cta-container">
+                    <p className="qf-cta-label">Ready to get a formal quote?</p>
+                    <button className="btn-get-quote" onClick={() => setIsQuoteFlowActive(true)}>PROCEED TOWARD QUOTE <ArrowRight size={18} /></button>
                   </div>
-                )}
-
-                {/* ── Quote Flow ── */}
-                {dimensions && (
-                  <div className="qf-container">
-                    <div className="qf-divider" />
-
-                    {/* Step 0: Service selection */}
-                    {!isQuoteFlowActive && (
-                      <div className="qf-initial-selection">
-                        <p className="qf-step-label">Ready to get a formal quote?</p>
-                        <button className="btn-get-quote" onClick={() => setIsQuoteFlowActive(true)}>
-                          PROCEED TOWARD QUOTE <ArrowRight size={18} />
-                        </button>
-                      </div>
-                    )}
-
-                    {isQuoteFlowActive && !selectedService && (
-                      <div className="qf-service-selector">
-                        <p className="qf-step-label">Select production method:</p>
-                        <p className="qf-step-sublabel">Please tell us which service you were intending to use with your file.</p>
-                        <button
-                          className={`qf-service-btn large-btn${cncOutOfBounds ? ' disabled' : ''}`}
-                          onClick={() => !cncOutOfBounds && setSelectedService('cnc_machining')}
-                          disabled={cncOutOfBounds}
-                        >
-                          <div className="qf-service-info">
-                            <strong>CNC Machining</strong>
-                            <span>Precision milled parts</span>
-                          </div>
-                          {cncOutOfBounds ? (
-                            <div className="view-errors-badge">
-                              <span>Exceeds Size Limits</span>
-                              <AlertCircle size={14} />
-                            </div>
-                          ) : cncMetals.length > 0 ? (
-                            <div className="qf-service-price">
-                              <span>Select Material</span>
-                              <ArrowRight size={15} />
-                            </div>
-                          ) : (
-                            <div className="view-errors-badge">
-                              <span>Coming Soon</span>
-                              <AlertCircle size={14} />
-                            </div>
-                          )}
-                        </button>
-                        <button className="qf-service-btn large-btn" onClick={() => setSelectedService('sheet_cutting')}>
-                          <div className="qf-service-info">
-                            <strong>Sheet Cutting</strong>
-                            <span>Laser / plasma cut sheets</span>
-                          </div>
-                          <div className="qf-service-price">
-                            <span>from $153.46</span>
-                            <ArrowRight size={15} />
-                          </div>
-                        </button>
-                      </div>
-                    )}
-
-                    {selectedService === 'cnc_machining' && (
-                      <div className="qf-step">
-                        <div className="qf-step-header">
-                          <button className="qf-back-btn" onClick={() => setSelectedService(null)}>
-                            <ChevronLeft size={15} />
-                          </button>
-                          <span><Wrench size={14} /> CNC Machining</span>
-                        </div>
-                        {cncMetals.length > 0 ? (
-                          <>
-                            <p className="qf-step-label">Select material</p>
-                            <div className="qf-metal-grid">
-                              {cncMetals.map(metal => (
-                                <button key={metal.id} className="qf-metal-card" onClick={() => navigate('/quote')}>
-                                  {metal.image_path && <img src={metal.image_path} alt={metal.name} className="qf-metal-img" />}
-                                  <span className="qf-metal-name">{metal.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="qf-coming-soon">
-                              <AlertCircle size={20} />
-                              <p>CNC Machining pricing coming soon.</p>
-                            </div>
-                            <button className="btn-get-quote" onClick={() => navigate('/quote')}>
-                              REQUEST QUOTE <ArrowRight size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Sheet Cutting flow */}
-                    {selectedService === 'sheet_cutting' && (
-                      <div className="qf-step">
-
-                        {/* Step A: Metal Selection */}
-                        {!selectedMetal && (
-                          <>
-                            <div className="qf-step-header">
-                              <button className="qf-back-btn" onClick={() => setSelectedService(null)}>
-                                <ChevronLeft size={15} />
-                              </button>
-                              <span><Scissors size={14} /> Select Material</span>
-                            </div>
-                            {loadingMetals ? (
-                              <div className="qf-loading"><div className="qf-spinner" /> Loading metals…</div>
-                            ) : sheetMetals.length === 0 ? (
-                              <div className="qf-empty">
-                                <AlertCircle size={18} />
-                                <p>No metals configured for sheet cutting yet.</p>
-                              </div>
-                            ) : (
-                              <div className="qf-metal-grid">
-                                {sheetMetals.map(metal => (
-                                  <button
-                                    key={metal.id}
-                                    className="qf-metal-card"
-                                    onClick={() => { setSelectedMetal(metal); setSelectedThickness(null); }}
-                                  >
-                                    {metal.image_path && (
-                                      <img src={metal.image_path} alt={metal.name} className="qf-metal-img" />
-                                    )}
-                                    <span className="qf-metal-name">{metal.name}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {/* Step B: Thickness Selection */}
-                        {selectedMetal && !selectedThickness && (
-                          <>
-                            <div className="qf-step-header">
-                              <button className="qf-back-btn" onClick={() => setSelectedMetal(null)}>
-                                <ChevronLeft size={15} />
-                              </button>
-                              <span className="qf-breadcrumb">{selectedMetal.name}</span>
-                            </div>
-                            <p className="qf-step-label">Select thickness</p>
-                            {(!selectedMetal.available_thicknesses || selectedMetal.available_thicknesses.length === 0) ? (
-                              <div className="qf-empty">
-                                <AlertCircle size={18} />
-                                <p>No thicknesses configured for this metal.</p>
-                              </div>
-                            ) : (
-                              <div className="qf-thickness-chips">
-                                {selectedMetal.available_thicknesses.map(t => (
-                                  <button
-                                    key={t}
-                                    className="qf-thickness-chip"
-                                    onClick={() => setSelectedThickness(t)}
-                                  >
-                                    {t} mm
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {/* Step C+D: Thickness selected — viewer updated + services shown */}
-                        {selectedMetal && selectedThickness && (
-                          <>
-                            <div className="qf-step-header">
-                              <button className="qf-back-btn" onClick={() => setSelectedThickness(null)}>
-                                <ChevronLeft size={15} />
-                              </button>
-                              <span className="qf-breadcrumb">{selectedMetal.name} · {selectedThickness} mm</span>
-                            </div>
-
-                            <div className="qf-selected-summary">
-                              <div className="qf-summary-pill"><Scissors size={12} /> Sheet Cutting</div>
-                              <div className="qf-summary-pill material">{selectedMetal.name}</div>
-                              <div className="qf-summary-pill thickness">{selectedThickness} mm</div>
-                            </div>
-
-                            {/* Services / Guidelines */}
-                            {loadingServices ? (
-                              <div className="qf-loading"><div className="qf-spinner" /> Loading services…</div>
-                            ) : metalServices ? (
-                              <div className="qf-services">
-                                <p className="qf-services-title">Available Services</p>
-                                {[
-                                  ...(metalServices.metalLevel || []),
-                                  ...((metalServices.thicknessLevel || [])
-                                    .filter(tl => {
-                                      const tlVal = parseFloat(tl.metric);
-                                      return Math.abs(tlVal - selectedThickness) < 0.01;
-                                    })
-                                    .flatMap(tl => tl.services || []))
-                                ]
-                                  .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i)
-                                  .map(service => (
-                                    <div key={service.id} className="qf-service-card">
-                                      <strong>{service.title}</strong>
-                                      {service.description && <p>{service.description}</p>}
-                                    </div>
-                                  ))
-                                }
-                                {metalServices.metalLevel?.length === 0 && (
-                                  <p className="qf-no-services">No specific services configured for this metal.</p>
-                                )}
-                              </div>
-                            ) : null}
-
-                            <button className="btn-get-quote" style={{ marginTop: '16px' }} onClick={() => navigate('/quote')}>
-                              PROCEED TO QUOTE <ArrowRight size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Fallback quote button (no flow active) */}
-                {!dimensions && (
-                  <div className="pricing-summary" style={{ padding: '16px' }}>
-                    <button className="btn-get-quote" onClick={() => navigate('/quote')}>
-                      PROCEED TO QUOTE <ArrowRight size={18} />
-                    </button>
-                  </div>
-                )}
+                </div>) : <div className="no-dimensions"><Layers size={40} /><p>Select a file</p></div>}
               </div>
             </>
           )}
         </div>
       )}
+      <StyleTag />
     </div>
   );
 };
+
+const styles = `
+.quote-flow-layout {
+  height: calc(100vh - 120px) !important;
+  max-width: 1440px;
+  margin: 0 auto;
+  gap: 0 !important;
+}
+
+.quote-flow-step-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+  border: 1px solid #f1f5f9;
+}
+
+.qf-top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  z-index: 10;
+}
+
+.qf-nav-right {
+  display: flex;
+  gap: 12px;
+}
+
+.qf-nav-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qf-nav-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.qf-split-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.qf-left-side {
+  flex: 0 0 45%;
+  background: #f8fafc;
+  border-right: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+.qf-right-side {
+  flex: 1;
+  padding: 40px;
+  overflow-y: auto;
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.qf-model-box {
+  flex: 0 0 400px;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 32px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.03), inset 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.qf-viewer-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.qf-view-toggles-simple {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 6px;
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  z-index: 5;
+}
+
+.qf-view-toggles-simple button {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.qf-view-toggles-simple button.active {
+  background: #0f172a;
+  color: white;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
+
+.qf-dimensions-simple {
+  background: white;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}
+
+.qf-dimensions-simple h4 {
+  margin: 0 0 20px 0;
+  font-size: 14px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.qf-dim-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.dim-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dim-row span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.dim-row strong {
+  font-size: 18px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* Right Side Selection Panel */
+.qf-selection-panel {
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.qf-step-fade-in {
+  animation: qfSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes qfSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.qf-panel-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+.qf-panel-subtitle {
+  font-size: 16px;
+  color: #64748b;
+  margin-bottom: 40px;
+  line-height: 1.5;
+}
+
+/* Large Service Cards */
+.qf-large-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.qf-large-service-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32px;
+  background: white;
+  border: 2px solid #f1f5f9;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  width: 100%;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.01);
+}
+
+.qf-large-service-card:hover:not(.disabled) {
+  border-color: #0f172a;
+  transform: scale(1.01);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+}
+
+.qf-large-service-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f8fafc;
+  border-style: dashed;
+}
+
+.qf-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qf-card-main strong {
+  font-size: 22px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.qf-card-main span {
+  font-size: 15px;
+  color: #64748b;
+  max-width: 320px;
+}
+
+.qf-card-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 14px;
+  transition: all 0.2s;
+}
+
+.qf-card-status.price {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.qf-large-service-card:hover .qf-card-status.price {
+  background: #0f172a;
+  color: white;
+}
+
+.qf-card-status.error {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+/* Metal Grid */
+.qf-metal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.qf-metal-card {
+  aspect-ratio: 1;
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 2px solid #f1f5f9;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+}
+
+.qf-metal-card:hover {
+  border-color: #0f172a;
+  transform: scale(1.05);
+  z-index: 2;
+  box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+}
+
+.qf-metal-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qf-metal-name-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px 12px 12px;
+  background: linear-gradient(transparent, rgba(15, 23, 42, 0.9));
+  color: white;
+  text-align: center;
+}
+
+.qf-metal-name-overlay span {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Summary Bar */
+.qf-selection-summary-bar {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+}
+
+.qf-summary-item {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.qf-summary-item strong {
+  color: #0f172a;
+  margin-right: 4px;
+}
+
+/* Sub Services Grid */
+.qf-services-grid-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 40px;
+}
+
+.qf-service-option {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  background: white;
+  border: 2px solid #f1f5f9;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: left;
+}
+
+.qf-service-option:hover {
+  border-color: #cbd5e1;
+  background: #fdfdfd;
+}
+
+.qf-service-option.active {
+  border-color: #0f172a;
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.qf-opt-check {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 2px solid #e2e8f0;
+  font-weight: 800;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.qf-service-option.active .qf-opt-check {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: white;
+  transform: scale(1.1);
+}
+
+.qf-opt-content strong {
+  display: block;
+  font-size: 17px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.qf-opt-content p {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.qf-no-services-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px;
+  background: #f8fafc;
+  border-radius: 24px;
+  color: #94a3b8;
+  gap: 16px;
+  border: 2px dashed #e2e8f0;
+}
+
+/* Final Button */
+.qf-final-btn {
+  width: 100%;
+  padding: 20px;
+  background: #0f172a;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  letter-spacing: 0.02em;
+}
+
+.qf-final-btn:hover {
+  background: #000;
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+}
+
+.qf-loading-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.flat-loading-spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(0, 0, 0, 0.05);
+  border-top-color: #3b82f6; 
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.qf-cta-container {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 2px solid #f1f5f9;
+}
+
+.qf-cta-label {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.import-loading-overlay {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+.progress-percentage {
+  font-size: 48px;
+  font-weight: 800;
+  color: #0f172a;
+}
+`;
+
+const StyleTag = () => <style dangerouslySetInnerHTML={{ __html: styles }} />;
 
 export default InstantPricing;

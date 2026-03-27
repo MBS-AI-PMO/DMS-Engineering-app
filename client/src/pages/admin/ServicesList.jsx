@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit2, Search, FileText, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, FileText, Layers, X } from 'lucide-react';
 import { fetchServices, deleteService, fetchServicesWithUsage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
