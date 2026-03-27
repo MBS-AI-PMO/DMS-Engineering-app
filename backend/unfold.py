@@ -282,6 +282,36 @@ def _append_polyline_segments(output, points, R, t):
         output.extend(end.tolist())
 
 
+def _get_projection_edges(shape, plane_code="xy"):
+    """
+    Project all edges of the shape onto a principal plane.
+    plane_code: 'xy' (Top), 'xz' (Front), 'yz' (Side)
+    """
+    all_edges = _get_edges(shape)
+    coords = []
+    for edge in all_edges:
+        pts = _sample_edge_points(edge)
+        if len(pts) < 2:
+            continue
+        
+        # Project and flatten
+        projected = []
+        for p in pts:
+            if plane_code == "xy":
+                projected.append([p[0], p[1], 0.0])
+            elif plane_code == "xz":
+                # For front view (XZ), we want to map Z to Y in 2D
+                projected.append([p[0], p[2], 0.0])
+            elif plane_code == "yz":
+                # For side view (YZ), we want to map Y to X and Z to Y in 2D
+                projected.append([p[1], p[2], 0.0])
+        
+        for i in range(len(projected) - 1):
+            coords.extend(projected[i])
+            coords.extend(projected[i+1])
+    return coords
+
+
 def unfold_step_file(filepath: str) -> dict:
     """
     Main entry point. Loads STEP, unfolds sheet metal, returns JSON-serializable dict.
@@ -548,21 +578,29 @@ def unfold_step_file(filepath: str) -> dict:
             else:
                 _append_polyline_segments(all_cut_edges, edge_points, combined_R, combined_t)
 
-    # 8. Compute bounding box
+    # 9. Get principal 2D projections
+    top_coords = _get_projection_edges(occ_shape, "xy")
+    front_coords = _get_projection_edges(occ_shape, "xz")
+    side_coords = _get_projection_edges(occ_shape, "yz")
+
+    # 10. Compute bounding box for the flat pattern
     if all_flat_verts:
         varr = np.array(all_flat_verts).reshape(-1, 3)
         mins = varr.min(axis=0)
         maxs = varr.max(axis=0)
-        width = maxs[0] - mins[0]
-        height = maxs[1] - mins[1]
-        thickness = maxs[2] - mins[2]
+        width = float(maxs[0] - mins[0])
+        height = float(maxs[1] - mins[1])
+        thickness = float(maxs[2] - mins[2])
     else:
-        width = height = thickness = 0
+        width = height = thickness = 0.0
 
     return {
         "flatVertices": all_flat_verts,
         "cutEdges": all_cut_edges,
         "bendEdges": all_bend_edges,
-        "thickness": float(thickness),
-        "bbox": {"width": float(width), "height": float(height)},
+        "topEdges": top_coords,
+        "frontEdges": front_coords,
+        "sideEdges": side_coords,
+        "thickness": thickness,
+        "bbox": {"width": width, "height": height},
     }

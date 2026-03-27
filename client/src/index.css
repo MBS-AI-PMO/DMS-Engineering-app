@@ -3799,38 +3799,58 @@ body {
 }
 
 .viewer-controls {
-    padding: 12px 20px;
-    background: #ffffff;
-    border-bottom: 1px solid #f1f5f9;
+    padding: 10px 24px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
 }
 
-.view-toggles {
+.view-toggles,
+.view-axis-toggles {
     display: flex;
     background: #f1f5f9;
     padding: 4px;
-    border-radius: 10px;
+    border-radius: 12px;
+    gap: 2px;
 }
 
-.view-toggles button {
-    background: none;
+.view-toggles button,
+.view-axis-toggles button {
+    background: transparent;
     border: none;
     color: #64748b;
-    padding: 8px 20px;
-    border-radius: 8px;
-    font-size: 0.85rem;
+    padding: 8px 16px;
+    border-radius: 9px;
+    font-size: 0.75rem;
     font-weight: 800;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
-.view-toggles button.active {
+.view-toggles button:hover,
+.view-axis-toggles button:hover {
+    color: #1e293b;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.view-toggles button.active,
+.view-axis-toggles button.active {
     background: #ffffff;
     color: #e31b23;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .viewer-actions {
@@ -3841,23 +3861,27 @@ body {
 }
 
 .viewer-actions button {
-    background: #f1f5f9;
-    border: none;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     color: #64748b;
-    padding: 0 12px;
-    height: 40px;
-    border-radius: 10px;
+    padding: 0 16px;
+    height: 38px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
     font-family: 'Montserrat', sans-serif;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
 }
 
 .viewer-actions button:hover {
-    background: #e2e8f0;
-    color: #334155;
+    border-color: #cbd5e1;
+    color: #1e293b;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .btn-wireframe {

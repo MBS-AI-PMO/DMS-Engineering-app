@@ -31,22 +31,6 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
 
-  useImperativeHandle(ref, () => ({
-    zoomIn: () => {
-      zoomRef.current *= 0.8;
-      updateCamera();
-    },
-    zoomOut: () => {
-      zoomRef.current *= 1.25;
-      updateCamera();
-    },
-    resetView: () => {
-      zoomRef.current = 1;
-      panRef.current = { x: 0, y: 0 };
-      fitCamera();
-    },
-  }));
-
   const updateCamera = useCallback(() => {
     const camera = cameraRef.current;
     if (!camera || camera._baseLeft === undefined) return;
@@ -104,6 +88,22 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     camera.lookAt(viewCamera.target);
     camera.updateProjectionMatrix();
   }, [geometries, updateCamera]);
+
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => {
+      zoomRef.current *= 0.8;
+      updateCamera();
+    },
+    zoomOut: () => {
+      zoomRef.current *= 1.25;
+      updateCamera();
+    },
+    resetView: () => {
+      zoomRef.current = 1;
+      panRef.current = { x: 0, y: 0 };
+      fitCamera();
+    },
+  }));
 
   // Initialize Three.js renderer, scene, camera, and event listeners
   useEffect(() => {
@@ -188,13 +188,15 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
 
   // Build geometry from backend data
   const buildFromBackend = useCallback((data) => {
-    const flatVertices = new Float32Array(data.flatVertices);
+    const flatVertices = new Float32Array(data.flatVertices || []);
     const unfoldedGeometry = new THREE.BufferGeometry();
-    unfoldedGeometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(flatVertices, 3)
-    );
-    unfoldedGeometry.computeVertexNormals();
+    if (flatVertices.length > 0) {
+      unfoldedGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(flatVertices, 3)
+      );
+      unfoldedGeometry.computeVertexNormals();
+    }
     unfoldedGeometry.computeBoundingBox();
 
     return {
@@ -253,7 +255,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     }
 
     const hasBackendGeometry = Boolean(
-      backendData?.flatVertices && backendData.flatVertices.length > 0
+      (backendData?.flatVertices && backendData.flatVertices.length > 0) ||
+      (backendData?.cutEdges && backendData.cutEdges.length > 0)
     );
     const hasSourceGeometry = Boolean(sourceFlatData?.cutPts?.length);
 
@@ -274,11 +277,11 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     const group = new THREE.Group();
     const maxDim = viewData.bounds
       ? Math.max(
-          viewData.bounds.max.x - viewData.bounds.min.x,
-          viewData.bounds.max.y - viewData.bounds.min.y,
-          viewData.bounds.max.z - viewData.bounds.min.z,
-          100
-        )
+        viewData.bounds.max.x - viewData.bounds.min.x,
+        viewData.bounds.max.y - viewData.bounds.min.y,
+        viewData.bounds.max.z - viewData.bounds.min.z,
+        100
+      )
       : 100;
 
     // Filled face mesh

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3 } from 'lucide-react';
+import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
 import * as THREE from 'three';
@@ -160,6 +160,16 @@ const InstantPricing = () => {
     };
     loadDxf();
   }, [selectedFile]);
+
+  /*
+  // ─── Automated 2D Fetch Effect (for Top/Front/Side/Flat) ──
+  useEffect(() => {
+    // Only auto-fetch if we have a STEP file and no data yet
+    if (selectedFile && isStepFile(selectedFile.file.name) && !backendData && !isLoadingUnfold && !backendError) {
+      handleUnfold();
+    }
+  }, [selectedFile, backendData, isLoadingUnfold, backendError, handleUnfold]);
+  */
 
   // ─── DXF 3D Viewer Effect (Three JS Native) ────────────
   useEffect(() => {
@@ -442,7 +452,7 @@ const InstantPricing = () => {
               v.scene.traverse((child) => {
                 if (child.isMesh) child.material = metalMat;
               });
-              try { v.Render(); } catch (e) { /* silent fail */ }
+              try { v.Render(); } catch { /* silent fail */ }
             };
 
             applyMetallicGlobal();
@@ -535,7 +545,8 @@ const InstantPricing = () => {
       const data = await response.json();
       if (data.flatVertices && data.flatVertices.length > 0) {
         setBackendData(data);
-        setActiveAxis('flat');
+        // Only set axis to flat if it was explicitly clicked (not during auto-fetch)
+        // However, we'll let the click handler handle axis setting.
       } else {
         throw new Error('No flat geometry data returned');
       }
@@ -586,7 +597,7 @@ const InstantPricing = () => {
             child.visible = next;
           }
         });
-        try { v.Render(); } catch (e) { /* silent */ }
+        try { v.Render(); } catch { /* silent */ }
       }
       return next;
     });
@@ -674,8 +685,14 @@ const InstantPricing = () => {
             <div className="viewer-controls">
               {showViewer && (
                 <div className="view-toggles">
-                  <button className={viewMode === '3d' ? 'active' : ''} onClick={() => toggleView('3d')}>3D VIEW</button>
-                  <button className={viewMode === '2d' ? 'active' : ''} onClick={() => toggleView('2d')}>2D VIEW</button>
+                  <button className={viewMode === '3d' ? 'active' : ''} onClick={() => toggleView('3d')}>
+                    <Box size={16} />
+                    <span>3D VIEW</span>
+                  </button>
+                  <button className={viewMode === '2d' ? 'active' : ''} onClick={() => toggleView('2d')}>
+                    <Square size={16} />
+                    <span>2D VIEW</span>
+                  </button>
                 </div>
               )}
               {showViewer && (
@@ -690,7 +707,8 @@ const InstantPricing = () => {
                           setAxisCamera(key);
                         }
                       }}>
-                      {label}
+                      {key === 'flat' ? <Maximize2 size={14} /> : <Monitor size={14} />}
+                      <span>{label}</span>
                     </button>
                   ))}
                 </div>
@@ -702,8 +720,8 @@ const InstantPricing = () => {
                     onClick={toggleEdges}
                     title={showEdges ? 'Hide edge mesh' : 'Show edge mesh'}
                   >
-                    <Grid3x3 size={16} />
-                    <span>Mesh</span>
+                    <Grid3x3 size={20} />
+                    <span>Highlight Bends</span>
                   </button>
                 )}
                 <div className="unit-switch-container">
@@ -723,14 +741,28 @@ const InstantPricing = () => {
                   <div className="flat-loading-spinner" />
                   Drawing flat pattern...
                 </div>
-              ) : activeAxis === 'flat' && backendData ? (
-                <FlatPatternViewer
-                  geometries={[]}
-                  options={{}}
-                  backendData={backendData}
-                  sourceFlatData={null}
-                  formatKind="model"
-                />
+              ) : viewMode === '2d' ? (
+                // In 2D mode, we ALWAYS want the FlatPatternViewer (or loading state)
+                backendData ? (
+                  <FlatPatternViewer
+                    geometries={[]}
+                    options={{}}
+                    backendData={activeAxis === 'flat' ? backendData : {
+                      flatVertices: [],
+                      cutEdges: activeAxis === 'top' ? backendData.topEdges :
+                        activeAxis === 'front' ? backendData.frontEdges :
+                          activeAxis === 'side' ? backendData.sideEdges : [],
+                      bendEdges: []
+                    }}
+                    sourceFlatData={null}
+                    formatKind="drawing"
+                  />
+                ) : (
+                  <div className="viewer-placeholder">
+                    <div className="flat-loading-spinner" />
+                    Preparing 2D views...
+                  </div>
+                )
               ) : activeAxis === 'flat' && backendError ? (
                 <div className="viewer-error">
                   {backendError}
