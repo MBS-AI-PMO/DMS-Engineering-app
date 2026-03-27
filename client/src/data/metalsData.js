@@ -41,6 +41,7 @@ import about6061 from '../assets/metals/6061-about-enhanced.png';
 import titaniumAbout from '../assets/metals/titanium-about.png';
 import titaniumGrade2About from '../assets/metals/titanium-grade2-about.png';
 import hrpoAbout from '../assets/metals/hrpo-about.png';
+import hrAbout from '../assets/metals/hr-about.png';
 
 // 5052-H32 Aluminum Showcase Images
 import h32_1 from '../assets/metals/5052-h32-1.png';
@@ -5426,10 +5427,240 @@ export const metalsData = [
         thickness: "Thicknesses: .313\" – .500\"",
         image: metal3,
         description: "Structural quality steel with excellent weldability.",
-        quickLook: { cutSizes: [], thicknesses: [], tolerance: "+/- .005\"" },
-        services: [3, 5, 10, 11],
-        specifications: { availableServices: ["Laser Cutting", "Bending", "Plating", "Powder Coating"], generalDetails: [], laserCuttingSpecs: [], properties: [] },
-        aboutSection: { title: "Hot Rolled A36 Steel", text: "Data coming soon.", items: [] }
+        quickLook: {
+            cutSizes: [
+                { label: "A", size: ".25\" x .375\" min", action: "Instant Pricing", type: "solid" },
+                { label: "B", size: "30\" x 44\" max", action: "Instant Pricing", type: "solid" },
+                { label: "C", size: "30\" x 56\" max", action: "Custom Quote", type: "outline" }
+            ],
+            thicknesses: [
+                { value: ".313\"", metric: "8.00mm" },
+                { value: ".375\"", metric: "9.53mm" },
+                { value: ".500\"", metric: "12.7mm" }
+            ],
+            tolerance: "+/- .005\""
+        },
+        services: [3, 6, 10, 11, 12, 13],
+        specifications: {
+            availableServices: ["Laser Cutting", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+            generalDetails: [],
+            laserCuttingSpecs: [],
+            properties: [
+                { label: "Material Composition", value: "Iron (Fe): 98.0 Manganese (Mn): 1.03 Carbon (C): 0.25 – 0.290 Copper (Cu): 0.20 Sulfur (S): .050 Phosphorus (P): 0.04 Silicon (Si): 0.280" },
+                { label: "Density", value: "490 lb/ft^3" },
+                { label: "Heat treatments process", value: "N/A" },
+                { label: "ASTM", value: "A1011-18A-CS-TYPE B" },
+                { label: "Tensile Strength (Ultimate)", value: "69 ksi" },
+                { label: "Tensile Strength (Yield)", value: "41 ksi" },
+                { label: "Shear Strength", value: "44 ksi" },
+                { label: "Shear Modulus", value: "11000 ksi" },
+                { label: "Fatigue Strength", value: "29 ksi" },
+                { label: "Brinell Hardness", value: "140" },
+                { label: "Elongation at Break", value: "22%" },
+                { label: "Elastic Modulus", value: "27000 ksi" },
+                { label: "Poisson’s Ratio", value: ".29" },
+                { label: "Thermal Conductivity", value: "43 BTU/h-ft °F" },
+                { label: "Melting Point", value: "2600 °F" },
+                { label: "Magnetic", value: "Yes" },
+                { label: "Does it Rust", value: "Yes" }
+            ]
+        },
+        thicknessSpecs: {
+            ".313\"": {
+                availableServices: ["Laser Cutting", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.313\"", mm: "8.00 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.040\"", mm: "1.016 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.040\"", mm: "1.016 mm" },
+                    { label: "Mill Finish", inch: "Hot Rolled", mm: "Hot Rolled" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.030 per foot" },
+                    { label: "Min part size", inch: "1.00\" x 1.00\"", mm: "25.4 mm x 25.4 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Recommended Min hole size", inch: ".118\"", mm: "2.9972 mm" },
+                    { label: "Min hole size", inch: ".075\"", mm: "1.905 mm" },
+                    { label: "Min bridge size", inch: ".118\"", mm: "2.9972 mm" },
+                    { label: "Min hole to edge distance", inch: ".094\"", mm: "2.3876 mm" },
+                    { label: "Tab and slot tolerance", inch: ".050\"", mm: "1.27 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height", inch: "N/A", mm: "N/A" },
+                    { label: "Hardware specific specifications", inch: "Please view our Hardware Catalog", mm: "Please view our Hardware Catalog" }
+                ],
+                platingSpecs: [
+                    { label: "Min Plating Part Size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max Plating Part Size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "30\" x 36\"", mm: "762 mm x 914.4 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M4 x 0.7", mm: "M4 x 0.7" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.1 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.094\"", mm: "2.3876 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.094\"", mm: "Tap hole size/2 +2.3876 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".375\"": {
+                availableServices: ["Laser Cutting", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.375\"", mm: "9.53 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.040\"", mm: "1.016 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.040\"", mm: "1.016 mm" },
+                    { label: "Mill Finish", inch: "Hot Rolled", mm: "Hot Rolled" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.030 per foot" },
+                    { label: "Min part size", inch: "1.00\" x 1.00\"", mm: "25.4 mm x 25.4 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Recommended Min hole size", inch: ".188\"", mm: "4.7752 mm" },
+                    { label: "Min hole size", inch: ".085\"", mm: "2.159 mm" },
+                    { label: "Min bridge size", inch: ".160\"", mm: "4.064 mm" },
+                    { label: "Min hole to edge distance", inch: ".113\"", mm: "2.8702 mm" },
+                    { label: "Tab and slot tolerance", inch: ".050\"", mm: "1.27 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height", inch: "N/A", mm: "N/A" },
+                    { label: "Hardware specific specifications", inch: "Please view our Hardware Catalog", mm: "Please view our Hardware Catalog" }
+                ],
+                platingSpecs: [
+                    { label: "Min Plating Part Size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max Plating Part Size", inch: "30\" x 36\"", mm: "762 mm x 914.4 mm" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M6 x 1.0", mm: "M6 x 1.0" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.1 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.113\"", mm: "2.8702 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.113\"", mm: "Tap hole size/2 +2.8702 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".500\"": {
+                availableServices: ["Laser Cutting", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.500\"", mm: "12.7 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.050\"", mm: "1.27 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.030\"", mm: "0.762 mm" },
+                    { label: "Mill Finish", inch: "Hot Rolled", mm: "Hot Rolled" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "+/-0.030 per foot" },
+                    { label: "Min part size", inch: "1.00\" x 1.00\"", mm: "25.4 mm x 25.4 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Recommended Min hole size", inch: ".190\"", mm: "4.826 mm" },
+                    { label: "Min hole size", inch: ".125\"", mm: "3.175 mm" },
+                    { label: "Min bridge size", inch: ".170\"", mm: "4.318 mm" },
+                    { label: "Min hole to edge distance", inch: ".150\"", mm: "3.81 mm" },
+                    { label: "Tab and slot tolerance", inch: ".055\"", mm: "1.397 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1\" x 1.5\"", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height", inch: "N/A", mm: "N/A" },
+                    { label: "Hardware specific specifications", inch: "Please view our Hardware Catalog", mm: "Please view our Hardware Catalog" }
+                ],
+                platingSpecs: [
+                    { label: "Min Plating Part Size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max Plating Part Size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "30\" x 36\"", mm: "762 mm x 914.4 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M6 x 1.0", mm: "M6 x 1.0" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.1 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.150\"", mm: "3.81 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.150\"", mm: "Tap hole size/2 +3.81 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            }
+        },
+        aboutSection: {
+            title: "What is Hot Rolled Carbon Steel?",
+            text: "Our hot rolled carbon steel is commercial mild steel, found in most industries as it offers good weldability and machinability. It’s sturdy and easy to work with. It has a scaled surface finish from the cooling process and as a result, it is free of internal stresses sometimes associated with further processing. Hot rolled steel can be used in bending but is more prone to cracking.",
+            image: hrAbout,
+            featureChart: [
+                { label: "Strength", rating: 3 },
+                { label: "Weldability", rating: 5 },
+                { label: "Formability", rating: 5 },
+                { label: "Heat Treating", rating: 2 },
+                { label: "Corrosion Resistance", rating: 2 },
+                { label: "Toughness", rating: 4 },
+                { label: "Machinability", rating: 2 },
+                { label: "Strength-to-Weight Ratio", rating: 2 }
+            ],
+            capabilities: {
+                title: "What can you make with Hot Rolled Carbon Steel parts?",
+                text: "With A36 hot rolled sheet metal, you can manufacture a wide range of products including structural beams, support frames, and brackets. Its excellent weldability and machinability make it ideal for creating industrial machinery parts, construction components, and heavy equipment. Additionally, A36 steel is commonly used in the fabrication of enclosures, base plates, and various metal structures that require durability and strength.",
+                items: [
+                    "Structural beams and columns",
+                    "Industrial machinery parts",
+                    "Metal fabrication and welding projects",
+                    "Support frames and braces",
+                    "Construction equipment components",
+                    "Agricultural equipment and machinery",
+                    "Base plates and gussets",
+                    "Heavy-duty enclosures and cabinets",
+                    "And so much more!"
+                ]
+            }
+        },
+        faqs: [
+            {
+                question: "What thicknesses does DMS Engineering offer Hot Rolled Carbon Steel in?",
+                answer: "DMS Engineering offers Hot Rolled Carbon Steel in 3 thicknesses: .313\" (8.0mm), .375\" (9.53mm) & .500\" (12.7mm)."
+            },
+            {
+                question: "What are the minimum and maximum sizes for cutting Hot Rolled Carbon Steel?",
+                answer: "With DMS Engineering's Hot Rolled Carbon Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". Custom quotes are available for sizes up to 30\" x 56\"."
+            },
+            {
+                question: "What additional services are available for Hot Rolled Carbon Steel?",
+                answer: "You can add the following services to your Hot Rolled Carbon Steel parts: Hardware Insertion, Plating, Powder Coating, Tapping, and Tumbling."
+            }
+        ]
     },
     {
         id: 15,
