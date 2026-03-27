@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler } from 'lucide-react';
+import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler, Boxes } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
 import * as THREE from 'three';
@@ -37,6 +37,7 @@ const InstantPricing = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [showEdges, setShowEdges] = useState(true);
+  const [showMesh, setShowMesh] = useState(false);
 
   const stepViewerRef = useRef(null);
   const dxfViewerRef = useRef(null);
@@ -521,7 +522,7 @@ const InstantPricing = () => {
     if (!isStepFile(selectedFile.file.name)) return;
 
     if (backendData) {
-      setActiveAxis('flat');
+      setViewMode('2d');
       return;
     }
 
@@ -545,8 +546,7 @@ const InstantPricing = () => {
       const data = await response.json();
       if (data.flatVertices && data.flatVertices.length > 0) {
         setBackendData(data);
-        // Only set axis to flat if it was explicitly clicked (not during auto-fetch)
-        // However, we'll let the click handler handle axis setting.
+        setViewMode('2d');
       } else {
         throw new Error('No flat geometry data returned');
       }
@@ -595,6 +595,23 @@ const InstantPricing = () => {
         v.scene.traverse((child) => {
           if (child.isLineSegments) {
             child.visible = next;
+          }
+        });
+        try { v.Render(); } catch { /* silent */ }
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleMesh = useCallback(() => {
+    setShowMesh(prev => {
+      const next = !prev;
+      const v = viewerInstance.current?.GetViewer?.();
+      if (v?.scene) {
+        v.scene.traverse((child) => {
+          if (child.isMesh) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(m => { if (m) m.wireframe = next; });
           }
         });
         try { v.Render(); } catch { /* silent */ }
@@ -701,10 +718,16 @@ const InstantPricing = () => {
                     <button key={key} className={activeAxis === key ? 'active' : ''}
                       onClick={() => {
                         if (key === 'flat') {
+                          setActiveAxis('flat');
                           handleUnfold();
                         } else {
                           setActiveAxis(key);
-                          setAxisCamera(key);
+                          if (currentIsStep) {
+                            setViewMode('2d');
+                            if (!backendData) handleUnfold();
+                          } else {
+                            setAxisCamera(key);
+                          }
                         }
                       }}>
                       {key === 'flat' ? <Maximize2 size={14} /> : <Monitor size={14} />}
@@ -714,6 +737,16 @@ const InstantPricing = () => {
                 </div>
               )}
               <div className="viewer-actions">
+                {showViewer && currentIsStep && viewMode === '3d' && (
+                  <button
+                    className={`btn-wireframe ${showMesh ? 'active' : ''}`}
+                    onClick={toggleMesh}
+                    title={showMesh ? 'Hide mesh' : 'Show mesh'}
+                  >
+                    <Boxes size={20} />
+                    <span>Show Mesh</span>
+                  </button>
+                )}
                 {showViewer && currentIsStep && (
                   <button
                     className={`btn-wireframe ${showEdges ? 'active' : ''}`}

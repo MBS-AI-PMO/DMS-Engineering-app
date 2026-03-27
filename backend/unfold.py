@@ -282,30 +282,63 @@ def _append_polyline_segments(output, points, R, t):
         output.extend(end.tolist())
 
 
-def _get_projection_edges(shape, plane_code="xy"):
+def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=None, face_info=None):
     """
-    Project all edges of the shape onto a principal plane.
+    Project edges of the shape onto a principal plane.
     plane_code: 'xy' (Top), 'xz' (Front), 'yz' (Side)
+
+    When edge_to_faces, edge_map, and face_info are provided, only silhouette
+    edges are included: edges where at least one adjacent face has a normal
+    component along the view axis. This filters out interior mesh lines that
+    appear between faces which are both parallel to the projection direction.
     """
+    # Which component of the face normal determines "facing the viewer"
+    view_axis_idx = {"xy": 2, "xz": 1, "yz": 0}[plane_code]
+    # Minimum normal component to consider a face as "facing" the view axis
+    SILHOUETTE_THRESHOLD = 0.05
+
     all_edges = _get_edges(shape)
     coords = []
     for edge in all_edges:
+        # Silhouette filtering when adjacency data is available
+        if edge_to_faces is not None and edge_map is not None and face_info is not None:
+            eidx = edge_map.FindIndex(edge)
+            adj_faces = edge_to_faces.get(eidx, [])
+
+            if len(adj_faces) >= 2:
+                # Include edge only if at least one adjacent face has a significant
+                # normal component along the view axis (boundary edges always pass)
+                has_view_axis_face = False
+                for fi in adj_faces:
+                    info = face_info[fi]
+                    if info[0] == "plane":
+                        if abs(info[1][view_axis_idx]) >= SILHOUETTE_THRESHOLD:
+                            has_view_axis_face = True
+                            break
+                    else:
+                        # Non-planar face (cylinder, etc.) – include to be safe
+                        has_view_axis_face = True
+                        break
+
+                if not has_view_axis_face:
+                    continue  # skip interior edge
+
         pts = _sample_edge_points(edge)
         if len(pts) < 2:
             continue
-        
+
         # Project and flatten
         projected = []
         for p in pts:
             if plane_code == "xy":
                 projected.append([p[0], p[1], 0.0])
             elif plane_code == "xz":
-                # For front view (XZ), we want to map Z to Y in 2D
+                # For front view (XZ), map Z to Y in 2D
                 projected.append([p[0], p[2], 0.0])
             elif plane_code == "yz":
-                # For side view (YZ), we want to map Y to X and Z to Y in 2D
+                # For side view (YZ), map Y to X and Z to Y in 2D
                 projected.append([p[1], p[2], 0.0])
-        
+
         for i in range(len(projected) - 1):
             coords.extend(projected[i])
             coords.extend(projected[i+1])
@@ -578,10 +611,10 @@ def unfold_step_file(filepath: str) -> dict:
             else:
                 _append_polyline_segments(all_cut_edges, edge_points, combined_R, combined_t)
 
-    # 9. Get principal 2D projections
-    top_coords = _get_projection_edges(occ_shape, "xy")
-    front_coords = _get_projection_edges(occ_shape, "xz")
-    side_coords = _get_projection_edges(occ_shape, "yz")
+    # 9. Get principal 2D projections (silhouette-filtered using face adjacency)
+    top_coords = _get_projection_edges(occ_shape, "xy", edge_to_faces, edge_map, face_info)
+    front_coords = _get_projection_edges(occ_shape, "xz", edge_to_faces, edge_map, face_info)
+    side_coords = _get_projection_edges(occ_shape, "yz", edge_to_faces, edge_map, face_info)
 
     # 10. Compute bounding box for the flat pattern
     if all_flat_verts:
