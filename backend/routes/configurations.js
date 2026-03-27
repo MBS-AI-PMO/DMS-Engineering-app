@@ -47,12 +47,14 @@ router.get('/cnc-machining', authenticate, requireAdmin, async (req, res) => {
             db.query(`SELECT * FROM service_configs WHERE service_type = 'cnc_machining'`),
             db.query(`
                 SELECT m.id, m.name, m.slug, m.image_path,
+                    mc_cat.name as category_name, mc_cat.slug as category_slug,
                     EXISTS(
                         SELECT 1 FROM service_metal_assignments sma
                         WHERE sma.service_type = 'cnc_machining' AND sma.metal_id = m.id
                     ) AS assigned
                 FROM metals m
-                ORDER BY m.name
+                LEFT JOIN metal_categories mc_cat ON m.category_id = mc_cat.id
+                ORDER BY mc_cat.display_order, m.name
             `)
         ]);
         res.json({ success: true, data: { config: configRes.rows[0] || {}, metals: metalsRes.rows } });
@@ -112,6 +114,7 @@ router.get('/sheet-cutting', authenticate, requireAdmin, async (req, res) => {
             db.query(`SELECT * FROM service_configs WHERE service_type = 'sheet_cutting'`),
             db.query(`
                 SELECT m.id, m.name, m.slug, m.image_path,
+                    mc_cat.name as category_name, mc_cat.slug as category_slug,
                     EXISTS(
                         SELECT 1 FROM service_metal_assignments sma
                         WHERE sma.service_type = 'sheet_cutting' AND sma.metal_id = m.id
@@ -119,7 +122,8 @@ router.get('/sheet-cutting', authenticate, requireAdmin, async (req, res) => {
                     COALESCE(mc.is_sheet_cuttable, false) AS is_sheet_cuttable
                 FROM metals m
                 LEFT JOIN metal_configs mc ON mc.metal_id = m.id
-                ORDER BY m.name
+                LEFT JOIN metal_categories mc_cat ON m.category_id = mc_cat.id
+                ORDER BY mc_cat.display_order, m.name
             `)
         ]);
         res.json({ success: true, data: { config: configRes.rows[0] || {}, metals: metalsRes.rows } });
@@ -129,23 +133,12 @@ router.get('/sheet-cutting', authenticate, requireAdmin, async (req, res) => {
     }
 });
 
-// PUT /api/configurations/sheet-cutting — save sizing + assignments → triggers recompute
+// PUT /api/configurations/sheet-cutting — save metal assignments only
 router.put('/sheet-cutting', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { min_x, max_x, min_y, max_y, metal_ids = [] } = req.body;
-
-        if (parseFloat(max_x) <= parseFloat(min_x) || parseFloat(max_y) <= parseFloat(min_y)) {
-            return res.status(400).json({ success: false, error: 'Max values must be greater than min values' });
-        }
+        const { metal_ids = [] } = req.body;
 
         await db.query('BEGIN');
-
-        await db.query(
-            `UPDATE service_configs
-             SET min_x=$1, max_x=$2, min_y=$3, max_y=$4, min_z=NULL, max_z=NULL, updated_at=NOW()
-             WHERE service_type = 'sheet_cutting'`,
-            [min_x || 0, max_x, min_y || 0, max_y]
-        );
 
         await db.query(`DELETE FROM service_metal_assignments WHERE service_type = 'sheet_cutting'`);
         if (metal_ids.length > 0) {
@@ -156,13 +149,18 @@ router.put('/sheet-cutting', authenticate, requireAdmin, async (req, res) => {
             );
         }
 
+        // is_sheet_cuttable mirrors the assignment — update all configured metals
+        await db.query(`
+            UPDATE metal_configs SET is_sheet_cuttable = (
+                EXISTS(
+                    SELECT 1 FROM service_metal_assignments sma
+                    WHERE sma.metal_id = metal_configs.metal_id AND sma.service_type = 'sheet_cutting'
+                )
+            )
+        `);
+
         await db.query('COMMIT');
-
-        // Recompute sheet-cuttability for ALL metals after SC config changes
-        await recomputeSheetCuttability();
-
-        const configRes = await db.query(`SELECT * FROM service_configs WHERE service_type = 'sheet_cutting'`);
-        res.json({ success: true, data: configRes.rows[0] });
+        res.json({ success: true });
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('PUT /configurations/sheet-cutting error:', err);
@@ -260,6 +258,20 @@ router.get('/pricing/sheet-cutting-metals', async (req, res) => {
     } catch (err) {
         console.error('GET /configurations/pricing/sheet-cutting-metals error:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch sheet cutting metals' });
+    }
+});
+
+// GET /api/configurations/pricing/cnc-config
+// Returns CNC sizing limits (public, no auth required)
+router.get('/pricing/cnc-config', async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT min_x, max_x, min_y, max_y, min_z, max_z FROM service_configs WHERE service_type = 'cnc_machining'`
+        );
+        res.json({ success: true, data: result.rows[0] || null });
+    } catch (err) {
+        console.error('GET /configurations/pricing/cnc-config error:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch CNC config' });
     }
 });
 

@@ -325,3 +325,7 @@ export async function fetchPricingCncMetals() {
     const { data } = await request('/configurations/pricing/cnc-metals');
     return data;
 }
+export async function fetchCncPricingConfig() {
+    const { data } = await request('/configurations/pricing/cnc-config');
+    return data;
+}

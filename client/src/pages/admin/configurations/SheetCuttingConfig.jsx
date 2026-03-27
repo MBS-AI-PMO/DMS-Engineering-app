@@ -1,99 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Scissors, ArrowLeft, Save, Check, Zap } from 'lucide-react';
+import { Scissors, ArrowLeft, Save, Check, Search, CheckSquare, Square } from 'lucide-react';
 import { fetchSheetCuttingConfig, saveSheetCuttingConfig } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
-
-const MM_PER_INCH = 25.4;
-const toDisplay = (mmVal, unit) => {
-    if (mmVal === '' || mmVal === null || mmVal === undefined) return '';
-    const n = parseFloat(mmVal);
-    if (isNaN(n)) return '';
-    return unit === 'inch' ? parseFloat((n / MM_PER_INCH).toFixed(5)) : n;
-};
-const toMm = (displayVal, unit) => {
-    if (displayVal === '' || displayVal === null || displayVal === undefined) return '';
-    const n = parseFloat(displayVal);
-    if (isNaN(n)) return '';
-    return unit === 'inch' ? n * MM_PER_INCH : n;
-};
-
-function UnitToggle({ unit, onChange }) {
-    return (
-        <div className="config-unit-toggle">
-            <button className={unit === 'mm' ? 'active' : ''} onClick={() => onChange('mm')}>mm</button>
-            <button className={unit === 'inch' ? 'active' : ''} onClick={() => onChange('inch')}>inch</button>
-        </div>
-    );
-}
-
-function SizingRow({ label, minKey, maxKey, values, onChange, unit }) {
-    return (
-        <div className="config-sizing-row">
-            <span className="config-axis-label">{label}</span>
-            <div className="config-sizing-pair">
-                <div className="config-sizing-field">
-                    <label>Min</label>
-                    <div className="config-sizing-input-wrap">
-                        <input
-                            type="number"
-                            min="0"
-                            step={unit === 'inch' ? '0.001' : '0.1'}
-                            value={toDisplay(values[minKey], unit)}
-                            onChange={e => onChange(minKey, toMm(e.target.value, unit))}
-                            placeholder="0"
-                        />
-                        <span className="config-unit">{unit}</span>
-                    </div>
-                </div>
-                <div className="config-sizing-sep">—</div>
-                <div className="config-sizing-field">
-                    <label>Max</label>
-                    <div className="config-sizing-input-wrap">
-                        <input
-                            type="number"
-                            min="0"
-                            step={unit === 'inch' ? '0.001' : '0.1'}
-                            value={toDisplay(values[maxKey], unit)}
-                            onChange={e => onChange(maxKey, toMm(e.target.value, unit))}
-                            placeholder="∞"
-                        />
-                        <span className="config-unit">{unit}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 export default function SheetCuttingConfig() {
     const navigate = useNavigate();
     const toast = useToast();
 
-    const [config, setConfig] = useState({ min_x: '', max_x: '', min_y: '', max_y: '' });
     const [metals, setMetals] = useState([]);
     const [assignedIds, setAssignedIds] = useState(new Set());
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [unit, setUnit] = useState('mm');
+    const [search, setSearch] = useState('');
 
     useEffect(() => {
         fetchSheetCuttingConfig()
             .then(data => {
-                const c = data.config || {};
-                setConfig({
-                    min_x: c.min_x ?? '', max_x: c.max_x ?? '',
-                    min_y: c.min_y ?? '', max_y: c.max_y ?? '',
-                });
                 setMetals(data.metals || []);
                 setAssignedIds(new Set((data.metals || []).filter(m => m.assigned).map(m => m.id)));
             })
             .catch(() => toast('Failed to load Sheet Cutting config', 'error'))
             .finally(() => setLoading(false));
     }, []);
-
-    const handleSizing = (key, val) => setConfig(c => ({ ...c, [key]: val }));
 
     const toggleMetal = (id) => {
         setAssignedIds(prev => {
@@ -103,17 +33,18 @@ export default function SheetCuttingConfig() {
         });
     };
 
+    const selectAll = () => setAssignedIds(new Set(filtered.map(m => m.id)));
+    const clearAll = () => setAssignedIds(prev => {
+        const next = new Set(prev);
+        filtered.forEach(m => next.delete(m.id));
+        return next;
+    });
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            await saveSheetCuttingConfig({
-                ...config,
-                metal_ids: Array.from(assignedIds),
-            });
-            // Refetch to get updated is_sheet_cuttable flags
-            const updated = await fetchSheetCuttingConfig();
-            setMetals(updated.metals || []);
-            toast('Sheet Cutting configuration saved', 'success');
+            await saveSheetCuttingConfig({ metal_ids: Array.from(assignedIds) });
+            toast('Sheet Cutting metals saved', 'success');
         } catch (err) {
             toast(err.message || 'Failed to save', 'error');
         } finally {
@@ -123,7 +54,8 @@ export default function SheetCuttingConfig() {
 
     if (loading) return <div className="admin-loading-inline"><div className="admin-loading-spinner" /><span>Loading…</span></div>;
 
-    const autoDetected = metals.filter(m => m.is_sheet_cuttable).length;
+    const filtered = metals.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    const allFilteredSelected = filtered.length > 0 && filtered.every(m => assignedIds.has(m.id));
 
     return (
         <div className="admin-list-page">
@@ -137,7 +69,7 @@ export default function SheetCuttingConfig() {
                     </div>
                     <div>
                         <h1 className="admin-page-title">Sheet Cutting</h1>
-                        <p className="admin-page-subtitle">Global sizing limits and assigned metals</p>
+                        <p className="admin-page-subtitle">Select which metals are available for sheet cutting</p>
                     </div>
                 </div>
                 <button className="config-save-btn" onClick={handleSave} disabled={saving}>
@@ -146,59 +78,65 @@ export default function SheetCuttingConfig() {
                 </button>
             </header>
 
-            {/* Auto-detection notice */}
-            <div className="config-auto-notice">
-                <Zap size={15} />
-                <span>
-                    After saving, metals whose configured sizing fits within these limits are automatically flagged as
-                    <strong> sheet-cuttable</strong>. Currently <strong>{autoDetected}</strong> metals qualify.
-                </span>
-            </div>
-
-            <div className="config-sections-grid">
-                {/* Sizing (X, Y only — no Z for sheet cutting) */}
-                <motion.div className="config-section-card" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                    <div className="config-section-header">
-                        <div className="config-section-header-row">
-                            <div>
-                                <h2>Sizing Limits</h2>
-                                <p>Define the maximum sheet dimensions (X, Y). No Z axis for sheet cutting.</p>
-                            </div>
-                            <UnitToggle unit={unit} onChange={setUnit} />
-                        </div>
-                    </div>
-                    <div className="config-sizing-grid">
-                        <SizingRow label="X" minKey="min_x" maxKey="max_x" values={config} onChange={handleSizing} unit={unit} />
-                        <SizingRow label="Y" minKey="min_y" maxKey="max_y" values={config} onChange={handleSizing} unit={unit} />
-                    </div>
-                </motion.div>
-
-                {/* Metal assignment */}
-                <motion.div className="config-section-card" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <div className="config-section-header">
+            <motion.div
+                className="sc-metals-card"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+            >
+                {/* Card header */}
+                <div className="sc-card-header">
+                    <div className="sc-card-header-left">
                         <h2>Available Metals</h2>
-                        <p>Manually assign metals to sheet cutting. The auto-flag shows which also fit the sizing limits.</p>
-                        <span className="config-assigned-count">{assignedIds.size} of {metals.length} selected</span>
+                        <span className="sc-assigned-pill">
+                            {assignedIds.size} <span>of {metals.length} assigned</span>
+                        </span>
                     </div>
-                    <div className="config-metal-toggle-list">
-                        {metals.map(metal => (
-                            <button
+                    <div className="sc-card-header-right">
+                        <div className="sc-search-wrap">
+                            <Search size={14} className="sc-search-icon" />
+                            <input
+                                type="text"
+                                placeholder="Search metals…"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                className="sc-search-input"
+                            />
+                        </div>
+                        <button className="sc-bulk-btn" onClick={allFilteredSelected ? clearAll : selectAll}>
+                            {allFilteredSelected
+                                ? <><Square size={14} /> Deselect All</>
+                                : <><CheckSquare size={14} /> Select All</>
+                            }
+                        </button>
+                    </div>
+                </div>
+
+                {/* Metal grid */}
+                <div className="sc-metal-grid">
+                    {filtered.map((metal, i) => {
+                        const selected = assignedIds.has(metal.id);
+                        return (
+                            <motion.button
                                 key={metal.id}
-                                className={`config-metal-toggle-item ${assignedIds.has(metal.id) ? 'selected' : ''}`}
+                                className={`sc-metal-item ${selected ? 'selected' : ''}`}
                                 onClick={() => toggleMetal(metal.id)}
+                                initial={{ opacity: 0, scale: 0.97 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: i * 0.012 }}
                             >
-                                <div className="config-metal-toggle-check">
-                                    {assignedIds.has(metal.id) && <Check size={12} />}
+                                <div className="sc-metal-check">
+                                    {selected && <Check size={11} />}
                                 </div>
-                                <span className="config-metal-toggle-name">{metal.name}</span>
-                                {metal.is_sheet_cuttable && (
-                                    <span className="config-auto-badge">auto</span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                </motion.div>
-            </div>
+                                <span className="sc-metal-name">{metal.name}</span>
+                            </motion.button>
+                        );
+                    })}
+                    {filtered.length === 0 && (
+                        <p className="sc-empty">No metals match your search.</p>
+                    )}
+                </div>
+            </motion.div>
         </div>
     );
 }

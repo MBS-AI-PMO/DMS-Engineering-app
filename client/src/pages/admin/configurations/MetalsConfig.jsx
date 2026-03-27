@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layers, ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Zap } from 'lucide-react';
+import { Layers, ArrowLeft, Save, ChevronDown, ChevronUp, Check, Zap } from 'lucide-react';
 import { fetchMetalConfigs, saveMetalConfig } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
@@ -39,8 +39,6 @@ function MetalRow({ metal, onSave, unit }) {
         max_x: metal.max_x ?? '',
         min_y: metal.min_y ?? '',
         max_y: metal.max_y ?? '',
-        min_z: metal.min_z ?? '',
-        max_z: metal.max_z ?? '',
         available_thicknesses: Array.isArray(metal.available_thicknesses) ? metal.available_thicknesses : [],
     });
 
@@ -60,7 +58,13 @@ function MetalRow({ metal, onSave, unit }) {
         }
     };
 
-    const allPotentialThicknesses = metal.quick_look?.thicknesses || [];
+    // Parse thickness list: metric field gives mm value, value field gives inch label
+    const allPotentialThicknesses = (metal.quick_look?.thicknesses || [])
+        .map(t => ({
+            mmVal: parseFloat(t.metric),   // "3.18mm" → 3.18
+            inchLabel: t.value,            // ".125\""
+        }))
+        .filter(t => !isNaN(t.mmVal) && t.mmVal > 0);
 
     const toggleThickness = (mmVal) => {
         setForm(prev => {
@@ -71,11 +75,6 @@ function MetalRow({ metal, onSave, unit }) {
                 : [...current, mmVal].sort((a, b) => a - b);
             return { ...prev, available_thicknesses: next };
         });
-    };
-
-    const displayThickness = (mmVal) => {
-        if (unit === 'inch') return `${(mmVal / MM_PER_INCH).toFixed(3)}`;
-        return `${mmVal}`;
     };
 
     return (
@@ -105,26 +104,40 @@ function MetalRow({ metal, onSave, unit }) {
                             {/* Sizing */}
                             <div className="config-metal-sizing-group">
                                 <h4 className="config-metal-group-title">Sizing ({unit})</h4>
-                                {[['X', 'min_x', 'max_x'], ['Y', 'min_y', 'max_y'], ['Z', 'min_z', 'max_z']].map(([axis, minK, maxK]) => (
-                                    <div key={axis} className="config-metal-sizing-row">
-                                        <span className="config-axis-label-sm">{axis}</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step={unit === 'inch' ? '0.001' : '0.1'}
-                                            value={toDisplay(form[minK], unit)}
-                                            onChange={e => f(minK, toMm(e.target.value, unit))}
-                                            placeholder="Min"
-                                        />
-                                        <span className="config-sizing-sep-sm">—</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step={unit === 'inch' ? '0.001' : '0.1'}
-                                            value={toDisplay(form[maxK], unit)}
-                                            onChange={e => f(maxK, toMm(e.target.value, unit))}
-                                            placeholder="Max"
-                                        />
+                                {[
+                                    ['X', 'Width', 'min_x', 'max_x'],
+                                    ['Y', 'Length', 'min_y', 'max_y'],
+                                ].map(([axis, label, minK, maxK]) => (
+                                    <div key={axis} className="config-metal-sizing-item">
+                                        <div className="config-axis-info">
+                                            <span className="config-axis-letter">{axis}</span>
+                                            <span className="config-axis-text">{label}</span>
+                                        </div>
+                                        <div className="config-sizing-input-group">
+                                            <div className="config-input-with-label">
+                                                <small>Min</small>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step={unit === 'inch' ? '0.001' : '0.1'}
+                                                    value={toDisplay(form[minK], unit)}
+                                                    onChange={e => f(minK, toMm(e.target.value, unit))}
+                                                    placeholder="0.000"
+                                                />
+                                            </div>
+                                            <span className="config-sizing-range-sep">to</span>
+                                            <div className="config-input-with-label">
+                                                <small>Max</small>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step={unit === 'inch' ? '0.001' : '0.1'}
+                                                    value={toDisplay(form[maxK], unit)}
+                                                    onChange={e => f(maxK, toMm(e.target.value, unit))}
+                                                    placeholder="0.000"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -136,18 +149,18 @@ function MetalRow({ metal, onSave, unit }) {
 
                                 <div className="config-thickness-checkbox-grid">
                                     {allPotentialThicknesses.map(t => {
-                                        const isSelected = form.available_thicknesses.some(v => Math.abs(v - t.value) < 0.0001);
+                                        const isSelected = form.available_thicknesses.some(v => Math.abs(v - t.mmVal) < 0.0001);
                                         return (
                                             <button
-                                                key={t.value}
+                                                key={t.mmVal}
                                                 className={`config-thickness-checkbox-item ${isSelected ? 'selected' : ''}`}
-                                                onClick={() => toggleThickness(t.value)}
+                                                onClick={() => toggleThickness(t.mmVal)}
                                             >
                                                 <div className="config-thickness-checkbox-check">
                                                     {isSelected && <Check size={10} />}
                                                 </div>
                                                 <span className="config-thickness-checkbox-label">
-                                                    {displayThickness(t.value)} <small>{unit}</small>
+                                                    {unit === 'inch' ? t.inchLabel : `${t.mmVal} mm`}
                                                 </span>
                                             </button>
                                         );
@@ -186,7 +199,7 @@ export default function MetalsConfig() {
             .then(data => setMetals(data || []))
             .catch(() => toast('Failed to load metal configs', 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const handleMetalSave = (id, updated) => {
         setMetals(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m));
