@@ -3799,12 +3799,13 @@ body {
 }
 
 .viewer-controls {
-    padding: 16px 24px;
+    padding: 12px 20px;
     background: #ffffff;
     border-bottom: 1px solid #f1f5f9;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .view-toggles {
@@ -3835,6 +3836,8 @@ body {
 .viewer-actions {
     display: flex;
     gap: 12px;
+    align-items: center;
+    margin-left: auto;
 }
 
 .viewer-actions button {
@@ -3855,6 +3858,28 @@ body {
 .viewer-actions button:hover {
     background: #e2e8f0;
     color: #334155;
+}
+
+.btn-wireframe {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 0 14px !important;
+    height: 36px !important;
+    border-radius: 8px !important;
+}
+
+.btn-wireframe.active {
+    background: #1e293b !important;
+    color: #fff !important;
+}
+
+.btn-wireframe:not(.active) {
+    background: #f1f5f9 !important;
+    color: #94a3b8 !important;
 }
 
 .unit-switch-container {

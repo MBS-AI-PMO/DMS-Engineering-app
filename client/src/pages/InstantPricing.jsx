@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, Info, ArrowRight, FileCode, Layers } from 'lucide-react';
+import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3 } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
 import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 
 const BACKEND_URL = 'http://localhost:8000';
 
@@ -30,11 +31,12 @@ const InstantPricing = () => {
   const [unit, setUnit] = useState('mm');
   const [dxfSvg, setDxfSvg] = useState(null);
   const [dxfError, setDxfError] = useState(null);
-  const [unfoldedSvg, setUnfoldedSvg] = useState(null);
-  const [unfoldError, setUnfoldError] = useState(null);
+  const [backendData, setBackendData] = useState(null);
+  const [backendError, setBackendError] = useState(null);
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [showEdges, setShowEdges] = useState(true);
 
   const stepViewerRef = useRef(null);
   const dxfViewerRef = useRef(null);
@@ -67,8 +69,8 @@ const InstantPricing = () => {
       setSelectedFile(newFiles[0]);
       setViewMode(is2DFile(newFiles[0].file.name) ? '2d' : '3d');
       setActiveAxis('top');
-      setUnfoldedSvg(null);
-      setUnfoldError(null);
+      setBackendData(null);
+      setBackendError(null);
       modelRef.current = null;
     }
   }, []);
@@ -501,20 +503,20 @@ const InstantPricing = () => {
   const handleUnfold = useCallback(async () => {
     if (!selectedFile) return;
     if (is2DFile(selectedFile.file.name)) {
-      setUnfoldedSvg(null);
+      setBackendData(null);
       setViewMode('2d');
       setActiveAxis('flat');
       return;
     }
     if (!isStepFile(selectedFile.file.name)) return;
 
-    if (unfoldedSvg) {
+    if (backendData) {
       setActiveAxis('flat');
       return;
     }
 
     setIsLoadingUnfold(true);
-    setUnfoldError(null);
+    setBackendError(null);
 
     const formData = new FormData();
     formData.append('file', selectedFile.file);
@@ -531,19 +533,19 @@ const InstantPricing = () => {
       }
 
       const data = await response.json();
-      if (data.success && data.svg) {
-        setUnfoldedSvg(data.svg);
+      if (data.flatVertices && data.flatVertices.length > 0) {
+        setBackendData(data);
         setActiveAxis('flat');
       } else {
-        throw new Error('No SVG data returned');
+        throw new Error('No flat geometry data returned');
       }
     } catch (err) {
       console.error('Unfold error:', err);
-      setUnfoldError(err.message || 'Error connecting to backend for flattening.');
+      setBackendError(err.message || 'Error connecting to backend for flattening.');
     } finally {
       setIsLoadingUnfold(false);
     }
-  }, [selectedFile, unfoldedSvg]);
+  }, [selectedFile, backendData]);
 
   const setAxisCamera = (axis) => {
     if (viewerInstance.current) {
@@ -551,6 +553,9 @@ const InstantPricing = () => {
       if (!v) return;
       const c = { top: { eye: [0, 1000, 0], up: [0, 0, -1] }, front: { eye: [0, 0, 1000], up: [0, 1, 0] }, side: { eye: [1000, 0, 0], up: [0, 1, 0] } }[axis];
       v.SetCamera(new OV.Camera(new OV.Coord3D(...c.eye), new OV.Coord3D(0, 0, 0), new OV.Coord3D(...c.up), 45));
+      if (viewMode === '2d') {
+        v.SetProjectionMode(OV.ProjectionMode.Orthographic);
+      }
       viewerInstance.current.FitToWindow();
     } else if (dxfViewerInstance.current) {
       const { camera, controls, extents } = dxfViewerInstance.current;
@@ -570,14 +575,38 @@ const InstantPricing = () => {
     }
   };
 
+  // ─── Toggle edge mesh (black outlines) on the 3D model ──
+  const toggleEdges = useCallback(() => {
+    setShowEdges(prev => {
+      const next = !prev;
+      const v = viewerInstance.current?.GetViewer?.();
+      if (v?.scene) {
+        v.scene.traverse((child) => {
+          if (child.isLineSegments) {
+            child.visible = next;
+          }
+        });
+        try { v.Render(); } catch (e) { /* silent */ }
+      }
+      return next;
+    });
+  }, []);
+
   const toggleView = (mode) => {
     setViewMode(mode);
-    if (!isStepFile(selectedFile?.file?.name ?? '')) return; // DXF handles itself natively by ref toggle
+    if (!isStepFile(selectedFile?.file?.name ?? '')) return;
     if (!viewerInstance.current) return;
     try {
       const vObj = viewerInstance.current.GetViewer();
-      if (mode === '2d') { vObj.SetProjectionMode(OV.ProjectionMode.Orthographic); setActiveAxis('top'); setAxisCamera('top'); }
-      else { vObj.SetProjectionMode(OV.ProjectionMode.Perspective); viewerInstance.current.FitToWindow(); }
+      if (mode === '2d') {
+        vObj.SetProjectionMode(OV.ProjectionMode.Orthographic);
+        setActiveAxis('top');
+        // Small delay to let OV update projection before setting camera
+        setTimeout(() => setAxisCamera('top'), 50);
+      } else {
+        vObj.SetProjectionMode(OV.ProjectionMode.Perspective);
+        viewerInstance.current.FitToWindow();
+      }
     } catch (e) { console.error("Error toggling view mode:", e); }
   };
 
@@ -620,7 +649,7 @@ const InstantPricing = () => {
           <div className="sidebar">
             <div className="sidebar-header">
               <h3>Uploaded Files</h3>
-              <button onClick={() => { setFiles([]); setSelectedFile(null); setDxfSvg(null); modelRef.current = null; }} className="btn-clear">
+              <button onClick={() => { setFiles([]); setSelectedFile(null); setDxfSvg(null); setBackendData(null); setBackendError(null); modelRef.current = null; }} className="btn-clear">
                 Clear all
               </button>
             </div>
@@ -667,6 +696,16 @@ const InstantPricing = () => {
                 </div>
               )}
               <div className="viewer-actions">
+                {showViewer && currentIsStep && (
+                  <button
+                    className={`btn-wireframe ${showEdges ? 'active' : ''}`}
+                    onClick={toggleEdges}
+                    title={showEdges ? 'Hide edge mesh' : 'Show edge mesh'}
+                  >
+                    <Grid3x3 size={16} />
+                    <span>Mesh</span>
+                  </button>
+                )}
                 <div className="unit-switch-container">
                   <span className={`label mm ${unit === 'mm' ? 'active' : ''}`}>MM</span>
                   <label className="switch">
@@ -684,17 +723,17 @@ const InstantPricing = () => {
                   <div className="flat-loading-spinner" />
                   Drawing flat pattern...
                 </div>
-              ) : activeAxis === 'flat' && unfoldedSvg ? (
-                <div className="flat-pattern-wrapper">
-                  <div className="flat-pattern-legend">
-                    <span className="legend-solid">Solid: Outline</span>
-                    <span className="legend-bend">Dashed: Bends</span>
-                  </div>
-                  <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: unfoldedSvg }} />
-                </div>
-              ) : activeAxis === 'flat' && unfoldError ? (
+              ) : activeAxis === 'flat' && backendData ? (
+                <FlatPatternViewer
+                  geometries={[]}
+                  options={{}}
+                  backendData={backendData}
+                  sourceFlatData={null}
+                  formatKind="model"
+                />
+              ) : activeAxis === 'flat' && backendError ? (
                 <div className="viewer-error">
-                  {unfoldError}
+                  {backendError}
                   <button className="btn-retry" onClick={handleUnfold} style={{ marginTop: '12px', padding: '6px 12px', background: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                     Retry Flattening
                   </button>
@@ -717,6 +756,20 @@ const InstantPricing = () => {
                     </div>
                   )}
                 </>
+              )}
+
+              {/* 2D View Mode Indicator */}
+              {viewMode === '2d' && activeAxis !== 'flat' && currentIsStep && (
+                <div style={{
+                  position: 'absolute', left: 12, top: 12, display: 'flex', alignItems: 'center', gap: 6,
+                  borderRadius: 6, border: '1px solid #d1d5db', backgroundColor: '#fff',
+                  padding: '4px 10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', zIndex: 10,
+                }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#3b82f6' }} />
+                  <span style={{ fontSize: 12, fontWeight: 500, color: '#4b5563' }}>
+                    2D {activeAxis.charAt(0).toUpperCase() + activeAxis.slice(1)} View
+                  </span>
+                </div>
               )}
 
               {!selectedFile && <div className="viewer-placeholder">Select a file to view</div>}

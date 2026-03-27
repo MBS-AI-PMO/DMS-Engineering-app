@@ -40,6 +40,7 @@ import aboutMetal2 from '../assets/metals/about-metal-2.jpg';
 import about6061 from '../assets/metals/6061-about-enhanced.png';
 import titaniumAbout from '../assets/metals/titanium-about.png';
 import titaniumGrade2About from '../assets/metals/titanium-grade2-about.png';
+import hrpoAbout from '../assets/metals/hrpo-about.png';
 
 // 5052-H32 Aluminum Showcase Images
 import h32_1 from '../assets/metals/5052-h32-1.png';
@@ -5197,10 +5198,227 @@ export const metalsData = [
         thickness: "Thicknesses: .187\" – .250\"",
         image: aboutMetal2,
         description: "Hot Rolled Pickled and Oiled steel for improved surface quality.",
-        quickLook: { cutSizes: [], thicknesses: [], tolerance: "+/- .005\"" },
-        services: [3, 5, 10, 11],
-        specifications: { availableServices: ["Laser Cutting", "Bending", "Plating", "Powder Coating"], generalDetails: [], laserCuttingSpecs: [], properties: [] },
-        aboutSection: { title: "HRP&O (A36/A1018) Steel", text: "Data coming soon.", items: [] }
+        quickLook: {
+            cutSizes: [
+                { label: "A", size: ".25\" x .375\" min", action: "Instant Pricing", type: "solid" },
+                { label: "B", size: "30\" x 44\" max", action: "Instant Pricing", type: "solid" },
+                { label: "C", size: "30\" x 56\" max", action: "Custom Quote", type: "outline" }
+            ],
+            thicknesses: [
+                { value: ".187\"", metric: "4.75mm" },
+                { value: ".250\"", metric: "6.35mm" }
+            ],
+            tolerance: "+/- .005\""
+        },
+        services: [3, 6, 7, 10, 11, 12],
+        specifications: {
+            availableServices: ["Laser Cutting", "Bending", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+            generalDetails: [],
+            laserCuttingSpecs: [],
+            properties: [
+                { label: "Material Composition", value: "Iron (Fe): 98.0 Manganese (Mn): 1.03 Carbon (C): 0.25 – 0.290 Copper (Cu): 0.20 Sulfur (S): .050 Phosphorus (P): 0.04 Silicon (Si): 0.280" },
+                { label: "Density", value: "490 lb/ft^3" },
+                { label: "Heat treatments process", value: "N/A" },
+                { label: "ASTM", value: "A1011-18A-CS-TYPE B" },
+                { label: "Tensile Strength (Ultimate)", value: "69 ksi" },
+                { label: "Tensile Strength (Yield)", value: "41 ksi" },
+                { label: "Shear Strength", value: "44 ksi" },
+                { label: "Shear Modulus", value: "11000 ksi" },
+                { label: "Fatigue Strength", value: "29 ksi" },
+                { label: "Brinell Hardness", value: "140" },
+                { label: "Elongation at Break", value: "22%" },
+                { label: "Elastic Modulus", value: "27000 ksi" },
+                { label: "Poisson’s Ratio", value: ".29" },
+                { label: "Thermal Conductivity", value: "43 BTU/h-ft °F" },
+                { label: "Melting Point", value: "2600 °F" },
+                { label: "Magnetic", value: "Yes" },
+                { label: "Does it Rust", value: "Yes" }
+            ]
+        },
+        thicknessSpecs: {
+            ".187\"": {
+                availableServices: ["Laser Cutting", "Bending", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.187\"", mm: "4.75 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.008\"", mm: "0.203 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.008\"", mm: "0.203 mm" },
+                    { label: "Mill Finish", inch: "Hot Rolled Pickled and Oiled", mm: "Hot Rolled Pickled and Oiled" },
+                    { label: "Steel Type", inch: "HRP&O (typically dual certified ASTM A1018 CS Type B / for conversion to ASTM A36)", mm: "HRP&O (typically dual certified ASTM A1018 CS Type B / for conversion to ASTM A36)" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".5\" x .570\"", mm: "12.7 mm x 14.478 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Recommended Min hole size", inch: ".070\"", mm: "1.778 mm" },
+                    { label: "Min hole size", inch: ".042\"", mm: "1.067 mm" },
+                    { label: "Min bridge size", inch: ".073\"", mm: "1.854 mm" },
+                    { label: "Min hole to edge distance", inch: ".056\"", mm: "1.422 mm" },
+                    { label: "Tab and slot tolerance", inch: ".015\"", mm: "0.381 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "44\"", mm: "1117.6 mm" },
+                    { label: "Min flange length (before/Flat Pattern) 90° or less", inch: "0.620\"", mm: "15.748 mm" },
+                    { label: "Min flange length (after bend) 90° or less", inch: "0.781\"", mm: "19.837 mm" },
+                    { label: "Minimum Length Center of bend line 91-130° (Acute)", inch: "N/A", mm: "N/A" },
+                    { label: "Die width", inch: "0.984\"", mm: "24.994 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.125\"", mm: "3.175 mm" },
+                    { label: "Max bend angle", inch: "90°", mm: "90°" },
+                    { label: "Bend angle tolerance (up to 24 in)", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (over 24 in)", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.323\"", mm: "8.204 mm" },
+                    { label: "K Factor", inch: "0.36", mm: "0.36" },
+                    { label: "Bend relief depth", inch: "0.332\"", mm: "8.433 mm" },
+                    { label: "Minimum joggle (Bend line to bend line @90°)", inch: "0.826\"", mm: "20.980 mm" },
+                    { label: "Maximum joggle (Bend line to bend line @90°)", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1″ x 1.5″", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36″ x 46″", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "Please view our Hardware Catalog", mm: "Please view our Hardware Catalog" }
+                ],
+                platingSpecs: [
+                    { label: "Min Plating Part Size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max Plating Part Size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "30\" x 36\"", mm: "762 mm x 914.4 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M2 x 0.4", mm: "M2 x 0.4" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.056\"", mm: "1.422 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.056\"", mm: "Tap hole size/2 +1.422 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            },
+            ".250\"": {
+                availableServices: ["Laser Cutting", "Bending", "Hardware Insertion", "Plating", "Powder Coating", "Tapping", "Tumbling"],
+                generalDetails: [
+                    { label: "Advertised Thickness", inch: "0.250\"", mm: "6.35 mm" },
+                    { label: "Gauge", inch: "N/A", mm: "N/A" },
+                    { label: "Thickness tolerance positive", inch: "0.008\"", mm: "0.203 mm" },
+                    { label: "Thickness tolerance negative", inch: "0.008\"", mm: "0.203 mm" },
+                    { label: "Mill Finish", inch: "Hot Rolled Pickled and Oiled", mm: "Hot Rolled Pickled and Oiled" },
+                    { label: "Steel Type", inch: "HRP&O (typically dual certified ASTM A1018 CS Type B / for conversion to ASTM A36)", mm: "HRP&O (typically dual certified ASTM A1018 CS Type B / for conversion to ASTM A36)" },
+                    { label: "Top/Bottom finish", inch: "Identical both sides", mm: "Identical both sides" },
+                    { label: "Sourced from", inch: "USA/Global", mm: "USA/Global" }
+                ],
+                laserCuttingSpecs: [
+                    { label: "Cutting process", inch: "Fiber laser", mm: "Fiber laser" },
+                    { label: "Cut tolerance +/-", inch: "0.005\"", mm: "0.127 mm" },
+                    { label: "Flatness tolerance before cutting", inch: "+/-0.030 per foot", mm: "0.762 mm per 304.8 mm" },
+                    { label: "Min part size", inch: ".500\" x .750\"", mm: "12.7 mm x 19.05 mm" },
+                    { label: "Max part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Recommended Min hole size", inch: ".095\"", mm: "2.413 mm" },
+                    { label: "Min hole size", inch: ".057\"", mm: "1.448 mm" },
+                    { label: "Min bridge size", inch: ".125\"", mm: "3.175 mm" },
+                    { label: "Min hole to edge distance", inch: ".075\"", mm: "1.905 mm" },
+                    { label: "Tab and slot tolerance", inch: ".015\"", mm: "0.381 mm" }
+                ],
+                bendingSpecs: [
+                    { label: "Min bend part size", inch: ".375\" x 1.5\"", mm: "9.525 mm x 38.1 mm" },
+                    { label: "Max bending flat part size", inch: "44\" x 30\"", mm: "1117.6 mm x 762 mm" },
+                    { label: "Max bend length", inch: "42\"", mm: "1066.8 mm" },
+                    { label: "Min flange length (before/Flat Pattern) 90° or less", inch: "1.150\"", mm: "29.21 mm" },
+                    { label: "Min flange length (after bend) 90° or less", inch: "1.361\"", mm: "34.569 mm" },
+                    { label: "Minimum Length Center of bend line 91-130° (Acute)", inch: "N/A", mm: "N/A" },
+                    { label: "Die width", inch: "1.575\"", mm: "40.005 mm" },
+                    { label: "Effective bend radius @ 90°", inch: "0.150\"", mm: "3.81 mm" },
+                    { label: "Max bend angle", inch: "90°", mm: "90°" },
+                    { label: "Bend angle tolerance (up to 24 in)", inch: "+/- 1 degree", mm: "+/- 1 degree" },
+                    { label: "Bend angle tolerance (over 24 in)", inch: "+/- 2 degrees", mm: "+/- 2 degrees" },
+                    { label: "Bend deduction @ 90°", inch: "0.422\"", mm: "10.719 mm" },
+                    { label: "K Factor", inch: "0.36", mm: "0.36" },
+                    { label: "Bend relief depth", inch: "0.420\"", mm: "10.668 mm" },
+                    { label: "Minimum joggle (Bend line to bend line @90°)", inch: "1.425\"", mm: "36.195 mm" },
+                    { label: "Maximum joggle (Bend line to bend line @90°)", inch: "3.750\"", mm: "95.25 mm" }
+                ],
+                hardwareSpecs: [
+                    { label: "Min hardware part size", inch: "1″ x 1.5″", mm: "25.4 mm x 38.1 mm" },
+                    { label: "Max hardware part size", inch: "36″ x 46″", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Max 4 sided box flange height", inch: "3\"", mm: "76.2 mm" },
+                    { label: "Hardware specific specifications", inch: "Please view our Hardware Catalog", mm: "Please view our Hardware Catalog" }
+                ],
+                platingSpecs: [
+                    { label: "Min Plating Part Size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max Plating Part Size", inch: "23\" x 23\"", mm: "584.2 mm x 584.2 mm" }
+                ],
+                powderCoatingSpecs: [
+                    { label: "Min powder coating part size", inch: "1\" x 3\"", mm: "25.4 mm x 76.2 mm" },
+                    { label: "Max powder coating part size", inch: "30\" x 36\"", mm: "762 mm x 914.4 mm" }
+                ],
+                tappingSpecs: [
+                    { label: "Largest Tap", inch: "1/2-20", mm: "1/2-20" },
+                    { label: "Smallest Tap", inch: "M2 x 0.4", mm: "M2 x 0.4" },
+                    { label: "Min Flat Part Size Tapping", inch: "0.949\" x 1.5\"", mm: "24.105 mm x 38.1 mm" },
+                    { label: "Max Flat Part Size Tapping", inch: "36\" x 46\"", mm: "914.4 mm x 1168.4 mm" },
+                    { label: "Tapping Min Hole to Edge", inch: "0.075\"", mm: "1.905 mm" },
+                    { label: "Tapping Min Hole Center to Material Edge", inch: "Tap hole size/2 +0.075\"", mm: "Tap hole size/2 +1.905 mm" }
+                ],
+                tumbleSpecs: [
+                    { label: "Min Part Size Tumbling", inch: "0.5\" x 1.5\"", mm: "12.7 mm x 38.1 mm" },
+                    { label: "Max Part Size Tumbling", inch: "4\" x 7\"", mm: "101.6 mm x 177.8 mm" }
+                ]
+            }
+        },
+        aboutSection: {
+            title: "What is HRP&O Carbon Steel?",
+            text: "HRP&O steel is much smoother and easier to finish than the cheaper \"mill finished hot-roll\" that most steel centers sell. HRP&O is just hot-rolled steel that is subjected to an acid bath to remove scale mill. Then it has some dry oil applied to prevent rusting. Overall, it has a nicer finish.",
+            image: hrpoAbout,
+            featureChart: [
+                { label: "Strength", rating: 3 },
+                { label: "Weldability", rating: 4 },
+                { label: "Formability", rating: 5 },
+                { label: "Heat Treating", rating: 3 },
+                { label: "Corrosion Resistance", rating: 3 },
+                { label: "Toughness", rating: 3 },
+                { label: "Machinability", rating: 4 },
+                { label: "Strength-to-Weight Ratio", rating: 3 }
+            ],
+            capabilities: {
+                title: "What can you make with HRP&O Carbon Steel parts",
+                text: "With A36/A1018 HRP&O sheet metal, you can fabricate a wide array of products including structural beams, automotive components, machinery parts, and industrial equipment. Its superior formability and weldability make it ideal for creating frames, brackets, supports, and enclosures. Additionally, its robustness and durability allow for the manufacturing of load-bearing structures and components that require high strength and resilience, ensuring reliability and longevity in demanding applications.",
+                items: [
+                    "Structural beams and supports",
+                    "Automotive frames and components",
+                    "Machinery and equipment parts",
+                    "Construction and building materials",
+                    "Industrial enclosures and cabinets",
+                    "Agricultural equipment",
+                    "Heavy-duty brackets and braces",
+                    "Metal fabrication projects",
+                    "And so much more!"
+                ]
+            }
+        },
+        faqs: [
+            {
+                question: "What thicknesses does DMS Engineering offer HRP&O Carbon Steel in?",
+                answer: "Thicknesses offered include two variations including .187\"(4.75mm) and .250\"(6.35mm)."
+            },
+            {
+                question: "What are the minimum and maximum sizes for cutting HRP&O Carbon Steel?",
+                answer: "At DMS Engineering, HRP&O Carbon Steel is supported with both instant and custom quoting depending on part size. The smallest part allowed is .25\" x .375\", while instant quotes go up to 30\" x 44\". For dimensions up to 30\" x 56\", a custom quote is needed."
+            },
+            {
+                question: "What additional services are available for HRP&O Carbon Steel?",
+                answer: "You can add the following services to your HRP&O Carbon Steel parts: Bending, Dimple Forming, Hardware Insertion, Plating, Powder Coating, Tapping, and Tumbling"
+            }
+        ]
     },
     {
         id: 23,

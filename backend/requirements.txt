@@ -1,5 +1,2 @@
-fastapi
-uvicorn[standard]
-python-multipart
 cadquery==2.4.0
 numpy
