@@ -9,7 +9,7 @@ const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
     is_production: false, parent_id: null,
     min_length: 0, max_length: 0, min_width: 0, max_width: 0, min_height: 0, max_height: 0,
-    dimensions_unit: 'in'
+    dimensions_unit: 'in', service_options: []
 };
 
 export default function ServiceEdit() {
@@ -34,7 +34,12 @@ export default function ServiceEdit() {
 
                 if (!isNew) {
                     const match = svcs.find(s => s.id === parseInt(id));
-                    if (match) setService({ ...match });
+                    if (match) {
+                        setService({
+                            ...match,
+                            service_options: Array.isArray(match.service_options) ? match.service_options : []
+                        });
+                    }
                     else setError('Service not found');
                 }
             } catch (err) {
@@ -268,6 +273,84 @@ export default function ServiceEdit() {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+
+                        <div className="admin-edit-card service-options-card">
+                            <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Shield size={16} />
+                                    <span>Options & Variants</span>
+                                </div>
+                                <button
+                                    className="admin-btn admin-btn-outline"
+                                    style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                    onClick={() => setService(s => ({
+                                        ...s,
+                                        service_options: [...(s.service_options || []), { name: '', color: '#000000' }]
+                                    }))}
+                                >
+                                    + Add Option
+                                </button>
+                            </div>
+
+                            <p className="admin-card-tip">Add custom options like colors or finishes. These will appear as selectable variants for this service.</p>
+
+                            <div className="options-list">
+                                {(service.service_options || []).map((opt, idx) => (
+                                    <div key={idx} className="option-item-row">
+                                        <div className="option-input-group">
+                                            <label>Name</label>
+                                            <input
+                                                type="text"
+                                                value={opt.name}
+                                                onChange={e => {
+                                                    const newOpts = [...service.service_options];
+                                                    newOpts[idx].name = e.target.value;
+                                                    setService(s => ({ ...s, service_options: newOpts }));
+                                                }}
+                                                placeholder="e.g. Red"
+                                            />
+                                        </div>
+                                        <div className="option-input-group color-picker-group">
+                                            <label>Color</label>
+                                            <div className="color-input-wrapper">
+                                                <input
+                                                    type="color"
+                                                    value={opt.color}
+                                                    onChange={e => {
+                                                        const newOpts = [...service.service_options];
+                                                        newOpts[idx].color = e.target.value;
+                                                        setService(s => ({ ...s, service_options: newOpts }));
+                                                    }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={opt.color}
+                                                    onChange={e => {
+                                                        const newOpts = [...service.service_options];
+                                                        newOpts[idx].color = e.target.value;
+                                                        setService(s => ({ ...s, service_options: newOpts }));
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            className="option-remove-btn"
+                                            onClick={() => {
+                                                const newOpts = service.service_options.filter((_, i) => i !== idx);
+                                                setService(s => ({ ...s, service_options: newOpts }));
+                                            }}
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {(!service.service_options || service.service_options.length === 0) && (
+                                    <div className="empty-options-state">
+                                        No custom options defined.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </section>
 
                     <aside className="admin-edit-sidebar">
@@ -484,6 +567,45 @@ export default function ServiceEdit() {
 
                 .admin-form-group-inline { display: flex; align-items: center; justify-content: space-between; }
                 
+                .admin-card-tip { font-size: 0.8rem; color: #64748b; margin-bottom: 20px; line-height: 1.4; }
+
+                .options-list { display: flex; flex-direction: column; gap: 12px; }
+                .option-item-row { 
+                    display: grid; 
+                    grid-template-columns: 1fr 180px 40px; 
+                    gap: 12px; 
+                    align-items: flex-end; 
+                    padding: 16px; 
+                    background: #f8fafc; 
+                    border-radius: 12px; 
+                    border: 1px solid #f1f5f9;
+                }
+                .option-input-group label { display: block; font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; }
+                .option-input-group input { 
+                    width: 100%; 
+                    padding: 8px 12px; 
+                    border-radius: 8px; 
+                    border: 1.5px solid #e2e8f0; 
+                    font-size: 0.85rem;
+                }
+                .color-input-wrapper { display: flex; gap: 8px; }
+                .color-input-wrapper input[type="color"] { width: 40px; height: 38px; padding: 2px; cursor: pointer; border: 1.5px solid #e2e8f0; }
+                .option-remove-btn { 
+                    height: 38px; 
+                    width: 38px; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    background: #fee2e2; 
+                    color: #ef4444; 
+                    border: none; 
+                    border-radius: 8px; 
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .option-remove-btn:hover { background: #fecaca; transform: scale(1.05); }
+                .empty-options-state { text-align: center; padding: 20px; color: #94a3b8; font-size: 0.85rem; border: 2px dashed #f1f5f9; border-radius: 12px; }
+
                 /* Buttons */
                 .admin-btn {
                     display: flex;

@@ -115,23 +115,16 @@ router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'),
 // POST /api/services/admin
 router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     try {
-        const {
-            title, description, image_path, display_order, is_production, parent_id,
-            min_length, max_length, min_width, max_width, min_height, max_height,
-            dimensions_unit
-        } = req.body;
-        if (!title) return res.status(400).json({ success: false, error: 'Title is required' });
-
         const result = await db.query(
             `INSERT INTO services (
                 title, description, image_path, display_order, is_production, parent_id,
                 min_length, max_length, min_width, max_width, min_height, max_height,
-                dimensions_unit
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+                dimensions_unit, service_options
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
             [
                 title, description, image_path, display_order || 0, is_production || false, parent_id || null,
                 min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
-                dimensions_unit || 'in'
+                dimensions_unit || 'in', JSON.stringify(req.body.service_options || [])
             ]
         );
         res.status(201).json({ success: true, data: result.rows[0] });
@@ -164,13 +157,15 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
                 max_width = COALESCE($10, max_width),
                 min_height = COALESCE($11, min_height),
                 max_height = COALESCE($12, max_height),
-                dimensions_unit = COALESCE($13, dimensions_unit)
-            WHERE id = $14
+                dimensions_unit = COALESCE($13, dimensions_unit),
+                service_options = COALESCE($14, service_options)
+            WHERE id = $15
             RETURNING *
         `, [
             title, description, image_path, display_order, is_production, parent_id || null,
             min_length, max_length, min_width, max_width, min_height, max_height,
             dimensions_unit,
+            JSON.stringify(req.body.service_options),
             req.params.id
         ]);
 

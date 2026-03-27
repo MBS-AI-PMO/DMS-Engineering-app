@@ -1,7 +1,12 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square, Monitor, Maximize2, Ruler, Boxes, Wrench, Scissors, ChevronLeft, AlertCircle, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
+  Monitor, Maximize2, Ruler, Boxes, Wrench, Scissors, ChevronLeft,
+  ChevronRight, AlertCircle, Loader2, Check, Shield
+} from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
 import * as THREE from 'three';
@@ -46,7 +51,8 @@ const InstantPricing = () => {
   const [allMetals, setAllMetals] = useState([]);
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
-  const [selectedChildService, setSelectedChildService] = useState(null);
+  const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
+  const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
 
   const modelBaseThicknessRef = useRef(null);
   const stepViewerRef = useRef(null);
@@ -84,7 +90,8 @@ const InstantPricing = () => {
     setIsQuoteFlowActive(false);
     setSelectedProductionService(null);
     setSelectedMetal(null);
-    setSelectedChildService(null);
+    setSelectedAdditionalServices([]);
+    setSelectedAnodizingColor(null);
     modelBaseThicknessRef.current = null;
   }, [selectedFile]);
 
@@ -291,7 +298,6 @@ const InstantPricing = () => {
         const group = new THREE.Group();
         const thicknessNative = dimensionsRef.current?.isNativeInches ? (2 / 25.4) : 2;
         const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
-        const extrudeMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide });
         const extrudeSettings = { depth: thicknessNative, bevelEnabled: false };
 
         const allShapes = [];
@@ -329,12 +335,18 @@ const InstantPricing = () => {
           const child = metaShapes[i];
           for (let j = i + 1; j < metaShapes.length; j++) {
             const parent = metaShapes[j];
-            if (child.minX >= parent.minX && child.maxX <= parent.maxX && child.minY >= parent.minY && child.maxY <= parent.maxY) {
+            if (child.minX >= parent.minX && child.maxX <= parent.maxX && child.minY >= parent.minY && child.maxY >= parent.maxY) {
               child.parent = parent; break;
             }
           }
         }
         metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
+        const extrudeMat = new THREE.MeshStandardMaterial({
+          color: selectedAnodizingColor ? new THREE.Color(selectedAnodizingColor.color) : 0xcecece,
+          roughness: 0.4,
+          metalness: 0.7
+        });
+
         metaShapes.forEach(m => { if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat)); else m.parent.shape.holes.push(m.shape); });
 
         group.scale.y = -1;
@@ -353,7 +365,7 @@ const InstantPricing = () => {
     };
     initViewer();
     return () => { cancelAnimationFrame(reqId); controls?.dispose(); renderer?.dispose(); if (currentRef) currentRef.innerHTML = ''; };
-  }, [selectedFile, viewMode, dxfSvg]);
+  }, [selectedFile, viewMode, dxfSvg, selectedAnodizingColor]);
 
   // ─── STEP 3D Viewer Effect ────────────────────────────
   useEffect(() => {
@@ -395,6 +407,24 @@ const InstantPricing = () => {
     } catch (e) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", e); }
     return () => { if (checkInterval) clearInterval(checkInterval); try { localViewer?.Destroy(); } catch (e) { console.error("Error destroying local viewer:", e); } };
   }, [selectedFile, viewMode, isQuoteFlowActive]);
+
+  // Handle STEP model color changes dynamically
+  useEffect(() => {
+    if (!viewerInstance.current || !selectedAnodizingColor || !isStepFile(selectedFile?.file?.name)) return;
+    try {
+      const hex = selectedAnodizingColor.color;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+
+      viewerInstance.current.EnumerateMeshes((mesh) => {
+        mesh.material.color = new OV.RGBColor(r, g, b);
+      });
+      viewerInstance.current.Render();
+    } catch (e) {
+      console.warn("Error updating STEP material color:", e);
+    }
+  }, [selectedAnodizingColor, selectedFile?.file?.name]);
 
   const handleUnfold = useCallback(async () => {
     if (!selectedFile || is2DFile(selectedFile.file.name) || !isStepFile(selectedFile.file.name) || backendData) { if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); } return; }
@@ -479,7 +509,7 @@ const InstantPricing = () => {
                 <button className="qf-nav-btn" onClick={() => setIsQuoteFlowActive(false)} title="Close"><X size={20} /></button>
                 <div className="qf-nav-right">
                   <button className="qf-nav-btn" onClick={() => setAxisCamera('top')} title="Reset"><Box size={20} /></button>
-                  <button className="qf-nav-btn" onClick={() => { if (selectedChildService) setSelectedChildService(null); else if (selectedMetal) setSelectedMetal(null); else if (selectedProductionService) setSelectedProductionService(null); else setIsQuoteFlowActive(false); }} title="Back"><ChevronLeft size={24} /></button>
+                  <button className="qf-nav-btn" onClick={() => { if (selectedAdditionalServices.length > 0) setSelectedAdditionalServices([]); else if (selectedMetal) setSelectedMetal(null); else if (selectedProductionService) setSelectedProductionService(null); else setIsQuoteFlowActive(false); }} title="Back"><ChevronLeft size={24} /></button>
                 </div>
               </div>
 
@@ -519,14 +549,15 @@ const InstantPricing = () => {
                             const { valid, errorMsg } = validateServiceDimensions(svc, dimensions);
                             return (
                               <button key={svc.id} className={`qf-large-service-card ${!valid ? 'disabled' : ''}`} onClick={() => valid && setSelectedProductionService(svc)} disabled={!valid}>
-                                <div className="qf-card-image"><img src={svc.image_path ? `${BACKEND_URL}${svc.image_path}` : '/placeholder-service.png'} alt={svc.title} /></div>
-                                <div className="qf-card-content">
-                                  <div className="qf-card-top">
-                                    <h3>{svc.title}</h3>
-                                    {!valid ? <div className="qf-card-status error">{errorMsg} <AlertCircle size={14} /></div> : <div className="qf-card-status price">Select Material <ArrowRight size={14} /></div>}
-                                  </div>
-                                  <p>{svc.description}</p>
+                                <div className="qf-card-main">
+                                  <strong>{svc.title}</strong>
+                                  <span>{svc.description}</span>
                                 </div>
+                                {!valid ? (
+                                  <div className="qf-card-status error"><Shield size={16} />{errorMsg}</div>
+                                ) : (
+                                  <div className="qf-card-status price">Select Material <ChevronRight size={16} /></div>
+                                )}
                               </button>
                             );
                           })}
@@ -546,20 +577,71 @@ const InstantPricing = () => {
                         </div>
                       </div>
                     )}
-                    {selectedMetal && (
+                    {selectedProductionService && selectedMetal && (
                       <div className="qf-step-fade-in">
                         <div className="qf-selection-summary-bar"><div><strong>Method:</strong> {selectedProductionService.title}</div><div><strong>Material:</strong> {selectedMetal.name}</div></div>
                         <h2 className="qf-panel-title">Additional Services</h2>
+                        <p className="qf-panel-subtitle">Select extra processes for your part</p>
                         <div className="qf-services-grid-v2">
-                          {allServices.filter(s => s.parent_id === selectedProductionService.id).map(svc => (
-                            <button key={svc.id} className={`qf-service-option ${selectedChildService?.id === svc.id ? 'active' : ''}`} onClick={() => setSelectedChildService(svc)}>
-                              <div className="qf-opt-check">{selectedChildService?.id === svc.id ? '✓' : ''}</div>
-                              <div className="qf-opt-content"><strong>{svc.title}</strong><p>{svc.description}</p></div>
-                            </button>
-                          ))}
-                          {allServices.filter(s => s.parent_id === selectedProductionService.id).length === 0 && <p className="qf-no-services-placeholder"><Info size={24} /> No additional services required.</p>}
+                          {allServices.filter(s => s.parent_id === selectedProductionService.id).map(svc => {
+                            const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
+                            const hasOptions = Array.isArray(svc.service_options) && svc.service_options.length > 0;
+
+                            return (
+                              <div key={svc.id} className="qf-additional-service-wrapper">
+                                <button
+                                  className={`qf-service-option ${isSelected ? 'active' : ''}`}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setSelectedAdditionalServices(prev => prev.filter(s => s.id !== svc.id));
+                                      if (svc.title.toLowerCase().includes('anodizing')) setSelectedAnodizingColor(null);
+                                    } else {
+                                      setSelectedAdditionalServices(prev => [...prev, svc]);
+                                    }
+                                  }}
+                                >
+                                  <div className={`qf-checkbox ${isSelected ? 'checked' : ''}`}>
+                                    {isSelected && <Check size={14} />}
+                                  </div>
+                                  <div className="qf-service-info">
+                                    <strong>{svc.title}</strong>
+                                    <p>{svc.description}</p>
+                                  </div>
+                                </button>
+
+                                {isSelected && hasOptions && (
+                                  <motion.div
+                                    className="qf-service-options-panel"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                  >
+                                    <label>Select {svc.title} Option:</label>
+                                    <div className="qf-options-grid">
+                                      {svc.service_options.map((opt, i) => (
+                                        <button
+                                          key={i}
+                                          className={`qf-option-swatch ${selectedAnodizingColor?.name === opt.name ? 'active' : ''}`}
+                                          onClick={() => {
+                                            if (svc.title.toLowerCase().includes('anodizing')) {
+                                              setSelectedAnodizingColor(opt);
+                                            }
+                                          }}
+                                          title={opt.name}
+                                        >
+                                          <div className="swatch-circle" style={{ backgroundColor: opt.color }} />
+                                          <span>{opt.name}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        <button className="qf-final-btn" onClick={() => navigate('/quote')}>PROCEED TO FINAL QUOTE <ArrowRight size={20} /></button>
+                        <div className="qf-cta-container">
+                          <button className="qf-primary-btn" onClick={() => navigate('/checkout')}>PROCEED TO FINAL QUOTE <ChevronRight size={20} /></button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -983,6 +1065,11 @@ const styles = `
   margin-bottom: 40px;
 }
 
+.qf-additional-service-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .qf-service-option {
   display: flex;
   align-items: center;
@@ -994,52 +1081,121 @@ const styles = `
   cursor: pointer;
   transition: all 0.25s ease;
   text-align: left;
+  width: 100%;
 }
-
 .qf-service-option:hover {
-  border-color: #cbd5e1;
-  background: #fdfdfd;
+  border-color: #0f172a;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
 }
 
 .qf-service-option.active {
   border-color: #0f172a;
   background: #f8fafc;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
 
-.qf-opt-check {
-  width: 28px;
-  height: 28px;
+.qf-checkbox {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #cbd5e1;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  border: 2px solid #e2e8f0;
-  font-weight: 800;
-  font-size: 16px;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+  flex-shrink: 0;
 }
 
-.qf-service-option.active .qf-opt-check {
+.qf-checkbox.checked {
   background: #0f172a;
   border-color: #0f172a;
   color: white;
-  transform: scale(1.1);
 }
 
-.qf-opt-content strong {
-  display: block;
-  font-size: 17px;
+.qf-service-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.qf-service-info strong {
+  font-size: 16px;
   color: #0f172a;
-  font-weight: 700;
+  font-weight: 800;
 }
 
-.qf-opt-content p {
-  margin: 4px 0 0 0;
+.qf-service-info p {
   font-size: 14px;
   color: #64748b;
+  margin: 0;
   line-height: 1.4;
 }
+
+.qf-service-options-panel {
+  margin-top: -12px;
+  margin-bottom: 24px;
+  padding: 28px 24px 24px 72px;
+  background: #f8fafc;
+  border: 2px solid #0f172a;
+  border-top: none;
+  border-radius: 0 0 24px 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.qf-service-options-panel label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #94a3b8;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.qf-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qf-option-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.qf-option-swatch:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.qf-option-swatch.active {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: white;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+}
+
+.swatch-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Original qf-opt-check and qf-opt-content rules removed as per instruction */
 
 .qf-no-services-placeholder {
   display: flex;
