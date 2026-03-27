@@ -122,7 +122,7 @@ class CORSHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Starting unfold backend on http://localhost:{PORT}")
+    print(f"\033[47m\033[30m [PYTHON] Starting unfold backend on http://localhost:{PORT} \033[0m")
     print("Press Ctrl+C to stop")
     server = HTTPServer(("0.0.0.0", PORT), CORSHandler)
     try:
