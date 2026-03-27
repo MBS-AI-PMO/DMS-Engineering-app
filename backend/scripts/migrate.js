@@ -18,6 +18,11 @@ async function migrate() {
         `);
         console.log('  ✓ users table');
 
+        // Customer profile columns (v2)
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`);
+        console.log('  ✓ users phone/address columns');
+
         // Metal categories table
         await db.query(`
             CREATE TABLE IF NOT EXISTS metal_categories (
@@ -125,6 +130,57 @@ async function migrate() {
         `);
         console.log('  ✓ newsletter_subscribers table');
 
+        // Service configurations (CNC Machining & Sheet Cutting global sizing limits)
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS service_configs (
+                id SERIAL PRIMARY KEY,
+                service_type VARCHAR(50) UNIQUE NOT NULL
+                    CHECK (service_type IN ('cnc_machining', 'sheet_cutting')),
+                min_x NUMERIC(12,4) DEFAULT 0,
+                max_x NUMERIC(12,4),
+                min_y NUMERIC(12,4) DEFAULT 0,
+                max_y NUMERIC(12,4),
+                min_z NUMERIC(12,4) DEFAULT 0,
+                max_z NUMERIC(12,4),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+        await db.query(`INSERT INTO service_configs (service_type) VALUES ('cnc_machining') ON CONFLICT DO NOTHING;`);
+        await db.query(`INSERT INTO service_configs (service_type) VALUES ('sheet_cutting') ON CONFLICT DO NOTHING;`);
+        console.log('  ✓ service_configs table');
+
+        // Per-metal sizing and available thicknesses configuration
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS metal_configs (
+                id SERIAL PRIMARY KEY,
+                metal_id INTEGER UNIQUE NOT NULL REFERENCES metals(id) ON DELETE CASCADE,
+                min_x NUMERIC(12,4),
+                max_x NUMERIC(12,4),
+                min_y NUMERIC(12,4),
+                max_y NUMERIC(12,4),
+                min_z NUMERIC(12,4),
+                max_z NUMERIC(12,4),
+                available_thicknesses JSONB DEFAULT '[]',
+                is_sheet_cuttable BOOLEAN DEFAULT false,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+        console.log('  ✓ metal_configs table');
+
+        // Service-to-metal assignments (which metals are offered per service)
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS service_metal_assignments (
+                id SERIAL PRIMARY KEY,
+                service_type VARCHAR(50) NOT NULL
+                    CHECK (service_type IN ('cnc_machining', 'sheet_cutting')),
+                metal_id INTEGER NOT NULL REFERENCES metals(id) ON DELETE CASCADE,
+                UNIQUE(service_type, metal_id)
+            );
+        `);
+        console.log('  ✓ service_metal_assignments table');
+
         // Updated_at trigger function
         await db.query(`
             CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -137,7 +193,7 @@ async function migrate() {
         `);
 
         // Apply triggers
-        const tablesWithUpdatedAt = ['users', 'metals', 'metal_categories', 'faq_categories', 'faqs', 'email_config'];
+        const tablesWithUpdatedAt = ['users', 'metals', 'metal_categories', 'faq_categories', 'faqs', 'email_config', 'service_configs', 'metal_configs'];
         for (const table of tablesWithUpdatedAt) {
             await db.query(`
                 DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table};

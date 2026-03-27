@@ -13,6 +13,9 @@ import FAQ from './components/FAQ';
 import FAQPage from './pages/FAQPage';
 import MetalsPage from './pages/MetalsPage';
 import Guidelines from './pages/Guidelines';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Settings from './pages/Settings';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MetalsList from './pages/admin/MetalsList';
@@ -28,6 +31,11 @@ import ContactSettings from './pages/admin/ContactSettings';
 import AdminLayout from './components/admin/AdminLayout';
 import GuidelinesList from './pages/admin/GuidelinesList';
 import GuidelineEdit from './pages/admin/GuidelineEdit';
+import Customers from './pages/admin/Customers';
+import ConfigurationsHub from './pages/admin/configurations/ConfigurationsHub';
+import CncMachiningConfig from './pages/admin/configurations/CncMachiningConfig';
+import SheetCuttingConfig from './pages/admin/configurations/SheetCuttingConfig';
+import MetalsConfig from './pages/admin/configurations/MetalsConfig';
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -64,6 +72,11 @@ function App() {
             <Route path="/faq" element={<PublicShell><FAQPage /></PublicShell>} />
             <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
             <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
+
+            {/* Auth */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/settings" element={<PublicShell><Settings /></PublicShell>} />
 
             {/* Admin */}
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -108,6 +121,21 @@ function App() {
             } />
             <Route path="/admin/guidelines/:serviceId" element={
               <ProtectedRoute><AdminLayout><GuidelineEdit /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/customers" element={
+              <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/configurations" element={
+              <ProtectedRoute><AdminLayout><ConfigurationsHub /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/configurations/cnc-machining" element={
+              <ProtectedRoute><AdminLayout><CncMachiningConfig /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/configurations/sheet-cutting" element={
+              <ProtectedRoute><AdminLayout><SheetCuttingConfig /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/configurations/metals" element={
+              <ProtectedRoute><AdminLayout><MetalsConfig /></AdminLayout></ProtectedRoute>
             } />
           </Routes>
         </Router>

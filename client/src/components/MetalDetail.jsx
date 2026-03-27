@@ -38,9 +38,9 @@ const MetalDetail = () => {
             const lookupSlug = slug || id;
 
             try {
-                /* 
                 // Try API first
                 const data = await fetchMetalBySlug(lookupSlug);
+
                 // Transform DB format to match component expectations
                 setMetal({
                     id: data.id,
@@ -57,17 +57,17 @@ const MetalDetail = () => {
                     services: data.services,
                     category: data.category_name
                 });
+
                 // Fetch hierarchical services
                 try {
                     const svcData = await fetchMetalServices(lookupSlug);
                     setResolvedServices(svcData);
-                } catch {
+                } catch (svcErr) {
+                    console.warn('Failed to fetch hierarchical services:', svcErr.message);
                     setResolvedServices({ metalLevel: [], thicknessLevel: [] });
                 }
-                */
-                throw new Error('API fetching disabled manually');
             } catch (err) {
-                console.warn('API disabled, using static data:', err.message);
+                console.warn('API fetch failed, using static data fallback:', err.message);
                 // Fallback: try slug match then numeric ID match
                 let found = metalsData.find(m => {
                     const mSlug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');

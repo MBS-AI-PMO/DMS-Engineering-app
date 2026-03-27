@@ -20,6 +20,7 @@ const emailRoutes = require('./routes/email');
 const newsletterRoutes = require('./routes/newsletter');
 const settingsRoutes = require('./routes/settings');
 const guidelinesRoutes = require('./routes/guidelines');
+const configurationsRoutes = require('./routes/configurations');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -46,6 +47,7 @@ app.use('/api/email', emailRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/guidelines', guidelinesRoutes);
+app.use('/api/configurations', configurationsRoutes);
 
 // Setup multer for file uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');
@@ -456,6 +458,44 @@ app.listen(port, async () => {
     try {
         await db.query('SELECT NOW()');
         console.log(`\x1b[45m\x1b[30m Database Integrated & Connected Successfully \x1b[0m`);
+        // Ensure customer profile columns exist
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`);
+        // Ensure configuration tables exist
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS service_configs (
+                id SERIAL PRIMARY KEY,
+                service_type VARCHAR(50) UNIQUE NOT NULL
+                    CHECK (service_type IN ('cnc_machining', 'sheet_cutting')),
+                min_x NUMERIC(12,4) DEFAULT 0, max_x NUMERIC(12,4),
+                min_y NUMERIC(12,4) DEFAULT 0, max_y NUMERIC(12,4),
+                min_z NUMERIC(12,4) DEFAULT 0, max_z NUMERIC(12,4),
+                created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+        await db.query(`INSERT INTO service_configs (service_type) VALUES ('cnc_machining') ON CONFLICT DO NOTHING;`);
+        await db.query(`INSERT INTO service_configs (service_type) VALUES ('sheet_cutting') ON CONFLICT DO NOTHING;`);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS metal_configs (
+                id SERIAL PRIMARY KEY,
+                metal_id INTEGER UNIQUE NOT NULL REFERENCES metals(id) ON DELETE CASCADE,
+                min_x NUMERIC(12,4), max_x NUMERIC(12,4),
+                min_y NUMERIC(12,4), max_y NUMERIC(12,4),
+                min_z NUMERIC(12,4), max_z NUMERIC(12,4),
+                available_thicknesses JSONB DEFAULT '[]',
+                is_sheet_cuttable BOOLEAN DEFAULT false,
+                created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS service_metal_assignments (
+                id SERIAL PRIMARY KEY,
+                service_type VARCHAR(50) NOT NULL
+                    CHECK (service_type IN ('cnc_machining', 'sheet_cutting')),
+                metal_id INTEGER NOT NULL REFERENCES metals(id) ON DELETE CASCADE,
+                UNIQUE(service_type, metal_id)
+            );
+        `);
     } catch (err) {
         console.log(`\x1b[41m\x1b[37m Database Connection Failed: ${err.message} \x1b[0m`);
     }

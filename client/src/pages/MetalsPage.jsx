@@ -3,21 +3,28 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { ChevronRight, Filter, Search, ArrowRight, Shield, Zap, Award, AlertTriangle } from 'lucide-react';
 import { metalsData as staticMetalsData } from '../data/metalsData';
-import { fetchMetals } from '../utils/api';
+import { fetchMetals, fetchCategories } from '../utils/api';
 
 const MetalsPage = () => {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [metals, setMetals] = useState(staticMetalsData);
     const [loading, setLoading] = useState(true);
-
-    const categories = ['All', 'Aluminum', 'Brass', 'Copper', 'Stainless Steel', 'Steel', 'Titanium'];
+    const [categories, setCategories] = useState(['All', 'Aluminum', 'Brass', 'Copper', 'Stainless Steel', 'Steel', 'Titanium']);
 
     // Fetch from API on mount
     useEffect(() => {
-        async function loadMetals() {
+        async function loadInitialData() {
             setLoading(true);
             try {
+                // Fetch categories
+                const categoriesData = await fetchCategories();
+                if (categoriesData && categoriesData.length > 0) {
+                    const dynamicCats = ['All', ...categoriesData.map(c => c.name)];
+                    setCategories(dynamicCats);
+                }
+
+                // Fetch metals
                 const data = await fetchMetals();
                 // Transform DB format to match static format for backward compat
                 const transformed = data.map(m => ({
@@ -38,12 +45,13 @@ const MetalsPage = () => {
                 setMetals(transformed);
             } catch (err) {
                 console.warn('API unavailable, using static data fallback:', err.message);
-                // We keep staticMetalsData as state
+                // We keep staticMetalsData and default categories as state
+                setMetals(staticMetalsData);
             } finally {
                 setLoading(false);
             }
         }
-        loadMetals();
+        loadInitialData();
     }, []);
 
     const filteredMetals = useMemo(() => {

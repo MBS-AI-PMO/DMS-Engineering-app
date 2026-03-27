@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, Mail, Users,
-    LogOut, Menu, X, ChevronRight, FileText
+    LogOut, Menu, X, ChevronRight, FileText, UserCheck, Settings2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -16,6 +16,8 @@ const navItems = [
     { to: '/admin/faq-categories', label: 'FAQ Categories', icon: FolderOpen },
     { to: '/admin/services', label: 'Services', icon: Wrench },
     { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
+    { to: '/admin/configurations', label: 'Configurations', icon: Settings2 },
+    { to: '/admin/customers', label: 'Customers', icon: UserCheck },
     { to: '/admin/admins', label: 'Admins', icon: Shield },
     { to: '/admin/email', label: 'Email Config', icon: Mail },
     { to: '/admin/subscribers', label: 'Subscribers', icon: Users },

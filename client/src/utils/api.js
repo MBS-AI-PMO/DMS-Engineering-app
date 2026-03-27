@@ -185,6 +185,30 @@ export async function uploadServiceImage(file) {
     });
 }
 
+// ── User Registration & Profile ─────────────────────────
+
+export async function registerUser(data) {
+    return request('/users/register', { method: 'POST', body: data });
+}
+
+export async function getUserProfile() {
+    const { data } = await request('/users/profile');
+    return data;
+}
+
+export async function updateUserProfile(data) {
+    return request('/users/profile', { method: 'PUT', body: data });
+}
+
+export async function updateUserPassword(data) {
+    return request('/users/password', { method: 'PUT', body: data });
+}
+
+export async function fetchCustomers() {
+    const { data } = await request('/users/customers');
+    return data;
+}
+
 // ── Admin Users ────────────────────────────────────────
 
 export async function fetchAdminUsers() {
@@ -267,4 +291,37 @@ export async function fetchGuideline(serviceId) {
 
 export async function saveGuideline(data) {
     return request('/guidelines/admin', { method: 'POST', body: data });
+}
+
+// ── Configurations ──────────────────────────────────────
+
+export async function fetchCncConfig() {
+    const { data } = await request('/configurations/cnc-machining');
+    return data;
+}
+export async function saveCncConfig(data) {
+    return request('/configurations/cnc-machining', { method: 'PUT', body: data });
+}
+export async function fetchSheetCuttingConfig() {
+    const { data } = await request('/configurations/sheet-cutting');
+    return data;
+}
+export async function saveSheetCuttingConfig(data) {
+    return request('/configurations/sheet-cutting', { method: 'PUT', body: data });
+}
+export async function fetchMetalConfigs() {
+    const { data } = await request('/configurations/metals');
+    return data;
+}
+export async function saveMetalConfig(metalId, data) {
+    const { data: result } = await request(`/configurations/metals/${metalId}`, { method: 'PUT', body: data });
+    return result;
+}
+export async function fetchPricingSheetMetals() {
+    const { data } = await request('/configurations/pricing/sheet-cutting-metals');
+    return data;
+}
+export async function fetchPricingCncMetals() {
+    const { data } = await request('/configurations/pricing/cnc-metals');
+    return data;
 }
