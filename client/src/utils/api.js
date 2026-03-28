@@ -5,7 +5,7 @@
  * Falls back to static data if the API is unavailable.
  */
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request(url, options = {}) {
     const config = {

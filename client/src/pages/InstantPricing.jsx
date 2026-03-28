@@ -15,7 +15,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 import { fetchServices, fetchMetals, calculatePrice } from '../utils/api';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_PYTHON_API_URL;
 
 const is2DFile = (filename) => {
   const name = filename?.toLowerCase() ?? '';
