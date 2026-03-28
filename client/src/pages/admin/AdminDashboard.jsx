@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, ArrowRight, Mail, Users } from 'lucide-react';
+import { Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, ArrowRight, Mail, Users, DollarSign } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { fetchMetals, fetchCategories, fetchFaqs, fetchFaqCategories, fetchServices, fetchAdminUsers, fetchServicesWithUsage } from '../../utils/api';
+import { fetchMetals, fetchCategories, fetchFaqs, fetchFaqCategories, fetchServices, fetchAdminUsers, fetchServicesWithUsage, fetchPricingMetadata } from '../../utils/api';
 
 const statCards = [
     { label: 'Metals', icon: Box, to: '/admin/metals', fetch: fetchMetals },
@@ -12,6 +12,7 @@ const statCards = [
     { label: 'FAQs', icon: HelpCircle, to: '/admin/faqs', fetch: fetchFaqs },
     { label: 'FAQ Categories', icon: FolderOpen, to: '/admin/faq-categories', fetch: fetchFaqCategories },
     { label: 'Services', icon: Wrench, to: '/admin/services', fetch: fetchServices },
+    { label: 'Pricing', icon: DollarSign, to: '/admin/pricing', fetch: fetchPricingMetadata },
     { label: 'Admins', icon: Shield, to: '/admin/admins', fetch: fetchAdminUsers },
 ];
 

@@ -442,6 +442,11 @@ def detect_holes_in_step(filepath: str) -> list:
                 round(float(avg_center[1]), 4),
                 round(float(avg_center[2]), 4),
             ],
+            "axis": [
+                round(float(cyl["axis"][0]), 4),
+                round(float(cyl["axis"][1]), 4),
+                round(float(cyl["axis"][2]), 4),
+            ],
         })
 
     # Sort smallest → largest for consistent display

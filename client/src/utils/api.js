@@ -314,3 +314,27 @@ export async function fetchCncPricingConfig() {
     const { data } = await request('/configurations/pricing/cnc-config');
     return data;
 }
+
+// ── Pricing ───────────────────────────────────────────
+
+export async function fetchPricingMetadata() {
+    return request('/pricing/admin/metadata');
+}
+
+export async function fetchPricingRules(metalId, serviceId) {
+    return request(`/pricing/admin/rules/${metalId}/${serviceId}`);
+}
+
+export async function savePricingRules(payload) {
+    return request('/pricing/admin/upsert', {
+        method: 'POST',
+        body: payload
+    });
+}
+
+export async function calculatePrice(payload) {
+    return request('/pricing/calculate', {
+        method: 'POST',
+        body: payload
+    });
+}

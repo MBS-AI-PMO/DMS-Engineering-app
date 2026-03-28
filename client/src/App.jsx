@@ -34,6 +34,7 @@ import GuidelinesList from './pages/admin/GuidelinesList';
 import GuidelineEdit from './pages/admin/GuidelineEdit';
 import ServiceMetalsConfig from './pages/admin/ServiceMetalsConfig';
 import Customers from './pages/admin/Customers';
+import PricingManagement from './pages/admin/PricingManagement';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -132,6 +133,9 @@ function App() {
             } />
             <Route path="/admin/customers" element={
               <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/pricing" element={
+              <ProtectedRoute><AdminLayout><PricingManagement /></AdminLayout></ProtectedRoute>
             } />
 
           </Routes>

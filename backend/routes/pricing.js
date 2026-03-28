@@ -1,0 +1,155 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { authenticate, requireAdmin } = require('../middleware/auth');
+
+// ── Admin Routes ─────────────────────────────────────────
+
+/**
+ * GET /api/admin/pricing/metadata
+ * Returns metals (with their available thicknesses) and services.
+ */
+router.get('/admin/metadata', authenticate, requireAdmin, async (req, res) => {
+    try {
+        const [metalsRes, servicesRes] = await Promise.all([
+            db.query(`
+                SELECT m.id, m.name, m.slug, m.image_path, m.services AS assigned_services,
+                       COALESCE(mc.available_thicknesses, '[]'::jsonb) AS thicknesses
+                FROM metals m
+                LEFT JOIN metal_configs mc ON mc.metal_id = m.id
+                ORDER BY m.name
+            `),
+            db.query(`SELECT id, title, description, is_production FROM services ORDER BY display_order, id`)
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                metals: metalsRes.rows,
+                services: servicesRes.rows
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching pricing metadata:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch metadata' });
+    }
+});
+
+/**
+ * GET /api/admin/pricing/:metalId/:serviceId
+ * Returns existing pricing rules for a specific metal/service.
+ */
+router.get('/admin/rules/:metalId/:serviceId', authenticate, requireAdmin, async (req, res) => {
+    const { metalId, serviceId } = req.params;
+    try {
+        const result = await db.query(
+            'SELECT * FROM pricing_rules WHERE metal_id = $1 AND service_id = $2',
+            [metalId, serviceId]
+        );
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        console.error('Error fetching pricing rules:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch pricing rules' });
+    }
+});
+
+/**
+ * POST /api/admin/pricing/upsert
+ * Batch saves/updates pricing rules for a metal/service combination.
+ */
+router.post('/admin/upsert', authenticate, requireAdmin, async (req, res) => {
+    const { metal_id, service_id, rules } = req.body;
+
+    if (!metal_id || !service_id || !Array.isArray(rules)) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        for (const rule of rules) {
+            const { thickness_value, price_per_inch_height, price_per_inch_length, price_per_inch_thickness, base_price } = rule;
+
+            await db.query(`
+                INSERT INTO pricing_rules (metal_id, service_id, thickness_value, price_per_inch_height, price_per_inch_length, price_per_inch_thickness, base_price, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                ON CONFLICT (metal_id, service_id, thickness_value) 
+                DO UPDATE SET 
+                    price_per_inch_height = EXCLUDED.price_per_inch_height,
+                    price_per_inch_length = EXCLUDED.price_per_inch_length,
+                    price_per_inch_thickness = EXCLUDED.price_per_inch_thickness,
+                    base_price = EXCLUDED.base_price,
+                    updated_at = NOW()
+            `, [metal_id, service_id, thickness_value, price_per_inch_height || 0, price_per_inch_length || 0, price_per_inch_thickness || 0, base_price || 0]);
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Pricing rules updated successfully' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('Error upserting pricing rules:', err);
+        res.status(500).json({ success: false, error: 'Failed to update pricing rules' });
+    }
+});
+
+// ── Public Calculation Routes ────────────────────────────
+
+/**
+ * POST /api/pricing/calculate
+ * Calculates the price for a specific configuration.
+ */
+router.post('/calculate', async (req, res) => {
+    const { metal_id, service_id, thickness_value, length_in, height_in } = req.body;
+
+    if (!metal_id || !service_id || !thickness_value) {
+        return res.status(400).json({ success: false, error: 'Missing calculation parameters' });
+    }
+
+    try {
+        // Special case for CNC Machining (ID 2): uses variable (3D) formula
+        const isCNC = parseInt(service_id) === 2;
+        const lookupThickness = isCNC ? 'variable' : thickness_value.toString();
+
+        const result = await db.query(`
+            SELECT * FROM pricing_rules 
+            WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3
+        `, [metal_id, service_id, lookupThickness]);
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: true,
+                total_price: 0,
+                error: 'No pricing rule configured for this combination.'
+            });
+        }
+
+        const rule = result.rows[0];
+        const base = parseFloat(rule.base_price) || 0;
+        const h_cost = (parseFloat(height_in) || 0) * (parseFloat(rule.price_per_inch_height) || 0);
+        const l_cost = (parseFloat(length_in) || 0) * (parseFloat(rule.price_per_inch_length) || 0);
+
+        // Add thickness cost for CNC
+        let t_cost = 0;
+        if (isCNC) {
+            t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
+        }
+
+        const total = base + h_cost + l_cost + t_cost;
+
+        res.json({
+            success: true,
+            total_price: total,
+            breakdown: {
+                base,
+                height_cost: h_cost,
+                length_cost: l_cost,
+                thickness_cost: t_cost
+            }
+        });
+    } catch (err) {
+        console.error('Error calculating price:', err);
+        res.status(500).json({ success: false, error: 'Calculation failed' });
+    }
+});
+
+module.exports = router;

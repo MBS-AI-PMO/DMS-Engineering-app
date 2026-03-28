@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import {
   Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
-  Monitor, Maximize2, Ruler, Boxes, Wrench, Scissors, ChevronLeft,
+  Monitor, Maximize2, Boxes, ChevronLeft,
   ChevronRight, AlertCircle, Loader2, Check, Shield
 } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
-import { fetchServices, fetchMetals } from '../utils/api';
+import { fetchServices, fetchMetals, calculatePrice } from '../utils/api';
 
 const BACKEND_URL = 'http://localhost:8000';
 
@@ -59,9 +59,9 @@ const InstantPricing = () => {
   const [activeTapHole, setActiveTapHole] = useState(null);
   const [isDetectingHoles, setIsDetectingHoles] = useState(false);
   const [holeDetectionError, setHoleDetectionError] = useState(null);
-  const [tappingExpanded, setTappingExpanded] = useState(true);
+  const [priceEstimate, setPriceEstimate] = useState(null);
+  const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
 
-  const modelBaseThicknessRef = useRef(null);
   const parsedDxfRef = useRef(null);
   const stepHolesDetectedRef = useRef(false);
   const stepViewerRef = useRef(null);
@@ -109,7 +109,6 @@ const InstantPricing = () => {
     setHoleDetectionError(null);
     parsedDxfRef.current = null;
     stepHolesDetectedRef.current = false;
-    modelBaseThicknessRef.current = null;
   }, [selectedFile]);
 
   // ── STEP Hole Detection for Tapping ──────────────────
@@ -145,6 +144,37 @@ const InstantPricing = () => {
     detect();
   }, [selectedAdditionalServices, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Real-Time Price Calculation ───────────────────────
+  useEffect(() => {
+    if (!selectedMetal || !selectedProductionService || !dimensions) {
+      setPriceEstimate(null);
+      return;
+    }
+
+    const getEstimate = async () => {
+      setIsCalculatingPrice(true);
+      try {
+        const payload = {
+          metal_id: selectedMetal.id,
+          service_id: selectedProductionService.id,
+          thickness_value: dimensions.inches.t, // Formula currently uses thickness in inches
+          length_in: dimensions.inches.l,
+          height_in: dimensions.inches.w
+        };
+        const data = await calculatePrice(payload);
+        setPriceEstimate(data.total_price);
+      } catch (err) {
+        console.error('Price calculation failed:', err);
+        setPriceEstimate(null);
+      } finally {
+        setIsCalculatingPrice(false);
+      }
+    };
+
+    const timeoutId = setTimeout(getEstimate, 500); // Debounce
+    return () => clearTimeout(timeoutId);
+  }, [selectedMetal, selectedProductionService, dimensions]);
+
   useEffect(() => {
     document.body.classList.add('light-mode');
     if (isQuoteFlowActive) {
@@ -154,7 +184,7 @@ const InstantPricing = () => {
       document.body.classList.remove('qf-active');
       document.documentElement.classList.remove('qf-active');
     }
-    
+
     return () => {
       document.body.classList.remove('light-mode');
       document.body.classList.remove('qf-active');
@@ -209,19 +239,6 @@ const InstantPricing = () => {
       else if (!isCnc && hTooLarge) errorMsg = 'Too Thick';
       else if (!isCnc && hTooSmall) errorMsg = 'Too Thin';
       else errorMsg = 'Size Mismatch';
-    }
-
-    if (!isValid) {
-      console.log(`Validation Failed for "${svc.title}" [ID: ${svc.id}]:`, {
-        reason: errorMsg,
-        svc_unit: unit,
-        model_svc_units: { L: modelL.toFixed(4), W: modelW.toFixed(4), T: modelT.toFixed(4) },
-        svc_limits: {
-          max: { L: sMaxL, W: sMaxW, H: sMaxH },
-          min: { L: sMinL, W: sMinW, H: sMinH }
-        },
-        raw_svc: svc
-      });
     }
 
     return { valid: isValid, errorMsg };
@@ -494,116 +511,130 @@ const InstantPricing = () => {
   const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
   const tapCount = Object.keys(selectedTaps).length;
 
-  // Handle STEP model color: anodizing base + hole highlights
+  // Anodizing color effect — only changes the whole model color
   useEffect(() => {
     if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
     if (modelLoadCount === 0) return;
-
-    const applyColors = () => {
+    const apply = () => {
       try {
-        const viewer = viewerInstance.current;
-        if (!viewer) return;
-        const v = viewer.GetViewer();
+        const v = viewerInstance.current?.GetViewer();
         if (!v?.scene) return;
-
-        // All detected hole positions (for showing all holes when tapping is active)
-        const allHolePositions = isTappingActive
-          ? detectedHoles.map(h => h.position).filter(Boolean)
-          : [];
-        // Positions of holes that have a tap assigned
-        const tappedPositions = Object.keys(selectedTaps)
-          .map(id => detectedHoles[parseInt(id)]?.position).filter(Boolean);
-        const activeHolePos = activeTapHole?.position || null;
-        const bb = new THREE.Box3();
-        const center = new THREE.Vector3();
-
         v.scene.traverse(obj => {
           if (!obj.isMesh) return;
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
           mats.forEach((mat, idx) => {
-            if (!mat || !mat.color) return;
-
-            // Clone material once so changes don't bleed across shared materials
+            if (!mat?.color) return;
             if (!obj.userData._matCloned) {
-              if (Array.isArray(obj.material)) {
-                obj.material = obj.material.map(m => m.clone());
-              } else {
-                obj.material = obj.material.clone();
-              }
+              obj.material = Array.isArray(obj.material) ? obj.material.map(m => m.clone()) : obj.material.clone();
               obj.userData._matCloned = true;
             }
-            const finalMat = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
-
-            if (!obj.userData.origColor) {
-              obj.userData.origColor = { r: finalMat.color.r, g: finalMat.color.g, b: finalMat.color.b };
-            }
-
-            let isActiveHole = false;
-            let isTappedHole = false;
-            let isDetectedHole = false;
-
-            bb.setFromObject(obj);
-            if (!bb.isEmpty()) {
-              bb.getCenter(center);
-
-              // Priority 1: Active hole being viewed (bright blue)
-              if (activeHolePos) {
-                if (center.distanceTo(new THREE.Vector3(activeHolePos[0], activeHolePos[1], activeHolePos[2])) < 20)
-                  isActiveHole = true;
-              }
-
-              // Priority 2: Hole with assigned tap (blue)
-              if (!isActiveHole && tappedPositions.length > 0) {
-                for (const pos of tappedPositions) {
-                  if (center.distanceTo(new THREE.Vector3(pos[0], pos[1], pos[2])) < 20)
-                    { isTappedHole = true; break; }
-                }
-              }
-
-              // Priority 3: All detected holes when tapping is active (orange outline)
-              if (!isActiveHole && !isTappedHole && allHolePositions.length > 0) {
-                for (const pos of allHolePositions) {
-                  if (center.distanceTo(new THREE.Vector3(pos[0], pos[1], pos[2])) < 20)
-                    { isDetectedHole = true; break; }
-                }
-              }
-            }
-
-            if (isActiveHole) {
-              finalMat.color.set(0x2563eb);
-              finalMat.emissive?.set(0x1e3a5f);
-            } else if (isTappedHole) {
-              finalMat.color.set(0x3b82f6);
-              finalMat.emissive?.set(0x172554);
-            } else if (isDetectedHole) {
-              finalMat.color.set(0xf59e0b);
-              finalMat.emissive?.set(0x451a03);
-            } else if (selectedAnodizingColor) {
-              finalMat.color.set(selectedAnodizingColor.color);
-              finalMat.emissive?.set(0x000000);
-            } else if (obj.userData.origColor) {
-              const oc = obj.userData.origColor;
-              finalMat.color.setRGB(oc.r, oc.g, oc.b);
-              finalMat.emissive?.set(0x000000);
-            }
-            finalMat.needsUpdate = true;
+            const fm = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
+            if (!obj.userData.origColor) obj.userData.origColor = { r: fm.color.r, g: fm.color.g, b: fm.color.b };
+            if (selectedAnodizingColor) fm.color.set(selectedAnodizingColor.color);
+            else { const oc = obj.userData.origColor; fm.color.setRGB(oc.r, oc.g, oc.b); }
+            fm.needsUpdate = true;
           });
         });
+        try { v.Render(); } catch (_) { }
+      } catch (e) { console.warn('Anodizing color error:', e); }
+    };
+    apply();
+    const tid = setTimeout(apply, 200);
+    return () => clearTimeout(tid);
+  }, [selectedAnodizingColor, selectedFile?.file?.name, modelLoadCount]);
 
-        try { v.Render(); } catch (_) {}
-        try {
-          if (v.renderer && v.scene && v.camera)
-            v.renderer.render(v.scene, v.camera);
-        } catch (_) {}
-      } catch (e) {
-        console.warn('Error updating STEP model colors:', e);
+  // 3D hole markers — adds colored rings at hole positions on the model
+  useEffect(() => {
+    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
+    if (modelLoadCount === 0) return;
+
+    const updateMarkers = () => {
+      try {
+        const v = viewerInstance.current?.GetViewer();
+        if (!v?.scene) return;
+
+        // Remove old markers
+        holeMarkersRef.current.forEach(m => { v.scene.remove(m); m.geometry?.dispose(); m.material?.dispose(); });
+        holeMarkersRef.current = [];
+
+        if (!isTappingActive || detectedHoles.length === 0) { try { v.Render(); } catch (_) { } return; }
+
+        detectedHoles.forEach(hole => {
+          if (!hole.position) return;
+          const isTapped = !!selectedTaps[hole.id];
+          const isActive = activeTapHole?.id === hole.id;
+
+          // Determine color: blue=tapped, bright blue=active, orange=unassigned
+          const color = isActive ? 0x2563eb : isTapped ? 0x3b82f6 : 0xf59e0b;
+
+          // Create a torus (ring) marker at hole position
+          const radius = (hole.diameterInches * 25.4) / 2; // convert back to mm for model coords
+          const markerRadius = Math.max(radius * 1.3, 2);
+          const tube = Math.max(markerRadius * 0.2, 0.5);
+          const geo = new THREE.TorusGeometry(markerRadius, tube, 8, 24);
+          const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthTest: false });
+          const ring = new THREE.Mesh(geo, mat);
+
+          ring.position.set(hole.position[0], hole.position[1], hole.position[2]);
+
+          // Orient ring using its actual axis (normal)
+          if (hole.axis) {
+            const axisVec = new THREE.Vector3(hole.axis[0], hole.axis[1], hole.axis[2]);
+            const up = new THREE.Vector3(0, 0, 1);
+            ring.quaternion.setFromUnitVectors(up, axisVec);
+          } else {
+            // Fallback for DXF or legacy data
+            ring.lookAt(hole.position[0], hole.position[1], hole.position[2] + 100);
+          }
+
+          ring.renderOrder = 999;
+          ring.userData = { isHoleMarker: true, hole: hole };
+
+          v.scene.add(ring);
+          holeMarkersRef.current.push(ring);
+        });
+
+        try { v.Render(); } catch (_) { }
+      } catch (e) { console.warn('Hole marker error:', e); }
+    };
+
+    updateMarkers();
+
+    // Add click listener for hole markers
+    const viewerEl = stepViewerRef.current;
+    if (!viewerEl) return;
+
+    const onViewerClick = (event) => {
+      const v = viewerInstance.current?.GetViewer();
+      if (!v?.scene || !v?.camera) return;
+
+      const rect = viewerEl.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, v.camera);
+
+      // Check for intersections with markers
+      const intersects = raycaster.intersectObjects(holeMarkersRef.current);
+      if (intersects.length > 0) {
+        const clickedMarker = intersects[0].object;
+        if (clickedMarker.userData.hole) {
+          setActiveTapHole(clickedMarker.userData.hole);
+        }
       }
     };
 
-    applyColors();
-    const tid = setTimeout(applyColors, 200);
-    return () => clearTimeout(tid);
-  }, [selectedAnodizingColor, selectedTaps, detectedHoles, selectedFile?.file?.name, activeTapHole, modelLoadCount, isTappingActive]);
+    viewerEl.addEventListener('click', onViewerClick);
+
+    const tid = setTimeout(updateMarkers, 300);
+    return () => {
+      clearTimeout(tid);
+      viewerEl.removeEventListener('click', onViewerClick);
+    };
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedFile?.file?.name, modelLoadCount]);
 
   const handleUnfold = useCallback(async () => {
     if (!selectedFile || is2DFile(selectedFile.file.name) || !isStepFile(selectedFile.file.name) || backendData) { if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); } return; }
@@ -699,6 +730,15 @@ const InstantPricing = () => {
                       {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
                       {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{}} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div className="qf-loading-viewer"><div className="flat-loading-spinner" />Preparing flat model...</div>)}
                       {currentIsDxf && <div className="dxf-svg-wrapper">{dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
+
+                      {/* 3D Hole Marker Legend */}
+                      {isTappingActive && viewMode === '3d' && (
+                        <div className="qf-viewer-legend">
+                          <div className="legend-item"><span className="legend-dot orange"></span> Detected Hole</div>
+                          <div className="legend-item"><span className="legend-dot blue"></span> Tap Assigned</div>
+                          <div className="legend-item"><span className="legend-dot active"></span> Selected</div>
+                        </div>
+                      )}
                     </div>
                     <div className="qf-view-toggles-simple">
                       <button className={viewMode === '3d' ? 'active' : ''} onClick={() => setViewMode('3d')}>3D</button>
@@ -758,7 +798,18 @@ const InstantPricing = () => {
                     )}
                     {selectedProductionService && selectedMetal && (
                       <div className="qf-step-fade-in">
-                        <div className="qf-selection-summary-bar"><div><strong>Method:</strong> {selectedProductionService.title}</div><div><strong>Material:</strong> {selectedMetal.name}</div></div>
+                        <div className="qf-selection-summary-bar">
+                          <div className="qf-summary-item"><strong>Method:</strong> {selectedProductionService.title}</div>
+                          <div className="qf-summary-item"><strong>Material:</strong> {selectedMetal.name}</div>
+                          <div className="qf-summary-item price-estimate-wrapper">
+                            <strong>Estimated Price:</strong>
+                            {isCalculatingPrice ? (
+                              <Loader2 className="animate-spin inline-spinner" size={14} />
+                            ) : (
+                              <span className="price-tag">${priceEstimate ? priceEstimate.toFixed(2) : '--.--'}</span>
+                            )}
+                          </div>
+                        </div>
                         <h2 className="qf-panel-title">Additional Services</h2>
                         <p className="qf-panel-subtitle">Select extra processes for your part</p>
                         <div className="qf-services-grid-v2">
@@ -808,91 +859,37 @@ const InstantPricing = () => {
                                   );
 
                                   if (isTappingSvc) {
-                                    if (activeTapHole) {
-                                      const holeDia = activeTapHole.diameterInches;
-                                      return (
-                                        <motion.div className="qf-service-options-panel qf-tapping-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                                          <div className="qf-tap-back-row">
-                                            <button className="qf-tap-back-btn" onClick={() => setActiveTapHole(null)}><ChevronLeft size={16} /> Back to holes</button>
-                                            <span className="qf-tap-hole-label">Hole #{activeTapHole.id + 1} — &#8960;{holeDia.toFixed(4)}&quot;</span>
-                                          </div>
-                                          <label>Select a tap:</label>
-                                          <div className="qf-tap-cards">
-                                            {(svc.service_options || []).map((tap, i) => {
-                                              const tooLarge = holeDia > parseFloat(tap.max_diameter);
-                                              const tooSmall = holeDia < parseFloat(tap.min_diameter);
-                                              const incompatible = tooLarge || tooSmall;
-                                              const isChosen = selectedTaps[activeTapHole.id]?.name === tap.name;
-                                              return (
-                                                <div key={i} className={`qf-tap-card ${isChosen ? 'chosen' : ''} ${incompatible ? 'incompatible' : ''}`}>
-                                                  <div className="qf-tap-card-header">
-                                                    <span className="qf-tap-name">{tap.name}</span>
-                                                    {incompatible && <span className="qf-tap-warning"><AlertCircle size={14} />{tooLarge ? 'Hole too large' : 'Hole too small'}</span>}
-                                                  </div>
-                                                  <div className="qf-tap-specs-grid">
-                                                    <div><span>Min Dia</span><strong>{tap.min_diameter}&quot;</strong></div>
-                                                    <div><span>Max Dia</span><strong>{tap.max_diameter}&quot;</strong></div>
-                                                    <div><span>Max Depth</span><strong>{tap.max_depth}&quot;</strong></div>
-                                                    <div><span>Min Depth</span><strong>{tap.min_depth === null || tap.min_depth === undefined ? 'None' : `${tap.min_depth}"`}</strong></div>
-                                                  </div>
-                                                  {tap.notes && <p className="qf-tap-notes">{tap.notes}</p>}
-                                                  <button className={`qf-tap-select-btn ${incompatible ? 'warn' : ''}`} onClick={() => { setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap })); setActiveTapHole(null); }}>
-                                                    {isChosen ? <><Check size={14} /> Selected</> : 'Select Tap'}
-                                                  </button>
-                                                </div>
-                                              );
-                                            })}
-                                            {(!svc.service_options || svc.service_options.length === 0) && <div className="qf-no-holes">No taps configured for this service.</div>}
-                                          </div>
-                                        </motion.div>
-                                      );
-                                    }
-
                                     return (
-                                      <motion.div className="qf-service-options-panel qf-tapping-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                                        <p className="qf-tap-prompt">Choose below or click a feature on your drawing to add services</p>
+                                      <motion.div className="qf-service-options-panel qf-tapping-compact-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                        <div className="qf-tapping-summary-row">
+                                          <div className="qf-tapping-stats">
+                                            <div className="qf-stat-item">
+                                              <span className="qf-stat-value">{detectedHoles.length}</span>
+                                              <span className="qf-stat-label">Holes Detected</span>
+                                            </div>
+                                            <div className="qf-stat-item">
+                                              <span className="qf-stat-value">{tapCount}</span>
+                                              <span className="qf-stat-label">Taps Assigned</span>
+                                            </div>
+                                          </div>
+                                          <button className="qf-manage-taps-btn" onClick={() => setActiveTapHole(detectedHoles[0] || null)}>
+                                            <Layers size={16} /> Manage Taps
+                                          </button>
+                                        </div>
 
-                                        {/* Tap count dropdown */}
-                                        <button className="qf-tap-dropdown-toggle" onClick={() => setTappingExpanded(p => !p)}>
-                                          <span>{tapCount} {tapCount === 1 ? 'Tap' : 'Taps'}</span>
-                                          <ChevronRight size={18} className={`qf-tap-chevron ${tappingExpanded ? 'expanded' : ''}`} />
-                                        </button>
+                                        {holeDetectionError && (
+                                          <div className="qf-tapping-error-minimal">
+                                            <AlertCircle size={14} />
+                                            <span>{holeDetectionError}</span>
+                                          </div>
+                                        )}
 
-                                        <AnimatePresence>
-                                          {tappingExpanded && (
-                                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                                              {isDetectingHoles ? (
-                                                <div className="qf-holes-detecting"><Loader2 size={18} className="qf-spin-icon" /><span>Analyzing model geometry...</span></div>
-                                              ) : holeDetectionError ? (
-                                                <div className="qf-no-holes"><AlertCircle size={16} style={{ marginRight: '6px', flexShrink: 0 }} />{holeDetectionError}</div>
-                                              ) : detectedHoles.length === 0 ? (
-                                                <div className="qf-no-holes">No holes detected in this model{currentIsStep ? '' : ' — upload a DXF file with circular cutouts'}.</div>
-                                              ) : (
-                                                <div className="qf-holes-table">
-                                                  <div className="qf-holes-table-header">
-                                                    <span>Hole</span>
-                                                    <span>Diameter</span>
-                                                    <span>Depth</span>
-                                                    <span></span>
-                                                  </div>
-                                                  {detectedHoles.map(hole => (
-                                                    <div key={hole.id} className={`qf-holes-table-row ${activeTapHole?.id === hole.id ? 'active-hole' : ''}`}>
-                                                      <span className="qf-hole-indicator">
-                                                        <span className={`qf-hole-dot ${selectedTaps[hole.id] ? 'tapped' : ''}`} />
-                                                        #{hole.id + 1}
-                                                      </span>
-                                                      <span>&#8960;{hole.diameterInches.toFixed(4)}&quot;</span>
-                                                      <span>{hole.depthInches.toFixed(4)}&quot;</span>
-                                                      <button className={`qf-select-tap-btn ${selectedTaps[hole.id] ? 'assigned' : ''}`} onClick={() => setActiveTapHole(hole)}>
-                                                        {selectedTaps[hole.id] ? selectedTaps[hole.id].name : 'SELECT TAP'}
-                                                      </button>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-                                            </motion.div>
-                                          )}
-                                        </AnimatePresence>
+                                        {isDetectingHoles && (
+                                          <div className="qf-holes-detecting-minimal">
+                                            <Loader2 size={14} className="qf-spin-icon" />
+                                            <span>Analyzing model...</span>
+                                          </div>
+                                        )}
                                       </motion.div>
                                     );
                                   }
@@ -975,6 +972,86 @@ const InstantPricing = () => {
         </div>
       )}
       <StyleTag />
+
+      {/* Tap Selection Modal */}
+      <AnimatePresence>
+        {activeTapHole && (
+          <div className="qf-modal-overlay">
+            <motion.div
+              className="qf-modal-container"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            >
+              <div className="qf-modal-header">
+                <div>
+                  <h3>Assign Tap to Hole #{activeTapHole.id + 1}</h3>
+                  <p>Hole Diameter: &#8960;{activeTapHole.diameterInches.toFixed(4)}&quot;</p>
+                </div>
+                <button className="qf-modal-close" onClick={() => setActiveTapHole(null)}><X size={24} /></button>
+              </div>
+
+              <div className="qf-modal-content">
+                <div className="qf-modal-scroll">
+                  {(() => {
+                    const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('tap'));
+                    if (!svc) return null;
+                    const options = svc.service_options || [];
+                    const assigned = selectedTaps[activeTapHole.id];
+
+                    return (
+                      <div className="qf-tap-selection-grid">
+                        {options.map((tap, idx) => {
+                          const tooLarge = activeTapHole.diameterInches > parseFloat(tap.max_diameter);
+                          const tooSmall = activeTapHole.diameterInches < parseFloat(tap.min_diameter);
+                          const incompatible = tooLarge || tooSmall;
+                          const isChosen = assigned?.name === tap.name;
+
+                          return (
+                            <div key={idx} className={`qf-tap-modal-card ${isChosen ? 'active' : ''} ${incompatible ? 'disabled' : ''}`}>
+                              <div className="tap-card-top">
+                                <strong>{tap.name}</strong>
+                                {isChosen && <span className="assigned-badge"><Check size={12} /> Assigned</span>}
+                                {incompatible && <span className="error-badge">{tooLarge ? 'Too Large' : 'Too Small'}</span>}
+                              </div>
+                              <div className="tap-card-specs">
+                                <div><span>Range:</span> {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</div>
+                                <div><span>Depth:</span> {tap.min_depth || 0}&quot; - {tap.max_depth}&quot;</div>
+                              </div>
+                              <button
+                                className="qf-modal-select-btn"
+                                disabled={incompatible}
+                                onClick={() => {
+                                  setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap }));
+                                  setActiveTapHole(null);
+                                }}
+                              >
+                                {isChosen ? 'Already Assigned' : 'Select this Tap'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="qf-modal-footer">
+                  {selectedTaps[activeTapHole.id] && (
+                    <button className="qf-modal-remove-btn" onClick={() => {
+                      setSelectedTaps(prev => { const n = { ...prev }; delete n[activeTapHole.id]; return n; });
+                      setActiveTapHole(null);
+                    }}>
+                      Remove assigned tap
+                    </button>
+                  )}
+                  <button className="qf-modal-cancel" onClick={() => setActiveTapHole(null)}>Cancel</button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -1090,6 +1167,7 @@ body.qf-active {
   display: flex;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
 .qf-left-side {
@@ -1110,6 +1188,7 @@ body.qf-active {
   background: white;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .qf-model-box {
@@ -1379,8 +1458,34 @@ body.qf-active {
 }
 
 .qf-summary-item strong {
-  color: #0f172a;
-  margin-right: 4px;
+  color: #64748b;
+  margin-right: 8px;
+}
+
+.price-estimate-wrapper {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0f172a;
+  padding: 8px 16px;
+  border-radius: 12px;
+  color: white !important;
+}
+
+.price-estimate-wrapper strong {
+  color: #94a3b8 !important;
+  font-size: 12px;
+}
+
+.price-tag {
+  font-size: 20px;
+  font-weight: 800;
+  color: #3b82f6;
+}
+
+.inline-spinner {
+  color: #3b82f6;
 }
 
 /* Sub Services Grid */
@@ -1657,271 +1762,349 @@ body.qf-active {
 }
 
 /* ── Tapping Panel ───────────────────────────────── */
-.qf-tapping-panel {
-  padding-left: 24px !important;
+.qf-tapping-compact-panel {
+  padding: 16px 20px !important;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  margin-bottom: 24px;
 }
 
-.qf-tap-prompt {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0 0 16px 0;
-  line-height: 1.5;
-}
-
-.qf-tap-dropdown-toggle {
-  width: 100%;
+.qf-tapping-summary-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
-  background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 700;
+  align-items: center;
+  gap: 20px;
+}
+
+.qf-tapping-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.qf-stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.qf-stat-value {
+  font-size: 20px;
+  font-weight: 800;
   color: #0f172a;
-  transition: all 0.2s;
-  margin-bottom: 16px;
-}
-.qf-tap-dropdown-toggle:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  line-height: 1;
 }
 
-.qf-tap-chevron {
-  transition: transform 0.25s ease;
-  color: #94a3b8;
-}
-.qf-tap-chevron.expanded {
-  transform: rotate(90deg);
+.qf-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
 }
 
-.qf-hole-indicator {
+.qf-manage-taps-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.qf-hole-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #f59e0b;
-  border: 2px solid #d97706;
-  flex-shrink: 0;
-}
-.qf-hole-dot.tapped {
-  background: #3b82f6;
-  border-color: #2563eb;
-}
-
-.qf-holes-table-row.active-hole {
-  background: #eff6ff;
-  box-shadow: inset 0 0 0 2px #3b82f6;
-}
-
-.qf-tap-back-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.qf-tap-back-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
+  padding: 10px 18px;
+  background: #0f172a;
+  color: white;
   border: none;
-  color: #64748b;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 8px;
   transition: all 0.2s;
 }
-.qf-tap-back-btn:hover { background: #f1f5f9; color: #0f172a; }
 
-.qf-tap-hole-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: #475569;
-  background: #f1f5f9;
-  padding: 6px 14px;
-  border-radius: 20px;
+.qf-manage-taps-btn:hover {
+  background: #1e293b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
 
-.qf-tap-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.qf-tap-card {
-  background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px;
-  transition: all 0.2s;
-}
-.qf-tap-card.chosen { border-color: #0f172a; background: #f8fafc; }
-.qf-tap-card.incompatible { border-color: #fcd34d; background: #fffbeb; }
-
-.qf-tap-card-header {
+.qf-holes-detecting-minimal {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
 }
 
-.qf-tap-name {
-  font-size: 16px;
+.qf-tapping-error-minimal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fff1f2;
+  color: #e11d48;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── 3D Viewer Legend ────────────────────────────── */
+.qf-viewer-legend {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.orange { background: #f59e0b; border: 2px solid #d97706; }
+.legend-dot.blue { background: #3b82f6; border: 2px solid #2563eb; }
+.legend-dot.active { background: #00ffff; border: 2px solid #00cccc; box-shadow: 0 0 10px rgba(0,255,255,0.5); }
+
+/* ── Tap Selection Modal ─────────────────────────── */
+.qf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 24px;
+}
+
+.qf-modal-container {
+  background: white;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  border-radius: 32px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.25);
+}
+
+.qf-modal-header {
+  padding: 32px 40px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.qf-modal-header h3 {
+  margin: 0;
+  font-size: 24px;
   font-weight: 800;
   color: #0f172a;
 }
 
-.qf-tap-warning {
+.qf-modal-header p {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.qf-modal-close {
+  background: #f1f5f9;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #d97706;
-  background: #fef3c7;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qf-modal-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: rotate(90deg);
+}
+
+.qf-modal-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.qf-modal-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px;
+}
+
+.qf-tap-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.qf-tap-modal-card {
+  border: 2px solid #f1f5f9;
+  border-radius: 20px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.qf-tap-modal-card.active {
+  border-color: #0f172a;
+  background: #f8fafc;
+}
+
+.qf-tap-modal-card.disabled {
+  opacity: 0.5;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.tap-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tap-card-top strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.assigned-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #10b981;
+  background: #d1fae5;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ef4444;
+  background: #fee2e2;
   padding: 4px 10px;
   border-radius: 20px;
 }
 
-.qf-tap-specs-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.qf-tap-specs-grid > div {
+.tap-card-specs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.qf-tap-specs-grid span {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.qf-tap-specs-grid strong {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 800;
-}
-
-.qf-tap-notes {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0 0 16px 0;
-  line-height: 1.5;
-  background: #f8fafc;
-  padding: 10px 14px;
-  border-radius: 10px;
-}
-
-.qf-tap-select-btn {
-  width: 100%;
-  padding: 10px;
-  background: #0f172a;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  transition: all 0.2s;
 }
-.qf-tap-select-btn:hover { background: #1e293b; transform: translateY(-1px); }
-.qf-tap-select-btn.warn { background: #d97706; }
-.qf-tap-select-btn.warn:hover { background: #b45309; }
 
-/* Holes table */
-.qf-holes-table {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.qf-holes-table-header, .qf-holes-table-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 130px;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-}
-.qf-holes-table-header {
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.qf-holes-table-row {
-  background: white;
-  border-radius: 10px;
+.tap-card-specs div {
   font-size: 13px;
-  color: #334155;
-  font-weight: 600;
-  transition: background 0.15s;
+  color: #0f172a;
+  font-weight: 700;
 }
-.qf-holes-table-row:hover { background: #f8fafc; }
 
-.qf-select-tap-btn {
-  padding: 7px 14px;
-  background: #0f172a;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  font-size: 11px;
+.tap-card-specs span {
+  color: #64748b;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.qf-modal-select-btn {
+  margin-top: auto;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
-  letter-spacing: 0.04em;
   transition: all 0.2s;
-  white-space: nowrap;
+  border: none;
+  background: #0f172a;
+  color: white;
 }
-.qf-select-tap-btn:hover { background: #1e293b; transform: translateY(-1px); }
-.qf-select-tap-btn.assigned { background: #059669; }
-.qf-select-tap-btn.assigned:hover { background: #047857; }
 
-.qf-no-holes {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 24px;
+.qf-modal-select-btn:hover:not(:disabled) {
+  background: #1e293b;
+  transform: translateY(-2px);
+}
+
+.qf-modal-select-btn:disabled {
+  background: #e2e8f0;
   color: #94a3b8;
-  font-size: 14px;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 2px dashed #e2e8f0;
+  cursor: not-allowed;
 }
 
-.qf-holes-detecting {
+.qf-modal-footer {
+  padding: 32px 40px;
+  border-top: 1px solid #f1f5f9;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 600;
+  justify-content: flex-end;
+  gap: 16px;
+  background: #f8fafc;
 }
 
-.qf-spin-icon {
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-  color: #3b82f6;
+.qf-modal-cancel {
+  padding: 14px 24px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qf-modal-cancel:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.qf-modal-remove-btn {
+  padding: 14px 24px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-right: auto;
+  transition: all 0.2s;
+}
+
+.qf-modal-remove-btn:hover {
+  background: #fecaca;
 }
 `;
 
