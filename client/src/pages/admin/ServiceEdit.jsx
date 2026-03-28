@@ -367,6 +367,10 @@ export default function ServiceEdit() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    <div className="option-input-group">
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>Price per Hole ($)</label>
+                                                        <input type="number" step="0.01" value={opt.price || ''} onChange={e => { const n = [...service.service_options]; n[idx].price = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.00" />
+                                                    </div>
                                                 </div>
                                                 <div className="option-input-group">
                                                     <label>Additional Notes</label>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line 
 import {
   Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
   Monitor, Maximize2, Boxes, ChevronLeft,
-  ChevronRight, AlertCircle, Loader2, Check, Shield
+  ChevronRight, AlertCircle, AlertTriangle, Loader2, Check, Shield, Calculator
 } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
@@ -54,6 +54,7 @@ const InstantPricing = () => {
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
+  const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
   const [detectedHoles, setDetectedHoles] = useState([]);
   const [selectedTaps, setSelectedTaps] = useState({});
   const [activeTapHole, setActiveTapHole] = useState(null);
@@ -497,19 +498,20 @@ const InstantPricing = () => {
                 obj.userData.origColor = { r: obj.material.color.r, g: obj.material.color.g, b: obj.material.color.b };
               }
             });
-          } catch (e) { /* ignore */ }
+          } catch { /* ignore */ }
           setModelLoadCount(c => c + 1);
         }
       });
       localViewer = viewer; viewerInstance.current = viewer; viewer.LoadModelFromFileList([selectedFile.file]);
       checkInterval = setInterval(() => { if (dimensionsRef.current) clearInterval(checkInterval); else { const m = viewer.GetModel(); if (m) extractDimensions(m); } }, 2000);
-    } catch (e) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", e); }
-    return () => { if (checkInterval) clearInterval(checkInterval); try { localViewer?.Destroy(); } catch (e) { console.error("Error destroying local viewer:", e); } };
+    } catch (err) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", err); }
+    return () => { if (checkInterval) clearInterval(checkInterval); try { localViewer?.Destroy(); } catch (err) { console.error("Error destroying local viewer:", err); } };
   }, [selectedFile, viewMode, isQuoteFlowActive]);
 
   // Whether tapping service is currently selected
   const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
   const tapCount = Object.keys(selectedTaps).length;
+  const tappingTotal = Object.values(selectedTaps).reduce((sum, tap) => sum + (parseFloat(tap.price) || 0), 0);
 
   // Anodizing color effect — only changes the whole model color
   useEffect(() => {
@@ -535,8 +537,8 @@ const InstantPricing = () => {
             fm.needsUpdate = true;
           });
         });
-        try { v.Render(); } catch (_) { }
-      } catch (e) { console.warn('Anodizing color error:', e); }
+        try { v.Render(); } catch { /* silent render error */ }
+      } catch (err) { console.warn('Anodizing color error:', err); }
     };
     apply();
     const tid = setTimeout(apply, 200);
@@ -553,11 +555,21 @@ const InstantPricing = () => {
         const v = viewerInstance.current?.GetViewer();
         if (!v?.scene) return;
 
+        // Find the model group more robustly
+        let modelParent = v.scene;
+        // online-3d-viewer adds a single group containing the model
+        for (const child of v.scene.children) {
+          if (child.isGroup && child.userData?.isModelGroup !== false) {
+            modelParent = child;
+            break;
+          }
+        }
+
         // Remove old markers
-        holeMarkersRef.current.forEach(m => { v.scene.remove(m); m.geometry?.dispose(); m.material?.dispose(); });
+        holeMarkersRef.current.forEach(m => { m.parent?.remove(m); m.geometry?.dispose(); m.material?.dispose(); });
         holeMarkersRef.current = [];
 
-        if (!isTappingActive || detectedHoles.length === 0) { try { v.Render(); } catch (_) { } return; }
+        if (!isTappingActive || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
 
         detectedHoles.forEach(hole => {
           if (!hole.position) return;
@@ -571,15 +583,24 @@ const InstantPricing = () => {
           const radius = (hole.diameterInches * 25.4) / 2; // convert back to mm for model coords
           const markerRadius = Math.max(radius * 1.3, 2);
           const tube = Math.max(markerRadius * 0.2, 0.5);
-          const geo = new THREE.TorusGeometry(markerRadius, tube, 8, 24);
-          const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthTest: false });
+          const geo = new THREE.TorusGeometry(markerRadius, tube, 12, 32);
+          const mat = new THREE.MeshStandardMaterial({
+            color,
+            transparent: true,
+            opacity: 0.85,
+            depthTest: false,
+            metalness: 0.5,
+            roughness: 0.3
+          });
           const ring = new THREE.Mesh(geo, mat);
 
           ring.position.set(hole.position[0], hole.position[1], hole.position[2]);
 
           // Orient ring using its actual axis (normal)
           if (hole.axis) {
-            const axisVec = new THREE.Vector3(hole.axis[0], hole.axis[1], hole.axis[2]);
+            const axisVec = new THREE.Vector3(hole.axis[0], hole.axis[1], hole.axis[2]).normalize();
+            // To ensure the ring is flat against the surface, we want its normal (Z-axis) 
+            // to align with the hole's axis vector. 
             const up = new THREE.Vector3(0, 0, 1);
             ring.quaternion.setFromUnitVectors(up, axisVec);
           } else {
@@ -590,12 +611,12 @@ const InstantPricing = () => {
           ring.renderOrder = 999;
           ring.userData = { isHoleMarker: true, hole: hole };
 
-          v.scene.add(ring);
+          modelParent.add(ring);
           holeMarkersRef.current.push(ring);
         });
 
-        try { v.Render(); } catch (_) { }
-      } catch (e) { console.warn('Hole marker error:', e); }
+        try { v.Render(); } catch { /* silent render error */ }
+      } catch (err) { console.warn('Hole marker error:', err); }
     };
 
     updateMarkers();
@@ -767,15 +788,20 @@ const InstantPricing = () => {
                           {allServices.filter(s => s.is_production).map(svc => {
                             const { valid, errorMsg } = validateServiceDimensions(svc, dimensions);
                             return (
-                              <button key={svc.id} className={`qf-large-service-card ${!valid ? 'disabled' : ''}`} onClick={() => valid && setSelectedProductionService(svc)} disabled={!valid}>
+                              <button key={svc.id} className={`qf-large-service-card ${!valid ? 'warning-bg' : ''}`} onClick={() => setSelectedProductionService(svc)}>
                                 <div className="qf-card-main">
                                   <strong>{svc.title}</strong>
                                   <span>{svc.description}</span>
                                 </div>
                                 {!valid ? (
-                                  <div className="qf-card-status error"><Shield size={16} />{errorMsg}</div>
+                                  <div className="qf-card-status error" title={errorMsg}>
+                                    <Shield size={16} /> {errorMsg}
+                                    <span className="cta-hint">(Click to proceed)</span>
+                                  </div>
                                 ) : (
-                                  <div className="qf-card-status price">Select Material <ChevronRight size={16} /></div>
+                                  <div className="qf-card-status price-cta">
+                                    Select Material <ChevronRight size={16} />
+                                  </div>
                                 )}
                               </button>
                             );
@@ -801,14 +827,6 @@ const InstantPricing = () => {
                         <div className="qf-selection-summary-bar">
                           <div className="qf-summary-item"><strong>Method:</strong> {selectedProductionService.title}</div>
                           <div className="qf-summary-item"><strong>Material:</strong> {selectedMetal.name}</div>
-                          <div className="qf-summary-item price-estimate-wrapper">
-                            <strong>Estimated Price:</strong>
-                            {isCalculatingPrice ? (
-                              <Loader2 className="animate-spin inline-spinner" size={14} />
-                            ) : (
-                              <span className="price-tag">${priceEstimate ? priceEstimate.toFixed(2) : '--.--'}</span>
-                            )}
-                          </div>
                         </div>
                         <h2 className="qf-panel-title">Additional Services</h2>
                         <p className="qf-panel-subtitle">Select extra processes for your part</p>
@@ -845,15 +863,24 @@ const InstantPricing = () => {
                                   const isTappingSvc = svc.title.toLowerCase().includes('tap');
 
                                   if (isAnodizingSvc && hasOptions) return (
-                                    <motion.div className="qf-service-options-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                                      <label>Select Anodizing Color:</label>
-                                      <div className="qf-options-grid">
-                                        {svc.service_options.map((opt, i) => (
-                                          <button key={i} className={`qf-option-swatch ${selectedAnodizingColor?.name === opt.name ? 'active' : ''}`} onClick={() => setSelectedAnodizingColor(opt)} title={opt.name}>
-                                            <div className="swatch-circle" style={{ backgroundColor: opt.color }} />
-                                            <span>{opt.name}</span>
-                                          </button>
-                                        ))}
+                                    <motion.div className="qf-service-options-panel qf-tapping-compact-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                      <div className="qf-tapping-summary-row">
+                                        <div className="qf-tapping-stats">
+                                          <div className="qf-stat-item">
+                                            <span className="qf-stat-value" style={{ fontSize: '15px' }}>
+                                              {selectedAnodizingColor ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                  <div className="swatch-circle" style={{ backgroundColor: selectedAnodizingColor.color, width: '16px', height: '16px', border: '1px solid #e2e8f0' }} />
+                                                  {selectedAnodizingColor.name}
+                                                </div>
+                                              ) : 'None'}
+                                            </span>
+                                            <span className="qf-stat-label">Color Selected</span>
+                                          </div>
+                                        </div>
+                                        <button className="qf-manage-taps-btn" onClick={() => setIsAnodizingModalOpen(true)}>
+                                          <Layers size={16} /> Choose Color
+                                        </button>
                                       </div>
                                     </motion.div>
                                   );
@@ -864,7 +891,7 @@ const InstantPricing = () => {
                                         <div className="qf-tapping-summary-row">
                                           <div className="qf-tapping-stats">
                                             <div className="qf-stat-item">
-                                              <span className="qf-stat-value">{detectedHoles.length}</span>
+                                              <span className="qf-stat-value">{(detectedHoles || []).length}</span>
                                               <span className="qf-stat-label">Holes Detected</span>
                                             </div>
                                             <div className="qf-stat-item">
@@ -872,7 +899,7 @@ const InstantPricing = () => {
                                               <span className="qf-stat-label">Taps Assigned</span>
                                             </div>
                                           </div>
-                                          <button className="qf-manage-taps-btn" onClick={() => setActiveTapHole(detectedHoles[0] || null)}>
+                                          <button className="qf-manage-taps-btn" onClick={() => setActiveTapHole((detectedHoles && detectedHoles.length > 0) ? detectedHoles[0] : null)}>
                                             <Layers size={16} /> Manage Taps
                                           </button>
                                         </div>
@@ -900,9 +927,79 @@ const InstantPricing = () => {
                             );
                           })}
                         </div>
-                        <div className="qf-cta-container">
-                          <button className="qf-primary-btn" onClick={() => navigate('/checkout')}>PROCEED TO FINAL QUOTE <ChevronRight size={20} /></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="qf-summary-sidebar">
+                  <div className="qf-summary-sidebar-content">
+                    <header className="breakdown-header">
+                      <h3>Quote Summary</h3>
+                      <span className="breakdown-subtitle">Estimated cost breakdown</span>
+                    </header>
+
+                    {selectedProductionService && selectedMetal ? (
+                      <div className="qf-summary-active-area">
+                        <div className="qf-price-breakdown-card">
+                          <div className="breakdown-items">
+                            <div className="breakdown-item">
+                              <div className="item-label">
+                                <strong>Production Method</strong>
+                                <span>{selectedProductionService.title}</span>
+                              </div>
+                              <div className="item-price">
+                                {isCalculatingPrice ? <Loader2 className="animate-spin" size={12} /> : `$${(priceEstimate || 0).toFixed(2)}`}
+                              </div>
+                            </div>
+
+                            <div className="breakdown-item">
+                              <div className="item-label">
+                                <strong>Material Cost</strong>
+                                <span>{selectedMetal.name}</span>
+                              </div>
+                              <div className="item-price">Included</div>
+                            </div>
+
+                            {tappingTotal > 0 && (
+                              <div className="breakdown-item">
+                                <div className="item-label">
+                                  <strong>Tapping Service</strong>
+                                  <span>{tapCount} hole{tapCount !== 1 ? 's' : ''} assigned</span>
+                                </div>
+                                <div className="item-price">${tappingTotal.toFixed(2)}</div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="breakdown-total">
+                            <div className="total-label">Estimated Total</div>
+                            <div className="total-amount">
+                              {isCalculatingPrice ? <Loader2 className="animate-spin" size={24} /> : `$${((priceEstimate || 0) + tappingTotal).toFixed(2)}`}
+                            </div>
+                          </div>
                         </div>
+
+                        <div className="qf-cta-container sidebar-cta">
+                          <button className="qf-primary-btn" onClick={() => navigate('/quote', {
+                            state: {
+                              totalPrice: (priceEstimate || 0) + tappingTotal,
+                              selectedProductionService,
+                              selectedMetal,
+                              tapCount
+                            }
+                          })}>PROCEED TO FINAL QUOTE <ChevronRight size={20} /></button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="qf-summary-placeholder">
+                        <div className="placeholder-icon"><Calculator size={40} /></div>
+                        <p>Select your <strong>Production Method</strong> and <strong>Material</strong> to generate an instant quote.</p>
+                        <div className="placeholder-steps">
+                          <div className={`step-item ${selectedProductionService ? 'done' : ''}`}><Check size={14} /> Choose Method</div>
+                          <div className={`step-item ${selectedMetal ? 'done' : ''}`}><Check size={14} /> Choose Material</div>
+                        </div>
+                        <p className="hint-text" style={{ fontSize: '12.5px', marginTop: '20px', color: '#94a3b8', fontStyle: 'italic' }}>*Pricing calculates automatically once both are selected.</p>
                       </div>
                     )}
                   </div>
@@ -976,83 +1073,174 @@ const InstantPricing = () => {
       {/* Tap Selection Modal */}
       <AnimatePresence>
         {activeTapHole && (
-          <div className="qf-modal-overlay">
+          <motion.div key="tap-modal-overlay" className="qf-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
               className="qf-modal-container"
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
             >
               <div className="qf-modal-header">
                 <div>
                   <h3>Assign Tap to Hole #{activeTapHole.id + 1}</h3>
-                  <p>Hole Diameter: &#8960;{activeTapHole.diameterInches.toFixed(4)}&quot;</p>
+                  <p>Hole Diameter: &#8960;{Number(activeTapHole.diameterInches || 0).toFixed(4)}&quot;</p>
                 </div>
                 <button className="qf-modal-close" onClick={() => setActiveTapHole(null)}><X size={24} /></button>
               </div>
 
-              <div className="qf-modal-content">
-                <div className="qf-modal-scroll">
-                  {(() => {
-                    const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('tap'));
-                    if (!svc) return null;
-                    const options = svc.service_options || [];
-                    const assigned = selectedTaps[activeTapHole.id];
-
-                    return (
-                      <div className="qf-tap-selection-grid">
-                        {options.map((tap, idx) => {
-                          const tooLarge = activeTapHole.diameterInches > parseFloat(tap.max_diameter);
-                          const tooSmall = activeTapHole.diameterInches < parseFloat(tap.min_diameter);
-                          const incompatible = tooLarge || tooSmall;
-                          const isChosen = assigned?.name === tap.name;
-
-                          return (
-                            <div key={idx} className={`qf-tap-modal-card ${isChosen ? 'active' : ''} ${incompatible ? 'disabled' : ''}`}>
-                              <div className="tap-card-top">
-                                <strong>{tap.name}</strong>
-                                {isChosen && <span className="assigned-badge"><Check size={12} /> Assigned</span>}
-                                {incompatible && <span className="error-badge">{tooLarge ? 'Too Large' : 'Too Small'}</span>}
-                              </div>
-                              <div className="tap-card-specs">
-                                <div><span>Range:</span> {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</div>
-                                <div><span>Depth:</span> {tap.min_depth || 0}&quot; - {tap.max_depth}&quot;</div>
-                              </div>
-                              <button
-                                className="qf-modal-select-btn"
-                                disabled={incompatible}
-                                onClick={() => {
-                                  setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap }));
-                                  setActiveTapHole(null);
-                                }}
-                              >
-                                {isChosen ? 'Already Assigned' : 'Select this Tap'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+              <div className="qf-modal-content qf-modal-body-split">
+                {/* Left Sidebar: List of all holes */}
+                <div className="qf-modal-sidebar">
+                  <div className="qf-sidebar-scroll">
+                    {detectedHoles.map((hole, i) => {
+                      const isSelected = activeTapHole?.id === hole.id;
+                      const isAssigned = !!selectedTaps[hole.id];
+                      return (
+                        <div
+                          key={hole.id}
+                          className={`qf-hole-mini-card ${isSelected ? 'active' : ''} ${isAssigned ? 'assigned' : ''}`}
+                          onClick={() => setActiveTapHole(hole)}
+                        >
+                          <div className="mini-card-info">
+                            <span className="hole-number">Hole #{i + 1}</span>
+                            <span className="hole-dia">&#8960;{Number(hole.diameterInches || 0).toFixed(4)}&quot;</span>
+                          </div>
+                          <div className="mini-card-status">
+                            {isAssigned ? <Check size={14} className="text-emerald-500" /> : <div className="dot-warn" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="qf-modal-footer">
-                  {selectedTaps[activeTapHole.id] && (
-                    <button className="qf-modal-remove-btn" onClick={() => {
-                      setSelectedTaps(prev => { const n = { ...prev }; delete n[activeTapHole.id]; return n; });
-                      setActiveTapHole(null);
-                    }}>
-                      Remove assigned tap
-                    </button>
-                  )}
-                  <button className="qf-modal-cancel" onClick={() => setActiveTapHole(null)}>Cancel</button>
+                {/* Right Content: Tap Selection for active hole */}
+                <div className="qf-modal-main">
+                  <div className="qf-modal-scroll">
+                    {(() => {
+                      if (!activeTapHole) return <div className="qf-modal-error">No hole selected</div>;
+                      const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('tap'));
+                      if (!svc) return <div className="qf-modal-error">Tapping service not found</div>;
+
+                      const options = svc.service_options || [];
+                      const assigned = selectedTaps[activeTapHole.id];
+                      const dia = activeTapHole.diameterInches || 0;
+
+                      return (
+                        <div className="qf-tap-selection-grid">
+                          {options.map((tap, idx) => {
+                            const minD = parseFloat(tap.min_diameter) || 0;
+                            const maxD = parseFloat(tap.max_diameter) || 0;
+                            const tooLarge = dia > maxD;
+                            const tooSmall = dia < minD;
+                            const incompatible = tooLarge || tooSmall;
+                            const isChosen = assigned?.name === tap.name;
+
+                            return (
+                              <div key={idx} className={`qf-tap-modal-card ${isChosen ? 'active' : ''} ${incompatible ? 'warning' : ''}`}>
+                                <div className="tap-card-top">
+                                  <strong>{tap.name}</strong>
+                                  {isChosen && <span className="assigned-badge"><Check size={12} /> Assigned</span>}
+                                  {incompatible && (
+                                    <span className="warning-badge" title={`${tooLarge ? 'Hole is too large for this tap' : 'Hole is too small for this tap'}`}>
+                                      <AlertTriangle size={12} /> {tooLarge ? 'Large' : 'Small'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="tap-card-specs">
+                                  <div><span>Range:</span> {minD.toFixed(3)}&quot; - {maxD.toFixed(3)}&quot;</div>
+                                  <div><span>Hole Dia:</span> {Number(dia || 0).toFixed(4)}&quot;</div>
+                                  {incompatible && <div className="text-orange-600 font-bold text-[10px] mt-1">Diameter Mismatch</div>}
+                                </div>
+                                <button
+                                  className={`qf-modal-select-btn ${incompatible ? 'warning-btn' : ''}`}
+                                  onClick={() => {
+                                    if (activeTapHole) {
+                                      setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap }));
+                                    }
+                                  }}
+                                >
+                                  {isChosen ? 'Update Assignment' : incompatible ? 'SELECT ANYWAY' : 'SELECT TAP'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="qf-modal-footer">
+                    {selectedTaps[activeTapHole.id] && (
+                      <button className="qf-modal-remove-btn" onClick={() => {
+                        setSelectedTaps(prev => { const n = { ...prev }; delete n[activeTapHole.id]; return n; });
+                      }}>
+                        Remove assigned tap
+                      </button>
+                    )}
+                    <button className="qf-modal-cancel" onClick={() => setActiveTapHole(null)}>Done</button>
+                  </div>
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
-    </div>
+
+      {/* Anodizing Selection Modal */}
+      <AnimatePresence>
+        {isAnodizingModalOpen && (
+          <motion.div key="anodize-modal-overlay" className="qf-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div
+              className="qf-modal-container"
+              style={{ maxWidth: '600px', maxHeight: '80vh' }}
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+            >
+              <div className="qf-modal-header">
+                <div>
+                  <h3>Select Anodizing Color</h3>
+                  <p>Choose a finish to proceed</p>
+                </div>
+                <button className="qf-modal-close" onClick={() => setIsAnodizingModalOpen(false)}><X size={24} /></button>
+              </div>
+
+              <div className="qf-modal-content">
+                <div className="qf-modal-scroll" style={{ padding: '40px' }}>
+                  <div className="qf-tap-selection-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+                    {(() => {
+                      const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'));
+                      if (!svc) return <div className="qf-modal-error">Service not found</div>;
+                      return (svc.service_options || []).map((opt, i) => {
+                        const isChosen = selectedAnodizingColor?.name === opt.name;
+                        return (
+                          <div key={i} className={`qf-tap-modal-card ${isChosen ? 'active' : ''}`} onClick={() => { setSelectedAnodizingColor(opt); setIsAnodizingModalOpen(false); }} style={{ cursor: 'pointer', flexDirection: 'row', alignItems: 'center', padding: '16px', gap: '16px' }}>
+                            <div className="swatch-circle" style={{ backgroundColor: opt.color, width: '32px', height: '32px', flexShrink: 0, border: '2px solid #e2e8f0', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }} />
+                            <div className="tap-card-top" style={{ flex: 1, marginBottom: 0 }}>
+                              <strong style={{ fontSize: '15px' }}>{opt.name}</strong>
+                            </div>
+                            {isChosen && <Check size={18} className="text-emerald-500" />}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+                <div className="qf-modal-footer">
+                  {selectedAnodizingColor && (
+                    <button className="qf-modal-remove-btn" onClick={() => setSelectedAnodizingColor(null)}>
+                      Clear Selection
+                    </button>
+                  )}
+                  <button className="qf-modal-cancel" onClick={() => setIsAnodizingModalOpen(false)}>Cancel</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div >
   );
 };
 
@@ -1066,7 +1254,7 @@ body.qf-active {
   background-color: #ffffff !important;
   width: 100vw !important;
   height: 100vh !important;
-  max-width: none !important;
+  max-width: 100vw !important;
 }
 
 .qf-active .navbar,
@@ -1075,12 +1263,14 @@ body.qf-active {
 }
 
 .qf-active #root,
+.qf-active body,
+.qf-active html,
 .qf-active .app-container,
 .qf-active .main-content,
 .qf-active .instant-pricing-container {
   padding: 0 !important;
   margin: 0 !important;
-  max-width: none !important;
+  max-width: 100vw !important;
   width: 100vw !important;
   min-width: 100vw !important;
   height: 100vh !important;
@@ -1096,23 +1286,18 @@ body.qf-active {
   padding: 0 !important;
   max-width: none !important;
   width: 100vw !important;
-  margin: 0 !important;
-  gap: 0 !important;
   height: 100vh !important;
+  margin: 0 !important;
   z-index: 9999 !important;
   background-color: #ffffff !important;
 }
 
 .quote-flow-layout {
   height: 100vh !important;
-  width: 100vw !important;
+  width: 100% !important;
   max-width: none !important;
   margin: 0 !important;
-  gap: 0 !important;
   display: flex !important;
-  border-radius: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
   background: #ffffff !important;
   overflow: hidden !important;
 }
@@ -1164,35 +1349,109 @@ body.qf-active {
 }
 
 .qf-split-content {
-  display: flex;
-  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(500px, 1.8fr) minmax(380px, 1.1fr) minmax(350px, 1.1fr);
+  width: 100%;
+  height: 100%;
   overflow: hidden;
+  overflow-x: auto;
   min-height: 0;
 }
 
 .qf-left-side {
-  flex: 0 0 48%;
-  max-width: none;
-  background: #f8fafc;
+  background: #fdfdfe;
   border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   padding: 0;
+  height: 100%;
   overflow-y: auto;
+  min-width: 0;
 }
 
 .qf-right-side {
-  flex: 1;
-  padding: 32px 40px;
+  padding: 40px 40px 120px 40px;
   overflow-y: auto;
   background: white;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-width: 0;
+}
+
+.qf-summary-sidebar {
+  background: #fdfdfe;
+  border-left: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 32px 120px 32px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.qf-summary-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.qf-summary-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 60px;
+  color: #64748b;
+}
+
+.placeholder-icon {
+  width: 80px;
+  height: 80px;
+  background: white;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.qf-summary-placeholder p {
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 240px;
+  margin-bottom: 32px;
+}
+
+.placeholder-steps {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  transition: all 0.3s ease;
+}
+
+.step-item.done {
+  background: #d1fae5;
+  color: #059669;
 }
 
 .qf-model-box {
-  flex: 0 0 500px;
+  flex: 1;
+  min-height: 400px;
   background: white;
   border-radius: 0;
   border: none;
@@ -1243,14 +1502,14 @@ body.qf-active {
 
 .qf-dimensions-simple {
   background: #f8fafc;
-  padding: 28px 32px;
+  padding: 32px 40px;
   border-radius: 0;
   border: none;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .qf-dimensions-simple h4 {
-  margin: 0 0 20px 0;
+  margin: 0 0 24px 0;
   font-size: 14px;
   color: #94a3b8;
   text-transform: uppercase;
@@ -1261,13 +1520,13 @@ body.qf-active {
 .qf-dim-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 24px;
 }
 
 .dim-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .dim-row span {
@@ -1276,16 +1535,16 @@ body.qf-active {
 }
 
 .dim-row strong {
-  font-size: 18px;
+  font-size: 20px;
   color: #0f172a;
   font-weight: 700;
 }
 
 /* Right Side Selection Panel */
 .qf-selection-panel {
+  width: 100%;
   max-width: 900px;
   margin: 0 auto;
-  width: 100%;
 }
 
 .qf-step-fade-in {
@@ -1298,17 +1557,17 @@ body.qf-active {
 }
 
 .qf-panel-title {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 800;
   color: #0f172a;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   letter-spacing: -0.02em;
 }
 
 .qf-panel-subtitle {
-  font-size: 16px;
+  font-size: 18px;
   color: #64748b;
-  margin-bottom: 40px;
+  margin-bottom: 48px;
   line-height: 1.5;
 }
 
@@ -1316,7 +1575,8 @@ body.qf-active {
 .qf-large-buttons {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  width: 100%;
 }
 
 .qf-large-service-card {
@@ -1899,7 +2159,7 @@ body.qf-active {
 .qf-modal-container {
   background: white;
   width: 100%;
-  max-width: 800px;
+  max-width: 1100px;
   max-height: 90vh;
   border-radius: 32px;
   overflow: hidden;
@@ -1954,6 +2214,97 @@ body.qf-active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.qf-modal-body-split {
+  flex-direction: row !important;
+}
+
+.qf-modal-sidebar {
+  width: 280px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.qf-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qf-modal-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+}
+
+.qf-hole-mini-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: white;
+  border: 2px solid #f1f5f9;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qf-hole-mini-card:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.qf-hole-mini-card.active {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: white;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+}
+
+.qf-hole-mini-card.active .hole-number { color: white; }
+.qf-hole-mini-card.active .hole-dia { color: rgba(255,255,255,0.7); }
+
+.qf-hole-mini-card.assigned {
+  border-color: #10b981;
+}
+
+.qf-hole-mini-card.assigned:not(.active) {
+  background: #f0fdf4;
+}
+
+.mini-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hole-number {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.hole-dia {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.dot-warn {
+  width: 8px;
+  height: 8px;
+  background: #f59e0b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
 }
 
 .qf-modal-scroll {
@@ -2105,6 +2456,120 @@ body.qf-active {
 
 .qf-modal-remove-btn:hover {
   background: #fecaca;
+}
+
+/* Pricing Breakdown Sidebar */
+.qf-price-breakdown-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02);
+}
+
+.sidebar-cta {
+  margin-top: auto;
+  padding: 0;
+}
+
+.breakdown-header {
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.breakdown-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.breakdown-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.breakdown-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.item-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-label strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.item-label span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.item-price {
+  font-size: 15px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.breakdown-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 2px dashed #e2e8f0;
+}
+
+.total-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.total-amount {
+  font-size: 24px;
+  font-weight: 800;
+  color: #2563eb;
+}
+.warning-badge {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #ffedd5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.qf-tap-modal-card.warning {
+  border-color: #fb923c;
+  background: #fffaf5;
+}
+
+.warning-btn {
+  background: #f97316 !important;
+}
+
+.warning-btn:hover {
+  background: #ea580c !important;
 }
 `;
 
