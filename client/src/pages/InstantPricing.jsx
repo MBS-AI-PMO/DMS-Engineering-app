@@ -45,6 +45,7 @@ const InstantPricing = () => {
   const [showEdges, setShowEdges] = useState(true);
   const [showMesh, setShowMesh] = useState(false);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
+  const [modelLoadCount, setModelLoadCount] = useState(0);
 
   // Dynamic data from DB
   const [allServices, setAllServices] = useState([]);
@@ -53,8 +54,16 @@ const InstantPricing = () => {
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
+  const [detectedHoles, setDetectedHoles] = useState([]);
+  const [selectedTaps, setSelectedTaps] = useState({});
+  const [activeTapHole, setActiveTapHole] = useState(null);
+  const [isDetectingHoles, setIsDetectingHoles] = useState(false);
+  const [holeDetectionError, setHoleDetectionError] = useState(null);
+  const [tappingExpanded, setTappingExpanded] = useState(true);
 
   const modelBaseThicknessRef = useRef(null);
+  const parsedDxfRef = useRef(null);
+  const stepHolesDetectedRef = useRef(false);
   const stepViewerRef = useRef(null);
   const dxfViewerRef = useRef(null);
   const viewerInstance = useRef(null);
@@ -62,6 +71,7 @@ const InstantPricing = () => {
   const modelRef = useRef(null);
   const gridHelperRef = useRef(null);
   const pendingAxisRef = useRef(null);
+  const holeMarkersRef = useRef([]);
 
   const navigate = useNavigate();
 
@@ -92,13 +102,65 @@ const InstantPricing = () => {
     setSelectedMetal(null);
     setSelectedAdditionalServices([]);
     setSelectedAnodizingColor(null);
+    setDetectedHoles([]);
+    setSelectedTaps({});
+    setActiveTapHole(null);
+    setIsDetectingHoles(false);
+    setHoleDetectionError(null);
+    parsedDxfRef.current = null;
+    stepHolesDetectedRef.current = false;
     modelBaseThicknessRef.current = null;
   }, [selectedFile]);
 
+  // ── STEP Hole Detection for Tapping ──────────────────
+  useEffect(() => {
+    const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
+    if (!hasTapping || !selectedFile || !isStepFile(selectedFile.file.name)) return;
+    if (stepHolesDetectedRef.current || isDetectingHoles) return;
+
+    const detect = async () => {
+      setIsDetectingHoles(true);
+      setHoleDetectionError(null);
+      const fd = new FormData();
+      fd.append('file', selectedFile.file);
+      try {
+        const r = await fetch(`${BACKEND_URL}/detect-holes`, { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(`Server responded with ${r.status}`);
+        const d = await r.json();
+        const depthIn = dimensions?.mm?.t ? parseFloat(dimensions.mm.t) / 25.4 : 2 / 25.4;
+        setDetectedHoles((d.holes || []).map((h, idx) => ({
+          id: idx,
+          diameterInches: h.diameter_in,
+          depthInches: depthIn,
+          position: h.position,
+        })));
+        stepHolesDetectedRef.current = true;
+      } catch (err) {
+        setHoleDetectionError('Could not detect holes: ' + err.message);
+        stepHolesDetectedRef.current = true;
+      } finally {
+        setIsDetectingHoles(false);
+      }
+    };
+    detect();
+  }, [selectedAdditionalServices, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     document.body.classList.add('light-mode');
-    return () => document.body.classList.remove('light-mode');
-  }, []);
+    if (isQuoteFlowActive) {
+      document.body.classList.add('qf-active');
+      document.documentElement.classList.add('qf-active');
+    } else {
+      document.body.classList.remove('qf-active');
+      document.documentElement.classList.remove('qf-active');
+    }
+    
+    return () => {
+      document.body.classList.remove('light-mode');
+      document.body.classList.remove('qf-active');
+      document.documentElement.classList.remove('qf-active');
+    };
+  }, [isQuoteFlowActive]);
 
   // ── Dimension Validation Helper ────────────────────────
   const validateServiceDimensions = (svc, dims) => {
@@ -228,6 +290,17 @@ const InstantPricing = () => {
         let ht = Math.abs((h.$EXTMAX?.y ?? 0) - (h.$EXTMIN?.y ?? 0));
         let isInch = true;
         if (h.$INSUNITS === 4 || h.$MEASUREMENT === 1) isInch = false;
+
+        // Extract holes from CIRCLE entities
+        const circles = parsed.entities?.filter(e => e.type === 'CIRCLE') || [];
+        const defaultDepthIn = 2 / 25.4; // default 2mm material thickness
+        setDetectedHoles(circles.map((c, idx) => ({
+          id: idx,
+          diameterInches: isInch ? c.r * 2 : (c.r * 2) / 25.4,
+          depthInches: defaultDepthIn
+        })));
+        parsedDxfRef.current = parsed;
+
         if (w === 0 || ht === 0) {
           const match = svgStr.match(/viewBox="[^"]*?\s+[^"]*?\s+([-\d.]+)\s+([-\d.]+)"/);
           if (match) { w = parseFloat(match[1]); ht = parseFloat(match[2]); }
@@ -400,6 +473,15 @@ const InstantPricing = () => {
           clearInterval(progressTimer); setImportProgress(100); setTimeout(() => setIsImporting(false), 800);
           const m = viewer.GetModel(); modelRef.current = m; extractDimensions(m);
           if (pendingAxisRef.current) { const a = pendingAxisRef.current; pendingAxisRef.current = null; setTimeout(() => setAxisCamera(a), 100); }
+          // Store each mesh's original STEP color so color effects can restore it
+          try {
+            viewer.GetViewer()?.scene?.traverse(obj => {
+              if (obj.isMesh && obj.material?.color && !obj.userData.origColor) {
+                obj.userData.origColor = { r: obj.material.color.r, g: obj.material.color.g, b: obj.material.color.b };
+              }
+            });
+          } catch (e) { /* ignore */ }
+          setModelLoadCount(c => c + 1);
         }
       });
       localViewer = viewer; viewerInstance.current = viewer; viewer.LoadModelFromFileList([selectedFile.file]);
@@ -408,23 +490,120 @@ const InstantPricing = () => {
     return () => { if (checkInterval) clearInterval(checkInterval); try { localViewer?.Destroy(); } catch (e) { console.error("Error destroying local viewer:", e); } };
   }, [selectedFile, viewMode, isQuoteFlowActive]);
 
-  // Handle STEP model color changes dynamically
-  useEffect(() => {
-    if (!viewerInstance.current || !selectedAnodizingColor || !isStepFile(selectedFile?.file?.name)) return;
-    try {
-      const hex = selectedAnodizingColor.color;
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
+  // Whether tapping service is currently selected
+  const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
+  const tapCount = Object.keys(selectedTaps).length;
 
-      viewerInstance.current.EnumerateMeshes((mesh) => {
-        mesh.material.color = new OV.RGBColor(r, g, b);
-      });
-      viewerInstance.current.Render();
-    } catch (e) {
-      console.warn("Error updating STEP material color:", e);
-    }
-  }, [selectedAnodizingColor, selectedFile?.file?.name]);
+  // Handle STEP model color: anodizing base + hole highlights
+  useEffect(() => {
+    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
+    if (modelLoadCount === 0) return;
+
+    const applyColors = () => {
+      try {
+        const viewer = viewerInstance.current;
+        if (!viewer) return;
+        const v = viewer.GetViewer();
+        if (!v?.scene) return;
+
+        // All detected hole positions (for showing all holes when tapping is active)
+        const allHolePositions = isTappingActive
+          ? detectedHoles.map(h => h.position).filter(Boolean)
+          : [];
+        // Positions of holes that have a tap assigned
+        const tappedPositions = Object.keys(selectedTaps)
+          .map(id => detectedHoles[parseInt(id)]?.position).filter(Boolean);
+        const activeHolePos = activeTapHole?.position || null;
+        const bb = new THREE.Box3();
+        const center = new THREE.Vector3();
+
+        v.scene.traverse(obj => {
+          if (!obj.isMesh) return;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat, idx) => {
+            if (!mat || !mat.color) return;
+
+            // Clone material once so changes don't bleed across shared materials
+            if (!obj.userData._matCloned) {
+              if (Array.isArray(obj.material)) {
+                obj.material = obj.material.map(m => m.clone());
+              } else {
+                obj.material = obj.material.clone();
+              }
+              obj.userData._matCloned = true;
+            }
+            const finalMat = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
+
+            if (!obj.userData.origColor) {
+              obj.userData.origColor = { r: finalMat.color.r, g: finalMat.color.g, b: finalMat.color.b };
+            }
+
+            let isActiveHole = false;
+            let isTappedHole = false;
+            let isDetectedHole = false;
+
+            bb.setFromObject(obj);
+            if (!bb.isEmpty()) {
+              bb.getCenter(center);
+
+              // Priority 1: Active hole being viewed (bright blue)
+              if (activeHolePos) {
+                if (center.distanceTo(new THREE.Vector3(activeHolePos[0], activeHolePos[1], activeHolePos[2])) < 20)
+                  isActiveHole = true;
+              }
+
+              // Priority 2: Hole with assigned tap (blue)
+              if (!isActiveHole && tappedPositions.length > 0) {
+                for (const pos of tappedPositions) {
+                  if (center.distanceTo(new THREE.Vector3(pos[0], pos[1], pos[2])) < 20)
+                    { isTappedHole = true; break; }
+                }
+              }
+
+              // Priority 3: All detected holes when tapping is active (orange outline)
+              if (!isActiveHole && !isTappedHole && allHolePositions.length > 0) {
+                for (const pos of allHolePositions) {
+                  if (center.distanceTo(new THREE.Vector3(pos[0], pos[1], pos[2])) < 20)
+                    { isDetectedHole = true; break; }
+                }
+              }
+            }
+
+            if (isActiveHole) {
+              finalMat.color.set(0x2563eb);
+              finalMat.emissive?.set(0x1e3a5f);
+            } else if (isTappedHole) {
+              finalMat.color.set(0x3b82f6);
+              finalMat.emissive?.set(0x172554);
+            } else if (isDetectedHole) {
+              finalMat.color.set(0xf59e0b);
+              finalMat.emissive?.set(0x451a03);
+            } else if (selectedAnodizingColor) {
+              finalMat.color.set(selectedAnodizingColor.color);
+              finalMat.emissive?.set(0x000000);
+            } else if (obj.userData.origColor) {
+              const oc = obj.userData.origColor;
+              finalMat.color.setRGB(oc.r, oc.g, oc.b);
+              finalMat.emissive?.set(0x000000);
+            }
+            finalMat.needsUpdate = true;
+          });
+        });
+
+        try { v.Render(); } catch (_) {}
+        try {
+          if (v.renderer && v.scene && v.camera)
+            v.renderer.render(v.scene, v.camera);
+        } catch (_) {}
+      } catch (e) {
+        console.warn('Error updating STEP model colors:', e);
+      }
+    };
+
+    applyColors();
+    const tid = setTimeout(applyColors, 200);
+    return () => clearTimeout(tid);
+  }, [selectedAnodizingColor, selectedTaps, detectedHoles, selectedFile?.file?.name, activeTapHole, modelLoadCount, isTappingActive]);
 
   const handleUnfold = useCallback(async () => {
     if (!selectedFile || is2DFile(selectedFile.file.name) || !isStepFile(selectedFile.file.name) || backendData) { if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); } return; }
@@ -459,8 +638,8 @@ const InstantPricing = () => {
   const showViewer = currentIsStep || currentIsDxf;
 
   return (
-    <div className="instant-pricing-container">
-      <header className="pricing-header">
+    <div className={`instant-pricing-container${isQuoteFlowActive ? ' ip-fullpage' : ''}`}>
+      <header className="pricing-header" style={{ display: isQuoteFlowActive ? 'none' : '' }}>
         <h1>Get Instant Pricing</h1>
         <p>Upload your CAD files to get an immediate quote for your project.</p>
       </header>
@@ -594,7 +773,8 @@ const InstantPricing = () => {
                                   onClick={() => {
                                     if (isSelected) {
                                       setSelectedAdditionalServices(prev => prev.filter(s => s.id !== svc.id));
-                                      if (svc.title.toLowerCase().includes('anodizing')) setSelectedAnodizingColor(null);
+                                      if (svc.title.toLowerCase().includes('anodiz')) setSelectedAnodizingColor(null);
+                                      if (svc.title.toLowerCase().includes('tap')) { setActiveTapHole(null); setSelectedTaps({}); }
                                     } else {
                                       setSelectedAdditionalServices(prev => [...prev, svc]);
                                     }
@@ -609,32 +789,116 @@ const InstantPricing = () => {
                                   </div>
                                 </button>
 
-                                {isSelected && hasOptions && (
-                                  <motion.div
-                                    className="qf-service-options-panel"
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                  >
-                                    <label>Select {svc.title} Option:</label>
-                                    <div className="qf-options-grid">
-                                      {svc.service_options.map((opt, i) => (
-                                        <button
-                                          key={i}
-                                          className={`qf-option-swatch ${selectedAnodizingColor?.name === opt.name ? 'active' : ''}`}
-                                          onClick={() => {
-                                            if (svc.title.toLowerCase().includes('anodizing')) {
-                                              setSelectedAnodizingColor(opt);
-                                            }
-                                          }}
-                                          title={opt.name}
-                                        >
-                                          <div className="swatch-circle" style={{ backgroundColor: opt.color }} />
-                                          <span>{opt.name}</span>
+                                {isSelected && (() => {
+                                  const isAnodizingSvc = svc.title.toLowerCase().includes('anodiz');
+                                  const isTappingSvc = svc.title.toLowerCase().includes('tap');
+
+                                  if (isAnodizingSvc && hasOptions) return (
+                                    <motion.div className="qf-service-options-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                      <label>Select Anodizing Color:</label>
+                                      <div className="qf-options-grid">
+                                        {svc.service_options.map((opt, i) => (
+                                          <button key={i} className={`qf-option-swatch ${selectedAnodizingColor?.name === opt.name ? 'active' : ''}`} onClick={() => setSelectedAnodizingColor(opt)} title={opt.name}>
+                                            <div className="swatch-circle" style={{ backgroundColor: opt.color }} />
+                                            <span>{opt.name}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </motion.div>
+                                  );
+
+                                  if (isTappingSvc) {
+                                    if (activeTapHole) {
+                                      const holeDia = activeTapHole.diameterInches;
+                                      return (
+                                        <motion.div className="qf-service-options-panel qf-tapping-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                          <div className="qf-tap-back-row">
+                                            <button className="qf-tap-back-btn" onClick={() => setActiveTapHole(null)}><ChevronLeft size={16} /> Back to holes</button>
+                                            <span className="qf-tap-hole-label">Hole #{activeTapHole.id + 1} — &#8960;{holeDia.toFixed(4)}&quot;</span>
+                                          </div>
+                                          <label>Select a tap:</label>
+                                          <div className="qf-tap-cards">
+                                            {(svc.service_options || []).map((tap, i) => {
+                                              const tooLarge = holeDia > parseFloat(tap.max_diameter);
+                                              const tooSmall = holeDia < parseFloat(tap.min_diameter);
+                                              const incompatible = tooLarge || tooSmall;
+                                              const isChosen = selectedTaps[activeTapHole.id]?.name === tap.name;
+                                              return (
+                                                <div key={i} className={`qf-tap-card ${isChosen ? 'chosen' : ''} ${incompatible ? 'incompatible' : ''}`}>
+                                                  <div className="qf-tap-card-header">
+                                                    <span className="qf-tap-name">{tap.name}</span>
+                                                    {incompatible && <span className="qf-tap-warning"><AlertCircle size={14} />{tooLarge ? 'Hole too large' : 'Hole too small'}</span>}
+                                                  </div>
+                                                  <div className="qf-tap-specs-grid">
+                                                    <div><span>Min Dia</span><strong>{tap.min_diameter}&quot;</strong></div>
+                                                    <div><span>Max Dia</span><strong>{tap.max_diameter}&quot;</strong></div>
+                                                    <div><span>Max Depth</span><strong>{tap.max_depth}&quot;</strong></div>
+                                                    <div><span>Min Depth</span><strong>{tap.min_depth === null || tap.min_depth === undefined ? 'None' : `${tap.min_depth}"`}</strong></div>
+                                                  </div>
+                                                  {tap.notes && <p className="qf-tap-notes">{tap.notes}</p>}
+                                                  <button className={`qf-tap-select-btn ${incompatible ? 'warn' : ''}`} onClick={() => { setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap })); setActiveTapHole(null); }}>
+                                                    {isChosen ? <><Check size={14} /> Selected</> : 'Select Tap'}
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                            {(!svc.service_options || svc.service_options.length === 0) && <div className="qf-no-holes">No taps configured for this service.</div>}
+                                          </div>
+                                        </motion.div>
+                                      );
+                                    }
+
+                                    return (
+                                      <motion.div className="qf-service-options-panel qf-tapping-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                        <p className="qf-tap-prompt">Choose below or click a feature on your drawing to add services</p>
+
+                                        {/* Tap count dropdown */}
+                                        <button className="qf-tap-dropdown-toggle" onClick={() => setTappingExpanded(p => !p)}>
+                                          <span>{tapCount} {tapCount === 1 ? 'Tap' : 'Taps'}</span>
+                                          <ChevronRight size={18} className={`qf-tap-chevron ${tappingExpanded ? 'expanded' : ''}`} />
                                         </button>
-                                      ))}
-                                    </div>
-                                  </motion.div>
-                                )}
+
+                                        <AnimatePresence>
+                                          {tappingExpanded && (
+                                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
+                                              {isDetectingHoles ? (
+                                                <div className="qf-holes-detecting"><Loader2 size={18} className="qf-spin-icon" /><span>Analyzing model geometry...</span></div>
+                                              ) : holeDetectionError ? (
+                                                <div className="qf-no-holes"><AlertCircle size={16} style={{ marginRight: '6px', flexShrink: 0 }} />{holeDetectionError}</div>
+                                              ) : detectedHoles.length === 0 ? (
+                                                <div className="qf-no-holes">No holes detected in this model{currentIsStep ? '' : ' — upload a DXF file with circular cutouts'}.</div>
+                                              ) : (
+                                                <div className="qf-holes-table">
+                                                  <div className="qf-holes-table-header">
+                                                    <span>Hole</span>
+                                                    <span>Diameter</span>
+                                                    <span>Depth</span>
+                                                    <span></span>
+                                                  </div>
+                                                  {detectedHoles.map(hole => (
+                                                    <div key={hole.id} className={`qf-holes-table-row ${activeTapHole?.id === hole.id ? 'active-hole' : ''}`}>
+                                                      <span className="qf-hole-indicator">
+                                                        <span className={`qf-hole-dot ${selectedTaps[hole.id] ? 'tapped' : ''}`} />
+                                                        #{hole.id + 1}
+                                                      </span>
+                                                      <span>&#8960;{hole.diameterInches.toFixed(4)}&quot;</span>
+                                                      <span>{hole.depthInches.toFixed(4)}&quot;</span>
+                                                      <button className={`qf-select-tap-btn ${selectedTaps[hole.id] ? 'assigned' : ''}`} onClick={() => setActiveTapHole(hole)}>
+                                                        {selectedTaps[hole.id] ? selectedTaps[hole.id].name : 'SELECT TAP'}
+                                                      </button>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </motion.div>
+                                    );
+                                  }
+
+                                  return null;
+                                })()}
                               </div>
                             );
                           })}
@@ -677,7 +941,18 @@ const InstantPricing = () => {
                           </div>}
                         </>
                       )}
-                  {isImporting && <div className="import-loading-overlay"><h2>Importing...</h2><div className="progress-percentage">{Math.round(importProgress)}%</div></div>}
+                  {isImporting && (
+                    <div className="import-loading-overlay">
+                      <div className="import-spinner-container">
+                        <svg className="import-spinner-svg" viewBox="0 0 100 100">
+                          <circle className="import-spinner-track" cx="50" cy="50" r="42" />
+                          <circle className="import-spinner-fill" cx="50" cy="50" r="42" strokeDasharray={264} strokeDashoffset={264 - (264 * importProgress) / 100} />
+                        </svg>
+                        <div className="import-spinner-text">{Math.round(importProgress)}%</div>
+                      </div>
+                      <p className="import-spinner-label">Importing model...</p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="dimensions-panel">
@@ -705,11 +980,64 @@ const InstantPricing = () => {
 };
 
 const styles = `
-.quote-flow-layout {
-  height: calc(100vh - 120px) !important;
-  max-width: 1440px;
-  margin: 0 auto;
+/* Global Reset for Full-Page Quote Flow */
+html.qf-active,
+body.qf-active {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background-color: #ffffff !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+}
+
+.qf-active .navbar,
+.qf-active .main-footer {
+  display: none !important;
+}
+
+.qf-active #root,
+.qf-active .app-container,
+.qf-active .main-content,
+.qf-active .instant-pricing-container {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 100vh !important;
+  background-color: #ffffff !important;
+}
+
+.instant-pricing-container.ip-fullpage {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100vw !important;
+  margin: 0 !important;
   gap: 0 !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background-color: #ffffff !important;
+}
+
+.quote-flow-layout {
+  height: 100vh !important;
+  width: 100vw !important;
+  max-width: none !important;
+  margin: 0 !important;
+  gap: 0 !important;
+  display: flex !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+  overflow: hidden !important;
 }
 
 .quote-flow-step-container {
@@ -718,10 +1046,7 @@ const styles = `
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.08);
-  border: 1px solid #f1f5f9;
 }
 
 .qf-top-nav {
@@ -768,18 +1093,19 @@ const styles = `
 }
 
 .qf-left-side {
-  flex: 0 0 45%;
+  flex: 0 0 48%;
+  max-width: none;
   background: #f8fafc;
-  border-right: 1px solid #f1f5f9;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  padding: 32px;
+  padding: 0;
   overflow-y: auto;
 }
 
 .qf-right-side {
   flex: 1;
-  padding: 40px;
+  padding: 32px 40px;
   overflow-y: auto;
   background: white;
   display: flex;
@@ -787,14 +1113,14 @@ const styles = `
 }
 
 .qf-model-box {
-  flex: 0 0 400px;
+  flex: 0 0 500px;
   background: white;
-  border-radius: 20px;
-  border: 1px solid #e2e8f0;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
   position: relative;
   overflow: hidden;
-  margin-bottom: 32px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.03), inset 0 2px 4px rgba(0,0,0,0.02);
+  margin-bottom: 0;
 }
 
 .qf-viewer-wrapper {
@@ -837,11 +1163,11 @@ const styles = `
 }
 
 .qf-dimensions-simple {
-  background: white;
-  padding: 24px;
-  border-radius: 20px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  background: #f8fafc;
+  padding: 28px 32px;
+  border-radius: 0;
+  border: none;
+  flex: 1;
 }
 
 .qf-dimensions-simple h4 {
@@ -878,7 +1204,7 @@ const styles = `
 
 /* Right Side Selection Panel */
 .qf-selection-panel {
-  max-width: 680px;
+  max-width: 900px;
   margin: 0 auto;
   width: 100%;
 }
@@ -1210,6 +1536,7 @@ const styles = `
 }
 
 /* Final Button */
+.qf-primary-btn,
 .qf-final-btn {
   width: 100%;
   padding: 20px;
@@ -1272,14 +1599,329 @@ const styles = `
 }
 
 .import-loading-overlay {
+  position: absolute;
+  inset: 0;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  gap: 20px;
 }
 
-.progress-percentage {
-  font-size: 48px;
+.import-spinner-container {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.import-spinner-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.import-spinner-track {
+  fill: none;
+  stroke: #fee2e2;
+  stroke-width: 8;
+}
+
+.import-spinner-fill {
+  fill: none;
+  stroke: #dc2626;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.import-spinner-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: #dc2626;
+}
+
+.import-spinner-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+/* ── Tapping Panel ───────────────────────────────── */
+.qf-tapping-panel {
+  padding-left: 24px !important;
+}
+
+.qf-tap-prompt {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.qf-tap-dropdown-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  transition: all 0.2s;
+  margin-bottom: 16px;
+}
+.qf-tap-dropdown-toggle:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.qf-tap-chevron {
+  transition: transform 0.25s ease;
+  color: #94a3b8;
+}
+.qf-tap-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.qf-hole-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qf-hole-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #d97706;
+  flex-shrink: 0;
+}
+.qf-hole-dot.tapped {
+  background: #3b82f6;
+  border-color: #2563eb;
+}
+
+.qf-holes-table-row.active-hole {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.qf-tap-back-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.qf-tap-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.qf-tap-back-btn:hover { background: #f1f5f9; color: #0f172a; }
+
+.qf-tap-hole-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 6px 14px;
+  border-radius: 20px;
+}
+
+.qf-tap-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qf-tap-card {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.2s;
+}
+.qf-tap-card.chosen { border-color: #0f172a; background: #f8fafc; }
+.qf-tap-card.incompatible { border-color: #fcd34d; background: #fffbeb; }
+
+.qf-tap-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.qf-tap-name {
+  font-size: 16px;
   font-weight: 800;
   color: #0f172a;
+}
+
+.qf-tap-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.qf-tap-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.qf-tap-specs-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qf-tap-specs-grid span {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.qf-tap-specs-grid strong {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.qf-tap-notes {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+  background: #f8fafc;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.qf-tap-select-btn {
+  width: 100%;
+  padding: 10px;
+  background: #0f172a;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+.qf-tap-select-btn:hover { background: #1e293b; transform: translateY(-1px); }
+.qf-tap-select-btn.warn { background: #d97706; }
+.qf-tap-select-btn.warn:hover { background: #b45309; }
+
+/* Holes table */
+.qf-holes-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qf-holes-table-header, .qf-holes-table-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 130px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+.qf-holes-table-header {
+  font-size: 11px;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.qf-holes-table-row {
+  background: white;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.qf-holes-table-row:hover { background: #f8fafc; }
+
+.qf-select-tap-btn {
+  padding: 7px 14px;
+  background: #0f172a;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.qf-select-tap-btn:hover { background: #1e293b; transform: translateY(-1px); }
+.qf-select-tap-btn.assigned { background: #059669; }
+.qf-select-tap-btn.assigned:hover { background: #047857; }
+
+.qf-no-holes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #94a3b8;
+  font-size: 14px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 2px dashed #e2e8f0;
+}
+
+.qf-holes-detecting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qf-spin-icon {
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+  color: #3b82f6;
 }
 `;
 

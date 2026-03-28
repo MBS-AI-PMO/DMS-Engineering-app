@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, Loader2, Wrench, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check } from 'lucide-react';
 import { fetchServices, createService, updateService, uploadServiceImage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -274,83 +274,113 @@ export default function ServiceEdit() {
                             )}
                         </AnimatePresence>
 
-                        <div className="admin-edit-card service-options-card">
-                            <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Shield size={16} />
-                                    <span>Options & Variants</span>
-                                </div>
-                                <button
-                                    className="admin-btn admin-btn-outline"
-                                    style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                                    onClick={() => setService(s => ({
-                                        ...s,
-                                        service_options: [...(s.service_options || []), { name: '', color: '#000000' }]
-                                    }))}
-                                >
-                                    + Add Option
-                                </button>
-                            </div>
+                        {(() => {
+                            const isAnodizing = service.title.toLowerCase().includes('anodiz');
+                            const isTapping = service.title.toLowerCase().includes('tap');
 
-                            <p className="admin-card-tip">Add custom options like colors or finishes. These will appear as selectable variants for this service.</p>
-
-                            <div className="options-list">
-                                {(service.service_options || []).map((opt, idx) => (
-                                    <div key={idx} className="option-item-row">
-                                        <div className="option-input-group">
-                                            <label>Name</label>
-                                            <input
-                                                type="text"
-                                                value={opt.name}
-                                                onChange={e => {
-                                                    const newOpts = [...service.service_options];
-                                                    newOpts[idx].name = e.target.value;
-                                                    setService(s => ({ ...s, service_options: newOpts }));
-                                                }}
-                                                placeholder="e.g. Red"
-                                            />
-                                        </div>
-                                        <div className="option-input-group color-picker-group">
-                                            <label>Color</label>
-                                            <div className="color-input-wrapper">
-                                                <input
-                                                    type="color"
-                                                    value={opt.color}
-                                                    onChange={e => {
-                                                        const newOpts = [...service.service_options];
-                                                        newOpts[idx].color = e.target.value;
-                                                        setService(s => ({ ...s, service_options: newOpts }));
-                                                    }}
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={opt.color}
-                                                    onChange={e => {
-                                                        const newOpts = [...service.service_options];
-                                                        newOpts[idx].color = e.target.value;
-                                                        setService(s => ({ ...s, service_options: newOpts }));
-                                                    }}
-                                                />
-                                            </div>
+                            if (isAnodizing) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Shield size={16} />
+                                            <span>Anodizing Colors</span>
                                         </div>
                                         <button
-                                            className="option-remove-btn"
-                                            onClick={() => {
-                                                const newOpts = service.service_options.filter((_, i) => i !== idx);
-                                                setService(s => ({ ...s, service_options: newOpts }));
-                                            }}
+                                            className="admin-btn admin-btn-outline"
+                                            style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000' }] }))}
                                         >
-                                            <X size={14} />
+                                            <Plus size={14} /> Add Color
                                         </button>
                                     </div>
-                                ))}
-                                {(!service.service_options || service.service_options.length === 0) && (
-                                    <div className="empty-options-state">
-                                        No custom options defined.
+                                    <p className="admin-card-tip">Define available anodizing colors. These appear as selectable swatches in the quote flow and are reflected on the 3D model.</p>
+                                    <div className="options-list">
+                                        {(service.service_options || []).map((opt, idx) => (
+                                            <div key={idx} className="option-item-row">
+                                                <div className="option-input-group">
+                                                    <label><Hash size={10} style={{ marginRight: '4px' }} /> Color Name</label>
+                                                    <input type="text" value={opt.name} onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="e.g. Clear" />
+                                                </div>
+                                                <div className="option-input-group color-picker-group">
+                                                    <label><Shield size={10} style={{ marginRight: '4px' }} /> Hex Code</label>
+                                                    <div className="color-input-wrapper">
+                                                        <input type="color" value={opt.color || '#000000'} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
+                                                        <input type="text" value={opt.color || ''} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
+                                                    </div>
+                                                </div>
+                                                <button className="option-remove-btn" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}><X size={14} /></button>
+                                            </div>
+                                        ))}
+                                        {(!service.service_options || service.service_options.length === 0) && <div className="empty-options-state">No anodizing colors defined.</div>}
                                     </div>
-                                )}
-                            </div>
-                        </div>
+                                </div>
+                            );
+
+                            if (isTapping) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Wrench size={16} />
+                                            <span>Tapping Configuration</span>
+                                        </div>
+                                        <button
+                                            className="admin-btn admin-btn-outline"
+                                            style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', notes: '' }] }))}
+                                        >
+                                            <Plus size={14} /> Add Tap
+                                        </button>
+                                    </div>
+                                    <p className="admin-card-tip">Configure taps with hole diameter and depth ranges. These appear in the quote flow when a DXF file is uploaded.</p>
+                                    <div className="tap-options-list">
+                                        {(service.service_options || []).map((opt, idx) => (
+                                            <div key={idx} className="tap-option-card">
+                                                <div className="tap-option-header">
+                                                    <Hash size={18} style={{ color: '#94a3b8' }} />
+                                                    <input type="text" className="tap-name-input" value={opt.name} onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="e.g. 4-40 Roll Tap" />
+                                                    <button className="option-remove-btn" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}><X size={14} /></button>
+                                                </div>
+                                                <div className="tap-fields-grid">
+                                                    <div className="option-input-group">
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowDown size={10} /> Min Diameter (in)</label>
+                                                        <input type="number" step="0.001" value={opt.min_diameter} onChange={e => { const n = [...service.service_options]; n[idx].min_diameter = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
+                                                    </div>
+                                                    <div className="option-input-group">
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowUp size={10} /> Max Diameter (in)</label>
+                                                        <input type="number" step="0.001" value={opt.max_diameter} onChange={e => { const n = [...service.service_options]; n[idx].max_diameter = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
+                                                    </div>
+                                                    <div className="option-input-group">
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Maximize size={10} /> Max Depth (in)</label>
+                                                        <input type="number" step="0.001" value={opt.max_depth} onChange={e => { const n = [...service.service_options]; n[idx].max_depth = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
+                                                    </div>
+                                                    <div className="option-input-group">
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowDown size={10} /> Min Depth (in)</label>
+                                                        <div className="tap-min-depth-group">
+                                                            <div className="toggle-switch-group" onClick={() => { const n = [...service.service_options]; n[idx].min_depth = n[idx].min_depth === null ? '' : null; setService(s => ({ ...s, service_options: n })); }}>
+                                                                <div className={`toggle-switch ${opt.min_depth === null ? 'active' : ''}`} style={{ width: '36px', height: '20px' }}>
+                                                                    <div className="toggle-handle" style={{ width: '14px', height: '14px', top: '3px', left: opt.min_depth === null ? '19px' : '3px' }} />
+                                                                </div>
+                                                                <span style={{ fontSize: '0.8rem' }}>{opt.min_depth === null ? 'No Limit' : 'Value'}</span>
+                                                            </div>
+                                                            {opt.min_depth !== null && (
+                                                                <input type="number" step="0.001" value={opt.min_depth} onChange={e => { const n = [...service.service_options]; n[idx].min_depth = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Additional Notes</label>
+                                                    <textarea className="tap-option-notes-area" rows={2} value={opt.notes || ''} onChange={e => { const n = [...service.service_options]; n[idx].notes = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="Optional notes... e.g. recommended hole size, material specific notes" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!service.service_options || service.service_options.length === 0) && <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>}
+                                    </div>
+                                </div>
+                            );
+
+                            return null;
+                        })()}
                     </section>
 
                     <aside className="admin-edit-sidebar">
@@ -583,10 +613,19 @@ export default function ServiceEdit() {
                 .option-input-group label { display: block; font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; }
                 .option-input-group input { 
                     width: 100%; 
-                    padding: 8px 12px; 
-                    border-radius: 8px; 
+                    padding: 10px 14px; 
+                    border-radius: 10px; 
                     border: 1.5px solid #e2e8f0; 
-                    font-size: 0.85rem;
+                    font-size: 0.9rem;
+                    background: #ffffff !important;
+                    color: #1e293b !important;
+                    font-family: inherit;
+                    transition: all 0.2s;
+                }
+                .option-input-group input:focus {
+                    outline: none;
+                    border-color: #8b5cf6;
+                    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
                 }
                 .color-input-wrapper { display: flex; gap: 8px; }
                 .color-input-wrapper input[type="color"] { width: 40px; height: 38px; padding: 2px; cursor: pointer; border: 1.5px solid #e2e8f0; }
@@ -642,6 +681,70 @@ export default function ServiceEdit() {
                     border-color: #cbd5e1;
                     color: #1e293b;
                 }
+
+                .tap-options-list { display: flex; flex-direction: column; gap: 20px; }
+                .tap-option-card {
+                    background: #ffffff;
+                    border: 1.5px solid #e2e8f0;
+                    border-radius: 20px;
+                    padding: 24px;
+                    position: relative;
+                    transition: all 0.2s;
+                }
+                .tap-option-card:hover {
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.03);
+                    border-color: #cbd5e1;
+                }
+                .tap-option-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin-bottom: 20px;
+                }
+                .tap-name-input {
+                    flex: 1;
+                    padding: 12px 16px;
+                    border-radius: 12px;
+                    border: 1.5px solid #e2e8f0;
+                    font-size: 1rem;
+                    font-weight: 700;
+                    color: #0f172a;
+                    background: #f8fafc;
+                    font-family: inherit;
+                    transition: all 0.2s;
+                }
+                .tap-name-input:focus { 
+                    outline: none; 
+                    border-color: #8b5cf6; 
+                    background: white;
+                    box-shadow: 0 0 0 4px rgba(139,92,246,0.1); 
+                }
+                .tap-fields-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin-bottom: 20px;
+                }
+                .tap-option-notes-area {
+                    width: 100%;
+                    padding: 12px 14px;
+                    border-radius: 12px;
+                    border: 1.5px solid #e2e8f0;
+                    background: #f8fafc;
+                    font-size: 0.9rem;
+                    color: #1e293b;
+                    font-family: inherit;
+                    resize: vertical;
+                    transition: all 0.2s;
+                }
+                .tap-option-notes-area:focus {
+                    outline: none;
+                    border-color: #8b5cf6;
+                    background: white;
+                    box-shadow: 0 0 0 4px rgba(139,92,246,0.1);
+                }
+                .tap-min-depth-group { display: flex; flex-direction: column; gap: 8px; }
+                .tap-min-depth-group .toggle-switch-group { margin-top: 4px; }
 
                 .animate-spin { animation: spin 1s linear infinite; }
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

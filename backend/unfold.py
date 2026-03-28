@@ -345,6 +345,113 @@ def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=N
     return coords
 
 
+def detect_holes_in_step(filepath: str) -> list:
+    """
+    Detect cylindrical holes in a STEP file.
+
+    Returns a list of dicts:
+        [{"id": "hole_1", "diameter_mm": float, "diameter_in": float, "position": [x, y, z]}]
+
+    Two cylindrical faces are considered the same hole when they share the same
+    radius (within 0.5 %), have parallel axes (dot-product ≥ 0.995), and their
+    centres are collinear with that axis (perpendicular distance ≤ 0.5 × radius
+    + 0.5 mm).
+    """
+    shape = cq.importers.importStep(filepath)
+    occ_shape = shape.val().wrapped
+
+    faces = _get_faces(occ_shape)
+    face_info = [_classify_face(f) for f in faces]
+
+    # Collect cylindrical faces that represent interior holes.
+    # FORWARD orientation = convex exterior rounded edge → skip.
+    # REVERSED orientation = concave interior surface → drilled/milled hole.
+    # Also skip sub-millimetre radii which are CAD fillets, not drilled holes.
+    raw = []
+    for fi, info in enumerate(face_info):
+        if info[0] != "cylinder":
+            continue
+        _, axis, radius, center = info
+
+        if radius < 0.5:          # < 1 mm diameter → fillet artefact
+            continue
+        if faces[fi].Orientation() == TopAbs_FORWARD:   # convex exterior edge
+            continue
+
+        raw.append({
+            "fi": fi,
+            "radius": float(radius),
+            "axis": _normalize(np.array(axis, dtype=float)),
+            "center": np.array(center, dtype=float),
+        })
+
+    if not raw:
+        return []
+
+    # Minimum hole depth (mm) = total cluster face area / (2π·r).
+    # Chamfer lead-ins and other shallow artefacts are typically < 1.5 mm deep.
+    MIN_DEPTH_MM = 1.5
+
+    seen: set = set()
+    holes: list = []
+
+    for i, cyl in enumerate(raw):
+        if i in seen:
+            continue
+        seen.add(i)
+        cluster = [cyl]
+
+        for j in range(i + 1, len(raw)):
+            if j in seen:
+                continue
+            other = raw[j]
+
+            # Same radius within 0.5 %
+            max_r = max(cyl["radius"], other["radius"]) + 1e-9
+            if abs(cyl["radius"] - other["radius"]) / max_r > 0.005:
+                continue
+
+            # Parallel axes
+            if abs(float(np.dot(cyl["axis"], other["axis"]))) < 0.995:
+                continue
+
+            # Centers colinear with cyl axis
+            diff = other["center"] - cyl["center"]
+            perp = diff - np.dot(diff, cyl["axis"]) * cyl["axis"]
+            if float(np.linalg.norm(perp)) > cyl["radius"] * 0.5 + 0.5:
+                continue
+
+            seen.add(j)
+            cluster.append(other)
+
+        # Filter: effective depth = total_area / (2π·r)
+        total_area = sum(_face_area(faces[c["fi"]]) for c in cluster)
+        effective_depth = total_area / (2 * math.pi * cyl["radius"])
+        if effective_depth < MIN_DEPTH_MM:
+            continue
+
+        avg_center = np.mean([c["center"] for c in cluster], axis=0)
+        diameter_mm = cyl["radius"] * 2.0
+
+        holes.append({
+            "id": f"hole_{len(holes) + 1}",
+            "diameter_mm": round(diameter_mm, 4),
+            "diameter_in": round(diameter_mm / 25.4, 6),
+            "position": [
+                round(float(avg_center[0]), 4),
+                round(float(avg_center[1]), 4),
+                round(float(avg_center[2]), 4),
+            ],
+        })
+
+    # Sort smallest → largest for consistent display
+    holes.sort(key=lambda h: h["diameter_mm"])
+    for idx, h in enumerate(holes):
+        h["id"] = f"hole_{idx + 1}"
+
+    return holes
+
+
 def unfold_step_file(filepath: str) -> dict:
     """
     Main entry point. Loads STEP, unfolds sheet metal, returns JSON-serializable dict.

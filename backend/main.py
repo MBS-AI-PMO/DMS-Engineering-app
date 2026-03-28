@@ -8,7 +8,7 @@ import json
 import tempfile
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from unfold import unfold_step_file
+from unfold import unfold_step_file, detect_holes_in_step
 
 PORT = 8000
 
@@ -38,11 +38,15 @@ class CORSHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
-        if self.path != "/unfold":
+        if self.path == "/unfold":
+            self._process_step_file(unfold_step_file, lambda r: r)
+        elif self.path == "/detect-holes":
+            self._process_step_file(detect_holes_in_step, lambda r: {"holes": r})
+        else:
             self.send_response(404)
             self.end_headers()
-            return
 
+    def _process_step_file(self, processor, wrap):
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type:
             self._send_error(400, "Expected multipart/form-data")
@@ -68,11 +72,11 @@ class CORSHandler(BaseHTTPRequestHandler):
                 tmp_path = tmp.name
 
             try:
-                result = unfold_step_file(tmp_path)
-                self._send_json(200, result)
+                result = processor(tmp_path)
+                self._send_json(200, wrap(result))
             except Exception as e:
                 traceback.print_exc()
-                self._send_error(500, f"Unfolding failed: {str(e)}")
+                self._send_error(500, f"Processing failed: {str(e)}")
             finally:
                 os.unlink(tmp_path)
 
