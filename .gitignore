@@ -31,3 +31,6 @@ yarn-error.log*
 temp_uploads/
 backend/uploads/metals/*
 !backend/uploads/metals/placeholder.txt
+
+# Large Files
+backend/uploads.zip

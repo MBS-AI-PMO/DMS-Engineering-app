@@ -107,41 +107,25 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 12px;
     text-decoration: none;
-    color: #fff !important;
-    font-weight: 900;
-    font-size: 1.4rem;
-    letter-spacing: -1px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    /* Prevents logo from wrapping */
+    transition: transform 0.3s ease;
 }
 
-.logo-icon {
-    width: 40px;
-    height: 40px;
-    background: #e31b23;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    font-size: 1.3rem;
-    font-weight: 900;
-    box-shadow: 0 4px 15px rgba(227, 27, 35, 0.4);
+.logo:hover {
+    transform: scale(1.02);
 }
 
-.logo-sep {
-    color: rgba(255, 255, 255, 0.2);
-    margin: 0 4px;
+.logo-img {
+    height: 48px; /* High-end 3D metallic logo height */
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
 }
 
-.logo-tag {
-    color: rgba(255, 255, 255, 0.5);
-    font-weight: 600;
-    letter-spacing: 1px;
-    font-size: 0.9rem;
+.logo-img-mobile {
+    height: 38px;
+    width: auto;
+    object-fit: contain;
 }
 
 @media (max-width: 480px) {

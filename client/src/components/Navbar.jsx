@@ -30,11 +30,7 @@ const Navbar = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Close dropdown on route change
-    useEffect(() => {
-        setDropdownOpen(false);
-        setMobileMenuOpen(false);
-    }, [location.pathname]);
+    // Redundant dropdown resets are handled by onClick handlers on nav links
 
     const handleLogout = async () => {
         await logout();
@@ -47,6 +43,7 @@ const Navbar = () => {
         { name: 'Metals', path: '/metals' },
         { name: 'Services', path: '/#services' },
         { name: 'Guidelines', path: '/guidelines' },
+        { name: 'FAQ', path: '/faq' },
         { name: 'Contact', path: '/contact' },
     ];
 
@@ -55,8 +52,7 @@ const Navbar = () => {
             <div className="container navbar-container">
                 <div className="navbar-left">
                     <Link to="/" className="logo">
-                        <div className="logo-icon">D</div>
-                        <span>DMS <span className="logo-sep">|</span> <span className="logo-tag">Engineering</span></span>
+                        <img src="/logo.png" alt="DMS Logo" className="logo-img" />
                     </Link>
                 </div>
 
@@ -155,8 +151,7 @@ const Navbar = () => {
                     >
                         <div className="mobile-menu-header">
                             <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
-                                <div className="logo-icon">D</div>
-                                <span>DMS</span>
+                                <img src="/logo.png" alt="DMS Logo" className="logo-img-mobile" />
                             </Link>
                             <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
                                 <X size={24} />
