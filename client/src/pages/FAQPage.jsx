@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Info, Clock, FileCode, Truck, HelpCircle } from 'lucide-react';
+import { Search, Info, Clock, FileCode, Truck, HelpCircle, ChevronDown, Filter } from 'lucide-react';
 import { faqData as staticFaqData, faqCategories as staticFaqCategories } from '../data/faqData';
 import { fetchFaqs, fetchFaqCategories } from '../utils/api';
 import faqHeroImg from '../assets/faq-hero.jpg';
@@ -47,6 +47,8 @@ const FAQPageItem = ({ item }) => {
 const FAQPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategory, setActiveCategory] = useState('recent');
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+    const categoryDropdownRef = React.useRef(null);
     const [faqData, setFaqData] = useState(staticFaqData);
     const [faqCategories, setFaqCategories] = useState(staticFaqCategories);
     const [loading, setLoading] = useState(true);
@@ -77,6 +79,18 @@ const FAQPage = () => {
         loadFaqs();
     }, []);
 
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+                setIsCategoryDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const filteredFaqs = useMemo(() => {
         const query = searchQuery.toLowerCase();
         if (!query) {
@@ -105,12 +119,12 @@ const FAQPage = () => {
                             How can we <span className="highlight">help?</span>
                         </h1>
                         <p className="faq-page-subtitle">Search our knowledge base or browse by category below.</p>
-                        
+
                         <div className="faq-search-wrapper">
                             <Search className="search-icon" />
-                            <input 
-                                type="text" 
-                                placeholder="Search for questions (e.g., lead times, file formats...)" 
+                            <input
+                                type="text"
+                                placeholder="Search for questions (e.g., lead times, file formats...)"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -122,8 +136,55 @@ const FAQPage = () => {
             {/* Categories & Questions Section */}
             <section className="faq-page-content">
                 <div className="container">
+                    {/* Mobile Category Dropdown */}
+                    <div className="category-mobile-select-wrapper" ref={categoryDropdownRef}>
+                        <div className="category-mobile-header">
+                            <span>Categories</span>
+                        </div>
+                        <div
+                            className="category-mobile-select"
+                            onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                        >
+                            <div className="selected-category-info">
+                                <Filter size={18} className="filter-icon" />
+                                <span className="selected-category-text">
+                                    {faqCategories.find(c => c.id === activeCategory)?.title || 'SELECT CATEGORY'}
+                                </span>
+                            </div>
+                            <ChevronDown
+                                size={20}
+                                className={`dropdown-arrow ${isCategoryDropdownOpen ? 'open' : ''}`}
+                            />
+
+                            <AnimatePresence>
+                                {isCategoryDropdownOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="category-dropdown-menu"
+                                    >
+                                        {faqCategories.map(cat => (
+                                            <div
+                                                key={cat.id}
+                                                className={`dropdown-item ${activeCategory === cat.id ? 'active' : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveCategory(cat.id);
+                                                    setIsCategoryDropdownOpen(false);
+                                                }}
+                                            >
+                                                {cat.title}
+                                            </div>
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </div>
+
                     <div className="faq-layout">
-                        {/* Sidebar: Categories */}
+                        {/* Sidebar: Categories (Desktop Only) */}
                         <aside className="faq-sidebar">
                             <h3 className="sidebar-title">Categories</h3>
                             {loading ? (

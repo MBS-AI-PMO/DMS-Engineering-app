@@ -147,37 +147,53 @@ const Navbar = () => {
             <AnimatePresence>
                 {mobileMenuOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         className="mobile-menu"
                     >
-                        {navLinks.map((link) => (
-                            <Link
-                                key={link.name}
-                                to={link.path}
-                                onClick={() => setMobileMenuOpen(false)}
-                            >
-                                {link.name}
+                        <div className="mobile-menu-header">
+                            <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
+                                <div className="logo-icon">D</div>
+                                <span>DMS</span>
                             </Link>
-                        ))}
-                        <Link to="/get-instant-pricing" className="mobile-cta" onClick={() => setMobileMenuOpen(false)}>
-                            Instant Pricing
-                        </Link>
-                        {user ? (
-                            <>
-                                <Link to="/settings" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
-                                    <Settings size={16} /> Settings
+                            <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="mobile-menu-links">
+                            {navLinks.map((link) => (
+                                <Link
+                                    key={link.name}
+                                    to={link.path}
+                                    onClick={() => setMobileMenuOpen(false)}
+                                >
+                                    {link.name}
                                 </Link>
-                                <button className="mobile-user-link mobile-logout" onClick={() => { setMobileMenuOpen(false); handleLogout(); }}>
-                                    <LogOut size={16} /> Logout
-                                </button>
-                            </>
-                        ) : (
-                            <Link to="/login" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
-                                <User size={16} /> Login
+                            ))}
+                            <Link to="/get-instant-pricing" className="mobile-cta" onClick={() => setMobileMenuOpen(false)}>
+                                Instant Pricing
                             </Link>
-                        )}
+
+                            <div className="mobile-menu-divider" />
+
+                            {user ? (
+                                <div className="mobile-user-section">
+                                    <Link to="/settings" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
+                                        <Settings size={20} /> Settings
+                                    </Link>
+                                    <button className="mobile-user-link mobile-logout" onClick={() => { setMobileMenuOpen(false); handleLogout(); }}>
+                                        <LogOut size={20} /> Logout
+                                    </button>
+                                </div>
+                            ) : (
+                                <Link to="/login" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
+                                    <User size={20} /> Login
+                                </Link>
+                            )}
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

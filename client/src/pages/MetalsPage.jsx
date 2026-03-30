@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { ChevronRight, Filter, Search, ArrowRight, Shield, Zap, Award, AlertTriangle } from 'lucide-react';
@@ -10,7 +10,20 @@ const MetalsPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [metals, setMetals] = useState(staticMetalsData);
     const [loading, setLoading] = useState(true);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [categories, setCategories] = useState(['All', 'Aluminum', 'Brass', 'Copper', 'Stainless Steel', 'Steel', 'Titanium']);
+    const dropdownRef = useRef(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Fetch from API on mount
     useEffect(() => {
@@ -114,16 +127,43 @@ const MetalsPage = () => {
                 <div className="container">
                     {/* Filter Bar */}
                     <div className="catalog-controls">
-                        <div className="category-tabs">
-                            {categories.map(cat => (
-                                <button
-                                    key={cat}
-                                    className={`category-tab ${selectedCategory === cat ? 'active' : ''}`}
-                                    onClick={() => setSelectedCategory(cat)}
-                                >
-                                    {cat}
-                                </button>
-                            ))}
+                        <div className="category-selector-wrapper">
+                            <div className="category-tabs">
+                                {categories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        className={`category-tab ${selectedCategory === cat ? 'active' : ''}`}
+                                        onClick={() => setSelectedCategory(cat)}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="category-mobile-select" ref={dropdownRef} onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+                                <Filter className="filter-icon" size={18} />
+                                <div className="selected-category-text">
+                                    {selectedCategory}
+                                </div>
+                                <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
+                                
+                                {isDropdownOpen && (
+                                    <div className="category-dropdown-menu">
+                                        {categories.map(cat => (
+                                            <div 
+                                                key={cat} 
+                                                className={`dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCategory(cat);
+                                                    setIsDropdownOpen(false);
+                                                }}
+                                            >
+                                                {cat}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="catalog-search">
                             <Search className="search-icon" size={18} />

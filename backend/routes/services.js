@@ -4,6 +4,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { optimizeImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
@@ -104,11 +105,15 @@ router.get('/:id/metals', async (req, res) => {
 // ── Admin ────────────────────────────────────────────────
 
 // POST /api/services/admin/upload — Upload service image
-router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'), (req, res) => {
+router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
-    const relativePath = `/uploads/services/${req.file.filename}`;
+    
+    // Optimize the uploaded image immediately
+    const optimizedFilename = await optimizeImage(req.file.path);
+    const relativePath = `/uploads/services/${optimizedFilename}`;
+    
     res.json({ success: true, data: { path: relativePath } });
 });
 

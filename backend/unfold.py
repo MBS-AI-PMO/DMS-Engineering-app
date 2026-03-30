@@ -10,6 +10,7 @@ Pipeline:
 6. Tessellate each planar face, apply cumulative transforms
 7. Return JSON with flat vertices, cut edges, bend edges
 """
+os.environ["OCP_NO_DISPLAY"] = "1"
 import math
 import numpy as np
 import cadquery as cq

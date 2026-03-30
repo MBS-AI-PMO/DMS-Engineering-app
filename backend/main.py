@@ -1,22 +1,26 @@
-"""
-Simple HTTP backend for STEP file processing and sheet metal unfolding.
-Uses cadquery (OpenCASCADE) for precise B-Rep geometry handling.
-Zero extra dependencies beyond cadquery — uses Python's built-in http.server.
-"""
+
 import os
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["OCP_NO_DISPLAY"] = "1"
 import json
 import tempfile
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn  # Added for handling multiple requests
 from unfold import unfold_step_file, detect_holes_in_step
 
-PORT = 8000
+# 1. Use Environment Variables for the Port
+PORT = int(os.getenv("PORT", 8000))
 
+# 2. Add Threading support so the server doesn't freeze during heavy 3D math
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 class CORSHandler(BaseHTTPRequestHandler):
     """Minimal handler with CORS support for the React frontend."""
 
     def _set_cors(self):
+        # Change "*" to your specific frontend URL later for better security
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
@@ -28,11 +32,7 @@ class CORSHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self._set_cors()
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok"}).encode())
+            self._send_json(200, {"status": "ok", "engine": "FreeCAD/CadQuery"})
         else:
             self.send_response(404)
             self.end_headers()
@@ -67,18 +67,21 @@ class CORSHandler(BaseHTTPRequestHandler):
                 self._send_error(400, f"Unsupported file type: {ext}")
                 return
 
+            # Use a secure temp directory
             with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                 tmp.write(file_content)
                 tmp_path = tmp.name
 
             try:
+                # Actual 3D processing happens here
                 result = processor(tmp_path)
                 self._send_json(200, wrap(result))
             except Exception as e:
                 traceback.print_exc()
                 self._send_error(500, f"Processing failed: {str(e)}")
             finally:
-                os.unlink(tmp_path)
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
 
         except Exception as e:
             traceback.print_exc()
@@ -102,9 +105,12 @@ class CORSHandler(BaseHTTPRequestHandler):
             filename = ""
             for line in header.split("\r\n"):
                 if "filename=" in line:
-                    start = line.index('filename="') + 10
-                    end = line.index('"', start)
-                    filename = line[start:end]
+                    try:
+                        start = line.index('filename="') + 10
+                        end = line.index('"', start)
+                        filename = line[start:end]
+                    except ValueError:
+                        pass
                     break
             return content, filename
         return None, None
@@ -122,13 +128,14 @@ class CORSHandler(BaseHTTPRequestHandler):
         self._send_json(code, {"error": message})
 
     def log_message(self, format, *args):
-        print(f"[unfold-backend] {args[0]}")
+        # Cleaner logging for PM2 logs
+        print(f"[Python-API] {args[1]} {args[0]}")
 
 
 if __name__ == "__main__":
-    print(f"\033[47m\033[30m [PYTHON] Starting unfold backend on http://localhost:{PORT} \033[0m")
-    print("Press Ctrl+C to stop")
-    server = HTTPServer(("0.0.0.0", PORT), CORSHandler)
+    # Ensure it listens on 0.0.0.0 to be accessible via AWS Public IP
+    print(f"\n\033[92m[DMS-PYTHON] Starting Engine on Port {PORT}...\033[0m")
+    server = ThreadedHTTPServer(("0.0.0.0", PORT), CORSHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

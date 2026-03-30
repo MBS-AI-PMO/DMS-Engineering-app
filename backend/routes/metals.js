@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const slugify = require('slugify');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { optimizeImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
@@ -172,11 +173,15 @@ const metalStorage = multer.diskStorage({
 });
 const metalUpload = multer({ storage: metalStorage });
 
-router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.single('image'), (req, res) => {
+router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.single('image'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No image uploaded' });
     }
-    const imagePath = `/uploads/metals/${req.file.filename}`;
+    
+    // Optimize the uploaded image immediately
+    const optimizedFilename = await optimizeImage(req.file.path);
+    const imagePath = `/uploads/metals/${optimizedFilename}`;
+    
     res.json({ success: true, data: { image_path: imagePath } });
 });
 

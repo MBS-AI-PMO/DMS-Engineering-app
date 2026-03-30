@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronRight, Filter } from 'lucide-react';
 import { metalsData } from '../data/metalsData';
 import { servicesData } from '../data/servicesData';
 import laserSpecsSvg from '../assets/metals/laser-specs.svg';
@@ -15,6 +16,20 @@ const MetalDetail = () => {
     const [metal, setMetal] = useState(null);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('Quick Look');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const [unit, setUnit] = useState('MM'); // 'INCH' or 'MM'
     const [activeFaq, setActiveFaq] = useState(null);
     const [selectedThicknessIndex, setSelectedThicknessIndex] = useState(0);
@@ -224,6 +239,32 @@ const MetalDetail = () => {
                                 )}
                             </button>
                         ))}
+                    </div>
+
+                    <div className="detail-mobile-select" ref={dropdownRef} onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+                        <Filter className="filter-icon" size={18} />
+                        <div className="selected-category-text">
+                            {activeTab}
+                        </div>
+                        <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
+
+                        {isDropdownOpen && (
+                            <div className="category-dropdown-menu">
+                                {tabs.map(tab => (
+                                    <div
+                                        key={tab}
+                                        className={`dropdown-item ${activeTab === tab ? 'active' : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveTab(tab);
+                                            setIsDropdownOpen(false);
+                                        }}
+                                    >
+                                        {tab}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -26,15 +27,20 @@ const pricingRoutes = require('./routes/pricing');
 const app = express();
 const port = process.env.PORT || 5000;
 
+// FIX 1: Allow your public IP in CORS so the frontend can talk to the backend
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: ['http://localhost:5173', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '3.133.86.166'}`],
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
+app.use(compression()); // Enable Gzip compression for all responses
 
-// Serve static images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve static images with aggressive 1-year caching
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    maxAge: '1y',
+    immutable: true
+}));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
@@ -54,7 +60,7 @@ app.use('/api/pricing', pricingRoutes);
 // Setup multer for file uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -64,7 +70,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Health Check
+// FIX 2: Added a root health check so http://IP:5000/health actually works
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', engine: 'Node.js', message: 'DMS Backend is Live' });
+});
+
+// Health Check (Under API prefix)
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', engine: 'Node.js' });
 });
@@ -101,13 +112,13 @@ app.post('/api/unfold', upload.single('file'), async (req, res) => {
         return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
     }
 
-    const stepPath = req.file.path.replace(/\\/g, '/');
+    // FIX 3: Using path.resolve for absolute Linux paths
+    const stepPath = path.resolve(req.file.path);
     const tempId = Date.now();
-    const svgPath = path.join(uploadDir, `output_${tempId}.svg`).replace(/\\/g, '/');
-    const logPath = path.join(uploadDir, `script_${tempId}.log`).replace(/\\/g, '/');
-    const scriptPath = path.join(uploadDir, `run_${tempId}.py`);
+    const svgPath = path.resolve(uploadDir, `output_${tempId}.svg`);
+    const logPath = path.resolve(uploadDir, `script_${tempId}.log`);
+    const scriptPath = path.resolve(uploadDir, `run_${tempId}.py`);
 
-    // The FreeCAD Python Script (Ported from original backend)
     const script = `
 import sys, os, math
 import numpy as np
@@ -205,14 +216,6 @@ try:
         for p in rpts:
             if not pt_in_hull(hull, p[0], p[1]): return False
         return True
-
-    def edge_2d_len(rpts):
-        total = 0.0
-        for i in range(len(rpts) - 1):
-            dx = rpts[i+1][0] - rpts[i][0]
-            dy = rpts[i+1][1] - rpts[i][1]
-            total += math.sqrt(dx*dx + dy*dy)
-        return total
 
     edge_faces = {}
     for fi,face in enumerate(faces):
@@ -361,7 +364,6 @@ try:
     mn_x,mx_x=min(all_rx),max(all_rx)
     mn_y,mx_y=min(all_ry),max(all_ry)
     W=mx_x-mn_x or 1; H=mx_y-mn_y or 1
-
     cx_all = (mn_x + mx_x) / 2.0
     cy_all = (mn_y + mx_y) / 2.0
 
@@ -427,11 +429,11 @@ except Exception as ex:
     import traceback
     log(f"FATAL: {ex}"); log(traceback.format_exc())
     _log.close(); sys.exit(1)
-  `;
+    `;
 
     fs.writeFileSync(scriptPath, script);
 
-    const freecad = spawn(process.env.FREECAD_PATH, [scriptPath]);
+    const freecad = spawn(process.env.FREECAD_PATH || 'freecadcmd', [scriptPath]);
 
     let stdout = '', stderr = '';
     freecad.stdout.on('data', d => stdout += d);

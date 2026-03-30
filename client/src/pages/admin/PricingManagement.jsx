@@ -169,7 +169,7 @@ export default function PricingManagement() {
                                     onClick={() => setSelectedMetal(metal)}
                                 >
                                     {metal.image_path ? (
-                                        <img src={metal.image_path} alt={metal.name} />
+                                        <img src={metal.image_path} alt={metal.name} loading="lazy" />
                                     ) : (
                                         <div className="fallback-img"><Box size={32} /></div>
                                     )}
