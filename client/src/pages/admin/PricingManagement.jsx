@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';// eslint-disable-line no-unused-vars
 import {
-    ChevronRight, Save, Loader2, Info, AlertCircle, Check,
+    ChevronRight, Save, Loader2, Info, AlertCircle, Check, X,
     Layers, Wrench, Box, DollarSign, ArrowLeft
 } from 'lucide-react';
-import { fetchPricingMetadata, fetchPricingRules, savePricingRules } from '../../utils/api';
+import {
+    fetchPricingMetadata, fetchPricingRules, savePricingRules,
+    fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier
+} from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function PricingManagement() {
@@ -25,12 +28,30 @@ export default function PricingManagement() {
     // Pricing Rules for the current selection
     const [rules, setRules] = useState([]);
 
+    // Global Quantity Discounts
+    const [discounts, setDiscounts] = useState([]);
+    const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+
+    const loadDiscounts = useCallback(async () => {
+        try {
+            setLoadingDiscounts(true);
+            const discRes = await fetchAdminDiscounts();
+            setDiscounts(discRes.data || []);
+        } catch (err) {
+            toast('Failed to load discounts: ' + err.message, 'error');
+        } finally {
+            setLoadingDiscounts(false);
+        }
+    }, [toast]);
+
     useEffect(() => {
         const loadMetadata = async () => {
             try {
                 const { data } = await fetchPricingMetadata();
                 setMetals(data.metals || []);
                 setServices(data.services || []);
+
+                await loadDiscounts();
             } catch (err) {
                 toast('Failed to load metadata: ' + err.message, 'error');
             } finally {
@@ -38,7 +59,7 @@ export default function PricingManagement() {
             }
         };
         loadMetadata();
-    }, [toast]);
+    }, [toast, loadDiscounts]);
 
     useEffect(() => {
         if (selectedMetal && selectedService) {
@@ -106,6 +127,69 @@ export default function PricingManagement() {
         }
     };
 
+    // --- Discount Handlers ---
+    const handleAddDiscount = () => {
+        setDiscounts(prev => [...prev, { min_quantity: 1, discount_percent: 0, is_new: true }]);
+    };
+
+    const handleDiscountChange = (index, field, value) => {
+        setDiscounts(prev => prev.map((d, i) =>
+            i === index ? {
+                ...d,
+                [field]: value === '' ? 0 : parseFloat(value),
+                is_dirty: true
+            } : d
+        ));
+    };
+
+    const handleSaveDiscount = async (e, index) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        const item = discounts[index];
+        console.log('Attempting to save discount tier:', item);
+
+        // Data sanitization
+        const payload = {
+            id: item.id,
+            min_quantity: parseInt(item.min_quantity) || 0,
+            discount_percent: parseFloat(item.discount_percent) || 0,
+            is_active: item.is_active !== false
+        };
+
+        try {
+            const res = await saveDiscountTier(payload);
+            console.log('Save response:', res);
+            toast('Discount tier saved successfully', 'success');
+            await loadDiscounts();
+        } catch (err) {
+            console.error('SAVE ERROR:', err);
+            toast(`Error: ${err.message}`, 'error');
+            alert(`Failed to save: ${err.message}`);
+        }
+    };
+
+    const handleDeleteDiscount = async (e, id, index) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        console.log('Attempting to delete tier:', id, index);
+        if (!id) {
+            console.log('Removing unsaved local tier');
+            setDiscounts(prev => prev.filter((_, i) => i !== index));
+            return;
+        }
+
+        if (!window.confirm('Are you sure you want to delete this volume discount tier?')) return;
+
+        try {
+            const res = await deleteDiscountTier(id);
+            console.log('Delete response:', res);
+            toast('Discount tier deleted', 'success');
+            await loadDiscounts();
+        } catch (err) {
+            console.error('DELETE ERROR:', err);
+            toast(`Delete failed: ${err.message}`, 'error');
+            alert(`Failed to delete: ${err.message}`);
+        }
+    };
+
     if (loading) {
         return (
             <div className="admin-loading-container">
@@ -157,6 +241,97 @@ export default function PricingManagement() {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                     >
+                        {/* PREMIUM GLOBAL DISCOUNTS SECTION */}
+                        <div className="admin-card volume-discounts-premium-card mb-12">
+                            <div className="premium-card-header">
+                                <div className="header-info">
+                                    <div className="icon-badge">
+                                        <DollarSign size={22} />
+                                    </div>
+                                    <div>
+                                        <h3>Volume Pricing Tiers</h3>
+                                        <p>Configure global percentage discounts based on order quantity.</p>
+                                    </div>
+                                </div>
+                                <button type="button" className="add-tier-btn" onClick={handleAddDiscount}>
+                                    <span>+ Add New Tier</span>
+                                </button>
+                            </div>
+
+                            <div className="premium-discounts-content">
+                                {loadingDiscounts ? (
+                                    <div className="mini-loader"><Loader2 className="animate-spin" size={24} /></div>
+                                ) : discounts.length === 0 ? (
+                                    <div className="premium-empty-state">
+                                        <Info size={32} />
+                                        <p>No volume discounts configured yet. Build your first tier to reward bulk orders.</p>
+                                    </div>
+                                ) : (
+                                    <div className="premium-table-container">
+                                        <table className="premium-discounts-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Minimum Quantity</th>
+                                                    <th>Discount Applied</th>
+                                                    <th className="actions-cell">Management</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {discounts.map((d, idx) => (
+                                                    <tr key={d.id || `new-${idx}`} className="premium-tier-row">
+                                                        <td>
+                                                            <div className="premium-input-wrapper">
+                                                                <input
+                                                                    type="number"
+                                                                    className="premium-mini-input"
+                                                                    value={d.min_quantity}
+                                                                    onChange={(e) => handleDiscountChange(idx, 'min_quantity', e.target.value)}
+                                                                />
+                                                                <span className="input-suffix">Units</span>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="premium-input-wrapper discount">
+                                                                <input
+                                                                    type="number"
+                                                                    className="premium-mini-input"
+                                                                    value={d.discount_percent}
+                                                                    onChange={(e) => handleDiscountChange(idx, 'discount_percent', e.target.value)}
+                                                                />
+                                                                <span className="input-suffix premium-discount-badge-v2">% OFF</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="actions-cell">
+                                                            <div className="premium-mini-actions">
+                                                                {(d.is_new || d.is_dirty) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="premium-action-btn save"
+                                                                        onClick={(e) => handleSaveDiscount(e, idx)}
+                                                                        title="Save Changes"
+                                                                    >
+                                                                        <Check size={16} />
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="premium-action-btn delete"
+                                                                    onClick={(e) => handleDeleteDiscount(e, d.id, idx)}
+                                                                    title="Remove Tier"
+                                                                >
+                                                                    <X size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="pricing-section-header">
                             <Box size={24} />
                             <h2>Select a Metal</h2>
@@ -630,15 +805,209 @@ export default function PricingManagement() {
                     color: #1e293b;
                     outline: none;
                 }
-                .admin-loading-container {
+                    gap: 16px;
+                }
+
+                .volume-discounts-premium-card {
+                    background: white;
+                    border-radius: 20px;
+                    border: 1px solid #e2e8f0;
+                    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+                    overflow: hidden;
+                    margin-bottom: 48px;
+                }
+                .premium-card-header {
+                    padding: 32px;
+                    background: #f8fafc;
+                    border-bottom: 1px solid #f1f5f9;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .header-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+                }
+                .icon-badge {
+                    width: 48px;
+                    height: 48px;
+                    background: #eff6ff;
+                    color: #3b82f6;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .premium-card-header h3 {
+                    margin: 0;
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #0f172a;
+                }
+                .premium-card-header p {
+                    margin: 4px 0 0 0;
+                    font-size: 13px;
+                    color: #64748b;
+                }
+                .add-tier-btn {
+                    padding: 10px 20px;
+                    background: white;
+                    border: 1.5px solid #e2e8f0;
+                    color: #0f172a;
+                    font-weight: 700;
+                    font-size: 13px;
+                    border-radius: 10px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .add-tier-btn:hover {
+                    border-color: #0f172a;
+                    background: #f8fafc;
+                    transform: translateY(-1px);
+                }
+                .premium-discounts-content {
+                    padding: 0;
+                }
+                .premium-table-container {
+                    width: 100%;
+                }
+                .premium-discounts-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                .premium-discounts-table th {
+                    text-align: left;
+                    padding: 16px 32px;
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: #94a3b8;
+                    font-weight: 800;
+                    background: white;
+                }
+                .premium-tier-row {
+                    transition: background 0.2s;
+                    border-top: 1px solid #f1f5f9;
+                }
+                .premium-tier-row:hover {
+                    background: #fcfcfc;
+                }
+                .premium-tier-row td {
+                    padding: 16px 32px;
+                    vertical-align: middle;
+                }
+                .premium-input-wrapper {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    background: white !important;
+                    border: 2px solid #e2e8f0;
+                    border-radius: 12px;
+                    padding: 4px 10px;
+                    width: 240px !important;
+                    transition: all 0.2s;
+                }
+                .premium-input-wrapper:focus-within {
+                    border-color: #2563eb;
+                    background: white !important;
+                }
+                .premium-mini-input {
+                    background: transparent !important;
+                    border: none !important;
+                    outline: none !important;
+                    font-size: 16px !important;
+                    font-weight: 800 !important;
+                    color: #0f172a !important;
+                    padding: 8px !important;
+                    flex: 1 !important;
+                    min-width: 80px !important;
+                    text-align: left !important;
+                }
+                /* Hide arrows/spinners */
+                .premium-mini-input::-webkit-outer-spin-button,
+                .premium-mini-input::-webkit-inner-spin-button {
+                    -webkit-appearance: none;
+                    margin: 0;
+                }
+                .premium-mini-input[type=number] {
+                    -moz-appearance: textfield;
+                }
+                .input-suffix {
+                    font-size: 11px !important;
+                    font-weight: 800 !important;
+                    color: #64748b !important;
+                    text-transform: uppercase !important;
+                    letter-spacing: 0.05em !important;
+                    padding: 4px 8px !important;
+                }
+                .input-suffix.premium-discount-badge-v2 {
+                    color: #1e40af !important;
+                    background: #dbeafe !important;
+                    border-radius: 8px !important;
+                    min-width: 75px !important;
+                    text-align: center !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: 11px !important;
+                    font-weight: 900 !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                }
+                .actions-cell {
+                    text-align: center;
+                    width: 120px;
+                }
+                .premium-mini-actions {
+                    display: flex;
+                    justify-content: center;
+                    gap: 12px;
+                }
+                .premium-action-btn {
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 10px;
+                    border: none;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .premium-action-btn.save {
+                    background: #f0fdf4;
+                    color: #16a34a;
+                }
+                .premium-action-btn.save:hover {
+                    background: #16a34a;
+                    color: white;
+                    transform: scale(1.1);
+                }
+                .premium-action-btn.delete {
+                    background: #fff1f2;
+                    color: #e11d48;
+                }
+                .premium-action-btn.delete:hover {
+                    background: #e11d48;
+                    color: white;
+                    transform: scale(1.1);
+                }
+                .premium-empty-state {
+                    padding: 64px 32px;
+                    text-align: center;
+                    color: #94a3b8;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: center;
-                    min-height: 400px;
-                    color: #64748b;
                     gap: 16px;
                 }
+                .premium-empty-state p {
+                    max-width: 300px;
+                    font-size: 14px;
+                    line-height: 1.5;
+                }
+                .mb-12 { margin-bottom: 48px; }
             `}</style>
         </div>
     );

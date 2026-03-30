@@ -332,7 +332,33 @@ export async function savePricingRules(payload) {
     });
 }
 
+// ── Discounts ───────────────────────────────────────────
+
+export async function fetchAdminDiscounts() {
+    return request('/pricing/admin/discounts');
+}
+
+export async function saveDiscountTier(data) {
+    return request('/pricing/admin/discounts/upsert', {
+        method: 'POST',
+        body: data
+    });
+}
+
+export async function deleteDiscountTier(id) {
+    return request(`/pricing/admin/discounts/${id}`, {
+        method: 'DELETE'
+    });
+}
+
+export async function fetchPublicDiscounts() {
+    // This can be the same as admin if no sensitivity, 
+    // but we'll use the admin one for now as it's a small internal tool.
+    return request('/pricing/admin/discounts');
+}
+
 export async function calculatePrice(payload) {
+    // payload should now include 'quantity'
     return request('/pricing/calculate', {
         method: 'POST',
         body: payload

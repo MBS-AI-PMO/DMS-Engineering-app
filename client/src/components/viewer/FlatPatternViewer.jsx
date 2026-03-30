@@ -65,7 +65,7 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     const sorted = [size.x, size.y, size.z].sort((a, b) => b - a);
     const fitWidth = sorted[0];
     const fitHeight = sorted[1];
-    const padding = 0.25;
+    const padding = 0.05;
     let halfHeight = (fitHeight / 2) * (1 + padding);
     let halfWidth = halfHeight * aspect;
 
@@ -199,10 +199,14 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     }
     unfoldedGeometry.computeBoundingBox();
 
+    // Check for both camelCase and snake_case backend names
+    const bendPts = data.bendEdges || data.bend_edges || [];
+    const cutPts = data.cutEdges || data.cut_edges || [];
+
     return {
       unfoldedGeometry,
-      cutPts: data.cutEdges ?? [],
-      bendPts: data.bendEdges ?? [],
+      cutPts,
+      bendPts,
       bounds: unfoldedGeometry.boundingBox.clone(),
       hasFilledFace: true,
       mode: 'backend',
@@ -211,14 +215,18 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
 
   // Build geometry from source flat data (e.g. DXF)
   const buildFromSource = useCallback((data) => {
+    // Check for both camelCase and snake_case
+    const bendPts = data.bendPts || data.bend_edges || [];
+    const cutPts = data.cutPts || data.cut_edges || [];
+
     const bounds =
       boundsToBox(data.bounds) ||
-      computeBoundingBoxFromPositions(data.cutPts || []);
+      computeBoundingBoxFromPositions(cutPts || []);
 
     return {
       unfoldedGeometry: null,
-      cutPts: data.cutPts ?? [],
-      bendPts: data.bendPts ?? [],
+      cutPts,
+      bendPts,
       bounds,
       hasFilledFace: false,
       mode: 'source',
@@ -245,6 +253,9 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
   }, []);
 
   // Build and display flat pattern geometry
+  const highlightBends = options.highlightBends;
+  const gridEnabled = options.grid;
+
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -256,9 +267,10 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
 
     const hasBackendGeometry = Boolean(
       (backendData?.flatVertices && backendData.flatVertices.length > 0) ||
-      (backendData?.cutEdges && backendData.cutEdges.length > 0)
+      (backendData?.cutEdges && backendData.cutEdges.length > 0) ||
+      (backendData?.cut_edges && backendData.cut_edges.length > 0)
     );
-    const hasSourceGeometry = Boolean(sourceFlatData?.cutPts?.length);
+    const hasSourceGeometry = Boolean(sourceFlatData?.cutPts?.length || sourceFlatData?.cut_edges?.length);
 
     if (!geometries.length && !hasBackendGeometry && !hasSourceGeometry)
       return;
@@ -337,13 +349,14 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
         'position',
         new THREE.Float32BufferAttribute(viewData.bendPts, 3)
       );
+      
       const bendLine = new THREE.LineSegments(
         bendGeometry,
         new THREE.LineDashedMaterial({
-          color: 0x111827,
-          dashSize: maxDim * 0.018,
-          gapSize: maxDim * 0.012,
-          linewidth: 2,
+          color: highlightBends ? 0xff0000 : 0x4b5563, // Brighter red for highlight
+          dashSize: maxDim * (highlightBends ? 0.05 : 0.018),
+          gapSize: maxDim * (highlightBends ? 0.02 : 0.012),
+          linewidth: highlightBends ? 4 : 2,
         })
       );
       bendLine.computeLineDistances();
@@ -351,7 +364,7 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     }
 
     // Optional grid
-    if (options.grid && viewData.bounds) {
+    if (gridEnabled && viewData.bounds) {
       const center = new THREE.Vector3();
       viewData.bounds.getCenter(center);
       const grid = new THREE.GridHelper(maxDim * 3, 30, 0xd1d5db, 0xe5e7eb);
@@ -365,7 +378,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     fitCamera();
   }, [
     geometries,
-    options,
+    highlightBends,  // Specific primitive dependency
+    gridEnabled,      // Specific primitive dependency
     backendData,
     sourceFlatData,
     fitCamera,

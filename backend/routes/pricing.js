@@ -92,6 +92,73 @@ router.post('/admin/upsert', authenticate, requireAdmin, async (req, res) => {
     }
 });
 
+// ── Quantity Discount Admin Routes ─────────────────────────
+/**
+ * GET /api/admin/pricing/discounts
+ * Returns all quantity-based discount tiers.
+ */
+router.get('/admin/discounts', authenticate, requireAdmin, async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM quantity_discounts ORDER BY min_quantity ASC');
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        console.error('Error fetching quantity discounts:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch discounts' });
+    }
+});
+
+/**
+ * POST /api/admin/pricing/discounts/upsert
+ * Creates or updates a discount tier.
+ */
+router.post('/admin/discounts/upsert', authenticate, requireAdmin, async (req, res) => {
+    const { id, min_quantity, discount_percent, is_active } = req.body;
+
+    if (min_quantity == null || discount_percent == null) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    try {
+        if (id) {
+            // Update
+            await db.query(`
+                UPDATE quantity_discounts 
+                SET min_quantity = $1, discount_percent = $2, is_active = $3, updated_at = NOW()
+                WHERE id = $4
+            `, [min_quantity, discount_percent, is_active !== false, id]);
+        } else {
+            // Insert
+            await db.query(`
+                INSERT INTO quantity_discounts (min_quantity, discount_percent, is_active)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (min_quantity) DO UPDATE SET
+                    discount_percent = EXCLUDED.discount_percent,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = NOW()
+            `, [min_quantity, discount_percent, is_active !== false]);
+        }
+        res.json({ success: true, message: 'Discount tier saved successfully' });
+    } catch (err) {
+        console.error('Error upserting discount tier:', err);
+        res.status(500).json({ success: false, error: 'Failed to save discount tier' });
+    }
+});
+
+/**
+ * DELETE /api/admin/pricing/discounts/:id
+ * Removes a discount tier.
+ */
+router.delete('/admin/discounts/:id', authenticate, requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM quantity_discounts WHERE id = $1', [id]);
+        res.json({ success: true, message: 'Discount tier deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting discount tier:', err);
+        res.status(500).json({ success: false, error: 'Failed to delete discount tier' });
+    }
+});
+
 // ── Public Calculation Routes ────────────────────────────
 
 /**
@@ -99,7 +166,7 @@ router.post('/admin/upsert', authenticate, requireAdmin, async (req, res) => {
  * Calculates the price for a specific configuration.
  */
 router.post('/calculate', async (req, res) => {
-    const { metal_id, service_id, thickness_value, length_in, height_in } = req.body;
+    const { metal_id, service_id, thickness_value, length_in, height_in, quantity = 1 } = req.body;
 
     if (!metal_id || !service_id || !thickness_value) {
         return res.status(400).json({ success: false, error: 'Missing calculation parameters' });
@@ -134,16 +201,47 @@ router.post('/calculate', async (req, res) => {
             t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
         }
 
-        const total = base + h_cost + l_cost + t_cost;
+        const unit_total = base + h_cost + l_cost + t_cost;
+
+        // Fetch applicable discounts based on quantity
+        let discount_percent = 0;
+        let applied_tier = null;
+
+        try {
+            const discountRes = await db.query(`
+                SELECT * FROM quantity_discounts 
+                WHERE is_active = true AND min_quantity <= $1
+                ORDER BY min_quantity DESC LIMIT 1
+            `, [quantity]);
+
+            if (discountRes.rows.length > 0) {
+                discount_percent = parseFloat(discountRes.rows[0].discount_percent);
+                applied_tier = discountRes.rows[0];
+            }
+        } catch (err) {
+            console.error('Error fetching discounts during calculation:', err);
+        }
+
+        // Apply discount directly to the unit total
+        const unit_discount_amount = unit_total * (discount_percent / 100);
+        const final_unit_price = unit_total - unit_discount_amount;
+
+        // Final total is clean: (Discounted Unit) * Qty
+        const final_total = final_unit_price * (parseInt(quantity) || 1);
 
         res.json({
             success: true,
-            total_price: total,
+            total_price: final_total,
             breakdown: {
                 base,
                 height_cost: h_cost,
                 length_cost: l_cost,
-                thickness_cost: t_cost
+                thickness_cost: t_cost,
+                unit_total, // Original unit cost
+                final_unit_price, // Discounted unit cost
+                discount_percent,
+                discount_amount: unit_discount_amount * quantity, // Total saved
+                applied_tier
             }
         });
     } catch (err) {

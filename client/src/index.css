@@ -116,10 +116,11 @@ body {
 }
 
 .logo-img {
-    height: 48px; /* High-end 3D metallic logo height */
+    height: 48px;
+    /* High-end 3D metallic logo height */
     width: auto;
     object-fit: contain;
-    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
 }
 
 .logo-img-mobile {
@@ -3911,12 +3912,10 @@ body {
 
 /* Viewer Layout */
 .viewer-layout {
-    display: grid;
-    grid-template-columns: 320px 1fr 340px;
+    display: flex !important;
     gap: 1px;
-    height: 750px;
-    background: #eee;
-    border-radius: 20px;
+    width: 100% !important;
+    background: #fff;
     overflow: hidden;
     border: 1px solid #eee;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
@@ -9312,8 +9311,10 @@ body.dark-mode .guideline-table tr:hover {
 }
 
 .quote-flow-layout {
-    display: block !important;
-    padding: 20px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+    height: 100% !important;
 }
 
 .quote-flow-step-container {
@@ -9321,7 +9322,6 @@ body.dark-mode .guideline-table tr:hover {
     flex-direction: column;
     gap: 20px;
     width: 100%;
-    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -9667,4 +9667,62 @@ body.dark-mode .guideline-table tr:hover {
         animation: fadeInSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
     }
+}
+
+/* --- Aggressive Layout Fixes and High Definition (HD) Scaling --- */
+body.qf-active,
+html.qf-active {
+    overflow: hidden !important;
+    height: 100vh !important;
+    margin: 0;
+    padding: 0;
+}
+
+.ip-fullpage {
+    height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+}
+
+.ip-fullpage .app-container,
+.ip-fullpage .main-content {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+}
+
+.qf-preview-container {
+    height: 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Hide global site elements in Quote Mode */
+body.qf-active .pricing-header,
+body.qf-active .navbar,
+body.qf-active footer {
+    display: none !important;
+}
+
+/* Force Canvas to fill parent properly */
+.qf-main-canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Additional HD Refinement */
+.qf-main-canvas {
+    min-height: 0;
+    flex: 1 1 0;
+}
+
+/* IMPORTANT: Only target the viewer div ref, not the overlay! */
+.qf-main-canvas>div:not(.qf-action-overlay) {
+    height: 100% !important;
+    width: 100% !important;
 }

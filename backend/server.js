@@ -29,7 +29,7 @@ const port = process.env.PORT || 5000;
 
 // FIX 1: Allow your public IP in CORS so the frontend can talk to the backend
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '3.133.86.166'}`],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '3.133.86.166'}`],
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
