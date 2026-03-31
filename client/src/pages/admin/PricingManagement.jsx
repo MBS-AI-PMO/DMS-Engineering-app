@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { Component, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';// eslint-disable-line no-unused-vars
 import {
@@ -11,7 +11,7 @@ import {
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import PricingSkeleton from '../../components/admin/PricingSkeleton';
-import DiscountModal from '../../components/admin/modals/DiscountModal';
+import VolumeDiscountModal from '../../components/admin/modals/VolumeDiscountModal';
 
 export default function PricingManagement() {
     const toast = useToast();
@@ -496,7 +496,8 @@ export default function PricingManagement() {
                     </motion.div>
                 )}
             </div>
-            <DiscountModal
+            <VolumeDiscountModal
+                key={isDiscountModalOpen ? (selectedDiscountTier?.id || 'new') : 'closed'}
                 isOpen={isDiscountModalOpen}
                 onClose={() => setIsDiscountModalOpen(false)}
                 onSave={handleSaveDiscount}
@@ -505,12 +506,12 @@ export default function PricingManagement() {
 
             <style>{`
                 .pricing-management-page {
-                    padding-bottom: 80px;
-                }
+                    padding-bottom: 80px;        
+                }   
                 .selection-separator {
                     color: #94a3b8;
                     display: flex;
-                    align-items: center;
+                    align-items: center;    
                 }
                 .pricing-selection-header-banner {
                     display: flex;
