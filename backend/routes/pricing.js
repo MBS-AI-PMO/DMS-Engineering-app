@@ -99,7 +99,7 @@ router.post('/admin/upsert', authenticate, requireAdmin, async (req, res) => {
  */
 router.get('/admin/discounts', authenticate, requireAdmin, async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM quantity_discounts ORDER BY min_quantity ASC');
+        const result = await db.query('SELECT * FROM quantity_discounts ORDER BY (quantities->>0)::int ASC');
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('Error fetching quantity discounts:', err);
@@ -112,10 +112,10 @@ router.get('/admin/discounts', authenticate, requireAdmin, async (req, res) => {
  * Creates or updates a discount tier.
  */
 router.post('/admin/discounts/upsert', authenticate, requireAdmin, async (req, res) => {
-    const { id, min_quantity, discount_percent, is_active } = req.body;
+    const { id, quantities, discount_percent, is_active } = req.body;
 
-    if (min_quantity == null || discount_percent == null) {
-        return res.status(400).json({ success: false, error: 'Missing required fields' });
+    if (!quantities || !Array.isArray(quantities) || quantities.length === 0 || discount_percent == null) {
+        return res.status(400).json({ success: false, error: 'Missing required fields (quantities array and discount_percent)' });
     }
 
     try {
@@ -123,19 +123,15 @@ router.post('/admin/discounts/upsert', authenticate, requireAdmin, async (req, r
             // Update
             await db.query(`
                 UPDATE quantity_discounts 
-                SET min_quantity = $1, discount_percent = $2, is_active = $3, updated_at = NOW()
+                SET quantities = $1, discount_percent = $2, is_active = $3, updated_at = NOW()
                 WHERE id = $4
-            `, [min_quantity, discount_percent, is_active !== false, id]);
+            `, [JSON.stringify(quantities), discount_percent, is_active !== false, id]);
         } else {
             // Insert
             await db.query(`
-                INSERT INTO quantity_discounts (min_quantity, discount_percent, is_active)
+                INSERT INTO quantity_discounts (quantities, discount_percent, is_active)
                 VALUES ($1, $2, $3)
-                ON CONFLICT (min_quantity) DO UPDATE SET
-                    discount_percent = EXCLUDED.discount_percent,
-                    is_active = EXCLUDED.is_active,
-                    updated_at = NOW()
-            `, [min_quantity, discount_percent, is_active !== false]);
+            `, [JSON.stringify(quantities), discount_percent, is_active !== false]);
         }
         res.json({ success: true, message: 'Discount tier saved successfully' });
     } catch (err) {
@@ -208,15 +204,24 @@ router.post('/calculate', async (req, res) => {
         let applied_tier = null;
 
         try {
+            // Find ALL active discounts and find the best match for the current quantity
             const discountRes = await db.query(`
                 SELECT * FROM quantity_discounts 
-                WHERE is_active = true AND min_quantity <= $1
-                ORDER BY min_quantity DESC LIMIT 1
-            `, [quantity]);
+                WHERE is_active = true 
+                ORDER BY (quantities->>0)::int DESC
+            `);
 
             if (discountRes.rows.length > 0) {
-                discount_percent = parseFloat(discountRes.rows[0].discount_percent);
-                applied_tier = discountRes.rows[0];
+                // Find the first tier where the current quantity meets or exceeds any of its triggers
+                const matchedTier = discountRes.rows.find(tier => {
+                    const triggers = Array.isArray(tier.quantities) ? tier.quantities : [];
+                    return triggers.some(q => parseInt(quantity) >= parseInt(q));
+                });
+
+                if (matchedTier) {
+                    discount_percent = parseFloat(matchedTier.discount_percent);
+                    applied_tier = matchedTier;
+                }
             }
         } catch (err) {
             console.error('Error fetching discounts during calculation:', err);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { User, Mail, Lock, Eye, EyeOff, UserPlus, CheckSquare } from 'lucide-react';
 import { registerUser } from '../utils/api';
 
@@ -65,7 +65,7 @@ export default function Signup() {
             >
                 <div className="auth-logo">
                     <Link to="/">
-                        <div className="auth-logo-icon">D</div>
+                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" />
                     </Link>
                 </div>
 

@@ -9,7 +9,7 @@ const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
     is_production: false, parent_id: null,
     min_length: 0, max_length: 0, min_width: 0, max_width: 0, min_height: 0, max_height: 0,
-    dimensions_unit: 'in', service_options: []
+    dimensions_unit: 'in', service_options: [], base_price: 0
 };
 
 export default function ServiceEdit() {
@@ -160,6 +160,17 @@ export default function ServiceEdit() {
                                     onChange={e => setService(s => ({ ...s, description: e.target.value }))}
                                     placeholder="Enter service details..."
                                 />
+                            </div>
+                            <div className="admin-form-group">
+                                <label>Base Price ($)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={service.base_price}
+                                    onChange={e => setService(s => ({ ...s, base_price: parseFloat(e.target.value) || 0 }))}
+                                    placeholder="0.00"
+                                />
+                                <p className="admin-card-tip" style={{ marginTop: '8px', marginBottom: 0 }}>Global price applied to this service (e.g., per part for Anodizing).</p>
                             </div>
                         </div>
 

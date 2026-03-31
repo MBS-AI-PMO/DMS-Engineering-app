@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';// eslint-disable-line no-unused-vars
 import {
     ChevronRight, Save, Loader2, Info, AlertCircle, Check, X,
-    Layers, Wrench, Box, DollarSign, ArrowLeft
+    Layers, Wrench, Box, DollarSign, ArrowLeft, Trash2
 } from 'lucide-react';
 import {
     fetchPricingMetadata, fetchPricingRules, savePricingRules,
     fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
+import PricingSkeleton from '../../components/admin/PricingSkeleton';
+import DiscountModal from '../../components/admin/modals/DiscountModal';
 
 export default function PricingManagement() {
     const toast = useToast();
@@ -31,12 +33,15 @@ export default function PricingManagement() {
     // Global Quantity Discounts
     const [discounts, setDiscounts] = useState([]);
     const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+    const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+    const [selectedDiscountTier, setSelectedDiscountTier] = useState(null);
 
     const loadDiscounts = useCallback(async () => {
         try {
             setLoadingDiscounts(true);
             const discRes = await fetchAdminDiscounts();
-            setDiscounts(discRes.data || []);
+            // fetchAdminDiscounts() returns the array directly
+            setDiscounts(discRes || []);
         } catch (err) {
             toast('Failed to load discounts: ' + err.message, 'error');
         } finally {
@@ -129,41 +134,25 @@ export default function PricingManagement() {
 
     // --- Discount Handlers ---
     const handleAddDiscount = () => {
-        setDiscounts(prev => [...prev, { min_quantity: 1, discount_percent: 0, is_new: true }]);
+        setSelectedDiscountTier(null);
+        setIsDiscountModalOpen(true);
     };
 
-    const handleDiscountChange = (index, field, value) => {
-        setDiscounts(prev => prev.map((d, i) =>
-            i === index ? {
-                ...d,
-                [field]: value === '' ? 0 : parseFloat(value),
-                is_dirty: true
-            } : d
-        ));
+    const handleEditDiscount = (tier) => {
+        setSelectedDiscountTier(tier);
+        setIsDiscountModalOpen(true);
     };
 
-    const handleSaveDiscount = async (e, index) => {
-        if (e) { e.preventDefault(); e.stopPropagation(); }
-        const item = discounts[index];
-        console.log('Attempting to save discount tier:', item);
-
-        // Data sanitization
-        const payload = {
-            id: item.id,
-            min_quantity: parseInt(item.min_quantity) || 0,
-            discount_percent: parseFloat(item.discount_percent) || 0,
-            is_active: item.is_active !== false
-        };
-
+    const handleSaveDiscount = async (data) => {
+        setSaving(true);
         try {
-            const res = await saveDiscountTier(payload);
-            console.log('Save response:', res);
+            await saveDiscountTier(data);
             toast('Discount tier saved successfully', 'success');
             await loadDiscounts();
         } catch (err) {
-            console.error('SAVE ERROR:', err);
             toast(`Error: ${err.message}`, 'error');
-            alert(`Failed to save: ${err.message}`);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -191,12 +180,7 @@ export default function PricingManagement() {
     };
 
     if (loading) {
-        return (
-            <div className="admin-loading-container">
-                <Loader2 className="animate-spin" size={40} />
-                <p>Loading pricing data...</p>
-            </div>
-        );
+        return <PricingSkeleton />;
     }
 
     return (
@@ -280,46 +264,35 @@ export default function PricingManagement() {
                                                 {discounts.map((d, idx) => (
                                                     <tr key={d.id || `new-${idx}`} className="premium-tier-row">
                                                         <td>
-                                                            <div className="premium-input-wrapper">
-                                                                <input
-                                                                    type="number"
-                                                                    className="premium-mini-input"
-                                                                    value={d.min_quantity}
-                                                                    onChange={(e) => handleDiscountChange(idx, 'min_quantity', e.target.value)}
-                                                                />
-                                                                <span className="input-suffix">Units</span>
+                                                            <div className="premium-qty-list-display">
+                                                                {d.quantities?.map(q => (
+                                                                    <span key={q} className="trigger-badge">{q} Units</span>
+                                                                ))}
+                                                                {!d.is_active && <span className="inactive-badge">Inactive</span>}
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <div className="premium-input-wrapper discount">
-                                                                <input
-                                                                    type="number"
-                                                                    className="premium-mini-input"
-                                                                    value={d.discount_percent}
-                                                                    onChange={(e) => handleDiscountChange(idx, 'discount_percent', e.target.value)}
-                                                                />
-                                                                <span className="input-suffix premium-discount-badge-v2">% OFF</span>
+                                                            <div className="discount-value-display">
+                                                                <span className="premium-discount-badge-v2">{d.discount_percent}% OFF</span>
                                                             </div>
                                                         </td>
                                                         <td className="actions-cell">
                                                             <div className="premium-mini-actions">
-                                                                {(d.is_new || d.is_dirty) && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="premium-action-btn save"
-                                                                        onClick={(e) => handleSaveDiscount(e, idx)}
-                                                                        title="Save Changes"
-                                                                    >
-                                                                        <Check size={16} />
-                                                                    </button>
-                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="premium-action-btn edit"
+                                                                    onClick={() => handleEditDiscount(d)}
+                                                                    title="Edit Tier"
+                                                                >
+                                                                    <ChevronRight size={16} />
+                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     className="premium-action-btn delete"
                                                                     onClick={(e) => handleDeleteDiscount(e, d.id, idx)}
                                                                     title="Remove Tier"
                                                                 >
-                                                                    <X size={16} />
+                                                                    <Trash2 size={16} />
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -350,7 +323,11 @@ export default function PricingManagement() {
                                     )}
                                     <div className="card-info">
                                         <h3>{metal.name}</h3>
-                                        <span className="badge">{metal.thicknesses?.length || 0} Dimensions</span>
+                                        {metal.thicknesses?.length > 0 ? (
+                                            <span className="badge">{metal.thicknesses?.length} Dimensions</span>
+                                        ) : (
+                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Dimensions</span>
+                                        )}
                                     </div>
                                     <ChevronRight size={20} />
                                 </button>
@@ -505,44 +482,11 @@ export default function PricingManagement() {
                                         </thead>
                                         <tbody>
                                             {rules.map((rule) => (
-                                                <tr key={rule.thickness_value}>
-                                                    <td className="thickness-cell">
-                                                        <strong>{rule.thickness_value}&quot;</strong>
-                                                    </td>
-                                                    <td>
-                                                        <div className="price-input-wrapper">
-                                                            <span>$</span>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={rule.base_price}
-                                                                onChange={(e) => handleRuleChange(rule.thickness_value, 'base_price', e.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div className="price-input-wrapper">
-                                                            <span>$</span>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={rule.price_per_inch_height}
-                                                                onChange={(e) => handleRuleChange(rule.thickness_value, 'price_per_inch_height', e.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div className="price-input-wrapper">
-                                                            <span>$</span>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={rule.price_per_inch_length}
-                                                                onChange={(e) => handleRuleChange(rule.thickness_value, 'price_per_inch_length', e.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                <PricingRow
+                                                    key={rule.thickness_value}
+                                                    rule={rule}
+                                                    onChange={handleRuleChange}
+                                                />
                                             ))}
                                         </tbody>
                                     </table>
@@ -552,6 +496,12 @@ export default function PricingManagement() {
                     </motion.div>
                 )}
             </div>
+            <DiscountModal
+                isOpen={isDiscountModalOpen}
+                onClose={() => setIsDiscountModalOpen(false)}
+                onSave={handleSaveDiscount}
+                tier={selectedDiscountTier}
+            />
 
             <style>{`
                 .pricing-management-page {
@@ -805,8 +755,6 @@ export default function PricingManagement() {
                     color: #1e293b;
                     outline: none;
                 }
-                    gap: 16px;
-                }
 
                 .volume-discounts-premium-card {
                     background: white;
@@ -1002,13 +950,105 @@ export default function PricingManagement() {
                     align-items: center;
                     gap: 16px;
                 }
-                .premium-empty-state p {
-                    max-width: 300px;
-                    font-size: 14px;
-                    line-height: 1.5;
+                .premium-qty-list-display {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
                 }
-                .mb-12 { margin-bottom: 48px; }
+                .trigger-badge {
+                    background: #f1f5f9;
+                    color: #475569;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: 800;
+                    border: 1px solid #e2e8f0;
+                }
+                .inactive-badge {
+                    background: #fef2f2;
+                    color: #991b1b;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                }
+                .premium-action-btn.edit {
+                    background: #eff6ff;
+                    color: #3b82f6;
+                }
+                .premium-action-btn.edit:hover {
+                    background: #3b82f6;
+                    color: white;
+                    transform: translateX(3px);
+                }
             `}</style>
         </div>
+    );
+}
+
+function PricingRow({ rule, onChange }) {
+    const [localBase, setLocalBase] = useState(rule.base_price);
+    const [localW, setLocalW] = useState(rule.price_per_inch_height);
+    const [localL, setLocalL] = useState(rule.price_per_inch_length);
+
+    useEffect(() => {
+        setLocalBase(rule.base_price);
+        setLocalW(rule.price_per_inch_height);
+        setLocalL(rule.price_per_inch_length);
+    }, [rule]);
+
+    const handleBlur = (field, value) => {
+        onChange(rule.thickness_value, field, value);
+    };
+
+    return (
+        <tr className="premium-tier-row">
+            <td className="thickness-cell">
+                <strong>{rule.thickness_value}&quot;</strong>
+            </td>
+            <td>
+                <div className="price-input-wrapper">
+                    <span>$</span>
+                    <input
+                        type="number"
+                        step="0.01"
+                        className="premium-mini-input"
+                        style={{ background: 'transparent', border: 'none', outline: 'none', width: '100%', fontWeight: 700 }}
+                        value={localBase}
+                        onChange={(e) => setLocalBase(e.target.value)}
+                        onBlur={(e) => handleBlur('base_price', e.target.value)}
+                    />
+                </div>
+            </td>
+            <td>
+                <div className="price-input-wrapper">
+                    <span>$</span>
+                    <input
+                        type="number"
+                        step="0.01"
+                        className="premium-mini-input"
+                        style={{ background: 'transparent', border: 'none', outline: 'none', width: '100%', fontWeight: 700 }}
+                        value={localW}
+                        onChange={(e) => setLocalW(e.target.value)}
+                        onBlur={(e) => handleBlur('price_per_inch_height', e.target.value)}
+                    />
+                </div>
+            </td>
+            <td>
+                <div className="price-input-wrapper">
+                    <span>$</span>
+                    <input
+                        type="number"
+                        step="0.01"
+                        className="premium-mini-input"
+                        style={{ background: 'transparent', border: 'none', outline: 'none', width: '100%', fontWeight: 700 }}
+                        value={localL}
+                        onChange={(e) => setLocalL(e.target.value)}
+                        onBlur={(e) => handleBlur('price_per_inch_length', e.target.value)}
+                    />
+                </div>
+            </td>
+        </tr>
     );
 }

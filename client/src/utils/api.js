@@ -335,7 +335,8 @@ export async function savePricingRules(payload) {
 // ── Discounts ───────────────────────────────────────────
 
 export async function fetchAdminDiscounts() {
-    return request('/pricing/admin/discounts');
+    const { data } = await request('/pricing/admin/discounts');
+    return data;
 }
 
 export async function saveDiscountTier(data) {
@@ -354,7 +355,8 @@ export async function deleteDiscountTier(id) {
 export async function fetchPublicDiscounts() {
     // This can be the same as admin if no sensitivity, 
     // but we'll use the admin one for now as it's a small internal tool.
-    return request('/pricing/admin/discounts');
+    const { data } = await request('/pricing/admin/discounts');
+    return data;
 }
 
 export async function calculatePrice(payload) {

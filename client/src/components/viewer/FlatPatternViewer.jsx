@@ -16,7 +16,7 @@ import {
 } from '../../utils/geometryUtils';
 
 const FlatPatternViewer = forwardRef(function FlatPatternViewer(
-  { geometries = [], options = {}, backendData, sourceFlatData, formatKind },
+  { geometries = [], options = {}, backendData, sourceFlatData, formatKind, holes = [], activeHoleId = null },
   ref
 ) {
   const mountRef = useRef(null);
@@ -349,7 +349,7 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
         'position',
         new THREE.Float32BufferAttribute(viewData.bendPts, 3)
       );
-      
+
       const bendLine = new THREE.LineSegments(
         bendGeometry,
         new THREE.LineDashedMaterial({
@@ -373,15 +373,50 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
       group.add(grid);
     }
 
+    // Holes (if any)
+    if (holes && holes.length > 0) {
+      holes.forEach(hole => {
+        const isActive = hole.id === activeHoleId;
+        const radius = (hole.diameterInches || 0.1) * 0.5 * 25.4; // assume model in mm
+
+        const curve = new THREE.EllipseCurve(
+          hole.position.x, hole.position.y,
+          radius, radius,
+          0, 2 * Math.PI,
+          false,
+          0
+        );
+
+        const points = curve.getPoints(32);
+        const circleGeometry = new THREE.BufferGeometry().setFromPoints(points);
+
+        const circle = new THREE.LineLoop(
+          circleGeometry,
+          new THREE.LineBasicMaterial({
+            color: isActive ? 0xff0000 : 0x4b5563,
+            linewidth: isActive ? 4 : 2,
+            transparent: true,
+            opacity: isActive ? 1 : 0.8
+          })
+        );
+
+        // Ensure circles are slightly above the face to avoid z-fighting
+        circle.position.z = 0.5;
+        group.add(circle);
+      });
+    }
+
     scene.add(group);
     meshGroupRef.current = group;
     fitCamera();
   }, [
     geometries,
-    highlightBends,  // Specific primitive dependency
-    gridEnabled,      // Specific primitive dependency
+    highlightBends,
+    gridEnabled,
     backendData,
     sourceFlatData,
+    holes,          // Added dependency
+    activeHoleId,   // Added dependency
     fitCamera,
     buildFromBackend,
     buildFromSource,
@@ -489,24 +524,6 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
         )}
       </div>
 
-      {/* Instructions */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 12,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          borderRadius: 9999,
-          border: '1px solid #e5e7eb',
-          backgroundColor: '#f3f4f6',
-          padding: '4px 12px',
-          fontSize: 10,
-          color: '#6b7280',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-        }}
-      >
-        Drag to pan | Scroll to zoom
-      </div>
     </div>
   );
 });

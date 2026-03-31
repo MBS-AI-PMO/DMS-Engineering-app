@@ -75,10 +75,10 @@ const Footer = () => {
                         transition={{ duration: 0.6 }}
                         className="footer-brand"
                     >
-                        <div className="footer-logo">
-                            DMS
+                        <Link to="/" className="footer-logo">
+                            <img src="/logo.png" alt="DMS Logo" className="footer-logo-img" />
                             <span className="footer-tagline">Precision. Quality. DMS.</span>
-                        </div>
+                        </Link>
                         <p className="footer-desc">
                             Premium metal processing and laser cutting services.
                             Delivering precision and quality for your most demanding projects.

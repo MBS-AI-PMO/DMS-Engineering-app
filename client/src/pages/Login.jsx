@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { Mail, Lock, Eye, EyeOff, LogIn, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,7 +44,7 @@ export default function Login() {
             >
                 <div className="auth-logo">
                     <Link to="/">
-                        <div className="auth-logo-icon">D</div>
+                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" />
                     </Link>
                 </div>
 
