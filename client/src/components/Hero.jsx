@@ -35,10 +35,8 @@ const Hero = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.5, delay: 0.4 }}
                 >
-                    <Link to="/get-instant-pricing" className="btn-hero-primary-link" style={{ textDecoration: 'none' }}>
-                        <button className="btn-hero-primary">
-                            BUILD NOW <span className="btn-icon">🚀</span>
-                        </button>
+                    <Link to="/get-instant-pricing" className="btn-hero-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
+                        BUILD NOW <span className="btn-icon">🚀</span>
                     </Link>
                 </motion.div>
             </div>
