@@ -43,6 +43,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     immutable: true
 }));
 
+// Serve temporary CAD assets for cart persistence établissement
+app.use('/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
+
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/metals', metalsRoutes);

@@ -1584,7 +1584,7 @@ const InstantPricing = () => {
                   <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HOLE THREADING CONFIG</h3>
                   <div className="d-flex align-items-center gap-3 mt-2">
                     <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3 py-1 fw-bold small">HOLE #{activeTapHole.id + 1}</span>
-                    <span className="text-muted small fw-bold text-uppercase letter-spacing-2">Diameter: {Number(activeTapHole.diameterInches || 0).toFixed(4)}&quot; ({Number((activeTapHole.diameterInches || 0) * 25.4).toFixed(3)} mm)</span>
+                    <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Diameter: {Number(activeTapHole.diameterInches || 0).toFixed(4)}&quot; ({Number((activeTapHole.diameterInches || 0) * 25.4).toFixed(3)} mm)</span>
                   </div>
                 </div>
                 <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setActiveTapHole(null)} />
@@ -1593,8 +1593,8 @@ const InstantPricing = () => {
               <div className="flex-grow-1 d-flex overflow-hidden bg-white">
                 <div className="border-end bg-light-subtle bg-opacity-20 p-4 overflow-auto hide-scrollbar" style={{ width: '320px' }}>
                   <div className="mb-4 px-2 d-flex justify-content-between align-items-center">
-                    <h4 className="small fw-black text-muted text-uppercase letter-spacing-2 m-0">Detected Holes</h4>
-                    <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '9px' }}>{detectedHoles.length}</span>
+                    <h4 className="fw-black text-muted text-uppercase letter-spacing-2 m-0" style={{ fontSize: '13px' }}>Detected Holes</h4>
+                    <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '11px' }}>{detectedHoles.length}</span>
                   </div>
                   {detectedHoles.map((hole, i) => {
                     const isTapped = !!selectedTaps[hole.id];
@@ -1606,11 +1606,11 @@ const InstantPricing = () => {
                       <motion.div key={hole.id} layout className={`p-4 rounded-4 mb-2 cursor-pointer border-2 transition-all d-flex align-items-center justify-content-between ${isActive ? 'border-danger bg-danger text-white shadow-md' : 'border-transparent bg-white hover-bg-light shadow-xs'}`} onClick={() => setActiveTapHole(hole)} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}>
                         <div className="d-flex align-items-center gap-3">
                           <div className={`rounded-circle d-flex align-items-center justify-content-center ${isActive ? 'bg-white text-danger' : isTapped ? 'bg-success text-white' : 'bg-light text-muted'}`} style={{ width: '32px', height: '32px' }}>
-                            <span className="fw-black" style={{ fontSize: '12px' }}>{i + 1}</span>
+                            <span className="fw-black" style={{ fontSize: '14px' }}>{i + 1}</span>
                           </div>
                           <div className="d-flex flex-column">
-                            <span className={`fw-black text-truncate ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px', maxWidth: '180px' }}>{isTapped ? selectedTaps[hole.id].name : 'Not Tapped'}</span>
-                            <span className={`${isActive ? 'text-white' : 'text-muted'} fw-bold`} style={{ fontSize: '11px' }}>DIA: {Number(hole.diameterInches || 0).toFixed(3)}&quot;</span>
+                            <span className={`fw-black text-truncate ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '15px', maxWidth: '180px' }}>{isTapped ? selectedTaps[hole.id].name : 'Not Tapped'}</span>
+                            <span className={`${isActive ? 'text-white' : 'text-muted'} fw-bold`} style={{ fontSize: '13px' }}>DIA: {Number(hole.diameterInches || 0).toFixed(3)}&quot;</span>
                           </div>
                         </div>
                         {isTapped && !isActive && <Check size={16} className="text-success" strokeWidth={3} />}
@@ -1634,7 +1634,7 @@ const InstantPricing = () => {
                       <div className="animate-fade-in">
                         {compatible.length > 0 && (
                           <div className="mb-5">
-                            <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '11px', letterSpacing: '2px' }}><Check size={14} className="text-success" /> RECOMMENDED TAPS</h4>
+                            <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}><Check size={14} className="text-success" /> RECOMMENDED TAPS</h4>
                             <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                               {compatible.map((tap, idx) => {
                                 const isChosen = assigned?.name === tap.name;
@@ -1649,9 +1649,9 @@ const InstantPricing = () => {
                                         {isChosen && <div className="bg-success rounded-circle p-1 text-white shadow-sm d-flex align-items-center justify-content-center" style={{ width: '22px', height: '22px' }}><Check size={12} strokeWidth={4} /></div>}
                                       </div>
                                       <div className="d-flex align-items-center gap-2">
-                                        <span className={`fw-bold font-monospace ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '10px' }}>{tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
+                                        <span className={`fw-bold font-monospace ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
                                         <div className={`rounded-circle ${isChosen ? 'bg-white opacity-40' : 'bg-light-subtle'}`} style={{ width: '3px', height: '3px' }} />
-                                        <span className={`fw-black ${isChosen ? 'text-white ripple-infinite' : 'text-danger'}`} style={{ fontSize: '11px' }}>+${tap.price || '0.00'}/HOLE</span>
+                                        <span className={`fw-black ${isChosen ? 'text-white ripple-infinite' : 'text-danger'}`} style={{ fontSize: '13px' }}>+${tap.price || '0.00'}/HOLE</span>
                                       </div>
                                     </div>
                                   </motion.button>
@@ -1663,7 +1663,7 @@ const InstantPricing = () => {
 
                         {incompatible.length > 0 && (
                           <div>
-                            <h4 className="fw-black text-muted fs-6 mb-4 d-flex align-items-center gap-2 opacity-50" style={{ letterSpacing: '2px' }}><AlertTriangle size={18} /> INCOMPATIBLE TAP SIZES (SELECTABLE WITH WARNING)</h4>
+                            <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2 opacity-50" style={{ letterSpacing: '2px', fontSize: '13px' }}><AlertTriangle size={18} /> INCOMPATIBLE TAP SIZES (SELECTABLE WITH WARNING)</h4>
                             <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
                               {incompatible.map((tap, idx) => {
                                 const isChosen = assigned?.name === tap.name;
@@ -1673,9 +1673,9 @@ const InstantPricing = () => {
                                       <AlertCircle size={20} />
                                     </div>
                                     <div className="flex-grow-1">
-                                      <strong className={`d-block fw-black mb-1 ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '13px' }}>{tap.name}</strong>
-                                      <span className={`fw-bold d-block ${isChosen ? 'text-white opacity-80' : 'text-danger'}`} style={{ fontSize: '10px' }}>Requires {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
-                                      <span className={`small ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '11px' }}>+${tap.price || '0.00'}/HOLE</span>
+                                      <strong className={`d-block fw-black mb-1 ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '15px' }}>{tap.name}</strong>
+                                      <span className={`fw-bold d-block ${isChosen ? 'text-white opacity-80' : 'text-danger'}`} style={{ fontSize: '12px' }}>Requires {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
+                                      <span className={`fw-black ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '13px' }}>+${tap.price || '0.00'}/HOLE</span>
                                     </div>
                                   </motion.button>
                                 );
@@ -1698,7 +1698,7 @@ const InstantPricing = () => {
               </div>
 
               <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
-                <button className="btn btn-link text-muted text-decoration-none fw-bold small hover-text-dark transition-all" onClick={() => setSelectedTaps(p => { const n = { ...p }; delete n[activeTapHole.id]; return n; })}>CLEAR SELECTION</button>
+                <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedTaps(p => { const n = { ...p }; delete n[activeTapHole.id]; return n; })}>CLEAR SELECTION</button>
                 <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveTapHole(null)}>DISMISS CONFIGURATOR</button>
               </div>
             </motion.div>

@@ -4,12 +4,33 @@ import { CartContext } from './CartContext';
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState(() => {
     const saved = localStorage.getItem('dms_cart');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      const items = JSON.parse(saved);
+      // Re-hydrate file object if missing using tempPath for persistence établissements
+      return items.map(item => {
+        if (!item.file && item.tempPath) {
+          return {
+            ...item,
+            file: {
+              name: item.fileName,
+              path: item.tempPath.startsWith('http') ? item.tempPath : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000'}/${item.tempPath}`
+            }
+          };
+        }
+        return item;
+      });
+    } catch (e) {
+      console.error("Cart hydration error:", e);
+      return [];
+    }
   });
 
   useEffect(() => {
-    // Only persist serializable data
+    // Only persist serializable data établissement
     const serializableItems = cartItems.map(item => {
+      // Keep everything except the binary file object (which contains the Blob)
+      // We rely on tempPath for re-hydration after refresh établissement
       const { file: _, ...serializable } = item;
       return serializable;
     });

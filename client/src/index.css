@@ -9799,7 +9799,7 @@ body.qf-active footer {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     z-index: 5000;
@@ -9905,7 +9905,7 @@ body.qf-active footer {
 }
 
 .search-item.selected::before {
-    content: \\;
+    content: "";
     position: absolute;
     left: 0;
     top: 0;
