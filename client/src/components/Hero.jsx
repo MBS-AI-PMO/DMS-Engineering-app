@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 
@@ -34,9 +35,11 @@ const Hero = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.5, delay: 0.4 }}
                 >
-                    <button className="btn-hero-primary">
-                        BUILD NOW <span className="btn-icon">🚀</span>
-                    </button>
+                    <Link to="/get-instant-pricing" className="btn-hero-primary-link" style={{ textDecoration: 'none' }}>
+                        <button className="btn-hero-primary">
+                            BUILD NOW <span className="btn-icon">🚀</span>
+                        </button>
+                    </Link>
                 </motion.div>
             </div>
         </section>
