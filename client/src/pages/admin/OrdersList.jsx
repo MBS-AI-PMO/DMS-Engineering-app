@@ -159,7 +159,7 @@ const AdminOrdersList = () => {
                 </div>
             </motion.div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className='align-items-center'>
                 <div className="admin-search-wrapper" style={{ flex: 1 }}>
                     <Search size={20} />
                     <input
@@ -173,7 +173,7 @@ const AdminOrdersList = () => {
                     <button
                         onClick={handleDeleteAll}
                         style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
+                            display: 'flex', alignItems: 'center',
                             padding: '12px 20px', borderRadius: '10px', border: '1px solid rgba(227,27,35,0.3)',
                             background: 'rgba(227,27,35,0.08)', color: '#e31b23',
                             fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',

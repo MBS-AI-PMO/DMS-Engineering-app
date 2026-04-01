@@ -58,9 +58,11 @@ const InstantPricing = () => {
   const handleProceedToReview = () => {
     if (!selectedFile || !selectedMetal || !dimensions) return;
 
-    const total = parseFloat(priceEstimate || 0) +
+    const totalBatch = parseFloat(priceEstimate || 0) +
       Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
       (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0);
+
+    const unitPrice = totalBatch / quantity;
 
     const config = {
       productionService: selectedProductionService,
@@ -79,10 +81,10 @@ const InstantPricing = () => {
       tempPath: selectedFile.tempPath,
       configuration: config,
       pricing: {
-        base: parseFloat(priceEstimate || 0),
-        taps: Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0),
-        finish: selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0,
-        total: total
+        base: parseFloat(priceEstimate || 0) / quantity,
+        taps: Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) / quantity,
+        finish: (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0) / quantity,
+        total: unitPrice
       },
       quantity: quantity
     });
