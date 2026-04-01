@@ -61,7 +61,7 @@ export default function MetalsList() {
                         <span className="stat-label">Total Metals</span>
                     </div>
                 </div>
-                <div className="admin-stat-card">
+                <div className="admin-stat-card mt-3">
                     <div className="stat-card-icon"><Filter size={20} /></div>
                     <div className="stat-card-body">
                         <span className="stat-count">{categories.length}</span>
@@ -71,7 +71,7 @@ export default function MetalsList() {
             </div>
 
             <div className="admin-toolbar premium">
-                <div className="admin-search">
+                <div className="admin-search mt-3">
                     <Search size={18} />
                     <input
                         type="text"
@@ -80,7 +80,7 @@ export default function MetalsList() {
                         onChange={e => setSearch(e.target.value)}
                     />
                 </div>
-                <div className="admin-filter">
+                <div className="admin-filter mt-3">
                     <Filter size={18} />
                     <select value={filterCat} onChange={e => setFilterCat(e.target.value)}>
                         <option value="">All Categories</option>
