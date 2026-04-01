@@ -2,16 +2,26 @@ import sys
 import json
 import os
 import cadquery as cq
+from pathlib import Path
+
+def hex_to_rgb(hex_str):
+    """Converts #RRGGBB to (r, g, b) normalized 0.0-1.0"""
+    hex_str = hex_str.lstrip('#')
+    if len(hex_str) == 3:
+        hex_str = ''.join([c*2 for c in hex_str])
+    r, g, b = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    return (r / 255.0, g / 255.0, b / 255.0)
 
 def process_configured_model(input_path, output_path, configuration_json):
     """
-    Physical hole cutting into a STEP file based on configuration metadata.
+    Physical hole cutting and high-fidelity coloring with coordinate logging
     """
     try:
+        print(f"[CAD-KERNEL] Processing: {input_path}")
         # Load the base model
-        model = cq.importer.importStep(input_path)
+        model = cq.importers.importStep(input_path)
         
-        # Robust JSON Loading: support both raw string and file path établissement
+        # Robust JSON Loading
         if os.path.exists(configuration_json):
             with open(configuration_json, "r", encoding="utf-8") as f:
                 config = json.load(f)
@@ -19,71 +29,54 @@ def process_configured_model(input_path, output_path, configuration_json):
             config = json.loads(configuration_json)
             
         selected_taps = config.get('selectedTaps', {})
+        print(f"[CAD-KERNEL] Found {len(selected_taps)} tapped holes to process.")
         
-        if not selected_taps:
-            # Just copy the file if no modifications needed
-            model.exportStep(output_path)
-            return True
-
-        # Perform the cuts
-        # active_model = model
-        
-        # We collect all "hole tools" and cut them at once
-        cutting_tools = []
-        
-        for tap_id, tap_info in selected_taps.items():
-            hole_data = tap_info.get('hole')
-            if not hole_data:
-                continue
+        # 1. Perform Tapping Cuts
+        if selected_taps:
+            for tap_id, tap_info in selected_taps.items():
+                if not tap_info: continue 
+                hole_data = tap_info.get('hole')
+                if not hole_data: continue
                 
-            pos = hole_data.get('position') # {x, y, z}
-            diameter = hole_data.get('diameterInches', 0) * 25.4 # convert to mm
-            # We use a slightly longer cylinder to ensure a clean cut
-            height = 100 
-            
-            if pos:
-                # Create a cylinder tool at the hole position
-                # Note: OpenCASCADE/CadQuery coordinates might need alignment with Three.js
-                tool = cq.Workplane("XY").center(pos['x'], pos['y']).cboreHole(diameter, diameter, height)
-                # For simplicity in this specialized script, we use a basic cylinder
-                # In a production environment, we'd align the normal vector of the face
-                tool = cq.Workplane("XY").workplane(offset=pos['z'] - (height/2)).center(pos['x'], pos['y']).circle(diameter/2).extrude(height)
-                cutting_tools.append(tool)
-
-        if cutting_tools:
-            # Union all tools and cut from base
-            for tool in cutting_tools:
-                model = model.cut(tool)
+                pos = hole_data.get('position')
+                diameter = hole_data.get('diameterInches', 0) * 25.4 
+                height = 200 # Extra length for through-hole
+                
+                if pos:
+                    # Robust parsing for [x,y,z] OR {x,y,z}
+                    if isinstance(pos, dict):
+                        px, py, pz = pos.get('x', 0), pos.get('y', 0), pos.get('z', 0)
+                    elif isinstance(pos, (list, tuple)) and len(pos) >= 3:
+                        px, py, pz = pos[0], pos[1], pos[2]
+                    else:
+                        px, py, pz = 0, 0, 0
+                    
+                    print(f"[CAD-KERNEL] CUTTING HOLE: id={tap_id}, x={px:.2f}, y={py:.2f}, z={pz:.2f}, dia={diameter:.2f}mm")
+                    
+                    # Create cutting tool shape at the exact DESIGN coordinates
+                    tool = cq.Workplane("XY").workplane(offset=pz - (height/2)).center(px, py).circle(diameter/2).extrude(height).val()
+                    # Apply cut directly to the shape
+                    model = cq.Workplane(model.val().cut(tool))
         
-        # Apply World-Class Manufacturing Aesthetics
-        # 1. Global Anodizing Color
-        final_color = config.get('anodizingColor', {}).get('color', '#808080')
-        if not final_color.startswith('#'):
-            # Convert decimal or name color to Hex if needed
-            pass
+        # 2. Apply Visual Finishes
+        hex_color = config.get('anodizingColor', {}).get('color', '#808080')
+        rgb = hex_to_rgb(hex_color)
+        part_color = cq.Color(rgb[0], rgb[1], rgb[2], 1.0)
 
-        # 2. Identify Tapped Holes for Face Coloring
-        # Note: In CadQuery, we can find the inner faces of the cylinder tools we just cut
-        # For simplicity and high-fidelity output, we tag the cut faces with Royal Blue
-        tapping_color = cq.Color(0.25, 0.41, 0.88, 1.0) # Royal Blue (RPGA)
-        part_color = cq.Color(final_color)
-
-        # Export with color metadata using CQ's assembly/metadata support
-        # We wrap the model in an assembly to preserve face colors and metadata
-        assy = cq.Assembly(model, color=part_color, name="Manufacturing_Part")
-        
-        # Color specific faces created by tapping
-        # In a robust production environment, we'd use .faces() selector that matches the tool positions
-        # Here we apply the Royal Blue to small cylinder faces (likely the tapped holes)
-        # for f in model.faces(">Z").objects: # example logic
-        #     pass
-
-        # Final Export to STEP (standard AP214/AP242 support for colors)
+        # 3. Wrapping in Assembly
+        assy = cq.Assembly(model, color=part_color, name="Configured_Manufacturing_Part")
+                
+        # Export the Final Production Asset
+        path_obj = Path(output_path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
         assy.save(output_path, "STEP")
+        print(f"[CAD-KERNEL] Success: Configured model saved to {output_path}")
         return True
 
     except Exception as e:
-        print(f"Error processing configured model: {str(e)}")
+        print(f"[CAD-KERNEL] CRITICAL ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 if __name__ == "__main__":
@@ -93,9 +86,9 @@ if __name__ == "__main__":
         
     in_path = sys.argv[1]
     out_path = sys.argv[2]
-    config_str = sys.argv[3]
+    config_file = sys.argv[3]
     
-    success = process_configured_model(in_path, out_path, config_str)
+    success = process_configured_model(in_path, out_path, config_file)
     if success:
         sys.exit(0)
     else:

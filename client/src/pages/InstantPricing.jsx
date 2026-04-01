@@ -533,7 +533,14 @@ const InstantPricing = () => {
           clearInterval(progressTimer); setImportProgress(100); setTimeout(() => setIsImporting(false), 800);
           const m = viewer.GetModel(); modelRef.current = m; extractDimensions(m);
           if (pendingAxisRef.current) { const a = pendingAxisRef.current; pendingAxisRef.current = null; setTimeout(() => setAxisCamera(a), 100); }
-          else { setTimeout(() => { viewer.FitToWindow(); viewer.Render(); }, 150); }
+          else {
+            setTimeout(() => {
+              if (viewer && typeof viewer.FitToWindow === 'function') {
+                viewer.FitToWindow();
+                viewer.Render();
+              }
+            }, 150);
+          }
           try {
             const v = viewer.GetViewer();
             const bb = OV.GetBoundingBox(m);
@@ -575,7 +582,12 @@ const InstantPricing = () => {
             });
           } catch { /* ignored */ }
           setModelLoadCount(c => c + 1);
-          setTimeout(() => { viewer.FitToWindow(); viewer.Render(); }, 200);
+          setTimeout(() => {
+            if (viewer && typeof viewer.FitToWindow === 'function') {
+              viewer.FitToWindow();
+              viewer.Render();
+            }
+          }, 200);
         }
       });
       localViewer = viewer; viewerInstance.current = viewer; viewer.LoadModelFromFileList([selectedFile.file]);
@@ -692,33 +704,28 @@ const InstantPricing = () => {
 
         detectedHoles.forEach(hole => {
           if (!hole.position) return;
-          const dia = hole.diameterInches || 0.1;
+          const dia = hole.diameter_mm ? hole.diameter_mm / 25.4 : (hole.diameterInches || 0.1);
           const mmDia = dia * 25.4;
+
+          // Safety Cap: Filter out accidental large features
+          if (mmDia > 100.0) return;
           const isConfigured = tapOptions.some(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
           const isTapped = !!selectedTaps[hole.id];
           const isActive = activeTapHole?.id === hole.id;
 
           let color = isConfigured ? 0x10b981 : 0xef4444;
           if (isTapped) color = 0x4169e1;
-          if (isActive) color = 0x000000;
+          if (isActive) color = 0xe31b23;
 
           const radius = mmDia / 2;
 
-          // Debugging hole metadata to resolve scaling issues - v3 (Axial Midpoint Sync)
-          if (isActive) {
-            console.log(`[3D-PRECISION-v3] Hole ${hole.id}: depth_mm=${hole.depth_mm}, hasPos=${!!hole.position}, globalT=${dimensions?.mm?.t}`);
-          }
+          // Unified "Hollow Tube" Geometry - Capped at EXACT part thickness
+          const partT = dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0;
+          let height = partT;
 
-          // Prioritize axial midpoint-calculated depth (orientation-independent)
-          let height = hole.depth_mm || (dimensions?.mm?.t ? parseFloat(dimensions.mm.t) : 2.0);
-
-          if (!hole.depth_mm && height > 3.0) {
-            // Skewed AABB detection: if thickness seems impossibly high for sheet metal, cap it
-            height = 2.0;
-          }
-
-          // Unified "Hollow Tube" Geometry - Scaled to EXACT individual hole depth
-          const geo = new THREE.CylinderGeometry(radius * 1.01, radius * 1.01, height, 32, 1, true);
+          // Use Open-Ended cylinder with DoubleSide material for "Hollow" look
+          const safeRadius = Math.max(radius, 0.5);
+          const geo = new THREE.CylinderGeometry(safeRadius, safeRadius, height, 32, 1, true);
 
           let mat;
           if (isTapped) {
@@ -1129,8 +1136,8 @@ const InstantPricing = () => {
                               </defs>
                               <g transform={`translate(0, ${viewBoxData.minY * 2 + viewBoxData.height}) scale(1, -1)`}>
                                 {detectedHoles.map(hole => {
-                                  const dia = hole.diameterInches || 0.1;
-                                  const mmDia = dia * 25.4;
+                                  const mmDia = (hole.diameterInches || 0.1) * 25.4;
+                                  if (mmDia > 100.0) return null;
                                   const isTapped = !!selectedTaps[hole.id];
                                   const isActive = activeTapHole?.id === hole.id;
 

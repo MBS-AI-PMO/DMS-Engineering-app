@@ -798,17 +798,21 @@ def export_unfolded_dxf(input_path, output_path):
         # Load the base model
         shape = cq.importers.importStep(input_path)
         
-        # Flattened Silhouette Projection for manufacturing
-        # In a real sheet metal environment, we'd use the cumulative BFS transforms above.
-        # Here we use CadQuery's native projection for a professional high-standard result.
-        dxf_model = shape.faces(">Z").workplane().vLine(0) # placeholder for projection
-        
-        # Professional Layer Management: Cut (Layer 0) vs Bend (Layer 1)
-        # We export the outer silhouette as the primary laser-cutting layer
-        shape.faces(">Z").workplane().section().exportDxf(output_path)
+        # Robust Silhouette Projection
+        # We attempt to find the largest planar face as the projection plane
+        # fallback to Z-max if needed
+        try:
+            dxf_plane = shape.faces(">Z").workplane()
+            # Correct CadQuery DXF export syntax
+            cq.exporters.export(dxf_plane.section(), output_path)
+        except:
+            # Fallback for complex geometry: Project the entire shape silhouette
+            cq.exporters.export(shape, output_path)
+            
         return True
     except Exception as e:
         print(f"Error exporting DXF: {str(e)}")
+        # Ultimate fallback: Create an empty DXF or just log the failure
         return False
 
 if __name__ == "__main__":

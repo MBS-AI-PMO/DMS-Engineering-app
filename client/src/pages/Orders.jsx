@@ -12,7 +12,8 @@ import {
     FileText,
     Boxes,
     Search,
-    ShieldCheck
+    ShieldCheck,
+    Trash2
 } from 'lucide-react';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import '../styles/PremiumOrders.css';
@@ -39,16 +40,30 @@ const ItemRow = React.memo(({ item, onPreview }) => {
             </div>
             <div className="item-qty">{item.quantity}</div>
             <div className="item-price">${parseFloat(item.unit_price).toFixed(2)}</div>
-            <div className="item-actions">
-                <button className="btn-icon" onClick={() => onPreview(item)} title="Preview 3D">
-                    <Eye size={18} />
-                </button>
-                <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
-                    <Download size={18} />
-                </a>
-                <a href={`/${item.configured_file_path}`} download className="btn-icon secondary" title="Download Configured File">
-                    <FileText size={18} />
-                </a>
+            <div className="item-actions-group">
+                <div className="action-pill">
+                    <span className="pill-label">Source Assets</span>
+                    <button className="btn-icon" onClick={() => onPreview(item, 'original')} title="Preview Raw 3D">
+                        <Eye size={16} />
+                    </button>
+                    <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
+                        <Download size={16} />
+                    </a>
+                </div>
+                <div className="action-pill manufacturing">
+                    <span className="pill-label">Manufacturing Part</span>
+                    <button className="btn-icon" onClick={() => onPreview(item, 'configured')} title="Preview Final 3D">
+                        <Eye size={16} />
+                    </button>
+                    <a href={`/${item.configured_file_path}`} download className="btn-icon" title="Download STEP File">
+                        <FileText size={16} />
+                    </a>
+                    {item.flat_file_path && (
+                        <a href={`/${item.flat_file_path}`} download className="btn-icon" title="Download DXF Flat Pattern">
+                            <Download size={16} style={{ transform: 'rotate(180deg)' }} />
+                        </a>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -77,7 +92,7 @@ const OrderItemsList = React.memo(({ items, loading }) => {
                 <span>Actions</span>
             </div>
             {items.map((item) => (
-                <ItemRow key={item.id} item={item} onPreview={(it) => window.dispatchEvent(new CustomEvent('open-preview', { detail: it }))} />
+                <ItemRow key={item.id} item={item} onPreview={(it, mode) => window.dispatchEvent(new CustomEvent('open-preview', { detail: { item: it, mode } }))} />
             ))}
         </div>
     );
@@ -138,6 +153,24 @@ const Orders = () => {
             setExpandedOrder(orderId);
         } else {
             setExpandedOrder(null);
+        }
+    };
+
+    const handleDeleteOrder = async (orderId, e) => {
+        e.stopPropagation();
+        if (!window.confirm(`Are you sure you want to remove Order #${orderId} from your history?`)) return;
+
+        try {
+            const response = await fetch(`/api/orders/${orderId}/user-delete`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                setOrders(prev => prev.filter(o => o.id !== orderId));
+                if (expandedOrder === orderId) setExpandedOrder(null);
+            }
+        } catch (err) {
+            console.error('Failed to delete order:', err);
         }
     };
 
@@ -206,7 +239,15 @@ const Orders = () => {
                                             {getStatusBadge(order.status)}
                                         </div>
                                     </div>
-                                    <div className="order-toggle">
+                                    <div className="order-toggle" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <button
+                                            className="btn-icon delete-btn"
+                                            onClick={(e) => handleDeleteOrder(order.id, e)}
+                                            title="Remove from history"
+                                            style={{ color: '#ef4444', opacity: 0.6 }}
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
                                         {expandedOrder === order.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                     </div>
                                 </div>
@@ -243,17 +284,19 @@ const Orders = () => {
                             animate={{ scale: 1, opacity: 1 }}
                         >
                             <div className="preview-modal-header">
-                                <h3>{previewItem.file_name}</h3>
+                                <h3>{previewItem.item.file_name} <span style={{ opacity: 0.5, fontWeight: 400, marginLeft: '10px' }}>• {previewItem.mode === 'original' ? 'Raw Source' : 'Configured Model'}</span></h3>
                                 <button onClick={() => setPreviewItem(null)}>&times;</button>
                             </div>
                             <div className="preview-body">
                                 <div className="preview-viewer-wrap">
                                     <ProjectViewer
                                         file={{
-                                            name: previewItem.file_name,
-                                            path: previewItem.original_file_path ? '/' + previewItem.original_file_path : null
+                                            name: previewItem.item.file_name,
+                                            path: previewItem.mode === 'original'
+                                                ? (previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null)
+                                                : (previewItem.item.configured_file_path ? '/' + previewItem.item.configured_file_path : null)
                                         }}
-                                        configuration={parseConfig(previewItem.configuration_json)}
+                                        configuration={previewItem.mode === 'configured' ? parseConfig(previewItem.item.configuration_json) : {}}
                                     />
                                 </div>
                                 <div className="preview-meta">
@@ -261,16 +304,16 @@ const Orders = () => {
                                     <div className="meta-grid">
                                         <div className="meta-item">
                                             <span className="label">Material</span>
-                                            <span className="value">{parseConfig(previewItem.configuration_json).metal?.name}</span>
+                                            <span className="value">{parseConfig(previewItem.item.configuration_json).metal?.name}</span>
                                         </div>
                                         <div className="meta-item">
                                             <span className="label">Thickness</span>
-                                            <span className="value">{parseConfig(previewItem.configuration_json).thickness}mm</span>
+                                            <span className="value">{parseConfig(previewItem.item.configuration_json).thickness}mm</span>
                                         </div>
-                                        {parseConfig(previewItem.configuration_json).anodizingColor && (
+                                        {parseConfig(previewItem.item.configuration_json).anodizingColor && (
                                             <div className="meta-item">
                                                 <span className="label">Anodizing</span>
-                                                <span className="value">{parseConfig(previewItem.configuration_json).anodizingColor.name}</span>
+                                                <span className="value">{parseConfig(previewItem.item.configuration_json).anodizingColor.name}</span>
                                             </div>
                                         )}
                                         <div className="meta-item">

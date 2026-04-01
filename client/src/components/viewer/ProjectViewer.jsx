@@ -11,21 +11,12 @@ const ProjectViewer = ({
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
   const [modelLoadCount, setModelLoadCount] = useState(0);
+  const [measuredThickness, setMeasuredThickness] = useState(3);
   const onDimRef = useRef(onDimensionsExtracted);
 
-  // Sync ref without triggering re-effects
   useEffect(() => {
     onDimRef.current = onDimensionsExtracted;
   }, [onDimensionsExtracted]);
-
-  // Initial Library Configuration
-  useEffect(() => {
-    try {
-      OV.SetExternalLibLocation('/libs/'); // Ensure workers are loaded correctly
-    } catch (e) {
-      console.warn("ProjectViewer Lib Config Warning:", e);
-    }
-  }, []);
 
   const isStepFile = (filename) => {
     const name = filename?.toLowerCase() ?? '';
@@ -44,7 +35,7 @@ const ProjectViewer = ({
       try {
         viewerInstance.current.Destroy();
       } catch (err) {
-        console.error("ProjectViewer Cleanup Error:", err);
+        console.warn("ProjectViewer Cleanup Warning:", err);
       }
       viewerInstance.current = null;
     }
@@ -54,32 +45,38 @@ const ProjectViewer = ({
         backgroundColor: new OV.RGBAColor(248, 249, 250, 255),
         edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(65, 105, 225), 1),
         onModelLoaded: () => {
-          const model = viewer.GetModel();
-
-          // World-class dimension extraction using bounding box logic
-          if (onDimRef.current && model) {
-            const boundingBox = OV.GetBoundingBox(model);
-            const sizes = [
-              boundingBox.max.x - boundingBox.min.x,
-              boundingBox.max.y - boundingBox.min.y,
-              boundingBox.max.z - boundingBox.min.z
-            ].sort((a, b) => a - b);
-
-            // Map to standard L/W/T
-            onDimRef.current({ l: sizes[2], w: sizes[1], t: sizes[0] });
-          }
-
-          // Enhance the viewer scene with premium lighting
           const threeViewer = viewer.GetViewer();
+
+          // NATIVE PRECISION BYPASS: Use THREE.js native Box3 (Stable 0.18.0)
           if (threeViewer?.scene) {
+            // 1. DIMENSION EXTRACTION
+            const box = new THREE.Box3().setFromObject(threeViewer.scene);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+
+            const dimensions = [size.x, size.y, size.z].sort((a, b) => a - b);
+            const t = dimensions[0];
+            setMeasuredThickness(t);
+
+            if (onDimRef.current) {
+              onDimRef.current({ l: dimensions[2], w: dimensions[1], t: t });
+            }
+
+            // 2. SCENE LIGHTING
             threeViewer.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-            const spotlight = new THREE.DirectionalLight(0xffffff, 1.0);
-            spotlight.position.set(100, 100, 100);
-            threeViewer.scene.add(spotlight);
+            const light = new THREE.DirectionalLight(0xffffff, 1.0);
+            light.position.set(100, 100, 100);
+            threeViewer.scene.add(light);
+
+            // 3. ZOOM TO FIT (Native Three.js Stable Method)
+            const sphere = new THREE.Sphere();
+            box.getBoundingSphere(sphere);
+
+            // Bypass buggy GetBoundingBox call in the library
+            threeViewer.FitSphereToWindow(sphere, false);
+            threeViewer.Render();
           }
 
-          viewer.FitToWindow();
-          viewer.Render();
           setModelLoadCount(c => c + 1);
         },
         onLoadError: (loadError) => {
@@ -89,7 +86,7 @@ const ProjectViewer = ({
 
       viewerInstance.current = viewer;
 
-      // Robust file source handling (Local File vs Remote URL persistent session)
+      // Model Loading
       if (file instanceof File) {
         viewer.LoadModelFromFileList([file]);
       } else if (file && (file.name || file.path)) {
@@ -97,25 +94,36 @@ const ProjectViewer = ({
         viewer.LoadModelFromUrlList([remoteUrl]);
       }
 
-      // Responsive observer for dashboard layouts
+      // Responsive Observer
       const resizeObserver = new ResizeObserver(() => {
         if (viewerInstance.current) {
-          viewerInstance.current.FitToWindow();
-          viewerInstance.current.Render();
+          const v = viewerInstance.current.GetViewer();
+          if (v?.scene) {
+            const box = new THREE.Box3().setFromObject(v.scene);
+            const sphere = new THREE.Sphere();
+            box.getBoundingSphere(sphere);
+            v.FitSphereToWindow(sphere, false);
+            v.Render();
+          }
         }
       });
       resizeObserver.observe(currentContainer);
 
       return () => {
         resizeObserver.disconnect();
-        try { viewer.Destroy(); } catch (e) { /* ignore */ }
+        // Robust cleanup guard against DOM race conditions
+        if (viewerInstance.current && currentContainer.contains(viewerInstance.current.canvas)) {
+          try { viewer.Destroy(); } catch (e) {
+            console.warn("ProjectViewer Auto-Cleanup suppressed error:", e);
+          }
+        }
       };
     } catch (err) {
       console.error("ProjectViewer Initialization Error:", err);
     }
-  }, [file]); // Only re-run model core if file changes
+  }, [file]);
 
-  // --- Dynamic Styling & Manufacturing Markers Effect ---
+  // --- Manufacturing Markers Effect ---
   useEffect(() => {
     if (!viewerInstance.current || modelLoadCount === 0) return;
 
@@ -124,27 +132,16 @@ const ProjectViewer = ({
         const threeViewer = viewerInstance.current.GetViewer();
         if (!threeViewer?.scene) return;
 
-        // Thread-safe marker cleanup
-        const existingMarkers = [];
-        threeViewer.scene.traverse(obj => {
-          if (obj.isTapMarker) existingMarkers.push(obj);
-        });
-        existingMarkers.forEach(m => {
-          if (m.parent) m.parent.remove(m);
-          if (m.geometry) m.geometry.dispose();
-          if (m.material) {
-            if (Array.isArray(m.material)) m.material.forEach(mat => mat.dispose());
-            else m.material.dispose();
-          }
-        });
+        // Clean Markers
+        const existing = [];
+        threeViewer.scene.traverse(obj => { if (obj.isTapMarker) existing.push(obj); });
+        existing.forEach(m => { if (m.parent) m.parent.remove(m); });
 
-        // Apply Premium Material Finishes
+        // Apply Premium Multi-Phase Finishes
         threeViewer.scene.traverse(obj => {
           if (!obj.isMesh || !obj.material) return;
-          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-
-          materials.forEach(mat => {
-            if (!mat) return;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach(mat => {
             if (configuration.anodizingColor?.color) {
               mat.color.set(configuration.anodizingColor.color);
             } else if (configuration.metal?.color) {
@@ -156,23 +153,35 @@ const ProjectViewer = ({
           });
         });
 
-        // Render Royal Blue Tap & Hole Markers
+        // 1:1 COORDINATE MAPPING (Handles both Array and Object formats)
         if (configuration.selectedTaps) {
           Object.values(configuration.selectedTaps).forEach(tap => {
             if (!tap.hole?.position) return;
-            const pos = tap.hole.position;
-            const radius = (tap.hole.diameterInches || 0.1) * 25.4 / 2;
 
-            const geometry = new THREE.CylinderGeometry(radius, radius * 1.05, 3, 32);
+            // Robust parsing for [x,y,z] OR {x,y,z}
+            const rawPos = tap.hole.position;
+            const pos = {
+              x: Array.isArray(rawPos) ? rawPos[0] : (rawPos.x || 0),
+              y: Array.isArray(rawPos) ? rawPos[1] : (rawPos.y || 0),
+              z: Array.isArray(rawPos) ? rawPos[2] : (rawPos.z || 0)
+            };
+
+            const mmDia = (tap.hole.diameterInches || 0.1) * 25.4;
+            const radius = mmDia / 2;
+            const height = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
+
+            const geometry = new THREE.CylinderGeometry(radius, radius, height + 2, 32);
             const material = new THREE.MeshStandardMaterial({
-              color: 0x4169e1, // Royal Blue High-End Marker
-              emissive: 0x4169e1,
-              emissiveIntensity: 0.4,
+              color: 0x4169E1, // Royal Blue High-Contrast
               transparent: true,
-              opacity: 0.9
+              opacity: 0.9,
+              emissive: 0x4169E1,
+              emissiveIntensity: 0.2
             });
             const marker = new THREE.Mesh(geometry, material);
             marker.isTapMarker = true;
+
+            // Placement in design world coordinates
             marker.position.set(pos.x, pos.y, pos.z);
             marker.rotateX(Math.PI / 2);
 
@@ -182,15 +191,12 @@ const ProjectViewer = ({
 
         threeViewer.Render();
       } catch (styleError) {
-        console.warn("ProjectViewer Sync Error:", styleError);
+        console.warn("Marker Precision Error:", styleError);
       }
     };
 
     applyManufacturingStyles();
-    // Re-check after layout stabilization
-    const timer = setTimeout(applyManufacturingStyles, 250);
-    return () => clearTimeout(timer);
-  }, [modelLoadCount, configuration]);
+  }, [modelLoadCount, configuration, measuredThickness]);
 
   return (
     <div

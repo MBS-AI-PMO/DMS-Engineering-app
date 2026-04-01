@@ -24,7 +24,7 @@ import '../styles/PremiumCheckout.css';
 const Checkout = () => {
     const { cartItems, cartTotal, clearCart } = useCart();
     const { user } = useAuth();
-    const { showToast } = useToast();
+    const showToast = useToast();
     const navigate = useNavigate();
 
     const [isSubmitting, setIsSubmitting] = useState(false);

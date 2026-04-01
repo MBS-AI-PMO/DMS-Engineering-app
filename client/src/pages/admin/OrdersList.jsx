@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ClipboardList,
@@ -14,20 +14,27 @@ import {
     ChevronRight,
     Filter,
     FileText,
-    Trash2
+    Trash2,
+    RotateCcw,
+    Trash
 } from 'lucide-react';
+import ProjectViewer from '../../components/viewer/ProjectViewer';
+import { generateOrderReport } from '../../utils/generateOrderReport';
 import '../../styles/PremiumAdminOrders.css';
 
 const AdminOrdersList = () => {
+    const [activeTab, setActiveTab] = useState('active'); // 'active' or 'deleted'
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [previewItem, setPreviewItem] = useState(null);
 
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
+        setLoading(true);
         try {
-            const response = await fetch('/api/orders/admin/all');
+            const endpoint = activeTab === 'active' ? '/api/orders/admin/all' : '/api/orders/admin/deleted';
+            const response = await fetch(endpoint);
             const data = await response.json();
             if (data.success) {
                 setOrders(data.data);
@@ -37,34 +44,45 @@ const AdminOrdersList = () => {
         } finally {
             setLoading(false);
         }
+    }, [activeTab]);
+
+    const handleSoftDelete = async (orderId, e) => {
+        e.stopPropagation();
+        try {
+            const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST' });
+            if ((await response.json()).success) fetchOrders();
+        } catch (err) { console.error(err); }
     };
 
-    const handleDeleteOrder = async (orderId, e) => {
+    const handleRestore = async (orderId, e) => {
         e.stopPropagation();
-        if (!window.confirm(`Are you sure you want to permanently delete Order #${orderId}? This will remove all associated manufacturing files.`)) return;
+        try {
+            const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST' });
+            if ((await response.json()).success) fetchOrders();
+        } catch (err) { console.error(err); }
+    };
+
+    const handlePermanentDelete = async (orderId, e) => {
+        e.stopPropagation();
+        if (!window.confirm(`PERMANENT DELETE: Are you sure you want to remove Order #${orderId} from the database? This action is irreversible for the Admin side.`)) return;
 
         try {
-            const response = await fetch(`/api/orders/${orderId}`, {
-                method: 'DELETE'
-            });
-            const data = await response.json();
-            if (data.success) {
-                fetchOrders();
-                if (selectedOrder?.id === orderId) {
-                    setSelectedOrder(null);
-                }
-            } else {
-                alert('Failed to delete: ' + data.error);
-            }
-        } catch (err) {
-            console.error('Error deleting order:', err);
-            alert('Failed to delete order. Check console.');
-        }
+            const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+            if ((await response.json()).success) fetchOrders();
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDeleteAll = async () => {
+        if (!window.confirm(`PERMANENT DELETE ALL: This will remove ALL ${orders.length} trashed order(s) from the database forever. This action is irreversible. Continue?`)) return;
+        try {
+            await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE' })));
+            fetchOrders();
+        } catch (err) { console.error(err); }
     };
 
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [fetchOrders]);
 
     const filteredOrders = orders.filter(o =>
         o.id.toString().includes(searchTerm) ||
@@ -72,26 +90,34 @@ const AdminOrdersList = () => {
         o.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const getStatusStyle = (status) => {
-        switch (status) {
-            case 'pending': return { class: 'pending', label: 'Pending Approval' };
-            case 'processing': return { class: 'processing', label: 'In Production' };
-            case 'completed': return { class: 'completed', label: 'Manufacturing Complete' };
-            default: return { class: '', label: status };
+    const STATUS_OPTIONS = [
+        { value: 'pending', label: 'Pending', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+        { value: 'processing', label: 'Processing', color: '#6366f1', bg: 'rgba(99,102,241,0.12)' },
+        { value: 'shipping', label: 'Shipping', color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
+        { value: 'completed', label: 'Completed', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+        { value: 'rejected', label: 'Rejected', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+    ];
+
+    const getStatusMeta = (status) => STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[0];
+
+    const handleStatusChange = async (orderId, newStatus, e) => {
+        e.stopPropagation();
+        try {
+            const res = await fetch(`/api/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+                if (selectedOrder?.id === orderId) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+            }
+        } catch (err) {
+            console.error('Status update failed:', err);
         }
     };
 
-    if (loading) return (
-        <div className="admin-orders-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                style={{ color: '#e31b23', fontWeight: 800, fontSize: '1.2rem' }}
-            >
-                INITIALIZING PRODUCTION QUEUE...
-            </motion.div>
-        </div>
-    );
 
     return (
         <div className="admin-orders-container">
@@ -104,16 +130,60 @@ const AdminOrdersList = () => {
                     <h1>Manufacturing Queue</h1>
                     <p>Global production tracking for precision customer projects</p>
                 </div>
+
+                <div className="admin-tabs" style={{ display: 'flex', gap: '5px', background: 'rgba(0,0,0,0.05)', padding: '5px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.1)' }}>
+                    <button
+                        className={`admin-tab-btn ${activeTab === 'active' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('active')}
+                        style={{
+                            padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                            background: activeTab === 'active' ? '#e31b23' : 'transparent',
+                            color: activeTab === 'active' ? 'white' : '#475569',
+                            fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.3s'
+                        }}
+                    >
+                        Active Orders
+                    </button>
+                    <button
+                        className={`admin-tab-btn ${activeTab === 'deleted' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('deleted')}
+                        style={{
+                            padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                            background: activeTab === 'deleted' ? '#e31b23' : 'transparent',
+                            color: activeTab === 'deleted' ? 'white' : '#475569',
+                            fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.3s'
+                        }}
+                    >
+                        Trash Bin
+                    </button>
+                </div>
             </motion.div>
 
-            <div className="admin-search-wrapper">
-                <Search size={20} />
-                <input
-                    type="text"
-                    placeholder="Search by Order ID, Customer Name or Email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="admin-search-wrapper" style={{ flex: 1 }}>
+                    <Search size={20} />
+                    <input
+                        type="text"
+                        placeholder="Search by Order ID, Customer Name or Email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                {activeTab === 'deleted' && orders.length > 0 && (
+                    <button
+                        onClick={handleDeleteAll}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '12px 20px', borderRadius: '10px', border: '1px solid rgba(227,27,35,0.3)',
+                            background: 'rgba(227,27,35,0.08)', color: '#e31b23',
+                            fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                            transition: 'all 0.2s', whiteSpace: 'nowrap',
+                        }}
+                        title="Permanently delete all trashed orders"
+                    >
+                        <Trash size={15} /> Delete All
+                    </button>
+                )}
             </div>
 
             <div className="admin-orders-grid">
@@ -127,15 +197,36 @@ const AdminOrdersList = () => {
                 </div>
 
                 <div className="admin-queue-list">
-                    <AnimatePresence>
-                        {filteredOrders.map((order) => {
-                            const status = getStatusStyle(order.status);
+                    <AnimatePresence mode="popLayout">
+                        {loading ? (
+                            <>
+                                <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+                                {[1, 2, 3, 4, 5].map(i => (
+                                    <div key={i} className="admin-order-card" style={{ display: 'grid', gridTemplateColumns: '80px 1fr 120px 100px 130px 80px', alignItems: 'center', gap: '12px', padding: '18px 20px' }}>
+                                        <div style={{ width: '50px', height: '28px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 25%, rgba(99,102,241,0.14) 50%, rgba(99,102,241,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div><div style={{ width: '120px', height: '14px', borderRadius: '6px', marginBottom: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /><div style={{ width: '170px', height: '11px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
+                                        <div style={{ width: '90px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div style={{ width: '65px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div style={{ width: '110px', height: '32px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(245,158,11,0.06) 25%, rgba(245,158,11,0.12) 50%, rgba(245,158,11,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                    </div>
+                                ))}
+                            </>
+                        ) : filteredOrders.length === 0 ? (
+                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                No orders found in this section.
+                            </div>
+                        ) : filteredOrders.map((order) => {
+                            const sMeta = getStatusMeta(order.status);
                             return (
                                 <motion.div
                                     key={order.id}
                                     className={`admin-order-card ${selectedOrder?.id === order.id ? 'active' : ''}`}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -8 }}
+                                    transition={{ duration: 0.15 }}
+                                    layout={false}
                                     onClick={() => setSelectedOrder(order)}
                                 >
                                     <div className="order-id-chip">#{order.id}</div>
@@ -151,19 +242,67 @@ const AdminOrdersList = () => {
                                         ${parseFloat(order.total_price).toFixed(2)}
                                     </div>
                                     <div className="order-status">
-                                        <span className={`status-badge ${status.class}`}>
-                                            {status.label}
-                                        </span>
+                                        <select
+                                            value={order.status || 'pending'}
+                                            onClick={e => e.stopPropagation()}
+                                            onChange={e => handleStatusChange(order.id, e.target.value, e)}
+                                            style={{
+                                                appearance: 'none',
+                                                WebkitAppearance: 'none',
+                                                background: sMeta.bg,
+                                                color: sMeta.color,
+                                                border: `1px solid ${sMeta.color}40`,
+                                                padding: '8px 28px 8px 12px',
+                                                borderRadius: '8px',
+                                                fontSize: '0.78rem',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.05em',
+                                                width: '100%',
+                                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(sMeta.color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                                                backgroundRepeat: 'no-repeat',
+                                                backgroundPosition: 'right 8px center',
+                                                transition: 'all 0.2s',
+                                            }}
+                                        >
+                                            {STATUS_OPTIONS.map(opt => (
+                                                <option key={opt.value} value={opt.value} style={{ background: '#ffffff', color: '#1e293b' }}>
+                                                    {opt.label}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div className="order-action-hub">
-                                        <button
-                                            className="action-btn-circle delete-btn"
-                                            onClick={(e) => handleDeleteOrder(order.id, e)}
-                                            title="Delete Order"
-                                            style={{ marginRight: '10px', background: 'rgba(227, 27, 35, 0.1)', color: '#e31b23', border: '1px solid rgba(227, 27, 35, 0.2)' }}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        {activeTab === 'active' ? (
+                                            <button
+                                                className="action-btn-circle delete-btn"
+                                                onClick={(e) => handleSoftDelete(order.id, e)}
+                                                title="Move to Trash"
+                                                style={{ marginRight: '10px', background: 'rgba(227, 27, 35, 0.1)', color: '#e31b23', border: '1px solid rgba(227, 27, 35, 0.2)' }}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    className="action-btn-circle"
+                                                    onClick={(e) => handleRestore(order.id, e)}
+                                                    title="Restore Order"
+                                                    style={{ marginRight: '10px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.2)' }}
+                                                >
+                                                    <RotateCcw size={16} />
+                                                </button>
+                                                <button
+                                                    className="action-btn-circle"
+                                                    onClick={(e) => handlePermanentDelete(order.id, e)}
+                                                    title="Delete Permanently"
+                                                    style={{ marginRight: '10px', background: 'rgba(227, 27, 35, 0.2)', color: '#e31b23', border: '1px solid rgba(227, 27, 35, 0.4)' }}
+                                                >
+                                                    <Trash size={16} />
+                                                </button>
+                                            </>
+                                        )}
                                         <button className="action-btn-circle">
                                             <ChevronRight size={20} />
                                         </button>
@@ -231,7 +370,7 @@ const AdminOrdersList = () => {
                                     <h4 style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.15em', color: '#a5b4fc', marginBottom: '15px', fontWeight: 800 }}>
                                         Configured Manufacturing Items
                                     </h4>
-                                    <AdminItemsList orderId={selectedOrder.id} onPreview={setPreviewItem} />
+                                    <AdminItemsList orderId={selectedOrder.id} order={selectedOrder} onPreview={setPreviewItem} />
                                 </div>
                             </div>
                         </motion.div>
@@ -271,19 +410,33 @@ const AdminOrdersList = () => {
                             }}
                         >
                             <div className="preview-header" style={{ padding: '25px 40px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'white', fontWeight: 800 }}>ADMIN PREVIEW: {previewItem.file_name}</h3>
-                                <div style={{ display: 'flex', gap: '15px' }}>
-                                    <a href={`/${previewItem.original_file_path}`} download style={{ color: 'white', opacity: 0.7 }}><Download size={22} /></a>
+                                <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'white', fontWeight: 800 }}>
+                                    ADMIN PREVIEW: {previewItem.item.file_name}
+                                    <span style={{ opacity: 0.5, marginLeft: '10px', fontSize: '0.9rem' }}>
+                                        • {previewItem.mode === 'original' ? 'RAW SOURCE' : 'MANUFACTURING MODEL'}
+                                    </span>
+                                </h3>
+                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                    <a
+                                        href={previewItem.mode === 'original' ? `/${previewItem.item.original_file_path}` : `/${previewItem.item.configured_file_path}`}
+                                        download
+                                        style={{ color: 'white', opacity: 0.7 }}
+                                        title="Download this version"
+                                    >
+                                        <Download size={22} />
+                                    </a>
                                     <button onClick={() => setPreviewItem(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '2rem', opacity: 0.7 }}>&times;</button>
                                 </div>
                             </div>
                             <div style={{ flex: 1, background: '#000' }}>
                                 <ProjectViewer
                                     file={{
-                                        name: previewItem.file_name,
-                                        path: previewItem.original_file_path ? '/' + previewItem.original_file_path : null
+                                        name: previewItem.item.file_name,
+                                        path: previewItem.mode === 'original'
+                                            ? (previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null)
+                                            : (previewItem.item.configured_file_path ? '/' + previewItem.item.configured_file_path : null)
                                     }}
-                                    configuration={typeof previewItem.configuration_json === 'string' ? JSON.parse(previewItem.configuration_json) : previewItem.configuration_json}
+                                    configuration={previewItem.mode === 'configured' ? (typeof previewItem.item.configuration_json === 'string' ? JSON.parse(previewItem.item.configuration_json) : previewItem.item.configuration_json) : {}}
                                 />
                             </div>
                         </motion.div>
@@ -294,13 +447,60 @@ const AdminOrdersList = () => {
     );
 };
 
-const AdminItemsList = ({ orderId, onPreview }) => {
+const AdminItemsList = ({ orderId, order, onPreview }) => {
     const [items, setItems] = useState([]);
+    const [loadingItems, setLoadingItems] = useState(true);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
+
     useEffect(() => {
+        setLoadingItems(true);
         fetch(`/api/orders/${orderId}`).then(r => r.json()).then(d => {
             if (d.success) setItems(d.items);
-        });
+        }).finally(() => setLoadingItems(false));
     }, [orderId]);
+
+    const handleGenerateReport = async () => {
+        if (!order || items.length === 0) return;
+        setGeneratingPdf(true);
+        try {
+            await generateOrderReport(order, items);
+        } catch (err) {
+            console.error('PDF Generation Error:', err);
+            alert('Failed to generate report. Please try again.');
+        } finally {
+            setGeneratingPdf(false);
+        }
+    };
+
+    const skeletonPulse = {
+        background: 'linear-gradient(90deg, rgba(99,102,241,0.05) 25%, rgba(99,102,241,0.12) 50%, rgba(99,102,241,0.05) 75%)',
+        backgroundSize: '200% 100%',
+        animation: 'shimmer 1.5s infinite',
+        borderRadius: '8px',
+    };
+
+    if (loadingItems) {
+        return (
+            <div className="admin-items-mini-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+                {[1, 2].map(i => (
+                    <div key={i} style={{ background: 'rgba(99, 102, 241, 0.03)', padding: '24px', borderRadius: '15px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+                        <div style={{ marginBottom: '18px' }}>
+                            <div style={{ ...skeletonPulse, width: '140px', height: '18px', marginBottom: '8px' }} />
+                            <div style={{ ...skeletonPulse, width: '200px', height: '14px' }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                            <div style={{ ...skeletonPulse, flex: 1, height: '38px' }} />
+                            <div style={{ ...skeletonPulse, flex: 1, height: '38px' }} />
+                        </div>
+                        <div style={{ ...skeletonPulse, width: '100%', height: '38px', marginBottom: '6px' }} />
+                        <div style={{ ...skeletonPulse, width: '100%', height: '42px', marginBottom: '6px' }} />
+                        <div style={{ ...skeletonPulse, width: '100%', height: '42px' }} />
+                    </div>
+                ))}
+            </div>
+        );
+    }
 
     return (
         <div className="admin-items-mini-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -309,45 +509,54 @@ const AdminItemsList = ({ orderId, onPreview }) => {
                 return (
                     <div key={item.id} style={{ background: 'rgba(99, 102, 241, 0.03)', padding: '24px', borderRadius: '15px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
                         <div style={{ marginBottom: '18px' }}>
-                            <span style={{ display: 'block', fontWeight: 800, marginBottom: '6px', color: 'white', fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{item.file_name}</span>
+                            <span style={{ block: 'block', fontWeight: 800, marginBottom: '6px', color: 'white', fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{item.file_name}</span>
                             <span style={{ fontSize: '0.85rem', color: '#a5b4fc', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                                 {config.metal?.name} - {config.thickness}mm
                             </span>
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <button
-                                onClick={() => onPreview(item)}
-                                style={{ flex: '1 1 30%', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#a5b4fc', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
-                                title="3D Preview"
-                            >
-                                <Eye size={14} />
-                            </button>
+                            <div style={{ display: 'flex', gap: '4px', flex: '1 1 100%', marginBottom: '4px' }}>
+                                <button
+                                    onClick={() => onPreview({ item, mode: 'original' })}
+                                    style={{ flex: 1, background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', color: 'rgba(255,255,255,0.6)', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                    title="Preview Raw Source"
+                                >
+                                    <Eye size={14} /> RAW
+                                </button>
+                                <button
+                                    onClick={() => onPreview({ item, mode: 'configured' })}
+                                    style={{ flex: 1, background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#a5b4fc', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                    title="Preview Manufacturing-Ready Design"
+                                >
+                                    <Eye size={14} /> FINAL
+                                </button>
+                            </div>
+
                             <a
                                 href={`/${item.original_file_path}`}
                                 download
-                                style={{ flex: '1 1 30%', backgroundColor: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', textAlign: 'center', color: '#a5b4fc', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', textDecoration: 'none', fontWeight: 600 }}
+                                style={{ flex: '1 1 30%', backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'center', color: 'rgba(255,255,255,0.5)', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', textDecoration: 'none', fontWeight: 600 }}
                                 title="Download Raw Source"
                             >
-                                <Download size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> RAW
+                                <Download size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> RAW 💾
                             </a>
                             <a
                                 href={`/${item.configured_file_path}`}
                                 download
-                                style={{ flex: '1 1 100%', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(124, 58, 237, 0.15))', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#a5b4fc', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'none', textAlign: 'center', fontWeight: 800, marginTop: '5px' }}
+                                style={{ flex: '1 1 100%', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(124, 58, 237, 0.15))', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#a5b4fc', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'none', textAlign: 'center', fontWeight: 800, marginTop: '2px' }}
                                 title="Download Manufacturing-Ready STEP (AP214/AP242)"
                             >
-                                <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> MANU-REQ STEP
+                                <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> MANU-REQ STEP 📄
                             </a>
-                            {item.flat_file_path && (
-                                <a
-                                    href={`/${item.flat_file_path}`}
-                                    download
-                                    style={{ flex: '1 1 100%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'none', textAlign: 'center', fontWeight: 800, marginTop: '2px' }}
-                                    title="Download Laser-Ready DXF (Flat Pattern)"
-                                >
-                                    <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> PRODUCTION DXF
-                                </a>
-                            )}
+                            <button
+                                onClick={handleGenerateReport}
+                                disabled={generatingPdf}
+                                style={{ flex: '1 1 100%', background: generatingPdf ? 'rgba(100,100,100,0.2)' : 'linear-gradient(135deg, rgba(227, 27, 35, 0.15), rgba(227, 27, 35, 0.25))', border: '1px solid rgba(227, 27, 35, 0.4)', color: generatingPdf ? '#94a3b8' : '#e31b23', padding: '12px', borderRadius: '8px', cursor: generatingPdf ? 'wait' : 'pointer', fontSize: '0.85rem', textAlign: 'center', fontWeight: 800, marginTop: '2px', transition: 'all 0.3s' }}
+                                title="Generate comprehensive PDF report with watermarks"
+                            >
+                                <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                                {generatingPdf ? 'GENERATING REPORT...' : 'GENERATE ORDER REPORT 📋'}
+                            </button>
                         </div>
                     </div>
                 );

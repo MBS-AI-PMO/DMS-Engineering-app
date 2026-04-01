@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently --names \"NODE,PYTHON\" --prefix-colors \"cyan,yellow\" \"nodemon server.js\" \"C:\\Users\\User\\miniconda3\\envs\\cadquery-env\\python.exe -u main.py\"",
+    "dev": "concurrently --names \"NODE,PYTHON\" --prefix-colors \"cyan,yellow\" \"nodemon --ignore uploads --ignore temp_uploads server.js\" \"C:\\Users\\User\\miniconda3\\envs\\cadquery-env\\python.exe -u main.py\"",
     "dev:node": "nodemon server.js",
     "dev:python": "C:\\Users\\User\\miniconda3\\envs\\cadquery-env\\python.exe -u main.py",
     "migrate": "node scripts/migrate.js",
