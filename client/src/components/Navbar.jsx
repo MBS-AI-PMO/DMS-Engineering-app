@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line 
 import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext.js';
+import SearchOverlay from './SearchOverlay';
 
 const Navbar = () => {
     const [isScrolled, setIsScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
@@ -30,6 +32,24 @@ const Navbar = () => {
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Keyboard shortcut for search (Ctrl+K or /)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsSearchOpen(true);
+            }
+            if (e.key === '/') {
+                if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                    setIsSearchOpen(true);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Redundant dropdown resets are handled by onClick handlers on nav links
@@ -75,11 +95,19 @@ const Navbar = () => {
 
                 <div className="navbar-right">
                     <div className="navbar-actions">
-                        <button className="icon-btn search-trigger">
+                        <button
+                            className="icon-btn search-trigger"
+                            onClick={() => setIsSearchOpen(true)}
+                            title="Search (Ctrl + K or /)"
+                        >
                             <Search size={20} />
                         </button>
 
-                        <Link to="/cart" className="icon-btn cart-trigger" style={{ position: 'relative' }}>
+                        <Link
+                            to="/cart"
+                            className={`icon-btn cart-trigger ${cartItems.length > 0 ? 'has-items' : ''}`}
+                            style={{ position: 'relative' }}
+                        >
                             <ShoppingBag size={20} />
                             {cartItems.length > 0 && (
                                 <span className="cart-badge" style={{
@@ -221,6 +249,11 @@ const Navbar = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+            {/* Search Overlay */}
+            <SearchOverlay
+                isOpen={isSearchOpen}
+                onClose={() => setIsSearchOpen(false)}
+            />
         </nav>
     );
 };

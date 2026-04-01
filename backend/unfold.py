@@ -409,7 +409,10 @@ def detect_holes_in_step(filepath: str) -> list:
             "fi": fi,
             "radius": float(radius),
             "axis": _normalize(np.array(axis, dtype=float)),
-            "center": _face_centroid(faces[fi]),
+            # FIX: Use the geometric axis location (p) from _classify_face, 
+            # NOT the bounding box center, otherwise partial cylinders (180 deg) 
+            # won't cluster because their BBox center is off-axis.
+            "center": center, 
         })
 
     if not raw:
