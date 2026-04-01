@@ -898,7 +898,7 @@ const InstantPricing = () => {
             <div className="row g-0 h-100 overflow-hidden m-0 position-relative border-0 shadow-none">
               <div className="col-lg-3 h-100 p-4 d-flex flex-column bg-white">
                 <div className="d-flex justify-content-between align-items-center mb-4">
-                  <span className="fw-bold text-uppercase small text-muted letter-spacing-1">Uploaded Files</span>
+                  <span className="fw-black text-uppercase technical-mono muted opacity-50 letter-spacing-2" style={{ fontSize: '10px' }}>Uploaded Files</span>
                   <button className="btn btn-link btn-sm text-danger text-decoration-none fw-bold p-0" onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
                 </div>
                 <div className="file-list-preview overflow-auto flex-grow-1 pe-2 py-2">
@@ -910,7 +910,7 @@ const InstantPricing = () => {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
                         key={f.id}
-                        className={`qf-mini-file-card p-3 rounded-4 d-flex align-items-center justify-content-between mb-3 cursor-pointer transition-all border-2 ${selectedFile?.id === f.id ? 'bg-white border-danger shadow-sm' : 'bg-white border-light-subtle hover-border-light shadow-xs'}`}
+                        className={`qf-mini-file-card p-3 rounded-4 d-flex align-items-center justify-content-between mb-3 cursor-pointer transition-all border-2 ${selectedFile?.id === f.id ? 'bg-white card-pulse-active shadow-md' : 'bg-white border-light-subtle hover-border-light shadow-xs'}`}
                         onClick={() => setSelectedFile(f)}
                         style={{ border: selectedFile?.id === f.id ? '2px solid #ef4444' : '2px solid #f1f5f9' }}
                       >
@@ -932,14 +932,14 @@ const InstantPricing = () => {
                     ))}
                   </AnimatePresence>
                 </div>
-                <button className="btn btn-light w-100 rounded-4 py-3 small fw-bold mt-3 transition-all d-flex align-items-center justify-content-center gap-2" {...getRootProps()}>
-                  <Plus size={16} className="text-muted" /> Add more files
+                <button className="btn btn-light w-100 rounded-4 py-3 small fw-bold mt-3 transition-all d-flex align-items-center justify-content-center gap-2 border-0 bg-light bg-opacity-50 hover-bg-light" {...getRootProps()}>
+                  <Plus size={16} className="text-secondary" /> <span className="text-muted">Add more files</span>
                 </button>
               </div>
               <div className="col-lg-6 h-100 position-relative p-0 d-flex flex-column bg-white">
                 <div className="qf-viewer-toolbar p-3 d-flex justify-content-between align-items-center gap-3 bg-transparent">
                   <div className="d-flex gap-2">
-                    <div className="pill-toggle-container d-flex p-1 rounded-4 bg-white border shadow-xs" style={{ minWidth: '180px', position: 'relative' }}>
+                    <div className="pill-toggle-container d-flex p-1 rounded-4 glass-pill shadow-xs" style={{ minWidth: '180px', position: 'relative' }}>
                       <motion.div
                         className="position-absolute bg-black rounded-3"
                         initial={false}
@@ -959,7 +959,7 @@ const InstantPricing = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="pill-toggle-container d-flex p-1 rounded-4 bg-white shadow-sm border border-black border-opacity-5" style={{ minWidth: '110px', position: 'relative' }}>
+                  <div className="pill-toggle-container d-flex p-1 rounded-4 glass-pill shadow-xs" style={{ minWidth: '110px', position: 'relative' }}>
                     <motion.div
                       className="position-absolute bg-black rounded-3"
                       initial={false}
@@ -1010,22 +1010,24 @@ const InstantPricing = () => {
                             <span className="text-muted fw-black text-uppercase letter-spacing-2" style={{ fontSize: '10px' }}>{unit === 'mm' ? 'Metric Dims' : 'Imperial Dims'}</span>
                             <div className="flex-grow-1 border-bottom border-light-subtle opacity-50" />
                           </div>
-                          <div className="d-flex flex-column gap-1">
+                          <div className="d-flex flex-column gap-3">
                             {[
-                              { label: 'Length', symbol: '(L)', key: 'l', color: 'dark' },
-                              { label: 'Width', symbol: '(W)', key: 'w', color: 'dark' },
-                              { label: 'Thickness', symbol: '(T)', key: 't', color: 'danger' }
+                              { label: 'Length', symbol: 'L', key: 'l', color: 'dark' },
+                              { label: 'Width', symbol: 'W', key: 'w', color: 'dark' },
+                              { label: 'Thickness', symbol: 'T', key: 't', color: 'danger' }
                             ].map(item => (
-                              <div key={item.key} className="d-flex justify-content-between align-items-end py-2 border-bottom border-light-subtle border-opacity-50">
+                              <div key={item.key} className="dimension-hero-card p-3 rounded-4 bg-light bg-opacity-30 border-0 d-flex justify-content-between align-items-center">
                                 <div className="d-flex flex-column">
-                                  <span className="text-muted fw-black text-uppercase letter-spacing-1 text-xxs">{item.label}</span>
-                                  <span className="text-secondary fw-bold text-xxs opacity-75">{item.symbol}</span>
+                                  <span className="text-muted fw-black text-uppercase technical-mono" style={{ fontSize: '10px', letterSpacing: '1px' }}>{item.label} <span className="opacity-50">{item.symbol}</span></span>
+                                  <div className="d-flex align-items-baseline gap-1 mt-1">
+                                    <span className={`fs-3 fw-black text-${item.color} technical-mono`}>
+                                      {unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}
+                                    </span>
+                                    <span className="text-muted fw-bold text-xxs text-uppercase">{unit}</span>
+                                  </div>
                                 </div>
-                                <div className="text-end">
-                                  <span className={`fs-4 fw-black text-${item.color} d-block line-height-1`}>
-                                    {unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}
-                                  </span>
-                                  <span className="text-muted fw-bold text-uppercase text-xxs">{unit}</span>
+                                <div className={`p-2 rounded-3 bg-${item.color} bg-opacity-10 text-${item.color}`}>
+                                  {item.key === 't' ? <Shield size={16} /> : <Box size={16} />}
                                 </div>
                               </div>
                             ))}
@@ -1034,7 +1036,7 @@ const InstantPricing = () => {
                       </div>
 
                       <div className="mt-auto pt-4">
-                        <button className="btn btn-danger btn-lg w-100 py-3 rounded-4 fw-bold d-flex align-items-center justify-content-center hover-scale transition-all border-0 shadow-none" onClick={() => setIsQuoteFlowActive(true)}>
+                        <button className="btn btn-danger btn-lg w-100 py-3 rounded-4 fw-black d-flex align-items-center justify-content-center shimmer-btn transition-all border-0 shadow-lg" style={{ letterSpacing: '1px' }} onClick={() => setIsQuoteFlowActive(true)}>
                           PROCEED TOWARD QUOTE <ChevronRight size={20} className="ms-2" />
                         </button>
                       </div>
