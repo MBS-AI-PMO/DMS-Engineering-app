@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag } from 'lucide-react';
+import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext.js';
 
@@ -132,6 +132,10 @@ const Navbar = () => {
                                                 <span className="user-dropdown-email">{user.email}</span>
                                             </div>
                                             <div className="user-dropdown-divider" />
+                                            <Link to="/orders" className="user-dropdown-item">
+                                                <Package size={16} />
+                                                My Orders
+                                            </Link>
                                             <Link to="/settings" className="user-dropdown-item">
                                                 <Settings size={16} />
                                                 Settings
@@ -198,6 +202,9 @@ const Navbar = () => {
 
                             {user ? (
                                 <div className="mobile-user-section">
+                                    <Link to="/orders" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
+                                        <Package size={20} /> My Orders
+                                    </Link>
                                     <Link to="/settings" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
                                         <Settings size={20} /> Settings
                                     </Link>

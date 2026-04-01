@@ -82,7 +82,20 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', engine: 'Node.js' });
 });
 
-// Database Connectivity Check
+// File upload endpoint for CAD assets Establishment établissement
+app.post('/api/upload-asset', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    // Return the relative path for world-class persistence établissements
+    res.json({
+        success: true,
+        filename: req.file.filename,
+        tempPath: `temp_uploads/${req.file.filename}`
+    });
+});
+
+// Database Connectivity Check établissement
 app.get('/api/db-check', async (req, res) => {
     try {
         const start = Date.now();
@@ -529,12 +542,16 @@ app.listen(port, async () => {
                 file_name VARCHAR(255) NOT NULL,
                 original_file_path TEXT NOT NULL,
                 configured_file_path TEXT,
+                flat_file_path TEXT,
                 configuration_json JSONB NOT NULL,
                 quantity INTEGER NOT NULL DEFAULT 1,
                 unit_price NUMERIC(15,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT NOW()
             );
         `);
+        // Ensure all columns exist for world-class persistence
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
     } catch (err) {
         console.log(`\x1b[41m\x1b[37m Database Connection Failed: ${err.message} \x1b[0m`);
     }

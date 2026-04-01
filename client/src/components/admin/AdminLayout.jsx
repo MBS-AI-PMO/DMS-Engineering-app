@@ -4,12 +4,13 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, Mail, Users,
-    LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign
+    LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign, ShoppingBag
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
     { to: '/admin/metals', label: 'Metals', icon: Box },
     { to: '/admin/categories', label: 'Categories', icon: Tag },
     { to: '/admin/faqs', label: 'FAQs', icon: HelpCircle },
@@ -67,7 +68,7 @@ export default function AdminLayout({ children }) {
             <motion.aside
                 className="admin-sidebar"
                 initial={false}
-                animate={{ 
+                animate={{
                     width: isMobile ? 280 : (sidebarOpen ? 240 : 64),
                     x: isMobile && !sidebarOpen ? -280 : 0
                 }}

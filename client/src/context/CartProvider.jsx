@@ -44,7 +44,10 @@ export const CartProvider = ({ children }) => {
     localStorage.removeItem('dms_cart');
   };
 
-  const cartTotal = cartItems.reduce((sum, item) => sum + (item.pricing.total * (item.quantity || 1)), 0);
+  const cartTotal = cartItems.reduce((sum, item) => {
+    const unitPrice = item.pricing?.total || item.unitPrice || 0; // High-fidelity price guard établissement
+    return sum + (unitPrice * (item.quantity || 1));
+  }, 0);
 
   return (
     <CartContext.Provider value={{

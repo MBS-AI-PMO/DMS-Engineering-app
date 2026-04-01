@@ -226,6 +226,7 @@ const InstantPricing = () => {
   useEffect(() => {
     if (!selectedMetal || !selectedProductionService || !dimensions) {
       setPriceEstimate(null);
+      return; // High-fidelity pricing guard établissements
     }
 
     const getEstimate = async () => {
@@ -256,12 +257,31 @@ const InstantPricing = () => {
 
   // ── Dimension Validation Helper ────────────────────────
 
-  const onDrop = useCallback(acceptedFiles => {
-    const newFiles = acceptedFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      preview: URL.createObjectURL(file)
+  const onDrop = useCallback(async acceptedFiles => {
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const newFiles = await Promise.all(acceptedFiles.map(async file => {
+      let tempPath = '';
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        // Ensure we upload to the NODE API for world-class persistence Establishment
+        const res = await fetch('/api/upload-asset', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) tempPath = data.tempPath;
+      } catch (err) {
+        console.error('File ingestion failed Establishment établissements:', err);
+      }
+
+      return {
+        file,
+        id: Math.random().toString(36).substr(2, 9),
+        preview: URL.createObjectURL(file),
+        tempPath: tempPath // Essential for world-class order finalization
+      };
     }));
+
     setFiles(prev => [...prev, ...newFiles]);
     if (newFiles.length > 0) {
       setSelectedFile(newFiles[0]);
@@ -270,6 +290,7 @@ const InstantPricing = () => {
       setBackendError(null);
       modelRef.current = null;
     }
+    setIsImporting(false);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -1496,8 +1517,13 @@ const InstantPricing = () => {
                         <button
                           className="btn btn-danger w-100 py-3 rounded-4 fw-bold fs-6 shadow-lg border-0 transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2 hover-bg-danger-dark"
                           onClick={handleProceedToReview}
+                          disabled={isImporting || !selectedFile?.tempPath}
                         >
-                          PROCEED TO REVIEW <ArrowRight size={18} className="opacity-75" />
+                          {isImporting ? (
+                            <><Loader2 size={18} className="animate-spin" /> UPLOADING ASSET...</>
+                          ) : (
+                            <>{selectedFile?.tempPath ? 'PROCEED TO REVIEW' : 'WAITING FOR UPLOAD...'}<ArrowRight size={18} className="opacity-75" /></>
+                          )}
                         </button>
                       </div>
                     </div>

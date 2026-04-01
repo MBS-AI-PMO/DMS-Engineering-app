@@ -19,6 +19,7 @@ import {
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import '../styles/PremiumCheckout.css';
 
 const Checkout = () => {
     const { cartItems, cartTotal, clearCart } = useCart();
@@ -50,21 +51,44 @@ const Checkout = () => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const formRef = React.useRef(null);
+
+    const handlePlaceOrder = (e) => {
+        if (e) e.preventDefault();
+        console.log('Place order triggered');
+        if (formRef.current && formRef.current.reportValidity()) {
+            console.log('Form is valid, submitting...');
+            handleSubmit(e);
+        } else {
+            console.warn('Form validation failed');
+            showToast('Please fill in all shipping details.', 'error');
+        }
+    };
+
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        if (isSubmitting) return;
+
         setIsSubmitting(true);
+        console.log('Submitting order with payload...', { cartItems, cartTotal, formData });
 
         try {
+            // Safety check for cart items and pricing
+            if (!cartItems || cartItems.length === 0) {
+                showToast('Your cart is empty', 'error');
+                return;
+            }
+
             const payload = {
                 ...formData,
                 items: cartItems.map(item => ({
-                    fileName: item.fileName,
-                    tempPath: item.tempPath,
-                    configuration: item.configuration,
-                    quantity: item.quantity,
-                    unitPrice: item.pricing.total
+                    fileName: item.fileName || item.file_name,
+                    tempPath: item.tempPath || item.temp_path || '',
+                    configuration: item.configuration || {},
+                    quantity: item.quantity || 1,
+                    unitPrice: item.pricing?.total || 0
                 })),
-                totalPrice: cartTotal
+                totalPrice: cartTotal || 0
             };
 
             const response = await fetch('/api/orders', {
@@ -74,6 +98,7 @@ const Checkout = () => {
             });
 
             const data = await response.json();
+            console.log('API Response:', data);
 
             if (data.success) {
                 setIsSuccess(true);
@@ -93,23 +118,23 @@ const Checkout = () => {
 
     if (isSuccess) {
         return (
-            <div className="checkout-success-page">
+            <div className="checkout-success-page cart-empty-state">
                 <div className="container">
                     <motion.div
-                        className="success-card"
+                        className="empty-card"
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                     >
-                        <div className="success-icon-wrap">
-                            <CheckCircle2 size={64} className="text-success" />
+                        <div className="empty-icon-wrap">
+                            <CheckCircle2 size={64} style={{ color: '#e31b23' }} />
                         </div>
-                        <h1>Order Confirmed!</h1>
-                        <p className="order-number">Order ID: <strong>#{orderId}</strong></p>
+                        <h2>Order Confirmed!</h2>
+                        <p className="order-number" style={{ color: '#fff', fontSize: '1.4rem' }}>Order ID: <strong>#{orderId}</strong></p>
                         <p className="success-msg">Your manufacturing request has been received and is being processed by our engineering team.</p>
 
-                        <div className="success-actions">
-                            <Link to="/orders" className="btn-primary">View My Orders</Link>
-                            <Link to="/" className="btn-secondary">Return Home</Link>
+                        <div className="success-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px' }}>
+                            <Link to="/orders" className="btn-primary large">View My Orders</Link>
+                            <Link to="/" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none' }}>Return Home</Link>
                         </div>
                     </motion.div>
                 </div>
@@ -128,25 +153,32 @@ const Checkout = () => {
 
                 <div className="checkout-grid">
                     <div className="checkout-form-column">
-                        <section className="checkout-section">
+                        <motion.div
+                            className="premium-section-card"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                        >
                             <div className="section-header">
-                                <User size={20} />
+                                <MapPin size={24} />
                                 <h2>Shipping Information</h2>
                             </div>
 
-                            <form id="checkout-form" onSubmit={handleSubmit} className="premium-form">
-                                <div className="form-row">
-                                    <div className="form-group full">
-                                        <label htmlFor="fullName">Full Name</label>
-                                        <div className="input-with-icon">
-                                            <User size={16} />
-                                            <input
-                                                type="text" id="fullName" name="fullName"
-                                                placeholder="Enter your full name"
-                                                value={formData.fullName}
-                                                onChange={handleInputChange} required
-                                            />
-                                        </div>
+                            <form
+                                id="checkout-form"
+                                ref={formRef}
+                                onSubmit={handleSubmit}
+                                className="premium-form"
+                            >
+                                <div className="form-group" style={{ marginBottom: '35px' }}>
+                                    <label htmlFor="fullName">Full Name</label>
+                                    <div className="input-with-icon">
+                                        <User size={18} />
+                                        <input
+                                            type="text" id="fullName" name="fullName"
+                                            placeholder="Enter your full name"
+                                            value={formData.fullName}
+                                            onChange={handleInputChange} required
+                                        />
                                     </div>
                                 </div>
 
@@ -154,7 +186,7 @@ const Checkout = () => {
                                     <div className="form-group">
                                         <label htmlFor="email">Email Address</label>
                                         <div className="input-with-icon">
-                                            <Mail size={16} />
+                                            <Mail size={18} />
                                             <input
                                                 type="email" id="email" name="email"
                                                 placeholder="email@example.com"
@@ -166,7 +198,7 @@ const Checkout = () => {
                                     <div className="form-group">
                                         <label htmlFor="phone">Phone Number</label>
                                         <div className="input-with-icon">
-                                            <Phone size={16} />
+                                            <Phone size={18} />
                                             <input
                                                 type="tel" id="phone" name="phone"
                                                 placeholder="+1 (555) 000-0000"
@@ -177,10 +209,10 @@ const Checkout = () => {
                                     </div>
                                 </div>
 
-                                <div className="form-group">
+                                <div className="form-group" style={{ marginBottom: '35px' }}>
                                     <label htmlFor="address">Street Address</label>
                                     <div className="input-with-icon">
-                                        <MapPin size={16} />
+                                        <MapPin size={18} />
                                         <input
                                             type="text" id="address" name="address"
                                             placeholder="123 Manufacturing Way"
@@ -211,93 +243,126 @@ const Checkout = () => {
                                     </div>
                                 </div>
 
-                                <div className="checkout-section mt-5">
-                                    <div className="section-header">
-                                        <CreditCard size={20} />
-                                        <h2>Payment Method</h2>
+                                <div className="section-header" style={{ marginTop: '60px' }}>
+                                    <CreditCard size={24} />
+                                    <h2>Payment Method</h2>
+                                </div>
+
+                                <div className="payment-gateway-card">
+                                    <div className="gateway-info">
+                                        <div className="gateway-icon" style={{ color: '#e31b23' }}>
+                                            <Truck size={30} />
+                                        </div>
+                                        <div className="gateway-text">
+                                            <span className="gateway-name" style={{ color: 'white' }}>Cash on Delivery (COD)</span>
+                                            <span className="gateway-desc" style={{ color: 'white' }}>Pay when your parts arrive at your doorstep.</span>
+                                        </div>
                                     </div>
-                                    <div className="payment-gateway-card active">
-                                        <div className="gateway-info">
-                                            <div className="gateway-icon">
-                                                <Truck size={20} />
-                                            </div>
-                                            <div className="gateway-text">
-                                                <span className="gateway-name">Cash on Delivery (COD)</span>
-                                                <span className="gateway-desc">Pay when your parts arrive at your doorstep.</span>
-                                            </div>
-                                        </div>
-                                        <div className="gateway-check">
-                                            <div className="check-circle active" />
-                                        </div>
+                                    <div className="gateway-check">
+                                        <div className="check-circle" />
                                     </div>
                                 </div>
                             </form>
-                        </section>
+                        </motion.div>
                     </div>
 
                     <div className="checkout-summary-column">
-                        <div className="summary-sticky">
-                            <div className="summary-card">
-                                <h3>Order Summary</h3>
-                                <div className="summary-items-list hide-scrollbar">
-                                    {cartItems.map((item) => (
-                                        <div key={item.cartId} className="summary-item">
-                                            <div className="summary-item-info">
-                                                <span className="name">{item.fileName}</span>
-                                                <span className="meta">Qty: {item.quantity} × ${item.pricing.total.toFixed(2)}</span>
+                        <motion.div
+                            className="summary-card"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                        >
+                            <h3>Order Summary</h3>
+                            <div className="summary-items-list">
+                                {cartItems.map((item) => (
+                                    <div key={item.cartId} className="summary-item">
+                                        <div className="summary-item-info">
+                                            <span className="name">{item.fileName}</span>
+                                            <div className="details-grid" style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: '1fr',
+                                                gap: '4px',
+                                                marginTop: '6px',
+                                                fontSize: '0.8rem',
+                                                color: 'rgba(255,255,255,0.35)'
+                                            }}>
+                                                <span>Material: <strong>{item.configuration?.metal?.name || 'Standard Metal'}</strong></span>
+                                                <span>Thickness: <strong>{item.configuration?.thickness || '0'}mm</strong></span>
+                                                {item.configuration?.anodizingColor && (
+                                                    <span>Anodizing: <strong>{item.configuration.anodizingColor.name}</strong></span>
+                                                )}
+                                                {item.configuration?.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
+                                                    <span>Taped Holes: <strong>{Object.keys(item.configuration.selectedTaps).length}</strong></span>
+                                                )}
                                             </div>
-                                            <span className="price">${(item.pricing.total * item.quantity).toFixed(2)}</span>
+                                            <span className="meta" style={{ marginTop: '10px', display: 'block' }}>
+                                                Qty: <strong>{item.quantity || 1}</strong> × ${(item.pricing?.total || 0).toFixed(2)}
+                                            </span>
                                         </div>
-                                    ))}
+                                        <span className="price">${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="summary-calculation" style={{ marginTop: '30px' }}>
+                                <div className="calc-row">
+                                    <span>Subtotal</span>
+                                    <span>${cartTotal.toFixed(2)}</span>
                                 </div>
-
-                                <div className="summary-divider" />
-
-                                <div className="summary-calculation">
-                                    <div className="calc-row">
-                                        <span>Subtotal</span>
-                                        <span>${cartTotal.toFixed(2)}</span>
-                                    </div>
-                                    <div className="calc-row">
-                                        <span>Shipping</span>
-                                        <span className="free">FREE</span>
-                                    </div>
-                                    <div className="calc-row total">
-                                        <span>Total</span>
-                                        <span>${cartTotal.toFixed(2)}</span>
-                                    </div>
+                                <div className="calc-row">
+                                    <span>Shipping</span>
+                                    <span style={{ color: '#e31b23' }}>FREE</span>
                                 </div>
-
-                                <button
-                                    type="submit"
-                                    form="checkout-form"
-                                    className="btn-place-order"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? 'Processing Order...' : 'Complete Purchase'}
-                                    <ArrowRight size={18} />
-                                </button>
-
-                                <div className="security-badges">
-                                    <div className="badge-item">
-                                        <ShieldCheck size={14} /> <span>Secure Checkout</span>
-                                    </div>
-                                    <div className="badge-item">
-                                        <Package size={14} /> <span>Quality Inspected</span>
-                                    </div>
+                                <div className="calc-row total">
+                                    <span>Total</span>
+                                    <span>${cartTotal.toFixed(2)}</span>
                                 </div>
                             </div>
 
-                            {!user && (
-                                <div className="checkout-login-prompt">
-                                    <AlertCircle size={20} />
-                                    <div>
-                                        <p>Checking out as a guest?</p>
-                                        <Link to="/login?redirect=/checkout">Login for a faster experience</Link>
-                                    </div>
+                            <button
+                                type="button"
+                                onClick={handlePlaceOrder}
+                                className="btn-place-order"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Processing Order...' : 'Complete Purchase'}
+                                <ArrowRight size={22} />
+                            </button>
+
+                            <div className="security-badges">
+                                <div className="badge-item">
+                                    <ShieldCheck size={18} /> <span>Secure Checkout</span>
                                 </div>
-                            )}
-                        </div>
+                                <div className="badge-item">
+                                    <Package size={18} /> <span>Quality Inspected</span>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {!user && (
+                            <motion.div
+                                className="checkout-login-prompt"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.5 }}
+                                style={{
+                                    marginTop: '30px',
+                                    padding: '25px',
+                                    background: 'rgba(255,255,255,0.03)',
+                                    borderRadius: '20px',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    display: 'flex',
+                                    gap: '15px',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                <AlertCircle size={24} style={{ color: '#e31b23' }} />
+                                <div>
+                                    <p style={{ margin: 0, fontWeight: 700 }}>Checking out as a guest?</p>
+                                    <Link to="/login?redirect=/checkout" style={{ color: '#e31b23', textDecoration: 'none', fontSize: '0.9rem' }}>Login for a faster experience</Link>
+                                </div>
+                            </motion.div>
+                        )}
                     </div>
                 </div>
             </div>

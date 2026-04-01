@@ -15,6 +15,71 @@ import {
     Search
 } from 'lucide-react';
 import ProjectViewer from '../components/viewer/ProjectViewer';
+import '../styles/PremiumOrders.css';
+
+// Helper to ensure JSON is parsed correctly regardless of DB driver behavior
+const parseConfig = (config) => {
+    if (typeof config === 'string') {
+        try { return JSON.parse(config); } catch (e) { return {}; }
+    }
+    return config || {};
+};
+
+const OrderItemsList = ({ orderId, onPreview }) => {
+    const [items, setItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchItems = async () => {
+            try {
+                const response = await fetch(`/api/orders/${orderId}`);
+                const data = await response.json();
+                if (data.success) {
+                    setItems(data.items);
+                }
+            } catch (err) {
+                console.error('Failed to fetch items:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchItems();
+    }, [orderId]);
+
+    if (loading) return <div className="items-loading">Loading items...</div>;
+
+    return (
+        <div className="order-items-table">
+            <div className="items-header">
+                <span>Product / Specification</span>
+                <span>Qty</span>
+                <span>Price</span>
+                <span>Actions</span>
+            </div>
+            {items.map((item) => (
+                <div key={item.id} className="item-row">
+                    <div className="item-main">
+                        <span className="item-name">{item.file_name}</span>
+                        <span className="item-spec">{parseConfig(item.configuration_json).metal?.name} • {parseConfig(item.configuration_json).thickness}mm</span>
+                    </div>
+                    <div className="item-qty">{item.quantity}</div>
+                    <div className="item-price">${parseFloat(item.unit_price).toFixed(2)}</div>
+                    <div className="item-actions">
+                        <button className="btn-icon" onClick={() => onPreview(item)} title="Preview 3D">
+                            <Eye size={18} />
+                        </button>
+                        <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
+                            <Download size={18} />
+                        </a>
+                        <a href={`/${item.configured_file_path}`} download className="btn-icon secondary" title="Download Configured File">
+                            <FileText size={18} />
+                        </a>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 const Orders = () => {
     const [orders, setOrders] = useState([]);
@@ -146,8 +211,11 @@ const Orders = () => {
                             <div className="preview-body">
                                 <div className="preview-viewer-wrap">
                                     <ProjectViewer
-                                        file={{ name: previewItem.file_name }}
-                                        configuration={previewItem.configuration_json}
+                                        file={{
+                                            name: previewItem.file_name,
+                                            path: previewItem.original_file_path ? '/' + previewItem.original_file_path : null
+                                        }}
+                                        configuration={parseConfig(previewItem.configuration_json)}
                                     />
                                 </div>
                                 <div className="preview-meta">
@@ -155,16 +223,16 @@ const Orders = () => {
                                     <div className="meta-grid">
                                         <div className="meta-item">
                                             <span className="label">Material</span>
-                                            <span className="value">{previewItem.configuration_json.metal?.name}</span>
+                                            <span className="value">{parseConfig(previewItem.configuration_json).metal?.name}</span>
                                         </div>
                                         <div className="meta-item">
                                             <span className="label">Thickness</span>
-                                            <span className="value">{previewItem.configuration_json.thickness}mm</span>
+                                            <span className="value">{parseConfig(previewItem.configuration_json).thickness}mm</span>
                                         </div>
-                                        {previewItem.configuration_json.anodizingColor && (
+                                        {parseConfig(previewItem.configuration_json).anodizingColor && (
                                             <div className="meta-item">
                                                 <span className="label">Anodizing</span>
-                                                <span className="value">{previewItem.configuration_json.anodizingColor.name}</span>
+                                                <span className="value">{parseConfig(previewItem.configuration_json).anodizingColor.name}</span>
                                             </div>
                                         )}
                                     </div>
@@ -178,60 +246,5 @@ const Orders = () => {
     );
 };
 
-const OrderItemsList = ({ orderId, onPreview }) => {
-    const [items, setItems] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchItems = async () => {
-            try {
-                const response = await fetch(`/api/orders/${orderId}`);
-                const data = await response.json();
-                if (data.success) {
-                    setItems(data.items);
-                }
-            } catch (err) {
-                console.error('Failed to fetch items:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchItems();
-    }, [orderId]);
-
-    if (loading) return <div className="items-loading">Loading items...</div>;
-
-    return (
-        <div className="order-items-table">
-            <div className="items-header">
-                <span>Product / Specification</span>
-                <span>Qty</span>
-                <span>Price</span>
-                <span>Actions</span>
-            </div>
-            {items.map((item) => (
-                <div key={item.id} className="item-row">
-                    <div className="item-main">
-                        <span className="item-name">{item.file_name}</span>
-                        <span className="item-spec">{item.configuration_json.metal?.name} • {item.configuration_json.thickness}mm</span>
-                    </div>
-                    <div className="item-qty">{item.quantity}</div>
-                    <div className="item-price">${parseFloat(item.unit_price).toFixed(2)}</div>
-                    <div className="item-actions">
-                        <button className="btn-icon" onClick={() => onPreview(item)} title="Preview 3D">
-                            <Eye size={18} />
-                        </button>
-                        <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
-                            <Download size={18} />
-                        </a>
-                        <a href={`/${item.configured_file_path}`} download className="btn-icon secondary" title="Download Configured File">
-                            <FileText size={18} />
-                        </a>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
 
 export default Orders;
