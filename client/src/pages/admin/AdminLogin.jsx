@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '../../context/AuthContext';
+import { useAdminAuth } from '../../context/AdminAuthContext';
 
 export default function AdminLogin() {
-    const { login } = useAuth();
+    const { login } = useAdminAuth();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');

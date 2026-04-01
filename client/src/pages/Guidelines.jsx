@@ -46,8 +46,10 @@ const Guidelines = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="animate-spin text-blue-600" size={48} />
+      <div className="guidelines-page">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="animate-spin text-red-600" size={48} />
+        </div>
       </div>
     );
   }

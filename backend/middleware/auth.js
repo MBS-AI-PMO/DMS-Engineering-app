@@ -8,8 +8,10 @@ const JWT_EXPIRES = '7d';
  * Attaches `req.user` = { id, email, role } on success.
  */
 function authenticate(req, res, next) {
-    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
-    
+    // Default to 'token', but can be specified differently if needed
+    const tokenName = req.tokenName || 'token';
+    const token = req.cookies?.[tokenName] || req.headers.authorization?.replace('Bearer ', '');
+
     if (!token) {
         return res.status(401).json({ success: false, error: 'Authentication required' });
     }

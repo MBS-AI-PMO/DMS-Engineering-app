@@ -77,6 +77,23 @@ export async function getMe() {
     return request('/auth/me');
 }
 
+// ── Admin Auth ──────────────────────────────────────────
+
+export async function adminLogin(email, password) {
+    return request('/auth/admin/login', {
+        method: 'POST',
+        body: { email, password },
+    });
+}
+
+export async function adminLogout() {
+    return request('/auth/admin/logout', { method: 'POST' });
+}
+
+export async function getAdminMe() {
+    return request('/auth/admin/me');
+}
+
 // ── Admin: Metals ───────────────────────────────────────
 
 export async function createMetal(metalData) {

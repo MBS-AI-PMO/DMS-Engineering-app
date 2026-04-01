@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, ArrowRight, Mail, Users, DollarSign } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAdminAuth } from '../../context/AdminAuthContext';
 import { fetchMetals, fetchCategories, fetchFaqs, fetchFaqCategories, fetchServices, fetchAdminUsers, fetchServicesWithUsage, fetchPricingMetadata } from '../../utils/api';
 
 const statCards = [
@@ -17,7 +17,7 @@ const statCards = [
 ];
 
 export default function AdminDashboard() {
-    const { user } = useAuth();
+    const { admin } = useAdminAuth();
     const navigate = useNavigate();
     const [counts, setCounts] = useState({});
     const [servicesUsage, setServicesUsage] = useState([]);
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
                 transition={{ duration: 0.5 }}
             >
                 <div className="admin-hero-content">
-                    <h2>Welcome back, {user?.name?.split(' ')[0] || 'Admin'}!</h2>
+                    <h2>Welcome back, {admin?.name?.split(' ')[0] || 'Admin'}!</h2>
                     <p>Here's what's happening with Direct Metal Service today.</p>
                 </div>
             </motion.div>

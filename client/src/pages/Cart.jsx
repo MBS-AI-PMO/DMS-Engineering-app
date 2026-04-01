@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, ArrowRight, ShoppingCart, Info, ChevronRight, Package, Box, PlusCircle } from 'lucide-react';
+import { Trash2, ArrowRight, ShoppingCart, Info, ChevronRight, Package, Box, PlusCircle, ShieldCheck } from 'lucide-react';
 import { useCart } from '../context/CartContext.js';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import '../styles/PremiumCart.css';
@@ -139,71 +139,73 @@ const Cart = () => {
           </div>
 
           <div className="cart-summary-column">
-            <motion.div
-              className="cart-summary-premium"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <h3 className="summary-title">Order Summary</h3>
+            <div className="cart-summary-sticky-wrapper">
+              <motion.div
+                className="cart-summary-premium"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <h3 className="summary-title">Order Summary</h3>
 
-              <div className="summary-row">
-                <span>Subtotal ({cartItems.length} Projects)</span>
-                <span>${cartTotal.toFixed(2)}</span>
-              </div>
-              <div className="summary-row">
-                <span>Production Logistics</span>
-                <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>
-              </div>
-
-              <div className="summary-row total">
-                <span>Estimate Total</span>
-                <span>${cartTotal.toFixed(2)}</span>
-              </div>
-
-              <Link to="/checkout" className="btn-checkout-premium">
-                Proceed to Checkout <ArrowRight size={20} />
-              </Link>
-
-              <div className="summary-trust-badges">
-                <div className="trust-badge-item">
-                  <Package size={18} /> <span>Secure Industrial Manufacturing</span>
+                <div className="summary-row">
+                  <span>Subtotal ({cartItems.length} Projects)</span>
+                  <span>${cartTotal.toFixed(2)}</span>
                 </div>
-                <div className="trust-badge-item">
-                  <ShieldCheck size={18} /> <span>Precision Quality Guarantee</span>
+                <div className="summary-row">
+                  <span>Production Logistics</span>
+                  <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>
                 </div>
-              </div>
-            </motion.div>
 
-            <motion.div
-              className="summary-help-card"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              style={{
-                marginTop: '25px',
-                padding: '30px',
-                background: 'rgba(255,255,255,0.02)',
-                borderRadius: '28px',
-                border: '1px solid rgba(255,255,255,0.06)'
-              }}
-            >
-              <h4 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Need engineering support?</h4>
-              <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-                Our experts are ready to assist with complex tolerances and custom materials.
-              </p>
-              <Link to="/contact" style={{
-                color: '#e31b23',
-                textDecoration: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginTop: '15px',
-                fontWeight: 600,
-                fontSize: '0.9rem'
-              }}>
-                Contact Specialist <ChevronRight size={14} />
-              </Link>
-            </motion.div>
+                <div className="summary-row total">
+                  <span>Estimate Total</span>
+                  <span>${cartTotal.toFixed(2)}</span>
+                </div>
+
+                <Link to="/checkout" className="btn-checkout-premium">
+                  Proceed to Checkout <ArrowRight size={20} />
+                </Link>
+
+                <div className="summary-trust-badges">
+                  <div className="trust-badge-item">
+                    <Package size={18} /> <span>Secure Industrial Manufacturing</span>
+                  </div>
+                  <div className="trust-badge-item">
+                    <ShieldCheck size={18} /> <span>Precision Quality Guarantee</span>
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="summary-help-card"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                style={{
+                  marginTop: '25px',
+                  padding: '30px',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: '28px',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}
+              >
+                <h4 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Need engineering support?</h4>
+                <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+                  Our experts are ready to assist with complex tolerances and custom materials.
+                </p>
+                <Link to="/contact" style={{
+                  color: '#e31b23',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: '15px',
+                  fontWeight: 600,
+                  fontSize: '0.9rem'
+                }}>
+                  Contact Specialist <ChevronRight size={14} />
+                </Link>
+              </motion.div>
+            </div>
           </div>
         </div>
       </div>

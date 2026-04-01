@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -79,8 +80,10 @@ export default function Settings() {
 
     if (authLoading) {
         return (
-            <div className="settings-loading">
-                <div className="settings-spinner" />
+            <div className="settings-page">
+                <div className="settings-loading">
+                    <div className="settings-spinner" />
+                </div>
             </div>
         );
     }

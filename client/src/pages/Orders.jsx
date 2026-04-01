@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Package,
@@ -11,8 +11,8 @@ import {
     ChevronUp,
     FileText,
     Boxes,
-    ExternalLink,
-    Search
+    Search,
+    ShieldCheck
 } from 'lucide-react';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import '../styles/PremiumOrders.css';
@@ -25,28 +25,48 @@ const parseConfig = (config) => {
     return config || {};
 };
 
-const OrderItemsList = ({ orderId, onPreview }) => {
-    const [items, setItems] = useState([]);
-    const [loading, setLoading] = useState(true);
+// Memoized Item Row for maximum render performance
+const ItemRow = React.memo(({ item, onPreview }) => {
+    const config = useMemo(() => parseConfig(item.configuration_json), [item.configuration_json]);
 
-    useEffect(() => {
-        const fetchItems = async () => {
-            try {
-                const response = await fetch(`/api/orders/${orderId}`);
-                const data = await response.json();
-                if (data.success) {
-                    setItems(data.items);
-                }
-            } catch (err) {
-                console.error('Failed to fetch items:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchItems();
-    }, [orderId]);
+    return (
+        <div className="item-row">
+            <div className="item-main">
+                <span className="item-name">{item.file_name}</span>
+                <span className="item-spec">
+                    {config.metal?.name || 'Standard Metal'} • {config.thickness}mm
+                </span>
+            </div>
+            <div className="item-qty">{item.quantity}</div>
+            <div className="item-price">${parseFloat(item.unit_price).toFixed(2)}</div>
+            <div className="item-actions">
+                <button className="btn-icon" onClick={() => onPreview(item)} title="Preview 3D">
+                    <Eye size={18} />
+                </button>
+                <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
+                    <Download size={18} />
+                </a>
+                <a href={`/${item.configured_file_path}`} download className="btn-icon secondary" title="Download Configured File">
+                    <FileText size={18} />
+                </a>
+            </div>
+        </div>
+    );
+});
 
-    if (loading) return <div className="items-loading">Loading items...</div>;
+// Memoized List to prevent summary-toggle re-renders
+const OrderItemsList = React.memo(({ items, loading }) => {
+    if (loading) {
+        return (
+            <div className="items-loading-skeleton">
+                {[1, 2].map(i => (
+                    <div key={i} className="skeleton-row-mini" />
+                ))}
+            </div>
+        );
+    }
+
+    if (!items || items.length === 0) return <div className="no-items">No items found for this order.</div>;
 
     return (
         <div className="order-items-table">
@@ -57,35 +77,18 @@ const OrderItemsList = ({ orderId, onPreview }) => {
                 <span>Actions</span>
             </div>
             {items.map((item) => (
-                <div key={item.id} className="item-row">
-                    <div className="item-main">
-                        <span className="item-name">{item.file_name}</span>
-                        <span className="item-spec">{parseConfig(item.configuration_json).metal?.name} • {parseConfig(item.configuration_json).thickness}mm</span>
-                    </div>
-                    <div className="item-qty">{item.quantity}</div>
-                    <div className="item-price">${parseFloat(item.unit_price).toFixed(2)}</div>
-                    <div className="item-actions">
-                        <button className="btn-icon" onClick={() => onPreview(item)} title="Preview 3D">
-                            <Eye size={18} />
-                        </button>
-                        <a href={`/${item.original_file_path}`} download className="btn-icon" title="Download Raw File">
-                            <Download size={18} />
-                        </a>
-                        <a href={`/${item.configured_file_path}`} download className="btn-icon secondary" title="Download Configured File">
-                            <FileText size={18} />
-                        </a>
-                    </div>
-                </div>
+                <ItemRow key={item.id} item={item} onPreview={(it) => window.dispatchEvent(new CustomEvent('open-preview', { detail: it }))} />
             ))}
         </div>
     );
-};
+});
 
 const Orders = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedOrder, setExpandedOrder] = useState(null);
     const [previewItem, setPreviewItem] = useState(null);
+    const [itemsCache, setItemsCache] = useState({}); // { [orderId]: { items, loading } }
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -102,10 +105,40 @@ const Orders = () => {
             }
         };
         fetchOrders();
+
+        // Listen for internal preview events from memoized children
+        const handlePreview = (e) => setPreviewItem(e.detail);
+        window.addEventListener('open-preview', handlePreview);
+        return () => window.removeEventListener('open-preview', handlePreview);
     }, []);
 
+    const fetchOrderItems = async (orderId) => {
+        // Skip if already in cache and not currently loading
+        if (itemsCache[orderId]?.items) return;
+
+        setItemsCache(prev => ({ ...prev, [orderId]: { ...prev[orderId], loading: true } }));
+        try {
+            const response = await fetch(`/api/orders/${orderId}`);
+            const data = await response.json();
+            if (data.success) {
+                setItemsCache(prev => ({
+                    ...prev,
+                    [orderId]: { items: data.items, loading: false }
+                }));
+            }
+        } catch (err) {
+            console.error('Failed to fetch items:', err);
+            setItemsCache(prev => ({ ...prev, [orderId]: { loading: false } }));
+        }
+    };
+
     const toggleOrder = (orderId) => {
-        setExpandedOrder(expandedOrder === orderId ? null : orderId);
+        if (expandedOrder !== orderId) {
+            fetchOrderItems(orderId);
+            setExpandedOrder(orderId);
+        } else {
+            setExpandedOrder(null);
+        }
     };
 
     const getStatusBadge = (status) => {
@@ -117,9 +150,11 @@ const Orders = () => {
         }
     };
 
+    const ordersToRender = useMemo(() => orders, [orders]);
+
     if (loading) {
         return (
-            <div className="orders-loading">
+            <div className="orders-page">
                 <div className="container">
                     <div className="skeleton-list">
                         {[1, 2, 3].map(i => <div key={i} className="skeleton-item" />)}
@@ -143,7 +178,7 @@ const Orders = () => {
                     </div>
                 </div>
 
-                {orders.length === 0 ? (
+                {ordersToRender.length === 0 ? (
                     <div className="empty-orders">
                         <Package size={48} />
                         <h3>No orders found</h3>
@@ -151,7 +186,7 @@ const Orders = () => {
                     </div>
                 ) : (
                     <div className="orders-list">
-                        {orders.map((order) => (
+                        {ordersToRender.map((order) => (
                             <div key={order.id} className={`order-card ${expandedOrder === order.id ? 'expanded' : ''}`}>
                                 <div className="order-summary" onClick={() => toggleOrder(order.id)}>
                                     <div className="order-info">
@@ -184,7 +219,10 @@ const Orders = () => {
                                             animate={{ height: 'auto', opacity: 1 }}
                                             exit={{ height: 0, opacity: 0 }}
                                         >
-                                            <OrderItemsList orderId={order.id} onPreview={setPreviewItem} />
+                                            <OrderItemsList
+                                                items={itemsCache[order.id]?.items}
+                                                loading={itemsCache[order.id]?.loading}
+                                            />
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
@@ -235,6 +273,12 @@ const Orders = () => {
                                                 <span className="value">{parseConfig(previewItem.configuration_json).anodizingColor.name}</span>
                                             </div>
                                         )}
+                                        <div className="meta-item">
+                                            <span className="label">Secure Manufacturing</span>
+                                            <span className="value" style={{ color: '#00c853', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <ShieldCheck size={18} /> Verified Quality
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

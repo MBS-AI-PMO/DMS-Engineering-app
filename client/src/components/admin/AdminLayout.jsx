@@ -6,7 +6,7 @@ import {
     LayoutDashboard, Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, Mail, Users,
     LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign, ShoppingBag
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAdminAuth } from '../../context/AdminAuthContext';
 
 const navItems = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -27,7 +27,7 @@ const navItems = [
 ];
 
 export default function AdminLayout({ children }) {
-    const { user, logout } = useAuth();
+    const { admin, logout } = useAdminAuth();
     const navigate = useNavigate();
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
@@ -157,9 +157,9 @@ export default function AdminLayout({ children }) {
                     </div>
                     <div className="admin-topbar-user">
                         <div className="admin-user-avatar">
-                            {user?.name?.[0]?.toUpperCase() || 'A'}
+                            {admin?.name?.[0]?.toUpperCase() || 'A'}
                         </div>
-                        <span className="admin-user-name">{user?.name || user?.email}</span>
+                        <span className="admin-user-name">{admin?.name || admin?.email}</span>
                     </div>
                 </header>
                 <main className="admin-content">

@@ -146,9 +146,23 @@
     letter-spacing: 1px;
 }
 
-.badge-status.pending { background: rgba(255, 184, 0, 0.1); color: #ffb800; border: 1px solid rgba(255, 184, 0, 0.2); }
-.badge-status.processing { background: rgba(227, 27, 35, 0.1); color: #e31b23; border: 1px solid rgba(227, 27, 35, 0.2); }
-.badge-status.completed { background: rgba(0, 200, 83, 0.1); color: #00c853; border: 1px solid rgba(0, 200, 83, 0.2); }
+.badge-status.pending {
+    background: rgba(255, 184, 0, 0.1);
+    color: #ffb800;
+    border: 1px solid rgba(255, 184, 0, 0.2);
+}
+
+.badge-status.processing {
+    background: rgba(227, 27, 35, 0.1);
+    color: #e31b23;
+    border: 1px solid rgba(227, 27, 35, 0.2);
+}
+
+.badge-status.completed {
+    background: rgba(0, 200, 83, 0.1);
+    color: #00c853;
+    border: 1px solid rgba(0, 200, 83, 0.2);
+}
 
 .order-details {
     padding: 0 45px 45px;
@@ -195,7 +209,8 @@
     color: rgba(255, 255, 255, 0.35);
 }
 
-.item-qty, .item-price {
+.item-qty,
+.item-price {
     font-weight: 900;
     font-size: 1.1rem;
 }
@@ -239,10 +254,30 @@
     animation: skeleton-pulse 1.5s infinite;
 }
 
+.items-loading-skeleton {
+    padding: 20px 0;
+}
+
+.skeleton-row-mini {
+    height: 40px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    animation: skeleton-pulse 1.5s infinite;
+}
+
 @keyframes skeleton-pulse {
-    0% { opacity: 0.5; }
-    50% { opacity: 0.8; }
-    100% { opacity: 0.5; }
+    0% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
+
+    100% {
+        opacity: 0.5;
+    }
 }
 
 /* ============================================================
@@ -277,9 +312,24 @@
     align-items: center;
 }
 
-.preview-modal-header h3 { margin: 0; font-size: 1.4rem; font-weight: 900; }
-.preview-modal-header button { background: none; border: none; color: #fff; font-size: 2rem; cursor: pointer; opacity: 0.5; }
-.preview-modal-header button:hover { opacity: 1; }
+.preview-modal-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 900;
+}
+
+.preview-modal-header button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 2rem;
+    cursor: pointer;
+    opacity: 0.5;
+}
+
+.preview-modal-header button:hover {
+    opacity: 1;
+}
 
 .preview-body {
     display: grid;
