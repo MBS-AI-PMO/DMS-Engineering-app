@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X, AlertTriangle } from 'lucide-react';
 import { fetchAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -19,9 +19,9 @@ export default function AdminsList() {
     useEffect(() => {
         fetchAdminUsers()
             .then(setAdmins)
-            .catch(console.error)
+            .catch(err => toast('Failed to load admins: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const openNew = () => { setEditing('new'); setForm(empty); setFormError(''); };
     const openEdit = (admin) => {
@@ -59,6 +59,7 @@ export default function AdminsList() {
             closeEdit();
             toast(editing === 'new' ? 'Admin created' : 'Admin updated', 'success');
         } catch (err) {
+            toast('Save failed: ' + err.message, 'error');
             setFormError(err.message);
         } finally {
             setSaving(false);

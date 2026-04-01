@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Edit2, Search, FileText, Layers, X } from 'lucide-react';
@@ -16,19 +16,19 @@ export default function ServicesList() {
     const navigate = useNavigate();
     const toast = useToast();
 
-    const fetchAllData = () => {
+    const fetchAllData = useCallback(() => {
         setLoading(true);
         fetchServicesWithUsage()
             .then(setServices)
             .catch(() => {
-                fetchServices().then(setServices).catch(console.error);
+                fetchServices().then(setServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
             })
             .finally(() => setLoading(false));
-    };
+    }, [toast]);
 
     useEffect(() => {
         fetchAllData();
-    }, []);
+    }, [fetchAllData]);
 
     // Build hierarchical tree and flatten it for display
     const getFlattenedHierarchy = (items, parentId = null, depth = 0) => {

@@ -10,7 +10,7 @@ export default function ContactSettings() {
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const { toast } = useToast();
+    const toast = useToast();
 
     useEffect(() => {
         fetchSettings()
@@ -72,9 +72,9 @@ export default function ContactSettings() {
                     <h1 className="admin-page-title">Contact & Footer Settings</h1>
                     <p className="admin-page-subtitle">Update your site's contact information and social links</p>
                 </div>
-                <button 
-                    className="admin-btn-primary" 
-                    onClick={handleSave} 
+                <button
+                    className="admin-btn-primary"
+                    onClick={handleSave}
                     disabled={saving}
                 >
                     {saving ? <Loader2 size={18} className="spin" /> : <Save size={18} />}
@@ -91,27 +91,27 @@ export default function ContactSettings() {
                     <div className="admin-form-grid">
                         <div className="admin-form-group">
                             <label><Phone size={14} /> Phone Number</label>
-                            <input 
-                                type="text" 
-                                value={settings.footer_contact.phone} 
+                            <input
+                                type="text"
+                                value={settings.footer_contact.phone}
                                 onChange={e => updateContact('phone', e.target.value)}
                                 placeholder="+1 (555) 000-0000"
                             />
                         </div>
                         <div className="admin-form-group">
                             <label><Mail size={14} /> Email Address</label>
-                            <input 
-                                type="email" 
-                                value={settings.footer_contact.email} 
+                            <input
+                                type="email"
+                                value={settings.footer_contact.email}
                                 onChange={e => updateContact('email', e.target.value)}
                                 placeholder="info@dms-metals.com"
                             />
                         </div>
                         <div className="admin-form-group full-width">
                             <label><MapPin size={14} /> Physical Address</label>
-                            <input 
-                                type="text" 
-                                value={settings.footer_contact.address} 
+                            <input
+                                type="text"
+                                value={settings.footer_contact.address}
                                 onChange={e => updateContact('address', e.target.value)}
                                 placeholder="1234 Metal St, Precision City"
                             />
@@ -133,18 +133,18 @@ export default function ContactSettings() {
                                     {social.platform === 'instagram' && <Instagram size={20} />}
                                 </div>
                                 <div className="admin-form-group" style={{ flex: 1, marginBottom: 0 }}>
-                                    <input 
-                                        type="text" 
-                                        value={social.url} 
+                                    <input
+                                        type="text"
+                                        value={social.url}
                                         onChange={e => updateSocial(i, e.target.value)}
                                         placeholder={`https://${social.platform}.com/...`}
                                     />
                                 </div>
                                 <div className="admin-social-toggle">
                                     <label className="switch">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={social.enabled} 
+                                        <input
+                                            type="checkbox"
+                                            checked={social.enabled}
                                             onChange={() => toggleSocial(i)}
                                         />
                                         <span className="slider round"></span>

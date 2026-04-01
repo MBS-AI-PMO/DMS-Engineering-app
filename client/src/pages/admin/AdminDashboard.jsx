@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, ArrowRight, Mail, Users, DollarSign } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { fetchMetals, fetchCategories, fetchFaqs, fetchFaqCategories, fetchServices, fetchAdminUsers, fetchServicesWithUsage, fetchPricingMetadata } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
 
 const statCards = [
     { label: 'Metals', icon: Box, to: '/admin/metals', fetch: fetchMetals },
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
     const navigate = useNavigate();
     const [counts, setCounts] = useState({});
     const [servicesUsage, setServicesUsage] = useState([]);
+    const toast = useToast();
 
     useEffect(() => {
         statCards.forEach(async ({ label, fetch: fn }) => {
@@ -34,8 +36,8 @@ export default function AdminDashboard() {
         // Fetch services with usage counts
         fetchServicesWithUsage()
             .then(data => setServicesUsage(data || []))
-            .catch(() => setServicesUsage([]));
-    }, []);
+            .catch(err => toast('Failed to load services usage: ' + err.message, 'error'));
+    }, [toast]);
 
     return (
         <div className="admin-dashboard">

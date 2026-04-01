@@ -21,6 +21,7 @@ import {
 import ProjectViewer from '../../components/viewer/ProjectViewer';
 import { generateOrderReport } from '../../utils/generateOrderReport';
 import '../../styles/PremiumAdminOrders.css';
+import { useToast } from '../../context/ToastContext';
 
 const AdminOrdersList = () => {
     const [activeTab, setActiveTab] = useState('active'); // 'active' or 'deleted'
@@ -29,6 +30,7 @@ const AdminOrdersList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [previewItem, setPreviewItem] = useState(null);
+    const toast = useToast();
 
     const fetchOrders = useCallback(async () => {
         setLoading(true);
@@ -40,26 +42,32 @@ const AdminOrdersList = () => {
                 setOrders(data.data);
             }
         } catch (err) {
-            console.error('Failed to fetch admin orders:', err);
+            toast('Failed to fetch orders: ' + err.message, 'error');
         } finally {
             setLoading(false);
         }
-    }, [activeTab]);
+    }, [activeTab, toast]);
 
     const handleSoftDelete = async (orderId, e) => {
         e.stopPropagation();
         try {
             const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST' });
-            if ((await response.json()).success) fetchOrders();
-        } catch (err) { console.error(err); }
+            if ((await response.json()).success) {
+                fetchOrders();
+                toast('Order moved to trash', 'success');
+            }
+        } catch (err) { toast('Failed to move to trash: ' + err.message, 'error'); }
     };
 
     const handleRestore = async (orderId, e) => {
         e.stopPropagation();
         try {
             const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST' });
-            if ((await response.json()).success) fetchOrders();
-        } catch (err) { console.error(err); }
+            if ((await response.json()).success) {
+                fetchOrders();
+                toast('Order restored successfully', 'success');
+            }
+        } catch (err) { toast('Failed to restore order: ' + err.message, 'error'); }
     };
 
     const handlePermanentDelete = async (orderId, e) => {
@@ -68,8 +76,11 @@ const AdminOrdersList = () => {
 
         try {
             const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
-            if ((await response.json()).success) fetchOrders();
-        } catch (err) { console.error(err); }
+            if ((await response.json()).success) {
+                fetchOrders();
+                toast('Order permanently deleted', 'success');
+            }
+        } catch (err) { toast('Delete failed: ' + err.message, 'error'); }
     };
 
     const handleDeleteAll = async () => {
@@ -77,7 +88,8 @@ const AdminOrdersList = () => {
         try {
             await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE' })));
             fetchOrders();
-        } catch (err) { console.error(err); }
+            toast('Trash bin cleared successfully', 'success');
+        } catch (err) { toast('Failed to clear trash: ' + err.message, 'error'); }
     };
 
     useEffect(() => {
@@ -112,9 +124,10 @@ const AdminOrdersList = () => {
             if (data.success) {
                 setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
                 if (selectedOrder?.id === orderId) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+                toast(`Order #${orderId} status updated to ${newStatus}`, 'success');
             }
         } catch (err) {
-            console.error('Status update failed:', err);
+            toast('Status update failed: ' + err.message, 'error');
         }
     };
 
@@ -451,6 +464,7 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
     const [items, setItems] = useState([]);
     const [loadingItems, setLoadingItems] = useState(true);
     const [generatingPdf, setGeneratingPdf] = useState(false);
+    const toast = useToast();
 
     useEffect(() => {
         setLoadingItems(true);
@@ -464,9 +478,9 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
         setGeneratingPdf(true);
         try {
             await generateOrderReport(order, items);
+            toast('Report generated successfully', 'success');
         } catch (err) {
-            console.error('PDF Generation Error:', err);
-            alert('Failed to generate report. Please try again.');
+            toast('Failed to generate report: ' + err.message, 'error');
         } finally {
             setGeneratingPdf(false);
         }

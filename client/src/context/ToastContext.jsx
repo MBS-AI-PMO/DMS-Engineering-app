@@ -1,14 +1,8 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, XCircle, AlertTriangle, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
+import ToastItem from '../components/admin/ToastItem';
 
 const ToastContext = createContext(null);
-
-const icons = {
-    success: <CheckCircle size={18} />,
-    error:   <XCircle size={18} />,
-    warning: <AlertTriangle size={18} />,
-};
 
 export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([]);
@@ -24,23 +18,14 @@ export function ToastProvider({ children }) {
     return (
         <ToastContext.Provider value={toast}>
             {children}
-            <div className="toast-container">
+            <div className="admin-toast-container">
                 <AnimatePresence>
                     {toasts.map(t => (
-                        <motion.div
+                        <ToastItem
                             key={t.id}
-                            className={`toast toast-${t.type}`}
-                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            <span className="toast-icon">{icons[t.type]}</span>
-                            <span className="toast-msg">{t.message}</span>
-                            <button className="toast-close" onClick={() => dismiss(t.id)}>
-                                <X size={14} />
-                            </button>
-                        </motion.div>
+                            toast={t}
+                            onDismiss={dismiss}
+                        />
                     ))}
                 </AnimatePresence>
             </div>

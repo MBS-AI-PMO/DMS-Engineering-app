@@ -188,8 +188,8 @@ export default function MetalEdit() {
     const [selectedServicesThicknessIdx, setSelectedServicesThicknessIdx] = useState(0);
 
     useEffect(() => {
-        fetchCategories().then(setCategories).catch(console.error);
-        fetchServices().then(setAllServices).catch(console.error);
+        fetchCategories().then(setCategories).catch(err => toast('Failed to load categories: ' + err.message, 'error'));
+        fetchServices().then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
         if (!isNew) {
             fetchMetalBySlug(slug)
                 .then(data => setMetal({
@@ -206,10 +206,10 @@ export default function MetalEdit() {
                     faqs: data.faqs || [],
                     custom_fields: data.custom_fields || {},
                 }))
-                .catch(err => setError(err.message))
+                .catch(err => toast('Failed to load metal details: ' + err.message, 'error'))
                 .finally(() => setLoading(false));
         }
-    }, [slug, isNew]);
+    }, [slug, isNew, toast]);
 
     const set = useCallback((key, value) => setMetal(prev => ({ ...prev, [key]: value })), []);
 

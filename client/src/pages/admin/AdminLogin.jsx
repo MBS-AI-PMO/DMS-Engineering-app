@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function AdminLogin() {
     const { login } = useAdminAuth();
@@ -10,6 +11,7 @@ export default function AdminLogin() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const toast = useToast();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -17,9 +19,12 @@ export default function AdminLogin() {
         setLoading(true);
         try {
             await login(email, password);
+            toast('Welcome back! Login successful.', 'success');
             navigate('/admin');
         } catch (err) {
-            setError(err.message || 'Invalid credentials');
+            const msg = err.message || 'Invalid credentials';
+            setError(msg);
+            toast(msg, 'error');
         } finally {
             setLoading(false);
         }

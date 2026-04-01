@@ -23,7 +23,11 @@ export default function ServiceEdit() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [error, setError] = useState('');
+
+    // Tapping Modal State
+    const [isTapModalOpen, setIsTapModalOpen] = useState(false);
+    const [editingTapIndex, setEditingTapIndex] = useState(null);
+    const [tempTap, setTempTap] = useState({ name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', price: '', notes: '' });
 
     useEffect(() => {
         const load = async () => {
@@ -40,16 +44,15 @@ export default function ServiceEdit() {
                             service_options: Array.isArray(match.service_options) ? match.service_options : []
                         });
                     }
-                    else setError('Service not found');
                 }
             } catch (err) {
-                setError('Failed to load data: ' + err.message);
+                toast('Failed to load data: ' + err.message, 'error');
             } finally {
                 setLoading(false);
             }
         };
         load();
-    }, [id, isNew]);
+    }, [id, isNew, toast]);
 
     const handleSave = async () => {
         if (!service.title) {
@@ -105,6 +108,32 @@ export default function ServiceEdit() {
         }));
     };
 
+    const openTapModal = (index = null) => {
+        if (index !== null) {
+            setEditingTapIndex(index);
+            setTempTap({ ...service.service_options[index] });
+        } else {
+            setEditingTapIndex(null);
+            setTempTap({ name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', price: '', notes: '' });
+        }
+        setIsTapModalOpen(true);
+    };
+
+    const saveTap = () => {
+        if (!tempTap.name) {
+            toast('Tap name is required', 'error');
+            return;
+        }
+        const updatedOptions = [...(service.service_options || [])];
+        if (editingTapIndex !== null) {
+            updatedOptions[editingTapIndex] = tempTap;
+        } else {
+            updatedOptions.push(tempTap);
+        }
+        setService(s => ({ ...s, service_options: updatedOptions }));
+        setIsTapModalOpen(false);
+    };
+
     if (loading) return (
         <div className="admin-loading-full">
             <Loader2 className="animate-spin" size={48} />
@@ -112,13 +141,6 @@ export default function ServiceEdit() {
         </div>
     );
 
-    if (error) return (
-        <div className="admin-error-container">
-            <h3>Error</h3>
-            <p>{error}</p>
-            <Link to="/admin/services" className="admin-btn admin-btn-outline">Back to Services</Link>
-        </div>
-    );
 
     return (
         <div className="admin-edit-page">
@@ -337,59 +359,51 @@ export default function ServiceEdit() {
                                         <button
                                             className="admin-btn admin-btn-outline"
                                             style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', notes: '' }] }))}
+                                            onClick={() => openTapModal()}
                                         >
                                             <Plus size={14} /> Add Tap
                                         </button>
                                     </div>
                                     <p className="admin-card-tip">Configure taps with hole diameter and depth ranges. These appear in the quote flow when a DXF file is uploaded.</p>
-                                    <div className="tap-options-list">
+
+                                    <div className="tap-bar-list">
+                                        <div className="tap-bar-header">
+                                            <div className="col-name">Tap Name</div>
+                                            <div className="col-diam">Diameter (in)</div>
+                                            <div className="col-depth">Depth (in)</div>
+                                            <div className="col-price">Price</div>
+                                            <div className="col-actions"></div>
+                                        </div>
                                         {(service.service_options || []).map((opt, idx) => (
-                                            <div key={idx} className="tap-option-card">
-                                                <div className="tap-option-header">
-                                                    <Hash size={18} style={{ color: '#94a3b8' }} />
-                                                    <input type="text" className="tap-name-input" value={opt.name} onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="e.g. 4-40 Roll Tap" />
-                                                    <button className="option-remove-btn" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}><X size={14} /></button>
+                                            <div key={idx} className="tap-option-bar">
+                                                <div className="col-name">
+                                                    <span className="tap-name-label">{opt.name}</span>
+                                                    {opt.notes && <span className="tap-notes-indicator" title={opt.notes}>Notes+</span>}
                                                 </div>
-                                                <div className="tap-fields-grid">
-                                                    <div className="option-input-group">
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowDown size={10} /> Min Diameter (in)</label>
-                                                        <input type="number" step="0.001" value={opt.min_diameter} onChange={e => { const n = [...service.service_options]; n[idx].min_diameter = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
-                                                    </div>
-                                                    <div className="option-input-group">
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowUp size={10} /> Max Diameter (in)</label>
-                                                        <input type="number" step="0.001" value={opt.max_diameter} onChange={e => { const n = [...service.service_options]; n[idx].max_diameter = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
-                                                    </div>
-                                                    <div className="option-input-group">
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Maximize size={10} /> Max Depth (in)</label>
-                                                        <input type="number" step="0.001" value={opt.max_depth} onChange={e => { const n = [...service.service_options]; n[idx].max_depth = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
-                                                    </div>
-                                                    <div className="option-input-group">
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><ArrowDown size={10} /> Min Depth (in)</label>
-                                                        <div className="tap-min-depth-group">
-                                                            <div className="toggle-switch-group" onClick={() => { const n = [...service.service_options]; n[idx].min_depth = n[idx].min_depth === null ? '' : null; setService(s => ({ ...s, service_options: n })); }}>
-                                                                <div className={`toggle-switch ${opt.min_depth === null ? 'active' : ''}`} style={{ width: '36px', height: '20px' }}>
-                                                                    <div className="toggle-handle" style={{ width: '14px', height: '14px', top: '3px', left: opt.min_depth === null ? '19px' : '3px' }} />
-                                                                </div>
-                                                                <span style={{ fontSize: '0.8rem' }}>{opt.min_depth === null ? 'No Limit' : 'Value'}</span>
-                                                            </div>
-                                                            {opt.min_depth !== null && (
-                                                                <input type="number" step="0.001" value={opt.min_depth} onChange={e => { const n = [...service.service_options]; n[idx].min_depth = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.000" />
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="option-input-group">
-                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>Price per Hole ($)</label>
-                                                        <input type="number" step="0.01" value={opt.price || ''} onChange={e => { const n = [...service.service_options]; n[idx].price = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="0.00" />
-                                                    </div>
+                                                <div className="col-diam">
+                                                    <span className="diam-range">{opt.min_diameter} - {opt.max_diameter}</span>
                                                 </div>
-                                                <div className="option-input-group">
-                                                    <label>Additional Notes</label>
-                                                    <textarea className="tap-option-notes-area" rows={2} value={opt.notes || ''} onChange={e => { const n = [...service.service_options]; n[idx].notes = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="Optional notes... e.g. recommended hole size, material specific notes" />
+                                                <div className="col-depth">
+                                                    <span className="depth-info">
+                                                        {opt.min_depth === null ? '∞' : opt.min_depth} to {opt.max_depth || '0'}
+                                                    </span>
+                                                </div>
+                                                <div className="col-price">
+                                                    <span className="price-tag">${opt.price || '0'}</span>
+                                                </div>
+                                                <div className="col-actions">
+                                                    <button className="tap-action-btn edit" onClick={() => openTapModal(idx)} title="Edit Tap">
+                                                        <Wrench size={14} />
+                                                    </button>
+                                                    <button className="tap-action-btn delete" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }} title="Remove">
+                                                        <X size={14} />
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
-                                        {(!service.service_options || service.service_options.length === 0) && <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>}
+                                        {(!service.service_options || service.service_options.length === 0) && (
+                                            <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -439,6 +453,99 @@ export default function ServiceEdit() {
                     </aside>
                 </div>
             </main>
+
+            <AnimatePresence>
+                {isTapModalOpen && (
+                    <div className="admin-modal-overlay">
+                        <motion.div
+                            className="admin-modal-container"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        >
+                            <div className="admin-modal-header">
+                                <h3>{editingTapIndex !== null ? 'Edit Tap Configuration' : 'Add New Tap'}</h3>
+                                <button className="modal-close-btn" onClick={() => setIsTapModalOpen(false)}><X size={20} /></button>
+                            </div>
+
+                            <div className="admin-modal-body">
+                                <div className="admin-form-group">
+                                    <label>Tap Name</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <Hash size={18} style={{ color: '#94a3b8' }} />
+                                        <input
+                                            type="text"
+                                            value={tempTap.name}
+                                            onChange={e => setTempTap(t => ({ ...t, name: e.target.value }))}
+                                            placeholder="e.g. M2 x 0.4 Roll Tap"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="tap-fields-grid" style={{ marginBottom: '20px' }}>
+                                    <div className="option-input-group">
+                                        <label><ArrowDown size={10} /> Min Diameter (in)</label>
+                                        <input type="number" step="0.0001" value={tempTap.min_diameter} onChange={e => setTempTap(t => ({ ...t, min_diameter: e.target.value }))} placeholder="0.0000" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label><ArrowUp size={10} /> Max Diameter (in)</label>
+                                        <input type="number" step="0.0001" value={tempTap.max_diameter} onChange={e => setTempTap(t => ({ ...t, max_diameter: e.target.value }))} placeholder="0.0000" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label><Maximize size={10} /> Max Depth (in)</label>
+                                        <input type="number" step="0.0001" value={tempTap.max_depth} onChange={e => setTempTap(t => ({ ...t, max_depth: e.target.value }))} placeholder="0.0000" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label>Price / Hole ($)</label>
+                                        <input type="number" step="0.01" value={tempTap.price} onChange={e => setTempTap(t => ({ ...t, price: e.target.value }))} placeholder="0.00" />
+                                    </div>
+                                </div>
+
+                                <div className="admin-form-group">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <ArrowDown size={10} /> Min Depth Configuration
+                                    </label>
+                                    <div className="tap-min-depth-modal-row">
+                                        <div className="toggle-switch-group" onClick={() => setTempTap(t => ({ ...t, min_depth: t.min_depth === null ? '0' : null }))}>
+                                            <div className={`toggle-switch ${tempTap.min_depth === null ? 'active' : ''}`} style={{ width: '40px', height: '22px' }}>
+                                                <div className="toggle-handle" style={{ width: '16px', height: '16px', top: '3px', left: tempTap.min_depth === null ? '21px' : '3px' }} />
+                                            </div>
+                                            <span>{tempTap.min_depth === null ? 'No Limit' : 'Set Limit'}</span>
+                                        </div>
+                                        {tempTap.min_depth !== null && (
+                                            <input
+                                                type="number"
+                                                step="0.0001"
+                                                value={tempTap.min_depth}
+                                                onChange={e => setTempTap(t => ({ ...t, min_depth: e.target.value }))}
+                                                placeholder="0.0000"
+                                                className="modal-small-input"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="admin-form-group">
+                                    <label>Additional Notes</label>
+                                    <textarea
+                                        rows={3}
+                                        value={tempTap.notes || ''}
+                                        onChange={e => setTempTap(t => ({ ...t, notes: e.target.value }))}
+                                        placeholder="Enter any material specific notes or hole size recommendations..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="admin-modal-footer">
+                                <button className="admin-btn admin-btn-outline" onClick={() => setIsTapModalOpen(false)}>Cancel</button>
+                                <button className="admin-btn admin-btn-primary" onClick={saveTap}>
+                                    <Check size={18} /> {editingTapIndex !== null ? 'Update Tap' : 'Add Tap'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <style>{`
                 .admin-edit-page, .admin-edit-page * {
@@ -765,6 +872,123 @@ export default function ServiceEdit() {
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
                 .admin-loading-full { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 16px; color: #64748b; }
+
+                /* New Tap Bar Styles */
+                .tap-bar-list {
+                    display: flex;
+                    flex-direction: column;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    background: #ffffff;
+                }
+                .tap-bar-header {
+                    display: grid;
+                    grid-template-columns: 1fr 140px 140px 100px 100px;
+                    background: #f8fafc;
+                    border-bottom: 1px solid #e2e8f0;
+                    padding: 12px 20px;
+                    font-size: 0.7rem;
+                    font-weight: 800;
+                    color: #94a3b8;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .tap-option-bar {
+                    display: grid;
+                    grid-template-columns: 1fr 140px 140px 100px 100px;
+                    padding: 14px 20px;
+                    border-bottom: 1px solid #f1f5f9;
+                    align-items: center;
+                    transition: all 0.2s;
+                }
+                .tap-option-bar:last-child { border-bottom: none; }
+                .tap-option-bar:hover { background: #fdfcff; }
+                
+                .col-name { display: flex; align-items: center; gap: 8px; }
+                .tap-name-label { font-weight: 700; color: #1e293b; font-size: 0.95rem; }
+                .tap-notes-indicator { 
+                    font-size: 0.65rem; 
+                    background: #f1f5f9; 
+                    color: #64748b; 
+                    padding: 2px 6px; 
+                    border-radius: 4px; 
+                    cursor: help;
+                }
+                
+                .diam-range, .depth-info { font-family: 'JetBrains Mono', monospace, monospace; font-size: 0.85rem; color: #475569; }
+                .price-tag { font-weight: 800; color: #8b5cf6; }
+                
+                .col-actions { display: flex; gap: 8px; justify-content: flex-end; }
+                .tap-action-btn {
+                    width: 32px; height: 32px;
+                    display: flex; align-items: center; justify-content: center;
+                    border-radius: 8px; border: none; cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .tap-action-btn.edit { background: #f5f3ff; color: #8b5cf6; }
+                .tap-action-btn.edit:hover { background: #ede9fe; transform: translateY(-1px); }
+                .tap-action-btn.delete { background: #fff1f2; color: #fb7185; }
+                .tap-action-btn.delete:hover { background: #ffe4e6; transform: translateY(-1px); }
+
+                /* Modal Styles */
+                .admin-modal-overlay {
+                    position: fixed;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(15, 23, 42, 0.4);
+                    backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                    padding: 20px;
+                }
+                .admin-modal-container {
+                    background: #ffffff;
+                    border-radius: 24px;
+                    width: 100%;
+                    max-width: 550px;
+                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+                    overflow: hidden;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                .admin-modal-header {
+                    padding: 24px 30px;
+                    background: #ffffff;
+                    border-bottom: 1px solid #f1f5f9;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .admin-modal-header h3 { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0; }
+                .modal-close-btn { background: none; border: none; color: #94a3b8; cursor: pointer; transition: color 0.2s; }
+                .modal-close-btn:hover { color: #1e293b; }
+
+                .admin-modal-body { padding: 30px; }
+                .admin-modal-footer {
+                    padding: 20px 30px;
+                    background: #f8fafc;
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 12px;
+                    border-top: 1px solid #f1f5f9;
+                }
+                
+                .tap-min-depth-modal-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+                    background: #f8fafc;
+                    padding: 12px 16px;
+                    border-radius: 12px;
+                    border: 1.5px solid #e2e8f0;
+                }
+                .modal-small-input {
+                    flex: 1;
+                    max-width: 150px;
+                    margin: 0 !important;
+                    background: white !important;
+                }
             `}</style>
         </div>
     );

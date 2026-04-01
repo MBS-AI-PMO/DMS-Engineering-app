@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Box } from 'lucide-react';
 import { fetchMetals, fetchCategories, deleteMetal } from '../../utils/api';
 import ImageModal from '../../components/admin/ImageModal';
+import { useToast } from '../../context/ToastContext';
 
 export default function MetalsList() {
     const [metals, setMetals] = useState([]);
@@ -14,11 +15,12 @@ export default function MetalsList() {
     const [filterCat, setFilterCat] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(null);
     const [zoomedImage, setZoomedImage] = useState(null);
+    const toast = useToast();
 
     useEffect(() => {
         Promise.all([fetchMetals(), fetchCategories()])
             .then(([m, c]) => { setMetals(m); setCategories(c); })
-            .catch(console.error)
+            .catch(err => toast('Failed to load metals: ' + err.message, 'error'))
             .finally(() => setLoading(false));
     }, []);
 
@@ -35,8 +37,9 @@ export default function MetalsList() {
             await deleteMetal(slug);
             setMetals(prev => prev.filter(m => m.slug !== slug));
             setConfirmDelete(null);
+            toast('Metal deleted successfully', 'success');
         } catch (err) {
-            alert('Delete failed: ' + err.message);
+            toast('Delete failed: ' + err.message, 'error');
         }
     };
 

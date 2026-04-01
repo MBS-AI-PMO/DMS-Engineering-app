@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Users, Search, UserCheck, Phone, MapPin, Calendar, Mail, User } from 'lucide-react';
 import { fetchCustomers } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
 
 export default function Customers() {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const toast = useToast();
 
     useEffect(() => {
         fetchCustomers()
             .then(data => setCustomers(data || []))
-            .catch(() => setCustomers([]))
+            .catch(err => toast('Failed to load customers: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const filtered = customers.filter(c => {
         const q = search.toLowerCase();

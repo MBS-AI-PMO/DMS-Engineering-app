@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Save, Send, Trash2, Mail, CheckCircle, AlertTriangle } from 'lucide-react';
 import { fetchEmailConfig, saveEmailConfig, testEmailConfig, deleteEmailConfig, sendTestEmail } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -38,9 +38,9 @@ export default function EmailConfig() {
                     setConfigured(true);
                 }
             })
-            .catch(console.error)
+            .catch(err => toast('Failed to load email config: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const handleSave = async () => {
         if (!form.smtp_host || !form.email) {

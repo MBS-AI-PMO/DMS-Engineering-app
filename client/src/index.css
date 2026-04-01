@@ -203,7 +203,7 @@ body {
     width: 0;
     height: 2px;
     background: #e31b23;
-    transition: width 0.3s ease;
+    transition: width 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .nav-links li a:hover::after,
@@ -229,6 +229,45 @@ body {
 
 .icon-btn:hover {
     color: #fff;
+}
+
+.icon-btn.cart-trigger.has-items {
+    animation: cartPulse 2s infinite ease-in-out;
+}
+
+.icon-btn.cart-trigger.has-items svg {
+    color: #e31b23;
+}
+
+.cart-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #e31b23;
+    color: white;
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 50%;
+    font-weight: 800;
+    box-shadow: 0 0 10px rgba(227, 27, 35, 0.4);
+    border: 2px solid #000;
+}
+
+@keyframes cartPulse {
+    0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0 rgba(227, 27, 35, 0));
+    }
+
+    50% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 8px rgba(227, 27, 35, 0.6));
+    }
+
+    100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0 rgba(227, 27, 35, 0));
+    }
 }
 
 .btn-pricing-nav {

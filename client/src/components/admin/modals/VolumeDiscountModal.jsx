@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Check, Plus, Info, Zap } from 'lucide-react';
+import { useToast } from '../../../context/ToastContext';
 
 /**
  * VolumeDiscountModal - A fresh, stable rebuild for managing pricing tiers.
@@ -10,6 +11,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
     const [newQty, setNewQty] = useState('');
     const [percent, setPercent] = useState(tier?.discount_percent || 0);
     const [isActive, setIsActive] = useState(tier?.is_active !== false);
+    const toast = useToast();
 
     if (!isOpen) return null;
 
@@ -28,7 +30,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                 // Prevent accidental massive arrays for stability
                 const rangeSize = end - start + 1;
                 if (rangeSize > 500) {
-                    alert('Range too large. Please keep it under 500 units.');
+                    toast('Range too large. Please keep it under 500 units.', 'error');
                     return;
                 }
                 for (let i = start; i <= end; i++) addedValues.push(i);
@@ -54,7 +56,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
 
     const handleSave = () => {
         if (quantities.length === 0) {
-            alert('Please add at least one quantity trigger.');
+            toast('Please add at least one quantity trigger.', 'error');
             return;
         }
         onSave({

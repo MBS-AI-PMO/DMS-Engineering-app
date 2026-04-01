@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X, Search } from 'lucide-react';
 import { fetchFaqs, fetchFaqCategories, createFaq, updateFaq, deleteFaq } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -21,9 +21,9 @@ export default function FaqsList() {
     useEffect(() => {
         Promise.all([fetchFaqs(), fetchFaqCategories()])
             .then(([f, c]) => { setFaqs(f); setFaqCategories(c); })
-            .catch(console.error)
+            .catch(err => toast('Failed to load FAQs: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const filtered = faqs.filter(f => {
         const matchSearch = f.question.toLowerCase().includes(search.toLowerCase());
@@ -46,6 +46,7 @@ export default function FaqsList() {
                 setFaqs(prev => prev.map(f => f.id === data.id ? data : f));
             }
             closeEdit();
+            toast('FAQ saved successfully', 'success');
         } catch (err) {
             toast('Save failed: ' + err.message, 'error');
         } finally {
@@ -58,6 +59,7 @@ export default function FaqsList() {
             await deleteFaq(id);
             setFaqs(prev => prev.filter(f => f.id !== id));
             setConfirmDelete(null);
+            toast('FAQ deleted', 'success');
         } catch (err) {
             toast('Delete failed: ' + err.message, 'error');
         }

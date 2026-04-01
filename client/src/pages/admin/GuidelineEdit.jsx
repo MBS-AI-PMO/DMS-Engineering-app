@@ -35,12 +35,12 @@ export default function GuidelineEdit() {
                 setGuideline(normalizeGuideline(data));
             }
         } catch (err) {
-            console.error('Fetch error:', err);
+            toast('Could not load guidelines: ' + err.message, 'error');
             setError('Could not load guidelines.');
         } finally {
             setLoading(false);
         }
-    }, [serviceId]);
+    }, [serviceId, toast]);
 
     useEffect(() => {
         loadData();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Plus, Trash2, AlertCircle, Info } from 'lucide-react';
 import { fetchGuideline, saveGuideline } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
 
 const GuidelinesEditor = ({ service, onClose, onSave }) => {
     const [guideline, setGuideline] = useState({
@@ -14,6 +15,7 @@ const GuidelinesEditor = ({ service, onClose, onSave }) => {
     const [saving, setSaving] = useState(false);
     const [jsonError, setJsonError] = useState(null);
     const [tablesJson, setTablesJson] = useState('[]');
+    const toast = useToast();
 
     useEffect(() => {
         const load = async () => {
@@ -51,9 +53,11 @@ const GuidelinesEditor = ({ service, onClose, onSave }) => {
             };
 
             await saveGuideline(payload);
+            toast('Guidelines updated', 'success');
             if (onSave) onSave();
             onClose();
         } catch (err) {
+            toast('Failed to save guidelines: ' + err.message, 'error');
             setJsonError('Save failed: ' + err.message);
         } finally {
             setSaving(false);

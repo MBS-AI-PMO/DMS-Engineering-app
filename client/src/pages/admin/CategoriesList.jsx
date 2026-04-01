@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { fetchCategories, createCategory, updateCategory, deleteCategory } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -18,9 +18,9 @@ export default function CategoriesList() {
     useEffect(() => {
         fetchCategories()
             .then(setCategories)
-            .catch(console.error)
+            .catch(err => toast('Failed to load categories: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const openNew = () => { setEditing('new'); setForm(empty); };
     const openEdit = (cat) => { setEditing(cat); setForm({ ...cat }); };
@@ -36,6 +36,7 @@ export default function CategoriesList() {
                 const { data } = await updateCategory(editing.id, form);
                 setCategories(prev => prev.map(c => c.id === data.id ? data : c));
             }
+            toast(`Category ${editing === 'new' ? 'created' : 'updated'} successfully`, 'success');
             closeEdit();
         } catch (err) {
             toast('Save failed: ' + err.message, 'error');
@@ -49,6 +50,7 @@ export default function CategoriesList() {
             await deleteCategory(id);
             setCategories(prev => prev.filter(c => c.id !== id));
             setConfirmDelete(null);
+            toast('Category deleted successfully', 'success');
         } catch (err) {
             toast('Delete failed: ' + err.message, 'error');
         }

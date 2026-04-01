@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Trash2, Search } from 'lucide-react';
 import { fetchSubscribers, deleteSubscriber } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -14,9 +14,9 @@ export default function SubscribersList() {
     useEffect(() => {
         fetchSubscribers()
             .then(setSubscribers)
-            .catch(console.error)
+            .catch(err => toast('Failed to load subscribers: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const filtered = subscribers.filter(s =>
         s.email.toLowerCase().includes(search.toLowerCase())
