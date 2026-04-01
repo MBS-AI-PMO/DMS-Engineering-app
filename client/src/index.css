@@ -10059,3 +10059,83 @@ body.qf-active footer {
 .hover-scale:hover {
     transform: scale(1.02);
 }
+
+/* --- Policy Pages Styles (Universal) --- */
+
+.privacy-page, .terms-page {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.policy-section {
+    margin-bottom: 2.5rem;
+}
+
+.policy-icon-box {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(227, 27, 35, 0.05) !important;
+    color: #e31b23 !important;
+}
+
+.mb-10 { margin-bottom: 2.5rem !important; }
+.mb-16 { margin-bottom: 4rem !important; }
+.mt-10 { margin-top: 2.5rem !important; }
+.pt-10 { padding-top: 2.5rem !important; }
+.gap-12 { gap: 3rem !important; }
+
+.leading-relaxed { line-height: 1.625; }
+
+.display-4 {
+    font-size: 3.5rem;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+}
+
+/* --- Final Policy UI Polishes --- */
+
+.display-4 {
+    font-size: 2.75rem !important;
+    line-height: 1.2 !important;
+    margin-top: 0.5rem !important;
+}
+
+.privacy-page, .terms-page {
+    padding-bottom: 5rem !important;
+    min-height: auto !important;
+}
+
+.agreement-card {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 2.5rem !important;
+    border-radius: 20px !important;
+    margin-top: 4rem !important;
+}
+
+.breadcrumb-back {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    margin-bottom: 1.5rem !important;
+    text-transform: uppercase !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    font-size: 0.75rem !important;
+}
+
+/* --- Ultra-Premium Spatial Refinements --- */
+
+.privacy-page, .terms-page {
+    padding-top: 180px !important; /* Increased space for sticky navbar */
+}
+
+.breadcrumb-back {
+    margin-bottom: 2.5rem !important; /* Clear gap between back link and label */
+    gap: 0.75rem !important;      /* Breathing room for the arrow icon */
+}

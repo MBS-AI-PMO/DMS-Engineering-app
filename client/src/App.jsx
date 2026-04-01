@@ -16,6 +16,8 @@ import Guidelines from './pages/Guidelines';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Settings from './pages/Settings';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MetalsList from './pages/admin/MetalsList';
@@ -82,6 +84,8 @@ function App() {
                 <Route path="/faq" element={<PublicShell><FAQPage /></PublicShell>} />
                 <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
                 <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
+                <Route path="/privacy-policy" element={<PublicShell><PrivacyPolicy /></PublicShell>} />
+                <Route path="/terms-of-service" element={<PublicShell><TermsOfService /></PublicShell>} />
 
                 {/* Auth */}
                 <Route path="/login" element={<Login />} />

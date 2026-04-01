@@ -183,8 +183,8 @@ const Footer = () => {
                     <div className="footer-bottom-flex">
                         <p>&copy; {new Date().getFullYear()} DMS Metals. All Rights Reserved.</p>
                         <div className="footer-bottom-links">
-                            <a href="#">Privacy Policy</a>
-                            <a href="#">Terms of Service</a>
+                            <Link to="/privacy-policy">Privacy Policy</Link>
+                            <Link to="/terms-of-service">Terms of Service</Link>
                         </div>
                     </div>
                 </div>
