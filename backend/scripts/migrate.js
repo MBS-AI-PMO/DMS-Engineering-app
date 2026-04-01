@@ -181,6 +181,43 @@ async function migrate() {
         `);
         console.log('  ✓ service_metal_assignments table');
 
+        // Orders table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                email VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                phone VARCHAR(50),
+                address TEXT NOT NULL,
+                city VARCHAR(100) NOT NULL,
+                zip_code VARCHAR(20) NOT NULL,
+                total_price DECIMAL(15, 2) NOT NULL,
+                payment_method VARCHAR(50) DEFAULT 'COD',
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('  ✓ orders table');
+
+        // Order Items table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+                file_name VARCHAR(255) NOT NULL,
+                original_file_path TEXT NOT NULL,
+                configured_file_path TEXT,
+                flat_file_path TEXT,
+                configuration_json JSONB NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit_price DECIMAL(15, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('  ✓ order_items table');
+
         // Updated_at trigger function
         await db.query(`
             CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -193,7 +230,7 @@ async function migrate() {
         `);
 
         // Apply triggers
-        const tablesWithUpdatedAt = ['users', 'metals', 'metal_categories', 'faq_categories', 'faqs', 'email_config', 'service_configs', 'metal_configs'];
+        const tablesWithUpdatedAt = ['users', 'metals', 'metal_categories', 'faq_categories', 'faqs', 'email_config', 'service_configs', 'metal_configs', 'orders'];
         for (const table of tablesWithUpdatedAt) {
             await db.query(`
                 DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table};
