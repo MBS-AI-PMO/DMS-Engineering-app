@@ -15,10 +15,35 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
 
     const handleAddQty = (e) => {
         if (e) e.preventDefault();
-        const val = parseInt(newQty);
-        if (val > 0 && !quantities.includes(val)) {
-            const updated = [...quantities, val].sort((a, b) => a - b);
-            setQuantities(updated);
+        const input = newQty.trim();
+        if (!input) return;
+
+        let addedValues = [];
+        if (input.includes('-')) {
+            const [startStr, endStr] = input.split('-').map(s => s.trim());
+            const start = parseInt(startStr);
+            const end = parseInt(endStr);
+
+            if (!isNaN(start) && !isNaN(end) && end >= start) {
+                // Prevent accidental massive arrays for stability
+                const rangeSize = end - start + 1;
+                if (rangeSize > 500) {
+                    alert('Range too large. Please keep it under 500 units.');
+                    return;
+                }
+                for (let i = start; i <= end; i++) addedValues.push(i);
+            }
+        } else if (input.endsWith('+')) {
+            const val = parseInt(input.slice(0, -1).trim());
+            if (!isNaN(val) && val > 0) addedValues.push(val);
+        } else {
+            const val = parseInt(input);
+            if (!isNaN(val) && val > 0) addedValues.push(val);
+        }
+
+        if (addedValues.length > 0) {
+            const next = Array.from(new Set([...quantities, ...addedValues])).sort((a, b) => a - b);
+            setQuantities(next);
             setNewQty('');
         }
     };
@@ -98,11 +123,11 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
 
                         <div className="vdm-add-qty-row">
                             <input
-                                type="number"
+                                type="text"
                                 value={newQty}
                                 onChange={e => setNewQty(e.target.value)}
                                 onKeyPress={e => e.key === 'Enter' && handleAddQty()}
-                                placeholder="e.g. 50"
+                                placeholder="e.g. 50 or 10-25"
                             />
                             <button onClick={handleAddQty} className="vdm-add-inline-btn">
                                 <Plus size={16} />
@@ -111,7 +136,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                         </div>
                         <p className="vdm-field-hint">
                             <Info size={12} />
-                            The discount applies when order quantity meets or exceeds these values.
+                            The discount applies when order quantity meets or exceeds these values. Use "500+" for infinity.
                         </p>
                     </div>
 
@@ -211,8 +236,13 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
 
                     .vdm-qty-tags { 
                         display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
-                        min-height: 42px; padding: 12px; background: #fafafa; border: 1px dashed #e2e8f0; border-radius: 12px;
+                        max-height: 240px; overflow-y: auto;
+                        min-height: 42px; padding: 12px; background: #f8fafc; border: 1.5px dashed #e2e8f0; border-radius: 12px;
                     }
+                    .vdm-qty-tags::-webkit-scrollbar { width: 6px; }
+                    .vdm-qty-tags::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+                    .vdm-qty-tags::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+                    .vdm-qty-tags::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
                     .vdm-tag {
                         display: flex; align-items: center; gap: 8px;
                         background: white; border: 1px solid #e2e8f0; border-radius: 8px;

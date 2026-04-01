@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import {
   Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
@@ -14,6 +15,8 @@ import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 import { fetchServices, fetchMetals, calculatePrice, fetchPublicDiscounts } from '../utils/api';
+import { useCart } from '../context/CartContext.js';
+import { useAuth } from '../context/AuthContext';
 
 const BACKEND_URL = import.meta.env.VITE_PYTHON_API_URL;
 
@@ -48,6 +51,48 @@ const InstantPricing = () => {
   // Dynamic data from DB
   const [allServices, setAllServices] = useState([]);
   const [allMetals, setAllMetals] = useState([]);
+  const { addToCart } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleProceedToReview = () => {
+    if (!selectedFile || !selectedMetal || !dimensions) return;
+
+    const total = parseFloat(priceEstimate || 0) +
+      Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
+      (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0);
+
+    const config = {
+      productionService: selectedProductionService,
+      metal: selectedMetal,
+      thickness: dimensions.mm.t,
+      anodizingColor: selectedAnodizingColor,
+      selectedTaps,
+      additionalServices: selectedAdditionalServices,
+      dimensions: dimensions,
+      dxfSvg: dxfSvg
+    };
+
+    addToCart({
+      fileName: selectedFile.file.name,
+      file: selectedFile.file,
+      tempPath: selectedFile.tempPath,
+      configuration: config,
+      pricing: {
+        base: parseFloat(priceEstimate || 0),
+        taps: Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0),
+        finish: selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0,
+        total: total
+      },
+      quantity: quantity
+    });
+
+    if (user) {
+      navigate('/checkout');
+    } else {
+      navigate('/cart');
+    }
+  };
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
@@ -559,9 +604,9 @@ const InstantPricing = () => {
             const isActive = obj.userData.isNativeHole && activeTapHole?.id === obj.userData.nativeHoleId;
 
             if (isTapped) {
-              fm.color.set(0x00ffea); // Vibrant Electric Cyan for tapped holes
-              fm.emissive.set(0x00ffea);
-              fm.emissiveIntensity = 2.0;
+              fm.color.set(0x4169e1); // Professional Royal Blue for tapped holes
+              fm.emissive.set(0x000000);
+              fm.emissiveIntensity = 0;
             } else if (isActive) {
               fm.color.set(0x000000); // Black for active hole
               fm.emissive.set(0x000000);
@@ -633,35 +678,56 @@ const InstantPricing = () => {
           const isActive = activeTapHole?.id === hole.id;
 
           let color = isConfigured ? 0x10b981 : 0xef4444;
-          if (isTapped) color = 0x00ffea;
+          if (isTapped) color = 0x4169e1;
           if (isActive) color = 0x000000;
 
           const radius = mmDia / 2;
 
-          if (isTapped) {
-            const height = dimensions?.mm?.t ? parseFloat(dimensions.mm.t) : 2.5;
-            const geo = new THREE.CylinderGeometry(radius * 1.025, radius * 1.025, height * 1.05, 32, 1, false);
-            const mat = new THREE.MeshBasicMaterial({ color: 0x00ffea, transparent: false, side: THREE.DoubleSide });
-            const sleeve = new THREE.Mesh(geo, mat);
-            sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
-            if (hole.axis) { const pos = new THREE.Vector3(...hole.position); const axis = new THREE.Vector3(...hole.axis); sleeve.lookAt(pos.clone().add(axis)); sleeve.rotateX(Math.PI / 2); }
-            else { sleeve.rotateX(Math.PI / 2); }
-            sleeve.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
-            modelParent.add(sleeve);
-            holeMarkersRef.current.push(sleeve);
-          } else {
-            const markerRadius = Math.max(radius * 1.35, 2.2);
-            const tube = Math.max(markerRadius * 0.45, 1.2);
-            const geo = new THREE.TorusGeometry(markerRadius, tube, 16, 64);
-            const mat = new THREE.MeshPhongMaterial({ color, emissive: isActive ? color : 0x000000, emissiveIntensity: isActive ? 4.0 : 0, shininess: 80 });
-            const ring = new THREE.Mesh(geo, mat);
-            ring.position.set(hole.position[0], hole.position[1], hole.position[2]);
-            if (hole.axis) { const pos = new THREE.Vector3(...hole.position); const axis = new THREE.Vector3(...hole.axis); ring.lookAt(pos.clone().add(axis)); }
-            else { ring.lookAt(hole.position[0], hole.position[1], hole.position[2] + 100); }
-            ring.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
-            modelParent.add(ring);
-            holeMarkersRef.current.push(ring);
+          // Debugging hole metadata to resolve scaling issues - v3 (Axial Midpoint Sync)
+          if (isActive) {
+            console.log(`[3D-PRECISION-v3] Hole ${hole.id}: depth_mm=${hole.depth_mm}, hasPos=${!!hole.position}, globalT=${dimensions?.mm?.t}`);
           }
+
+          // Prioritize axial midpoint-calculated depth (orientation-independent)
+          let height = hole.depth_mm || (dimensions?.mm?.t ? parseFloat(dimensions.mm.t) : 2.0);
+
+          if (!hole.depth_mm && height > 3.0) {
+            // Skewed AABB detection: if thickness seems impossibly high for sheet metal, cap it
+            height = 2.0;
+          }
+
+          // Unified "Hollow Tube" Geometry - Scaled to EXACT individual hole depth
+          const geo = new THREE.CylinderGeometry(radius * 1.01, radius * 1.01, height, 32, 1, true);
+
+          let mat;
+          if (isTapped) {
+            mat = new THREE.MeshBasicMaterial({ color, transparent: false, side: THREE.DoubleSide });
+          } else {
+            mat = new THREE.MeshPhongMaterial({
+              color,
+              emissive: isActive ? color : 0x000000,
+              emissiveIntensity: isActive ? 4.0 : 0,
+              shininess: 80,
+              side: THREE.DoubleSide,
+              transparent: false
+            });
+          }
+
+          const sleeve = new THREE.Mesh(geo, mat);
+          sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
+
+          if (hole.axis) {
+            const pos = new THREE.Vector3(...hole.position);
+            const axis = new THREE.Vector3(...hole.axis);
+            sleeve.lookAt(pos.clone().add(axis));
+            sleeve.rotateX(Math.PI / 2);
+          } else {
+            sleeve.rotateX(Math.PI / 2);
+          }
+
+          sleeve.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
+          modelParent.add(sleeve);
+          holeMarkersRef.current.push(sleeve);
         });
         v.Render();
       } catch (err) { console.warn('Hole marker error:', err); }
@@ -975,7 +1041,7 @@ const InstantPricing = () => {
                     >
                       <div className="d-flex flex-column gap-1">
                         <div className="d-flex align-items-center gap-2 small fw-bold">
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#00ffea', boxShadow: '0 0 4px #00ffea' }} />
+                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#4169e1' }} />
                           <span style={{ fontSize: '10px', letterSpacing: '0.5px' }}>TAPPED</span>
                         </div>
                         <div className="d-flex align-items-center gap-2 small fw-bold">
@@ -1427,7 +1493,10 @@ const InstantPricing = () => {
                             </div>
                           </div>
                         </div>
-                        <button className="btn btn-danger w-100 py-3 rounded-4 fw-bold fs-6 shadow-lg border-0 transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2 hover-bg-danger-dark">
+                        <button
+                          className="btn btn-danger w-100 py-3 rounded-4 fw-bold fs-6 shadow-lg border-0 transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2 hover-bg-danger-dark"
+                          onClick={handleProceedToReview}
+                        >
                           PROCEED TO REVIEW <ArrowRight size={18} className="opacity-75" />
                         </button>
                       </div>
@@ -1535,7 +1604,7 @@ const InstantPricing = () => {
                               {compatible.map((tap, idx) => {
                                 const isChosen = assigned?.name === tap.name;
                                 return (
-                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-danger bg-danger text-white shadow-danger' : 'bg-white border-light-subtle shadow-xs tap-option-card-hover'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap }))} whileTap={{ scale: 0.98 }}>
+                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-danger bg-danger text-white shadow-danger' : 'bg-white border-light-subtle shadow-xs tap-option-card-hover'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: { ...tap, hole: activeTapHole } }))} whileTap={{ scale: 0.98 }}>
                                     <div className={`p-3 rounded-4 ${isChosen ? 'bg-white text-danger' : 'bg-light text-muted'}`}>
                                       <Settings size={20} className={isChosen ? 'animate-spin-slow' : ''} />
                                     </div>
@@ -1564,7 +1633,7 @@ const InstantPricing = () => {
                               {incompatible.map((tap, idx) => {
                                 const isChosen = assigned?.name === tap.name;
                                 return (
-                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-warning bg-warning shadow-warning' : 'bg-white border-light-subtle shadow-xs op-hover-100'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: tap }))} whileTap={{ scale: 0.98 }}>
+                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-warning bg-warning shadow-warning' : 'bg-white border-light-subtle shadow-xs op-hover-100'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: { ...tap, hole: activeTapHole } }))} whileTap={{ scale: 0.98 }}>
                                     <div className={`p-3 rounded-4 ${isChosen ? 'bg-white text-warning' : 'bg-light text-muted'}`}>
                                       <AlertCircle size={20} />
                                     </div>

@@ -34,6 +34,7 @@ export default function PricingManagement() {
     const [discounts, setDiscounts] = useState([]);
     const [loadingDiscounts, setLoadingDiscounts] = useState(false);
     const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+    const [discountDisplayMode, setDiscountDisplayMode] = useState('range'); // 'range' or 'unit'
     const [selectedDiscountTier, setSelectedDiscountTier] = useState(null);
 
     const loadDiscounts = useCallback(async () => {
@@ -179,6 +180,39 @@ export default function PricingManagement() {
         }
     };
 
+    // Helper to format quantity arrays as ranges (e.g. 10-15)
+    // Now accepts allDiscounts to identify the global max trigger for infinity representation (e.g. 500+)
+    const getRangeString = (nums, allDiscounts = []) => {
+        if (!Array.isArray(nums) || !nums.length) return 'No triggers';
+        const sorted = [...nums].sort((a, b) => a - b);
+
+        // Find global max to determine if we should use the "+" infinity marker
+        const globalMax = allDiscounts.length > 0
+            ? Math.max(...allDiscounts.flatMap(d => Array.isArray(d.quantities) ? d.quantities : []))
+            : 0;
+
+        const ranges = [];
+        let start = sorted[0];
+        let prev = start;
+
+        for (let i = 1; i <= sorted.length; i++) {
+            const current = sorted[i];
+            if (current === prev + 1) {
+                prev = current;
+            } else {
+                // If the end of this range is the global maximum, mark it as infinity
+                if (prev === globalMax && globalMax > 0) {
+                    ranges.push(`${start}+`);
+                } else {
+                    ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+                }
+                start = current;
+                prev = start;
+            }
+        }
+        return ranges.join(', ');
+    };
+
     if (loading) {
         return <PricingSkeleton />;
     }
@@ -237,9 +271,40 @@ export default function PricingManagement() {
                                         <p>Configure global percentage discounts based on order quantity.</p>
                                     </div>
                                 </div>
-                                <button type="button" className="add-tier-btn" onClick={handleAddDiscount}>
-                                    <span>+ Add New Tier</span>
-                                </button>
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <div className="display-toggle-group" style={{
+                                        background: '#ecf2f8', padding: '4px', borderRadius: '10px',
+                                        display: 'flex', gap: '4px', border: '1px solid #e2e8f0'
+                                    }}>
+                                        <button
+                                            type="button"
+                                            className={`toggle-tab ${discountDisplayMode === 'range' ? 'active' : ''}`}
+                                            onClick={() => setDiscountDisplayMode('range')}
+                                            style={{
+                                                padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                                                background: discountDisplayMode === 'range' ? '#fff' : 'transparent',
+                                                boxShadow: discountDisplayMode === 'range' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                                color: discountDisplayMode === 'range' ? '#3b82f6' : '#64748b', fontWeight: '800',
+                                                transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
+                                            }}
+                                        >Range View</button>
+                                        <button
+                                            type="button"
+                                            className={`toggle-tab ${discountDisplayMode === 'unit' ? 'active' : ''}`}
+                                            onClick={() => setDiscountDisplayMode('unit')}
+                                            style={{
+                                                padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                                                background: discountDisplayMode === 'unit' ? '#fff' : 'transparent',
+                                                boxShadow: discountDisplayMode === 'unit' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                                color: discountDisplayMode === 'unit' ? '#3b82f6' : '#64748b', fontWeight: '800',
+                                                transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
+                                            }}
+                                        >Unit View</button>
+                                    </div>
+                                    <button type="button" className="add-tier-btn" onClick={handleAddDiscount}>
+                                        <span>+ Add New Tier</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="premium-discounts-content">
@@ -255,7 +320,7 @@ export default function PricingManagement() {
                                         <table className="premium-discounts-table">
                                             <thead>
                                                 <tr>
-                                                    <th>Minimum Quantity</th>
+                                                    <th>Quantity Triggers</th>
                                                     <th>Discount Applied</th>
                                                     <th className="actions-cell">Management</th>
                                                 </tr>
@@ -265,9 +330,15 @@ export default function PricingManagement() {
                                                     <tr key={d.id || `new-${idx}`} className="premium-tier-row">
                                                         <td>
                                                             <div className="premium-qty-list-display">
-                                                                {d.quantities?.map(q => (
-                                                                    <span key={q} className="trigger-badge">{q} Units</span>
-                                                                ))}
+                                                                {discountDisplayMode === 'range' ? (
+                                                                    <span className="trigger-badge" style={{ background: '#f8fafc', color: '#1e293b', padding: '6px 12px', border: '1.5px solid #e2e8f0' }}>
+                                                                        {getRangeString(d.quantities, discounts)} Units
+                                                                    </span>
+                                                                ) : (
+                                                                    d.quantities?.map(q => (
+                                                                        <span key={q} className="trigger-badge">{q} Units</span>
+                                                                    ))
+                                                                )}
                                                                 {!d.is_active && <span className="inactive-badge">Inactive</span>}
                                                             </div>
                                                         </td>
@@ -324,9 +395,9 @@ export default function PricingManagement() {
                                     <div className="card-info">
                                         <h3>{metal.name}</h3>
                                         {metal.thicknesses?.length > 0 ? (
-                                            <span className="badge">{metal.thicknesses?.length} Dimensions</span>
+                                            <span className="badge">{metal.thicknesses?.length} Thicknesses</span>
                                         ) : (
-                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Dimensions</span>
+                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Thicknesses</span>
                                         )}
                                     </div>
                                     <ChevronRight size={20} />
@@ -411,7 +482,7 @@ export default function PricingManagement() {
                         <div className="pricing-table-container admin-card">
                             <div className="admin-section-header">
                                 <DollarSign size={20} />
-                                <h3>{selectedService.id === 2 ? 'CNC 3D Dimension Pricing' : 'Price Parameters per Thickness'}</h3>
+                                <h3>{selectedService.id === 2 ? 'CNC 3D Thickness Pricing' : 'Price Parameters per Thickness'}</h3>
                                 <div className="info-tooltip">
                                     <Info size={14} />
                                     <span>

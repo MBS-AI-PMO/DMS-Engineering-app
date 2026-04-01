@@ -10,14 +10,26 @@ Pipeline:
 6. Tessellate each planar face, apply cumulative transforms
 7. Return JSON with flat vertices, cut edges, bend edges
 """
+import os
 os.environ["OCP_NO_DISPLAY"] = "1"
 import math
 import numpy as np
 import cadquery as cq
-
 from OCP.BRep import BRep_Tool
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_FORWARD
+from OCP.TopExp import TopExp
+from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.TopoDS import TopoDS
+from OCP.BRepAdaptor import BRepAdaptor_Surface
+from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder
+from OCP.TopLoc import TopLoc_Location
+from OCP.BRepGProp import BRepGProp
+from OCP.GProp import GProp_GProps
+from OCP.Bnd import Bnd_Box
+from OCP.BRepBndLib import BRepBndLib
+
+import numpy as np # already imported above, but keeping consistency
 from OCP.TopExp import TopExp_Explorer, TopExp
 from OCP.TopTools import TopTools_IndexedMapOfShape, TopTools_IndexedDataMapOfShapeListOfShape
 from OCP.TopoDS import TopoDS
@@ -28,6 +40,8 @@ from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Circle, GeomAbs_Ellipse
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
+from OCP.Bnd import Bnd_Box
+from OCP.BRepBndLib import BRepBndLib
 
 
 def _get_faces(shape):
@@ -68,6 +82,18 @@ def _face_area(face):
     props = GProp_GProps()
     BRepGProp.SurfaceProperties_s(face, props)
     return props.Mass()
+
+
+def _face_centroid(face):
+    """Calculate the absolute volumetric center of a face using its 3D bounding box."""
+    bbox = Bnd_Box()
+    BRepBndLib.Add_s(face, bbox)
+    xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+    return np.array([
+        (xmin + xmax) / 2.0,
+        (ymin + ymax) / 2.0,
+        (zmin + zmax) / 2.0
+    ], dtype=np.float64)
 
 
 def _build_face_edge_adjacency(shape, faces):
@@ -383,7 +409,7 @@ def detect_holes_in_step(filepath: str) -> list:
             "fi": fi,
             "radius": float(radius),
             "axis": _normalize(np.array(axis, dtype=float)),
-            "center": np.array(center, dtype=float),
+            "center": _face_centroid(faces[fi]),
         })
 
     if not raw:
@@ -431,7 +457,19 @@ def detect_holes_in_step(filepath: str) -> list:
         if effective_depth < MIN_DEPTH_MM:
             continue
 
-        avg_center = np.mean([c["center"] for c in cluster], axis=0)
+        all_pts = []
+        for c in cluster:
+            fverts, _ = _tessellate_face(faces[c["fi"]])
+            if fverts.shape[0] > 0:
+                all_pts.append(fverts)
+        
+        if all_pts:
+            pts_concat = np.concatenate(all_pts, axis=0)
+            proj = np.dot(pts_concat - cyl["center"], cyl["axis"])
+            z_min, z_max = np.min(proj), np.max(proj)
+            avg_center = cyl["center"] + ((z_min + z_max) / 2.0) * cyl["axis"]
+        else:
+            avg_center = np.mean([c["center"] for c in cluster], axis=0)
         diameter_mm = cyl["radius"] * 2.0
 
         holes.append({
@@ -448,6 +486,7 @@ def detect_holes_in_step(filepath: str) -> list:
                 round(float(cyl["axis"][1]), 4),
                 round(float(cyl["axis"][2]), 4),
             ],
+            "depth_mm": round(float(effective_depth), 4)
         })
 
     # Sort smallest → largest for consistent display

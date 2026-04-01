@@ -14,9 +14,8 @@ router.get('/admin/metadata', authenticate, requireAdmin, async (req, res) => {
         const [metalsRes, servicesRes] = await Promise.all([
             db.query(`
                 SELECT m.id, m.name, m.slug, m.image_path, m.services AS assigned_services,
-                       COALESCE(mc.available_thicknesses, '[]'::jsonb) AS thicknesses
+                       (SELECT COALESCE(jsonb_agg(DISTINCT thickness_value), '[]'::jsonb) FROM pricing_rules WHERE metal_id = m.id AND thickness_value != 'variable') AS thicknesses
                 FROM metals m
-                LEFT JOIN metal_configs mc ON mc.metal_id = m.id
                 ORDER BY m.name
             `),
             db.query(`SELECT id, title, description, is_production FROM services ORDER BY display_order, id`)
@@ -119,19 +118,21 @@ router.post('/admin/discounts/upsert', authenticate, requireAdmin, async (req, r
     }
 
     try {
+        const minQty = quantities.length > 0 ? Math.min(...quantities.map(q => parseInt(q))) : 0;
+
         if (id) {
             // Update
             await db.query(`
                 UPDATE quantity_discounts 
-                SET quantities = $1, discount_percent = $2, is_active = $3, updated_at = NOW()
-                WHERE id = $4
-            `, [JSON.stringify(quantities), discount_percent, is_active !== false, id]);
+                SET quantities = $1, min_quantity = $2, discount_percent = $3, is_active = $4, updated_at = NOW()
+                WHERE id = $5
+            `, [JSON.stringify(quantities), minQty, discount_percent, is_active !== false, id]);
         } else {
             // Insert
             await db.query(`
-                INSERT INTO quantity_discounts (quantities, discount_percent, is_active)
-                VALUES ($1, $2, $3)
-            `, [JSON.stringify(quantities), discount_percent, is_active !== false]);
+                INSERT INTO quantity_discounts (quantities, min_quantity, discount_percent, is_active)
+                VALUES ($1, $2, $3, $4)
+            `, [JSON.stringify(quantities), minQty, discount_percent, is_active !== false]);
         }
         res.json({ success: true, message: 'Discount tier saved successfully' });
     } catch (err) {

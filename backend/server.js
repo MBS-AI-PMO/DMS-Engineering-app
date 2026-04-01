@@ -23,6 +23,7 @@ const settingsRoutes = require('./routes/settings');
 const guidelinesRoutes = require('./routes/guidelines');
 const configurationsRoutes = require('./routes/configurations');
 const pricingRoutes = require('./routes/pricing');
+const orderRoutes = require('./routes/orders');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -56,6 +57,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/guidelines', guidelinesRoutes);
 app.use('/api/configurations', configurationsRoutes);
 app.use('/api/pricing', pricingRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Setup multer for file uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');
@@ -498,6 +500,39 @@ app.listen(port, async () => {
                     CHECK (service_type IN ('cnc_machining', 'sheet_cutting')),
                 metal_id INTEGER NOT NULL REFERENCES metals(id) ON DELETE CASCADE,
                 UNIQUE(service_type, metal_id)
+            );
+        `);
+
+        // Order Management Tables
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                email VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255),
+                phone VARCHAR(50),
+                address TEXT,
+                city VARCHAR(100),
+                zip_code VARCHAR(20),
+                total_price NUMERIC(15,2) NOT NULL,
+                payment_method VARCHAR(50) DEFAULT 'COD',
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                file_name VARCHAR(255) NOT NULL,
+                original_file_path TEXT NOT NULL,
+                configured_file_path TEXT,
+                configuration_json JSONB NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                unit_price NUMERIC(15,2) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
             );
         `);
     } catch (err) {

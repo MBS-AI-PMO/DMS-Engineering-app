@@ -39,6 +39,13 @@ import PricingManagement from './pages/admin/PricingManagement';
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { CartProvider } from './context/CartProvider';
+
+// New Pages
+import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import Orders from './pages/Orders';
+import OrdersList from './pages/admin/OrdersList';
 
 const PublicShell = ({ children }) => (
   <div className="app-container">
@@ -52,94 +59,102 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <Router>
-          <ScrollToTop />
-          <Routes>
-            {/* Public site */}
-            <Route path="/" element={
-              <PublicShell>
-                <Hero />
-                <Services />
-                <Metals />
-                <FAQ />
-              </PublicShell>
-            } />
-            <Route path="/metal/:slug" element={<PublicShell><MetalDetail /></PublicShell>} />
-            <Route path="/metal-by-id/:id" element={<PublicShell><MetalDetail /></PublicShell>} />
-            <Route path="/get-instant-pricing" element={<PublicShell><InstantPricing /></PublicShell>} />
-            <Route path="/quote" element={<PublicShell><Quote /></PublicShell>} />
-            <Route path="/contact" element={<PublicShell><Contact /></PublicShell>} />
-            <Route path="/faq" element={<PublicShell><FAQPage /></PublicShell>} />
-            <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
-            <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
+        <CartProvider>
+          <Router>
+            <ScrollToTop />
+            <Routes>
+              {/* Public site */}
+              <Route path="/" element={
+                <PublicShell>
+                  <Hero />
+                  <Services />
+                  <Metals />
+                  <FAQ />
+                </PublicShell>
+              } />
+              <Route path="/metal/:slug" element={<PublicShell><MetalDetail /></PublicShell>} />
+              <Route path="/metal-by-id/:id" element={<PublicShell><MetalDetail /></PublicShell>} />
+              <Route path="/get-instant-pricing" element={<PublicShell><InstantPricing /></PublicShell>} />
+              <Route path="/quote" element={<PublicShell><Quote /></PublicShell>} />
+              <Route path="/contact" element={<PublicShell><Contact /></PublicShell>} />
+              <Route path="/faq" element={<PublicShell><FAQPage /></PublicShell>} />
+              <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
+              <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
 
-            {/* Auth */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/settings" element={<PublicShell><Settings /></PublicShell>} />
+              {/* Auth */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/settings" element={<PublicShell><Settings /></PublicShell>} />
+              <Route path="/cart" element={<PublicShell><Cart /></PublicShell>} />
+              <Route path="/checkout" element={<PublicShell><Checkout /></PublicShell>} />
+              <Route path="/orders" element={<PublicShell><Orders /></PublicShell>} />
 
-            {/* Admin */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={
-              <ProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/metals" element={
-              <ProtectedRoute><AdminLayout><MetalsList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/metals/new" element={
-              <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/metals/:slug" element={
-              <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/categories" element={
-              <ProtectedRoute><AdminLayout><CategoriesList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/faqs" element={
-              <ProtectedRoute><AdminLayout><FaqsList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/faq-categories" element={
-              <ProtectedRoute><AdminLayout><FaqCategoriesList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/services" element={
-              <ProtectedRoute><AdminLayout><ServicesList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/services/new" element={
-              <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/services/:id" element={
-              <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/services/:id/metals" element={
-              <ProtectedRoute><AdminLayout><ServiceMetalsConfig /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/admins" element={
-              <ProtectedRoute><AdminLayout><AdminsList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/email" element={
-              <ProtectedRoute><AdminLayout><EmailConfig /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/subscribers" element={
-              <ProtectedRoute><AdminLayout><SubscribersList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/contact" element={
-              <ProtectedRoute><AdminLayout><ContactSettings /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/guidelines" element={
-              <ProtectedRoute><AdminLayout><GuidelinesList /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/guidelines/:serviceId" element={
-              <ProtectedRoute><AdminLayout><GuidelineEdit /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/customers" element={
-              <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
-            } />
-            <Route path="/admin/pricing" element={
-              <ProtectedRoute><AdminLayout><PricingManagement /></AdminLayout></ProtectedRoute>
-            } />
+              {/* Admin */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={
+                <ProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/metals" element={
+                <ProtectedRoute><AdminLayout><MetalsList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/metals/new" element={
+                <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/metals/:slug" element={
+                <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/categories" element={
+                <ProtectedRoute><AdminLayout><CategoriesList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/faqs" element={
+                <ProtectedRoute><AdminLayout><FaqsList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/faq-categories" element={
+                <ProtectedRoute><AdminLayout><FaqCategoriesList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/services" element={
+                <ProtectedRoute><AdminLayout><ServicesList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/services/new" element={
+                <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/services/:id" element={
+                <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/services/:id/metals" element={
+                <ProtectedRoute><AdminLayout><ServiceMetalsConfig /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/admins" element={
+                <ProtectedRoute><AdminLayout><AdminsList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/email" element={
+                <ProtectedRoute><AdminLayout><EmailConfig /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/subscribers" element={
+                <ProtectedRoute><AdminLayout><SubscribersList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/contact" element={
+                <ProtectedRoute><AdminLayout><ContactSettings /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/guidelines" element={
+                <ProtectedRoute><AdminLayout><GuidelinesList /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/guidelines/:serviceId" element={
+                <ProtectedRoute><AdminLayout><GuidelineEdit /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/customers" element={
+                <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/pricing" element={
+                <ProtectedRoute><AdminLayout><PricingManagement /></AdminLayout></ProtectedRoute>
+              } />
+              <Route path="/admin/orders" element={
+                <ProtectedRoute><AdminLayout><OrdersList /></AdminLayout></ProtectedRoute>
+              } />
 
-          </Routes>
-        </Router>
+            </Routes>
+          </Router>
+        </CartProvider>
       </ToastProvider>
     </AuthProvider>
   );

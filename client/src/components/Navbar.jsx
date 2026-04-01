@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { Menu, X, Search, User, ChevronDown, Settings, LogOut } from 'lucide-react';
+import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext.js';
 
 const Navbar = () => {
     const [isScrolled, setIsScrolled] = useState(false);
@@ -11,6 +12,7 @@ const Navbar = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
+    const { cartItems } = useCart();
     const dropdownRef = useRef(null);
 
     useEffect(() => {
@@ -76,6 +78,26 @@ const Navbar = () => {
                         <button className="icon-btn search-trigger">
                             <Search size={20} />
                         </button>
+
+                        <Link to="/cart" className="icon-btn cart-trigger" style={{ position: 'relative' }}>
+                            <ShoppingBag size={20} />
+                            {cartItems.length > 0 && (
+                                <span className="cart-badge" style={{
+                                    position: 'absolute',
+                                    top: '-4px',
+                                    right: '-4px',
+                                    backgroundColor: 'var(--primary-color, #1a1a1a)',
+                                    color: 'white',
+                                    fontSize: '10px',
+                                    padding: '2px 5px',
+                                    borderRadius: '50%',
+                                    fontWeight: 'bold'
+                                }}>
+                                    {cartItems.length}
+                                </span>
+                            )}
+                        </Link>
+
                         <Link to="/get-instant-pricing" className="btn-pricing-nav">
                             Instant Pricing
                         </Link>
