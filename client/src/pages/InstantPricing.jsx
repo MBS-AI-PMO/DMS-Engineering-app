@@ -1412,7 +1412,7 @@ const InstantPricing = () => {
                               <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
                                 <div className="d-flex align-items-center gap-3">
                                   <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedAnodizingColor.color, width: '24px', height: '24px', border: '3px solid white' }} />
-                                  <span className="fw-black text-white fs-6">{selectedAnodizingColor.name.toUpperCase()}</span>
+                                  <span className="fw-black text-white fs-6">{(selectedAnodizingColor.name || '').toUpperCase()}</span>
                                 </div>
                                 <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setIsAnodizingModalOpen(true); }}>CHANGE</button>
                               </div>
@@ -1731,8 +1731,8 @@ const InstantPricing = () => {
                             {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}
                           </div>
                           <div className="text-center">
-                            <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{opt.name.toUpperCase()}</span>
-                            <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{opt.color.toUpperCase()}</span>
+                            <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{(opt.name || '').toUpperCase()}</span>
+                            <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{(opt.color || '').toUpperCase()}</span>
                           </div>
                         </motion.button>
                       );

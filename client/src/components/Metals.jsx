@@ -90,7 +90,7 @@ const Metals = () => {
                                     }}
                                 >
                                     <div className="metal-thumbnail">
-                                        <img src={metal.image} alt={metal.name} />
+                                        <img src={metal.image} alt={metal.name} loading="lazy" decoding="async" />
                                     </div>
                                     <div className="metal-info">
                                         <h3 className="metal-name">{metal.name}</h3>

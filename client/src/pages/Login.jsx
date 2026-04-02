@@ -44,7 +44,7 @@ export default function Login() {
             >
                 <div className="auth-logo">
                     <Link to="/">
-                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" />
+                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" decoding="async" />
                     </Link>
                 </div>
 

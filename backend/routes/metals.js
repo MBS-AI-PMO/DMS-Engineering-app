@@ -171,7 +171,17 @@ const metalStorage = multer.diskStorage({
         cb(null, `metal-${Date.now()}${ext}`);
     }
 });
-const metalUpload = multer({ storage: metalStorage });
+const metalUpload = multer({
+    storage: metalStorage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => {
+        const allowed = /jpeg|jpg|png|webp|avif/;
+        const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+        const mime = /image\/(jpeg|png|webp|avif)/.test(file.mimetype);
+        if (ext && mime) return cb(null, true);
+        cb(new Error('Only images (jpg, png, webp, avif) are allowed'));
+    }
+});
 
 router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.single('image'), async (req, res) => {
     if (!req.file) {

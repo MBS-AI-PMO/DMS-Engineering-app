@@ -22,7 +22,7 @@ const Showcase = ({ images, title = "MATERIAL SHOWCASE" }) => {
                         }}
                     >
                         <div className="showcase-img-wrapper">
-                            <img src={img} alt={`${title} ${idx + 1}`} className="showcase-img" />
+                            <img src={img} alt={`${title} ${idx + 1}`} className="showcase-img" loading="lazy" decoding="async" />
                             <div className="showcase-overlay"></div>
                         </div>
                     </motion.div>

@@ -91,7 +91,7 @@ const MetalsPage = () => {
             {/* Premium Hero Section */}
             <section className="metals-hero-new">
                 <div className="metals-hero-bg">
-                    <img src="/assets/metals-hero.avif" alt="Metal textures" />
+                    <img src="/assets/metals-hero.avif" alt="Metal textures" decoding="async" />
                     <div className="metals-hero-overlay"></div>
                 </div>
                 <div className="container">
@@ -200,7 +200,7 @@ const MetalsPage = () => {
                                     className="material-detail-card"
                                 >
                                     <div className="card-image">
-                                        <img src={metal.image} alt={metal.name} />
+                                        <img src={metal.image} alt={metal.name} loading="lazy" decoding="async" />
                                     </div>
                                     <div className="card-body">
                                         <div className="card-main">

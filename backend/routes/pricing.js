@@ -156,6 +156,21 @@ router.delete('/admin/discounts/:id', authenticate, requireAdmin, async (req, re
     }
 });
 
+// ── Public Discount Tiers (no auth required) ────────────────
+/**
+ * GET /api/pricing/discounts
+ * Returns active quantity-based discount tiers for the public pricing page.
+ */
+router.get('/discounts', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM quantity_discounts WHERE is_active = true ORDER BY (quantities->>0)::int ASC');
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        console.error('Error fetching public discounts:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch discounts' });
+    }
+});
+
 // ── Public Calculation Routes ────────────────────────────
 
 /**

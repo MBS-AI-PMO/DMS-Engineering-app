@@ -138,7 +138,7 @@ export default function QuoteFlow({ isOpen, onClose, modelDimensions = null }) {
                                                         className="qf-option-card"
                                                         onClick={() => handleSelectMetal(m)}
                                                     >
-                                                        {m.image_path && <img src={m.image_path} alt="" className="qf-thumb" />}
+                                                        {m.image_path && <img src={m.image_path} alt="" className="qf-thumb" loading="lazy" decoding="async" />}
                                                         <span className="qf-option-name">{m.name}</span>
                                                         <ChevronRight size={16} />
                                                     </button>

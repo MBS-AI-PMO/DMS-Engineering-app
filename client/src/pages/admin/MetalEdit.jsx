@@ -69,7 +69,7 @@ function ShowcaseEditor({ images = [], onChange, onUpload, onZoom }) {
                             style={{ cursor: 'zoom-in' }}
                             onClick={() => onZoom({ src: img, title: `Showcase Image ${i + 1}` })}
                         >
-                            <img src={img} alt={`Showcase ${i}`} />
+                            <img src={img} alt={`Showcase ${i}`} loading="lazy" decoding="async" />
                             <button
                                 className="admin-showcase-remove"
                                 onClick={e => {

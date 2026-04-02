@@ -76,7 +76,7 @@ const Footer = () => {
                         className="footer-brand"
                     >
                         <Link to="/" className="footer-logo">
-                            <img src="/logo.png" alt="DMS Logo" className="footer-logo-img" />
+                            <img src="/logo.png" alt="DMS Logo" className="footer-logo-img" loading="lazy" decoding="async" />
                             <span className="footer-tagline">Precision. Quality. DMS.</span>
                         </Link>
                         <p className="footer-desc">

@@ -417,7 +417,7 @@ export default function ServiceEdit() {
                             <h3>Service Image</h3>
                             <div className="admin-image-preview-large">
                                 {service.image_path ? (
-                                    <img src={service.image_path} alt="Preview" />
+                                    <img src={service.image_path} alt="Preview" loading="lazy" decoding="async" />
                                 ) : (
                                     <div className="image-placeholder">No Image</div>
                                 )}

@@ -79,7 +79,7 @@ const Services = () => {
                             whileHover={{ y: -10, transition: { duration: 0.3 } }}
                         >
                             <div className="service-image-container">
-                                <img src={service.image} alt={service.title} className="service-image" />
+                                <img src={service.image} alt={service.title} className="service-image" loading="lazy" decoding="async" />
                             </div>
                             <div className="service-info">
                                 <h3 className="service-title">{service.title}</h3>

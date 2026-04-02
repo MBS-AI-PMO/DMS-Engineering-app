@@ -101,7 +101,7 @@ export default function Settings() {
                         transition={{ duration: 0.5 }}
                     >
                         <div className="settings-avatar">
-                            {firstName[0].toUpperCase()}
+                            {(firstName?.[0] || 'U').toUpperCase()}
                         </div>
                         <div>
                             <h1>Account Settings</h1>

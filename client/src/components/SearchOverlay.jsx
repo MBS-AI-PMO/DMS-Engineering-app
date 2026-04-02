@@ -1,5 +1,6 @@
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import OptimizedImage from './OptimizedImage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Box, Settings, ArrowRight, Command } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -165,7 +166,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                                 onMouseEnter={() => setSelectedIndex(globalIdx)}
                                             >
                                                 <div className="search-item-thumb">
-                                                    <img src={metal.image_path || '/placeholder.png'} alt={metal.name} />
+                                                    <OptimizedImage src={metal.image_path} alt={metal.name} />
                                                 </div>
                                                 <div className="search-item-info">
                                                     <div className="search-item-title">{metal.name}</div>
@@ -191,7 +192,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                                 onMouseEnter={() => setSelectedIndex(globalIdx)}
                                             >
                                                 <div className="search-item-thumb">
-                                                    <img src={svc.image_path || '/placeholder.png'} alt={svc.title} />
+                                                    <OptimizedImage src={svc.image_path} alt={svc.title} />
                                                 </div>
                                                 <div className="search-item-info">
                                                     <div className="search-item-title">{svc.title}</div>

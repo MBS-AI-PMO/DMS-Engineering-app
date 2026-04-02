@@ -464,7 +464,7 @@ const MetalDetail = () => {
                                                             </tbody>
                                                         </table>
                                                         <div className="specs-visual-container">
-                                                            <img src={laserSpecsSvg} alt="Laser Cutting Specifications Visual" className="specs-svg" />
+                                                            <img src={laserSpecsSvg} alt="Laser Cutting Specifications Visual" className="specs-svg" loading="lazy" decoding="async" />
                                                         </div>
                                                     </div>
                                                 )}
@@ -712,7 +712,7 @@ const MetalDetail = () => {
 
                                                     <div className="about-main-content">
                                                         <div className="about-image-container">
-                                                            <img src={metal.aboutSection.image} alt={metal.name} className="about-img-premium" />
+                                                            <img src={metal.aboutSection.image} alt={metal.name} className="about-img-premium" loading="lazy" decoding="async" />
                                                         </div>
                                                         <div className="about-text-content">
                                                             <h2 className="about-heading-custom">{metal.aboutSection.title}</h2>
@@ -764,7 +764,7 @@ const MetalDetail = () => {
                                                         whileHover={{ y: -10, transition: { duration: 0.3 } }}
                                                     >
                                                         <div className="service-image-container">
-                                                            <img src={service.image_path} alt={service.title} className="service-image" />
+                                                            <img src={service.image_path} alt={service.title} className="service-image" loading="lazy" decoding="async" />
                                                         </div>
                                                         <div className="service-info">
                                                             <h3 className="service-title">{service.title}</h3>
@@ -797,7 +797,7 @@ const MetalDetail = () => {
                                                             whileHover={{ y: -10, transition: { duration: 0.3 } }}
                                                         >
                                                             <div className="service-image-container">
-                                                                <img src={service.image} alt={service.title} className="service-image" />
+                                                                <img src={service.image} alt={service.title} className="service-image" loading="lazy" decoding="async" />
                                                             </div>
                                                             <div className="service-info">
                                                                 <h3 className="service-title">{service.title}</h3>
@@ -865,7 +865,7 @@ const MetalDetail = () => {
                                                                         whileHover={{ y: -10, transition: { duration: 0.3 } }}
                                                                     >
                                                                         <div className="service-image-container">
-                                                                            <img src={service.image_path} alt={service.title} className="service-image" />
+                                                                            <img src={service.image_path} alt={service.title} className="service-image" loading="lazy" decoding="async" />
                                                                         </div>
                                                                         <div className="service-info">
                                                                             <h3 className="service-title">{service.title}</h3>

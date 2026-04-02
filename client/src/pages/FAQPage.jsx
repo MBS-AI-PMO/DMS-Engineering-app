@@ -197,7 +197,7 @@ const FAQPage = () => {
                                     className={`category-btn ${activeCategory === cat.id ? 'active' : ''}`}
                                     onClick={() => setActiveCategory(cat.id)}
                                 >
-                                    <span>{cat.title.toUpperCase()}</span>
+                                    <span>{(cat.title || '').toUpperCase()}</span>
                                 </button>
                             ))}
                         </aside>

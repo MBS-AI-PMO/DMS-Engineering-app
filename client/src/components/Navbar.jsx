@@ -74,7 +74,7 @@ const Navbar = () => {
             <div className="container navbar-container">
                 <div className="navbar-left">
                     <Link to="/" className="logo">
-                        <img src="/logo.png" alt="DMS Logo" className="logo-img" />
+                        <img src="/logo.png" alt="DMS Logo" className="logo-img" decoding="async" />
                     </Link>
                 </div>
 
@@ -137,7 +137,7 @@ const Navbar = () => {
                                     onClick={() => setDropdownOpen(o => !o)}
                                 >
                                     <div className="user-menu-avatar">
-                                        {firstName[0].toUpperCase()}
+                                        {(firstName?.[0] || 'U').toUpperCase()}
                                     </div>
                                     <span className="user-menu-name">{firstName}</span>
                                     <ChevronDown
@@ -205,7 +205,7 @@ const Navbar = () => {
                     >
                         <div className="mobile-menu-header">
                             <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
-                                <img src="/logo.png" alt="DMS Logo" className="logo-img-mobile" />
+                                <img src="/logo.png" alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" />
                             </Link>
                             <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
                                 <X size={24} />
