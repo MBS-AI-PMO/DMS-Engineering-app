@@ -123,8 +123,8 @@ router.get('/:slug/services', async (req, res) => {
 router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     try {
         const { name, category_id, thickness, description, image_path,
-                quick_look, services, specifications, thickness_specs,
-                about_section, faqs, custom_fields, display_order } = req.body;
+            quick_look, services, specifications, thickness_specs,
+            about_section, faqs, custom_fields, display_order, pricing_config } = req.body;
 
         if (!name) {
             return res.status(400).json({ success: false, error: 'Name is required' });
@@ -141,14 +141,15 @@ router.post('/admin', authenticate, requireAdmin, async (req, res) => {
         const result = await db.query(`
             INSERT INTO metals (slug, name, category_id, thickness, description, image_path,
                 quick_look, services, specifications, thickness_specs,
-                about_section, faqs, custom_fields, display_order)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                about_section, faqs, custom_fields, display_order, pricing_config)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             RETURNING *
         `, [slug, name, category_id, thickness, description, image_path,
             JSON.stringify(quick_look || {}), JSON.stringify(services || []),
             JSON.stringify(specifications || {}), JSON.stringify(thickness_specs || {}),
             JSON.stringify(about_section || {}), JSON.stringify(faqs || []),
-            JSON.stringify(custom_fields || {}), display_order || 0]);
+            JSON.stringify(custom_fields || {}), display_order || 0,
+            JSON.stringify(pricing_config || {})]);
 
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (err) {
@@ -187,11 +188,11 @@ router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.singl
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No image uploaded' });
     }
-    
+
     // Optimize the uploaded image immediately
     const optimizedFilename = await optimizeImage(req.file.path);
     const imagePath = `/uploads/metals/${optimizedFilename}`;
-    
+
     res.json({ success: true, data: { image_path: imagePath } });
 });
 
@@ -199,8 +200,8 @@ router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.singl
 router.put('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
     try {
         const { name, category_id, thickness, description, image_path,
-                quick_look, services, specifications, thickness_specs,
-                about_section, faqs, custom_fields, display_order } = req.body;
+            quick_look, services, specifications, thickness_specs,
+            about_section, faqs, custom_fields, display_order, pricing_config } = req.body;
 
         // Check if exists
         const existing = await db.query('SELECT id FROM metals WHERE slug = $1', [req.params.slug]);
@@ -222,32 +223,19 @@ router.put('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
 
         const result = await db.query(`
             UPDATE metals SET
-                slug = COALESCE($1, slug),
-                name = COALESCE($2, name),
-                category_id = COALESCE($3, category_id),
-                thickness = COALESCE($4, thickness),
-                description = COALESCE($5, description),
-                image_path = COALESCE($6, image_path),
-                quick_look = COALESCE($7, quick_look),
-                services = COALESCE($8, services),
-                specifications = COALESCE($9, specifications),
-                thickness_specs = COALESCE($10, thickness_specs),
-                about_section = COALESCE($11, about_section),
-                faqs = COALESCE($12, faqs),
-                custom_fields = COALESCE($13, custom_fields),
-                display_order = COALESCE($14, display_order)
-            WHERE slug = $15
+                slug = $1, name = $2, category_id = $3, thickness = $4, description = $5, image_path = $6,
+                quick_look = $7, services = $8, specifications = $9, thickness_specs = $10,
+                about_section = $11, faqs = $12, custom_fields = $13, display_order = $14,
+                pricing_config = $15
+            WHERE id = $16
             RETURNING *
         `, [
             newSlug, name, category_id, thickness, description, image_path,
-            quick_look ? JSON.stringify(quick_look) : null,
-            services ? JSON.stringify(services) : null,
-            specifications ? JSON.stringify(specifications) : null,
-            thickness_specs ? JSON.stringify(thickness_specs) : null,
-            about_section ? JSON.stringify(about_section) : null,
-            faqs ? JSON.stringify(faqs) : null,
-            custom_fields ? JSON.stringify(custom_fields) : null,
-            display_order, req.params.slug
+            JSON.stringify(quick_look || {}), JSON.stringify(services || []),
+            JSON.stringify(specifications || {}), JSON.stringify(thickness_specs || {}),
+            JSON.stringify(about_section || {}), JSON.stringify(faqs || []),
+            JSON.stringify(custom_fields || {}), display_order || 0,
+            JSON.stringify(pricing_config || {}), existing.rows[0].id
         ]);
 
         res.json({ success: true, data: result.rows[0] });

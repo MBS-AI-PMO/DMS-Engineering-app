@@ -6,7 +6,7 @@ import {
     Layers, Wrench, Box, DollarSign, ArrowLeft, Trash2
 } from 'lucide-react';
 import {
-    fetchPricingMetadata, fetchPricingRules, savePricingRules,
+    fetchPricingMetadata, updateMetal,
     fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -15,13 +15,13 @@ import VolumeDiscountModal from '../../components/admin/modals/VolumeDiscountMod
 
 export default function PricingManagement() {
     const toast = useToast();
-    const navigate = useNavigate();
+    const navigate = useNavigate(); // eslint-disable-line no-unused-vars
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     // Metadata
     const [metals, setMetals] = useState([]);
-    const [services, setServices] = useState([]);
+    const [services, setServices] = useState([]); // eslint-disable-line no-unused-vars
 
     // Selection state
     const [selectedMetal, setSelectedMetal] = useState(null);
@@ -68,45 +68,28 @@ export default function PricingManagement() {
     }, [toast, loadDiscounts]);
 
     useEffect(() => {
-        if (selectedMetal && selectedService) {
-            const loadRules = async () => {
-                try {
-                    const { data } = await fetchPricingRules(selectedMetal.id, selectedService.id);
-                    const isCNC = selectedService.id === 2;
-                    let merged;
+        if (selectedMetal) {
+            // Initializing rules from the metal's own pricing_config
+            const config = selectedMetal.pricing_config || {};
+            // Support both old and new metadata structure
+            const thicknessData = selectedMetal.quick_look?.thicknesses || selectedMetal.thicknesses || [];
 
-                    if (isCNC) {
-                        // CNC uses a single 'variable' rule
-                        const existing = (data || []).find(r => r.thickness_value === 'variable');
-                        merged = [{
-                            thickness_value: 'variable',
-                            base_price: existing ? existing.base_price : 0,
-                            price_per_inch_height: existing ? existing.price_per_inch_height : 0,
-                            price_per_inch_length: existing ? existing.price_per_inch_length : 0,
-                            price_per_inch_thickness: existing ? existing.price_per_inch_thickness : 0
-                        }];
-                    } else {
-                        // Standard services use the thickness table
-                        merged = (selectedMetal.thicknesses || []).map(t => {
-                            const existing = (data || []).find(r => r.thickness_value === t.toString());
-                            return {
-                                thickness_value: t.toString(),
-                                base_price: existing ? existing.base_price : 0,
-                                price_per_inch_height: existing ? existing.price_per_inch_height : 0,
-                                price_per_inch_length: existing ? existing.price_per_inch_length : 0
-                            };
-                        });
-                    }
-                    setRules(merged);
-                } catch (err) {
-                    toast('Failed to load pricing rules: ' + err.message, 'error');
-                }
-            };
-            loadRules();
+            const merged = thicknessData.map(t => {
+                // Handle both object {value, label} and legacy string formats
+                const val = typeof t === 'object' ? t.value : t.toString();
+                const lbl = typeof t === 'object' ? t.label : (t.toString() + '"');
+                return {
+                    thickness_value: val,
+                    label: lbl,
+                    price_per_sq_inch: config[val] || 0
+                };
+            });
+
+            setRules(merged);
         } else {
             setRules([]);
         }
-    }, [selectedMetal, selectedService, toast]);
+    }, [selectedMetal]);
 
     const handleRuleChange = (thickness, field, value) => {
         setRules(prev => prev.map(r =>
@@ -117,17 +100,23 @@ export default function PricingManagement() {
     };
 
     const handleSave = async () => {
-        if (!selectedMetal || !selectedService) return;
+        if (!selectedMetal) return;
         setSaving(true);
         try {
-            await savePricingRules({
-                metal_id: selectedMetal.id,
-                service_id: selectedService.id,
-                rules
+            // Convert array back to object for storage
+            const newConfig = {};
+            rules.forEach(r => {
+                newConfig[r.thickness_value] = r.price_per_sq_inch;
             });
-            toast('Pricing rules updated successfully', 'success');
+
+            await updateMetal(selectedMetal.slug, {
+                ...selectedMetal,
+                pricing_config: newConfig
+            });
+
+            toast('Material pricing updated successfully', 'success');
         } catch (err) {
-            toast('Failed to save pricing: ' + err.message, 'error');
+            toast('Failed to save material pricing: ' + err.message, 'error');
         } finally {
             setSaving(false);
         }
@@ -237,7 +226,7 @@ export default function PricingManagement() {
                         <p className="admin-page-subtitle">Configure per-inch pricing rules for your catalog.</p>
                     </div>
                 </div>
-                {selectedMetal && selectedService && (
+                {selectedMetal && (
                     <div className="admin-page-actions">
                         <button
                             className="admin-btn-primary"
@@ -245,7 +234,7 @@ export default function PricingManagement() {
                             disabled={saving}
                         >
                             {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            {saving ? 'Saving...' : 'Save Configuration'}
+                            {saving ? 'Saving...' : 'Save Material Prices'}
                         </button>
                     </div>
                 )}
@@ -394,10 +383,10 @@ export default function PricingManagement() {
                                     )}
                                     <div className="card-info">
                                         <h3>{metal.name}</h3>
-                                        {metal.thicknesses?.length > 0 ? (
-                                            <span className="badge">{metal.thicknesses?.length} Thicknesses</span>
+                                        {(metal.quick_look?.thicknesses || []).length > 0 ? (
+                                            <span className="badge">{(metal.quick_look?.thicknesses || []).length} Thicknesses</span>
                                         ) : (
-                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Thicknesses</span>
+                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Catalog</span>
                                         )}
                                     </div>
                                     <ChevronRight size={20} />
@@ -406,62 +395,8 @@ export default function PricingManagement() {
                         </div>
                     </motion.div>
                 )}
-
-                {/* ─── STEP 2: SELECT SERVICE ─── */}
-                {selectedMetal && !selectedService && (
-                    <motion.div
-                        className="pricing-step-section"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                    >
-                        <div className="pricing-selection-header-banner">
-                            <div className="selection-info">
-                                <span className="label">Selected Metal:</span>
-                                <strong className="value">{selectedMetal.name}</strong>
-                            </div>
-                        </div>
-                        <div className="pricing-section-header mt-8">
-                            <Wrench size={24} />
-                            <h2>Select a Service</h2>
-                        </div>
-                        <div className="pricing-list-selection">
-                            {services.filter(svc => (selectedMetal.assigned_services || []).includes(svc.id)).length > 0 ? (
-                                services
-                                    .filter(svc => (selectedMetal.assigned_services || []).includes(svc.id))
-                                    .map(svc => (
-                                        <button
-                                            key={svc.id}
-                                            className="pricing-list-item"
-                                            onClick={() => setSelectedService(svc)}
-                                        >
-                                            <div className="svc-icon-box">
-                                                {svc.is_production ? <Layers size={20} /> : <Wrench size={20} />}
-                                            </div>
-                                            <div className="svc-info">
-                                                <h3 style={{ color: '#1e293b' }}>{svc.title}</h3>
-                                                <p style={{ color: '#64748b' }}>{svc.description}</p>
-                                            </div>
-                                            <ChevronRight size={20} />
-                                        </button>
-                                    ))
-                            ) : (
-                                <div className="no-services-placeholder">
-                                    <AlertCircle size={32} />
-                                    <p>No services are currently assigned to this metal.</p>
-                                    <button
-                                        className="admin-btn-secondary mt-4"
-                                        onClick={() => navigate(`/admin/metals/${selectedMetal.slug}`)}
-                                    >
-                                        Configure Metal Services
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* ─── STEP 3: CONFIGURE RULES ─── */}
-                {selectedMetal && selectedService && (
+                {/* ─── STEP 2: CONFIGURE RULES ─── */}
+                {selectedMetal && (
                     <motion.div
                         className="pricing-step-section"
                         initial={{ opacity: 0, y: 30 }}
@@ -469,99 +404,50 @@ export default function PricingManagement() {
                     >
                         <div className="pricing-selection-header-banner multi">
                             <div className="selection-info">
-                                <span className="label">Metal:</span>
+                                <span className="label">Selected Metal:</span>
                                 <strong className="value">{selectedMetal.name}</strong>
-                            </div>
-                            <div className="selection-separator"><ChevronRight size={16} /></div>
-                            <div className="selection-info">
-                                <span className="label">Service:</span>
-                                <strong className="value">{selectedService.title}</strong>
                             </div>
                         </div>
 
                         <div className="pricing-table-container admin-card">
                             <div className="admin-section-header">
                                 <DollarSign size={20} />
-                                <h3>{selectedService.id === 2 ? 'CNC 3D Thickness Pricing' : 'Price Parameters per Thickness'}</h3>
+                                <h3>Thickness-Based Material Pricing</h3>
                                 <div className="info-tooltip">
                                     <Info size={14} />
-                                    <span>
-                                        {selectedService.id === 2
-                                            ? 'Formula: (Base + (Width * $W) + (Length * $L) + (Actual Thickness * $T))'
-                                            : 'Formula: (Base + (Width * $W) + (Length * $L))'}
-                                    </span>
+                                    <span>Set the raw material cost per square inch ($/sq-in) for each thickness. Manufacturing costs are set in the Services section.</span>
                                 </div>
                             </div>
 
                             <div className="pricing-table-scroll">
-                                {selectedService.id === 2 ? (
-                                    <div className="cnc-variable-pricing-grid">
-                                        <div className="pricing-input-group">
-                                            <label>Base Price / Setup ($)</label>
-                                            <div className="price-input-wrapper">
-                                                <span>$</span>
-                                                <input
-                                                    type="number"
-                                                    value={rules[0]?.base_price || 0}
-                                                    onChange={(e) => handleRuleChange('variable', 'base_price', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="pricing-input-group">
-                                            <label>Price per Inch Width ($)</label>
-                                            <div className="price-input-wrapper">
-                                                <span>$</span>
-                                                <input
-                                                    type="number"
-                                                    value={rules[0]?.price_per_inch_height || 0}
-                                                    onChange={(e) => handleRuleChange('variable', 'price_per_inch_height', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="pricing-input-group">
-                                            <label>Price per Inch Length ($)</label>
-                                            <div className="price-input-wrapper">
-                                                <span>$</span>
-                                                <input
-                                                    type="number"
-                                                    value={rules[0]?.price_per_inch_length || 0}
-                                                    onChange={(e) => handleRuleChange('variable', 'price_per_inch_length', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="pricing-input-group">
-                                            <label>Price per Inch Thickness ($)</label>
-                                            <div className="price-input-wrapper">
-                                                <span>$</span>
-                                                <input
-                                                    type="number"
-                                                    value={rules[0]?.price_per_inch_thickness || 0}
-                                                    onChange={(e) => handleRuleChange('variable', 'price_per_inch_thickness', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <table className="pricing-config-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Thickness (in)</th>
-                                                <th>Base Price ($)</th>
-                                                <th>$ / Inch (Width)</th>
-                                                <th>$ / Inch (Length)</th>
+                                <table className="pricing-config-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Thickness Label</th>
+                                            <th>Value (in)</th>
+                                            <th>Price per Square Inch ($/sq-in)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rules.map((rule) => (
+                                            <tr key={rule.thickness_value}>
+                                                <td><span className="thickness-badge">{rule.label || rule.thickness_value}</span></td>
+                                                <td><span className="thickness-val">{rule.thickness_value}&quot;</span></td>
+                                                <td>
+                                                    <div className="price-input-wrapper" style={{ maxWidth: '200px' }}>
+                                                        <span>$</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.001"
+                                                            value={rule.price_per_sq_inch}
+                                                            onChange={(e) => handleRuleChange(rule.thickness_value, 'price_per_sq_inch', e.target.value)}
+                                                        />
+                                                    </div>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {rules.map((rule) => (
-                                                <PricingRow
-                                                    key={rule.thickness_value}
-                                                    rule={rule}
-                                                    onChange={handleRuleChange}
-                                                />
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </motion.div>

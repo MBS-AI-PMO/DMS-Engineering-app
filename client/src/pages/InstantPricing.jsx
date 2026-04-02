@@ -14,9 +14,10 @@ import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
-import { fetchServices, fetchMetals, calculatePrice, fetchPublicDiscounts } from '../utils/api';
+import { fetchServices, fetchMetals, calculatePrice, fetchPublicDiscounts, fetchCategories } from '../utils/api';
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 const BACKEND_URL = import.meta.env.VITE_PYTHON_API_URL;
 
@@ -50,15 +51,48 @@ const InstantPricing = () => {
 
   // Dynamic data from DB
   const [allServices, setAllServices] = useState([]);
+  const [allCategories, setAllCategories] = useState([]);
   const [allMetals, setAllMetals] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const { addToCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
+  const [selectedProductionService, setSelectedProductionService] = useState(null);
+  const [selectedMetal, setSelectedMetal] = useState(null);
+  const [selectedThickness, setSelectedThickness] = useState(null);
+  const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
+  const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
+  const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
+  const [selectedTaps, setSelectedTaps] = useState({});
+  const [activeTapHole, setActiveTapHole] = useState(null);
+  const [isDetectingHoles, setIsDetectingHoles] = useState(false);
+  const [highlightBends, setHighlightBends] = useState(false);
+  const [holeDetectionError, setHoleDetectionError] = useState(null);
+  const [detectedHoles, setDetectedHoles] = useState([]);
+  const [allDiscounts, setAllDiscounts] = useState([]);
+  const [priceEstimate, setPriceEstimate] = useState(null);
+  const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [isModelFadedManually, setIsModelFadedManually] = useState(false);
+  const [metalSearch, setMetalSearch] = useState('');
+
+  const parsedDxfRef = useRef(null);
+  const stepHolesDetectedRef = useRef(false);
+  const stepViewerRef = useRef(null);
+  const dxfViewerRef = useRef(null);
+  const [viewBoxData, setViewBoxData] = useState(null);
+  const viewerInstance = useRef(null);
+  const dimensionsRef = useRef(null);
+  const modelRef = useRef(null);
+  const pendingAxisRef = useRef(null);
+
+  const isCNC = selectedProductionService?.title?.toLowerCase()?.includes('cnc');
   const handleProceedToReview = () => {
     if (!selectedFile || !selectedMetal || !dimensions) return;
 
-    const totalBatch = parseFloat(priceEstimate || 0) +
+    const totalBatch = parseFloat(priceEstimate?.total_price || 0) +
       Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
       (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0);
 
@@ -81,7 +115,7 @@ const InstantPricing = () => {
       tempPath: selectedFile.tempPath,
       configuration: config,
       pricing: {
-        base: parseFloat(priceEstimate || 0) / quantity,
+        base: parseFloat(priceEstimate?.total_price || 0) / quantity,
         taps: Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) / quantity,
         finish: (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0) / quantity,
         total: unitPrice
@@ -95,33 +129,6 @@ const InstantPricing = () => {
       navigate('/cart');
     }
   };
-  const [selectedProductionService, setSelectedProductionService] = useState(null);
-  const [selectedMetal, setSelectedMetal] = useState(null);
-  const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
-  const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
-  const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
-  const [selectedTaps, setSelectedTaps] = useState({});
-  const [activeTapHole, setActiveTapHole] = useState(null);
-  const [isDetectingHoles, setIsDetectingHoles] = useState(false);
-  const [highlightBends, setHighlightBends] = useState(false);
-  const [holeDetectionError, setHoleDetectionError] = useState(null);
-  const [detectedHoles, setDetectedHoles] = useState([]);
-  const [allDiscounts, setAllDiscounts] = useState([]);
-  const [priceEstimate, setPriceEstimate] = useState(null);
-  const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [isModelFadedManually, setIsModelFadedManually] = useState(false);
-
-  const parsedDxfRef = useRef(null);
-  const stepHolesDetectedRef = useRef(false);
-  const stepViewerRef = useRef(null);
-  const dxfViewerRef = useRef(null);
-  const [viewBoxData, setViewBoxData] = useState(null);
-  const viewerInstance = useRef(null);
-  const dimensionsRef = useRef(null);
-  const modelRef = useRef(null);
-  const pendingAxisRef = useRef(null);
-
 
   // ── File Selection Handler ──────────
   useEffect(() => {
@@ -154,16 +161,19 @@ const InstantPricing = () => {
         const results = await Promise.allSettled([
           fetchServices(),
           fetchMetals(),
-          fetchPublicDiscounts()
+          fetchPublicDiscounts(),
+          fetchCategories()
         ]);
 
         const svcs = results[0].status === 'fulfilled' ? results[0].value : [];
         const mtls = results[1].status === 'fulfilled' ? results[1].value : [];
         const disc = results[2].status === 'fulfilled' ? results[2].value : [];
+        const cats = results[3].status === 'fulfilled' ? results[3].value : [];
 
         setAllServices(svcs || []);
         setAllMetals(mtls || []);
         setAllDiscounts(disc || []);
+        setAllCategories(cats || []);
       } catch (err) {
         console.error('Failed to fetch initial data:', err);
       }
@@ -180,6 +190,7 @@ const InstantPricing = () => {
   // ── Reset quoting flow when file changes ──────────────
   useEffect(() => {
     setSelectedProductionService(null);
+    setSelectedCategory(null);
     setSelectedMetal(null);
     setQuantity(1);
     setSelectedAdditionalServices([]);
@@ -226,9 +237,16 @@ const InstantPricing = () => {
 
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
+    // Guard: Need metal and production service
     if (!selectedMetal || !selectedProductionService || !dimensions) {
       setPriceEstimate(null);
-      return; // High-fidelity pricing guard établissements
+      return;
+    }
+
+    // Guard: For Laser, need thickness selection
+    if (!isCNC && !selectedThickness) {
+      setPriceEstimate(null);
+      return;
     }
 
     const getEstimate = async () => {
@@ -237,13 +255,23 @@ const InstantPricing = () => {
         const payload = {
           metal_id: selectedMetal.id,
           service_id: selectedProductionService.id,
-          thickness_value: dimensions.inches.t,
+          thickness_value: isCNC ? dimensions.inches.t : selectedThickness,
           length_in: dimensions.inches.l,
           height_in: dimensions.inches.w,
-          quantity: quantity
+          quantity: quantity,
+          additional_services: selectedAdditionalServices.map(s => s.id),
+          taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price }))
         };
-        const data = await calculatePrice(payload);
-        setPriceEstimate(data.total_price);
+        const res = await calculatePrice(payload);
+        if (res.success) {
+          setPriceEstimate(res);
+        } else {
+          // If backend says not configured
+          if (res.error?.includes('not configured')) {
+            toast(res.error, 'error');
+          }
+          setPriceEstimate(null);
+        }
       } catch (err) {
         console.error('Price calculation failed:', err);
         setPriceEstimate(null);
@@ -254,7 +282,7 @@ const InstantPricing = () => {
 
     const timeoutId = setTimeout(getEstimate, 500); // Debounce
     return () => clearTimeout(timeoutId);
-  }, [selectedMetal, selectedProductionService, dimensions, quantity]);
+  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, dimensions, quantity, toast, isCNC]);
 
 
   // ── Dimension Validation Helper ────────────────────────
@@ -864,12 +892,71 @@ const InstantPricing = () => {
   return (
     <div className={`instant-pricing-container ${isQuoteFlowActive || files.length > 0 ? 'ip-fullpage qf-active' : ''}`}>
       <style>{`
-        * { box-shadow: none !important; border-color: transparent !important; }
-        .qf-active, .qf-active .app-container, .qf-active .main-content, .qf-active #root, .qf-active .instant-pricing-container { background-color: #ffffff !important; background: #ffffff !important; box-shadow: none !important; border: none !important; }
-        .qf-main-canvas, .qf-viewer-panel, .qf-viewer-panel > div, .qf-main-canvas > div { background-color: #ffffff !important; border: none !important; box-shadow: none !important; }
-        .row, .col-lg-3, .col-lg-4, .col-lg-5, .col-lg-6, .col-lg-9 { border: none !important; box-shadow: none !important; }
-        .bg-light, .bg-light-subtle { background-color: #ffffff !important; }
-        .border-light-subtle, .border-bottom, .border-end, .border-top { border: none !important; }
+        .qf-active, .qf-active .app-container, .qf-active .main-content, .qf-active #root, .qf-active .instant-pricing-container { background-color: #ffffff !important; background: #ffffff !important; }
+        .qf-main-canvas > div { background-color: #ffffff !important; }
+        .qf-preview-container { height: 0 !important; }
+        .ip-left-panel { width: 200px; min-width: 200px; background: #ffffff; border-right: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 14px 12px; overflow: hidden; }
+        .ip-center-panel { flex: 1; display: flex; flex-direction: column; background: #ffffff; min-width: 0; min-height: 0; overflow: hidden; }
+        .ip-right-panel { width: 290px; min-width: 290px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 18px 16px; overflow-y: auto; }
+        /* Desktop: floating card with padding from edges */
+        .ip-panel-layout { display: flex; position: fixed; top: 48px; left: 48px; right: 48px; bottom: 48px; z-index: 50; overflow: hidden; border-radius: 20px; box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1.5px solid #e2e6ea; }
+        body.qf-active { overflow: hidden !important; background: #e8eaed !important; }
+        /* Tablet + Mobile: switch to scrollable vertical stack */
+        @media (max-width: 1024px) {
+          .ip-panel-layout { position: static; flex-direction: column; height: auto; min-height: unset; overflow: visible; border-radius: 0; box-shadow: none; border: none; top: auto; left: auto; right: auto; bottom: auto; }
+          .qf-preview-container { height: auto !important; overflow: visible !important; }
+          html.qf-active, body.qf-active { overflow-y: auto !important; overflow-x: hidden !important; background: #f4f5f7 !important; }
+          .ip-left-panel { width: 100% !important; min-width: unset !important; border-right: none !important; border-bottom: 1.5px solid #e8eaed; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; gap: 6px; overflow: visible !important; height: auto !important; }
+          .ip-center-panel { height: 55vw; min-height: 300px; max-height: 480px; flex-shrink: 0; overflow: hidden; }
+          .ip-right-panel { width: 100% !important; min-width: unset !important; border-left: none !important; border-top: 1.5px solid #e8eaed; height: auto; overflow-y: visible; padding-bottom: 24px; }
+          .ip-proceed-btn { margin-top: 16px; }
+        }
+        /* Mobile */
+        @media (max-width: 640px) {
+          .ip-center-panel { height: 65vw; min-height: 240px; }
+          .ip-toolbar { flex-wrap: wrap; gap: 4px; padding: 8px 10px; }
+          .ip-right-panel { padding: 14px 12px 28px; }
+          .ip-dim-row { padding: 8px 10px; }
+          .ip-section-title { margin-top: 12px; }
+        }
+        .ip-file-card { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; cursor:pointer; margin-bottom:6px; transition:all 0.15s; }
+        .ip-file-card:hover { border-color:#cbd5e1; background:#fafafa; }
+        .ip-file-card.active { border-color:#ef4444; background:#fff5f5; }
+        .ip-file-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .ip-file-icon.active { background:#ef4444; color:#fff; }
+        .ip-file-icon.inactive { background:#f1f5f9; color:#64748b; }
+        .ip-dim-row { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:8px; border:1px solid #e8eaed; background:#fafafa; margin-bottom:8px; }
+        .ip-dim-label { font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#94a3b8; }
+        .ip-dim-value { font-size:18px; font-weight:900; line-height:1; font-family:monospace; }
+        .ip-dim-icon { width:30px; height:30px; border-radius:7px; display:flex; align-items:center; justify-content:center; }
+        .ip-section-title { font-size:10px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:#94a3b8; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .ip-section-title::after { content:''; flex:1; height:1px; background:#e8eaed; }
+        .ip-viewer-frame { flex:1; margin:0; border-radius:0; overflow:hidden; border:none; background:#ffffff; position:relative; }
+        .ip-toolbar { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; background:#ffffff; border-bottom:1.5px solid #e8eaed; }
+        .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e6ea; gap:2px; }
+        .ip-pill-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; }
+        .ip-pill-btn.active { background:#1a1a2e; color:#ffffff; }
+        .ip-axis-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; text-transform:uppercase; }
+        .ip-axis-btn.active { background:#ef4444; color:#ffffff; }
+        .ip-stat-chip { background:#f8fafc; border:1px solid #e8eaed; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+        .ip-proceed-btn { width:100%; padding:13px; border:none; border-radius:10px; background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; font-weight:900; font-size:13px; letter-spacing:1px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s; margin-top:auto; }
+        .ip-proceed-btn:hover { background:linear-gradient(135deg,#dc2626,#b91c1c); transform:translateY(-1px); box-shadow:0 6px 20px rgba(239,68,68,0.35); }
+        .ip-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border-radius:8px; border:1.5px dashed #cbd5e1; background:transparent; color:#64748b; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.15s; width:100%; margin-top:8px; }
+        .ip-add-btn:hover { border-color:#94a3b8; background:#f8fafc; }
+        .ip-badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; }
+        /* Quote Flow Active panels */
+        .ip-qf-left { width:50%; min-width:400px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
+        .ip-qf-mid { flex:1; background:#ffffff; border-right:1.5px solid #e8eaed; overflow-y:auto; padding:24px 20px; min-width:0; }
+        .ip-qf-right { width:460px; min-width:380px; background:#ffffff; display:flex; flex-direction:column; padding:16px 14px; overflow-y:auto; }
+        .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; }
+        .ip-qf-dims { padding:12px 14px; border-top:1.5px solid #e8eaed; background:#ffffff; flex-shrink:0; }
+        .ip-back-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; color:#1e293b; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s; }
+        .ip-back-btn:hover { border-color:#94a3b8; background:#f8fafc; }
+        @media (max-width: 1024px) {
+          .ip-qf-left { width:100% !important; min-width:unset !important; border-right:none !important; border-bottom:1.5px solid #e8eaed; height:55vw; min-height:280px; max-height:400px; flex-shrink:0; }
+          .ip-qf-mid { border-right:none !important; border-bottom:1.5px solid #e8eaed; padding:16px 14px; }
+          .ip-qf-right { width:100% !important; min-width:unset !important; padding-bottom:24px; }
+        }
       `}</style>
       {!isQuoteFlowActive && (
         <header className="pricing-header text-center pt-4 pb-0 mb-0">
@@ -882,179 +969,250 @@ const InstantPricing = () => {
         <div className="upload-section pt-0 pb-5 mt-0">
           <div {...getRootProps()} className={`dropzone mx-auto rounded-5 border-2 border-dashed p-5 text-center ${isDragActive ? 'bg-light border-primary' : 'bg-white border-secondary'}`} style={{ maxWidth: '800px', cursor: 'pointer' }}>
             <input {...getInputProps()} />
-            <div className="file-icons-row d-flex justify-content-center gap-3 mb-4">
-              {['.dxf', '.dwg', '.step', '.stp'].map(ext => (
-                <div key={ext} className="file-icon-item p-3 border rounded-3 bg-light"><span className="fw-bold small">{ext}</span></div>
-              ))}
-            </div>
-            <h2 className="h3 fw-bold">Drop files here to get started</h2>
-            <p className="text-muted fs-5">or</p>
-            <button className="btn btn-danger btn-lg px-5 rounded-pill shadow-sm">BROWSE FILES</button>
+            {isImporting ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
+                  <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 900, color: '#ef4444' }}>{importProgress > 0 ? `${importProgress.toFixed(0)}%` : ''}</div>
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  INITIALIZING IMPORT...
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="file-icons-row d-flex justify-content-center gap-3 mb-4">
+                  {['.dxf', '.dwg', '.step', '.stp'].map(ext => (
+                    <div key={ext} className="file-icon-item p-3 border rounded-3 bg-light"><span className="fw-bold small">{ext}</span></div>
+                  ))}
+                </div>
+                <h2 className="h3 fw-bold">Drop files here to get started</h2>
+                <p className="text-muted fs-5">or</p>
+                <button className="btn btn-danger btn-lg px-5 rounded-pill shadow-sm">BROWSE FILES</button>
+              </>
+            )}
           </div>
         </div>
       ) : (
         <div className="qf-preview-container container-fluid p-0 h-100">
           {!isQuoteFlowActive ? (
-            <div className="row g-0 h-100 overflow-hidden m-0 position-relative border-0 shadow-none">
-              <div className="col-lg-3 h-100 p-4 d-flex flex-column bg-white">
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                  <span className="fw-black text-uppercase technical-mono muted opacity-50 letter-spacing-2" style={{ fontSize: '10px' }}>Uploaded Files</span>
-                  <button className="btn btn-link btn-sm text-danger text-decoration-none fw-bold p-0" onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
+            <div className="ip-panel-layout">
+
+              {/* ── LEFT PANEL: File List ── */}
+              <div className="ip-left-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>
+                    Files <span style={{ background: '#f1f5f9', color: '#64748b', borderRadius: '4px', padding: '1px 5px', marginLeft: '4px' }}>{files.length}</span>
+                  </span>
+                  <button style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }} onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
                 </div>
-                <div className="file-list-preview overflow-auto flex-grow-1 pe-2 py-2">
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                   <AnimatePresence mode="popLayout">
                     {files.map(f => (
                       <motion.div
                         layout
-                        initial={{ opacity: 0, x: -20 }}
+                        initial={{ opacity: 0, x: -12 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
+                        exit={{ opacity: 0, x: -12 }}
                         key={f.id}
-                        className={`qf-mini-file-card p-3 rounded-4 d-flex align-items-center justify-content-between mb-3 cursor-pointer transition-all border-2 ${selectedFile?.id === f.id ? 'bg-white card-pulse-active shadow-md' : 'bg-white border-light-subtle hover-border-light shadow-xs'}`}
+                        className={`ip-file-card ${selectedFile?.id === f.id ? 'active' : ''}`}
                         onClick={() => setSelectedFile(f)}
-                        style={{ border: selectedFile?.id === f.id ? '2px solid #ef4444' : '2px solid #f1f5f9' }}
                       >
-                        <div className="d-flex align-items-center gap-3 overflow-hidden">
-                          <div className={`p-2 rounded-3 ${selectedFile?.id === f.id ? 'bg-danger text-white' : 'bg-light text-secondary'}`}>
-                            <FileText size={18} />
-                          </div>
-                          <div className="d-flex flex-column overflow-hidden">
-                            <span className="text-dark fw-bold small text-truncate">{f.file.name}</span>
-                            <span className="text-muted" style={{ fontSize: '10px' }}>CAD MODEL</span>
+                        <div className={`ip-file-icon ${selectedFile?.id === f.id ? 'active' : 'inactive'}`}>
+                          <FileText size={14} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.file.name}</div>
+                          <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '1px' }}>
+                            {f.file.name.split('.').pop().toUpperCase()}
                           </div>
                         </div>
-                        {selectedFile?.id === f.id ? (
-                          <div className="bg-danger rounded-circle p-1 text-white"><Check size={12} /></div>
-                        ) : (
-                          <X size={16} className="text-muted opacity-50 hover-opacity-100 flex-shrink-0" onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} />
-                        )}
+                        {selectedFile?.id === f.id
+                          ? <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={9} color="#fff" /></div>
+                          : <X size={13} color="#cbd5e1" style={{ flexShrink: 0, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} />
+                        }
                       </motion.div>
                     ))}
                   </AnimatePresence>
                 </div>
-                <button className="btn btn-light w-100 rounded-4 py-3 small fw-bold mt-3 transition-all d-flex align-items-center justify-content-center gap-2 border-0 bg-light bg-opacity-50 hover-bg-light" {...getRootProps()}>
-                  <Plus size={16} className="text-secondary" /> <span className="text-muted">Add more files</span>
+                <button className="ip-add-btn" {...getRootProps()}>
+                  <Plus size={13} /> Add more files
                 </button>
               </div>
-              <div className="col-lg-6 h-100 position-relative p-0 d-flex flex-column bg-white">
-                <div className="qf-viewer-toolbar p-3 d-flex justify-content-between align-items-center gap-3 bg-transparent">
-                  <div className="d-flex gap-2">
-                    <div className="pill-toggle-container d-flex p-1 rounded-4 glass-pill shadow-xs" style={{ minWidth: '180px', position: 'relative' }}>
-                      <motion.div
-                        className="position-absolute bg-black rounded-3"
-                        initial={false}
-                        animate={{ x: viewMode === '3d' ? 0 : 85 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        style={{ width: '85px', height: 'calc(100% - 8px)', top: 4, left: 4 }}
-                      />
-                      <button className={`btn btn-sm px-0 py-2 flex-grow-1 fw-bold transition-all border-0 position-relative z-1 ${viewMode === '3d' ? 'text-white' : 'text-muted'}`} onClick={() => setViewMode('3d')}>3D VIEW</button>
-                      <button className={`btn btn-sm px-0 py-2 flex-grow-1 fw-bold transition-all border-0 position-relative z-1 ${viewMode === '2d' ? 'text-white' : 'text-muted'}`} onClick={() => { setViewMode('2d'); handleUnfold(); }}>2D VIEW</button>
+
+              {/* ── CENTER PANEL: 3D Viewer ── */}
+              <div className="ip-center-panel">
+                <div className="ip-toolbar">
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <div className="ip-pill-toggle">
+                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); setAxisCamera('top'); } }}>3D View</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); setActiveAxis('flat'); setAxisCamera('flat'); }}>2D View</button>
                     </div>
-                    <div className="btn-group p-1 rounded-4 bg-white border shadow-xs">
-                      {['top', 'front', 'side', 'flat'].map(ax => (
-                        <button key={ax} className={`btn btn-sm px-3 py-2 text-uppercase fw-bold transition-all rounded-3 d-flex align-items-center gap-1 border-0 ${activeAxis === ax ? 'bg-danger text-white' : 'bg-transparent text-muted hover-bg-light'}`}
-                          onClick={() => { setActiveAxis(ax); setAxisCamera(ax); }}>
-                          {ax}
-                        </button>
-                      ))}
+                    <div className="ip-pill-toggle">
+                      {['top', 'front', 'side', 'flat']
+                        .filter(ax => (viewMode === '3d' && ax !== 'flat') || (viewMode === '2d' && ax === 'flat'))
+                        .map(ax => (
+                          <button key={ax} className={`ip-axis-btn ${activeAxis === ax ? 'active' : ''}`} onClick={() => { setActiveAxis(ax); setAxisCamera(ax); }}>{ax}</button>
+                        ))}
                     </div>
                   </div>
-                  <div className="pill-toggle-container d-flex p-1 rounded-4 glass-pill shadow-xs" style={{ minWidth: '110px', position: 'relative' }}>
-                    <motion.div
-                      className="position-absolute bg-black rounded-3"
-                      initial={false}
-                      animate={{ x: unit === 'mm' ? 0 : 50 }}
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                      style={{ width: '50px', height: 'calc(100% - 8px)', top: 4, left: 4 }}
-                    />
-                    <button className={`btn btn-sm px-0 py-2 flex-grow-1 fw-bold transition-all border-0 position-relative z-1 ${unit === 'mm' ? 'text-white' : 'text-muted'}`} onClick={() => setUnit('mm')}>MM</button>
-                    <button className={`btn btn-sm px-0 py-2 flex-grow-1 fw-bold transition-all border-0 position-relative z-1 ${unit === 'inch' ? 'text-white' : 'text-muted'}`} onClick={() => setUnit('inch')}>INCH</button>
+                  <div className="ip-pill-toggle">
+                    <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
+                    <button className={`ip-pill-btn ${unit === 'inch' ? 'active' : ''}`} onClick={() => setUnit('inch')}>INCH</button>
                   </div>
                 </div>
-                <div className="qf-main-canvas flex-grow-1 position-relative bg-white">
+                <div className="ip-viewer-frame qf-main-canvas">
                   {(isImporting || isCalculatingPrice || isDetectingHoles || isLoadingUnfold) && (
-                    <div className="position-absolute top-50 start-50 translate-middle z-3 text-center">
-                      <Loader2 className="spinner-border animate-spin text-danger mb-2 border-0" />
-                      <div className="fw-bold small text-muted">
-                        {isImporting ? `IMPORTING MODEL (${importProgress.toFixed(0)}%)` :
-                          isLoadingUnfold ? 'PREPARING FLAT PATTERN...' :
-                            isCalculatingPrice ? 'CALCULATING PRICE...' : 'DETECTING FEATURES...'}
+                    <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
+                        <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 900, color: '#ef4444' }}>{importProgress > 0 ? `${importProgress.toFixed(0)}%` : ''}</div>
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                        {isImporting ? 'Importing Asset...' : isLoadingUnfold ? 'Preparing Flat Pattern...' : isCalculatingPrice ? 'Calculating Quote...' : 'Analyzing Features...'}
+                      </div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginTop: '8px', letterSpacing: '0.5px' }}>
+                        PLEASE WAIT WHILE WE PROCESS YOUR CAD DATA
                       </div>
                     </div>
                   )}
                   {(dxfError || backendError || holeDetectionError) && (
-                    <div className="position-absolute top-0 start-50 translate-middle-x mt-4 z-3 bg-danger bg-opacity-10 text-danger px-4 py-2 rounded-pill small fw-bold border border-danger border-opacity-25">
-                      <AlertTriangle size={14} className="me-2" />
-                      {dxfError || backendError || holeDetectionError}
+                    <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 3, background: '#fef2f2', color: '#ef4444', padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertTriangle size={12} />{dxfError || backendError || holeDetectionError}
                     </div>
                   )}
-                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} className="w-100 h-100" />}
-                  {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{ highlightBends }} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div className="p-5 text-center text-muted">Preparing Pattern...</div>)}
-                  {currentIsDxf && <div className="dxf-svg-wrapper h-100 d-flex align-items-center justify-content-center p-5">{dxfSvg ? <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
+                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
+                  {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{ highlightBends }} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Preparing Pattern...</div>)}
+                  {currentIsDxf && <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>{dxfSvg ? <div dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
                 </div>
               </div>
 
-              {/* RIGHT PANEL: Dimensions & Proceed */}
-              <div className="col-lg-3 h-100 p-4 d-flex flex-column bg-white border-end">
-                <div className="qf-info-panel h-100 d-flex flex-column">
-                  <div className="mb-4 d-flex align-items-center gap-2">
-                    <Info size={18} className="text-secondary" />
-                    <h2 className="fs-6 fw-bold m-0 letter-spacing-1">MODEL DIMENSIONS</h2>
+              {/* ── RIGHT PANEL: Model Details ── */}
+              <div className="ip-right-panel">
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#ef4444,#dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Info size={15} color="#fff" />
                   </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', letterSpacing: '0.5px' }}>Model Details</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600 }}>Extracted from CAD file</div>
+                  </div>
+                </div>
 
-                  {dimensions ? (
-                    <>
-                      <div className="flex-grow-1 pe-2">
-                        <div className="mb-4">
-                          <div className="d-flex align-items-center gap-2 mb-3">
-                            <span className="text-muted fw-black text-uppercase letter-spacing-2" style={{ fontSize: '10px' }}>{unit === 'mm' ? 'Metric Dims' : 'Imperial Dims'}</span>
-                            <div className="flex-grow-1 border-bottom border-light-subtle opacity-50" />
-                          </div>
-                          <div className="d-flex flex-column gap-3">
-                            {[
-                              { label: 'Length', symbol: 'L', key: 'l', color: 'dark' },
-                              { label: 'Width', symbol: 'W', key: 'w', color: 'dark' },
-                              { label: 'Thickness', symbol: 'T', key: 't', color: 'danger' }
-                            ].map(item => (
-                              <div key={item.key} className="dimension-hero-card p-3 rounded-4 bg-light bg-opacity-30 border-0 d-flex justify-content-between align-items-center">
-                                <div className="d-flex flex-column">
-                                  <span className="text-muted fw-black text-uppercase technical-mono" style={{ fontSize: '10px', letterSpacing: '1px' }}>{item.label} <span className="opacity-50">{item.symbol}</span></span>
-                                  <div className="d-flex align-items-baseline gap-1 mt-1">
-                                    <span className={`fs-3 fw-black text-${item.color} technical-mono`}>
-                                      {unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}
-                                    </span>
-                                    <span className="text-muted fw-bold text-xxs text-uppercase">{unit}</span>
-                                  </div>
-                                </div>
-                                <div className={`p-2 rounded-3 bg-${item.color} bg-opacity-10 text-${item.color}`}>
-                                  {item.key === 't' ? <Shield size={16} /> : <Box size={16} />}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                {/* File Info */}
+                {selectedFile && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="ip-section-title">File Info</div>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: '#fff0f0', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <FileText size={16} color="#ef4444" />
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedFile.file.name}</div>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 3, alignItems: 'center' }}>
+                          <span className="ip-badge" style={{ background: '#dbeafe', color: '#1d4ed8' }}>{selectedFile.file.name.split('.').pop().toUpperCase()}</span>
+                          <span className="ip-badge" style={{ background: '#dcfce7', color: '#15803d' }}>CAD MODEL</span>
                         </div>
                       </div>
-
-                      <div className="mt-auto pt-4">
-                        <button className="btn btn-danger btn-lg w-100 py-3 rounded-4 fw-black d-flex align-items-center justify-content-center shimmer-btn transition-all border-0 shadow-lg" style={{ letterSpacing: '1px' }} onClick={() => setIsQuoteFlowActive(true)}>
-                          PROCEED TOWARD QUOTE <ChevronRight size={20} className="ms-2" />
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-5 my-auto">
-                      <Loader2 className="spinner-border animate-spin text-danger mb-3 border-0" />
-                      <div className="text-muted small fw-bold mt-2">CALCULATING DIMENSIONS...</div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {dimensions ? (
+                  <>
+                    {/* Dimensions */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div className="ip-section-title">{unit === 'mm' ? 'Metric' : 'Imperial'} Dimensions</div>
+                      {[
+                        { label: 'Length', symbol: 'L', key: 'l', bg: '#eff6ff', iconBg: '#dbeafe', iconColor: '#3b82f6' },
+                        { label: 'Width', symbol: 'W', key: 'w', bg: '#f0fdf4', iconBg: '#dcfce7', iconColor: '#22c55e' },
+                        { label: 'Thickness', symbol: 'T', key: 't', bg: '#fff7ed', iconBg: '#fed7aa', iconColor: '#f97316' },
+                      ].map(item => (
+                        <div key={item.key} className="ip-dim-row" style={{ background: item.bg }}>
+                          <div>
+                            <div className="ip-dim-label">{item.label} <span style={{ opacity: 0.5 }}>({item.symbol})</span></div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
+                              <span className="ip-dim-value" style={{ color: item.iconColor }}>
+                                {unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}
+                              </span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{unit}</span>
+                            </div>
+                          </div>
+                          <div className="ip-dim-icon" style={{ background: item.iconBg }}>
+                            {item.key === 't' ? <Shield size={14} color={item.iconColor} /> : <Box size={14} color={item.iconColor} />}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Analysis */}
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="ip-section-title">Analysis</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</span>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
+                            {unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'cm³' : 'in³'}</span>
+                        </div>
+                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Footprint</span>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
+                            {unit === 'mm'
+                              ? (parseFloat(dimensions.mm.l) * parseFloat(dimensions.mm.w) / 100).toFixed(1)
+                              : (parseFloat(dimensions.inches.l) * parseFloat(dimensions.inches.w)).toFixed(3)}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'cm²' : 'in²'}</span>
+                        </div>
+                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aspect Ratio</span>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
+                            {(parseFloat(dimensions.mm.l) / parseFloat(dimensions.mm.w)).toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>L / W</span>
+                        </div>
+                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Format</span>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
+                            {selectedFile?.file.name.split('.').pop().toUpperCase() || '—'}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>File type</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Proceed */}
+                    <button className="ip-proceed-btn" onClick={() => setIsQuoteFlowActive(true)}>
+                      PROCEED TO QUOTE <ChevronRight size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 40 }}>
+                    <Loader2 size={28} style={{ color: '#ef4444', animation: 'spin 1s linear infinite' }} />
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.5px' }}>CALCULATING DIMENSIONS...</div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
-            <div className="row g-0 h-100 w-100 m-0">
-              <div className="col-lg-5 h-100 bg-white d-flex flex-column overflow-hidden">
-                <div className="qf-viewer-panel flex-grow-1 position-relative" style={{ height: '75%' }}>
-                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} className="w-100 h-100" />}
+            <div className="ip-panel-layout">
+              <div className="ip-qf-left">
+                <div className="ip-toolbar">
+                  <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                    <div className="ip-pill-toggle">
+                      <button className={`ip-pill-btn ${viewMode==='3d'?'active':''}`} onClick={()=>setViewMode('3d')}>3D VIEW</button>
+                      <button className={`ip-pill-btn ${viewMode==='2d'?'active':''}`} onClick={()=>{setViewMode('2d');handleUnfold();}}>2D FLAT</button>
+                    </div>
+                    <button className="ip-pill-btn" style={{ background:isModelFadedManually?'#ef4444':'transparent', color:isModelFadedManually?'#fff':'#64748b', border:'none' }} onClick={()=>setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
+                  </div>
+                  <button className="ip-back-btn" onClick={()=>setIsQuoteFlowActive(false)}>
+                    <ChevronLeft size={13} /> BACK
+                  </button>
+                </div>
+                <div className="ip-qf-viewer">
+                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width:'100%', height:'100%' }} />}
 
                   {/* Premium Vibrant Legend */}
                   {isTappingActive && currentIsStep && (
@@ -1176,72 +1334,43 @@ const InstantPricing = () => {
                       ) : <div>Parsing...</div>}
                     </div>
                   )}
-                  <div className="qf-view-toggles-simple position-absolute bottom-0 start-50 translate-middle-x mb-4 bg-white p-2 rounded-pill d-flex gap-1 border shadow-sm z-3" style={{ minWidth: '360px' }}>
-                    <button
-                      className="btn btn-sm rounded-pill flex-grow-1 py-2 fw-bold transition-all border-0"
-                      style={{ backgroundColor: viewMode === '3d' ? '#000' : 'transparent', color: viewMode === '3d' ? '#fff' : '#666' }}
-                      onClick={() => setViewMode('3d')}
-                    >
-                      3D VIEW
-                    </button>
-                    <button
-                      className="btn btn-sm rounded-pill flex-grow-1 py-2 fw-bold transition-all border-0"
-                      style={{ backgroundColor: viewMode === '2d' ? '#000' : 'transparent', color: viewMode === '2d' ? '#fff' : '#666' }}
-                      onClick={() => { setViewMode('2d'); handleUnfold(); }}
-                    >
-                      2D FLAT
-                    </button>
-                    <div className="vr mx-1 my-1" style={{ width: '1px', opacity: 0.2 }}></div>
-                    <button
-                      className="btn btn-sm rounded-pill flex-grow-1 py-2 fw-bold transition-all border-0 px-3 text-uppercase"
-                      style={{
-                        backgroundColor: isModelFadedManually ? '#ef4444' : 'transparent',
-                        color: isModelFadedManually ? '#fff' : '#666',
-                        fontSize: '10px'
-                      }}
-                      onClick={() => setIsModelFadedManually(!isModelFadedManually)}
-                    >
-                      {isModelFadedManually ? 'Unfade Model' : 'Fade Model'}
-                    </button>
-                  </div>
                 </div>
                 {dimensions && (
-                  <div className="qf-quick-dims p-5 border-top bg-light-subtle" style={{ minHeight: '25%' }}>
-                    <div className="d-flex justify-content-between align-items-center mb-4">
-                      <h4 className="fs-6 fw-bold m-0 text-uppercase text-muted letter-spacing-1">{unit === 'mm' ? 'Metric Dims' : 'Imperial Dims'}</h4>
-                      <div className="btn-group p-1 rounded-3 bg-white shadow-sm border border-black border-opacity-5">
-                        <button className={`btn btn-xs px-2 py-1 fw-bold transition-all rounded-2 border-0 ${unit === 'mm' ? 'bg-black text-white' : 'bg-transparent text-muted hover-bg-light'}`} style={{ fontSize: '9px' }} onClick={() => setUnit('mm')}>MM</button>
-                        <button className={`btn btn-xs px-2 py-1 fw-bold transition-all rounded-2 border-0 ${unit === 'inch' ? 'bg-black text-white' : 'bg-transparent text-muted hover-bg-light'}`} style={{ fontSize: '9px' }} onClick={() => setUnit('inch')}>INCH</button>
+                  <div className="ip-qf-dims">
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                      <span style={{ fontSize:'9px', fontWeight:800, letterSpacing:'1.5px', textTransform:'uppercase', color:'#94a3b8' }}>{unit==='mm'?'Metric':'Imperial'} Dims</span>
+                      <div className="ip-pill-toggle">
+                        <button className={`ip-pill-btn ${unit==='mm'?'active':''}`} onClick={()=>setUnit('mm')}>MM</button>
+                        <button className={`ip-pill-btn ${unit==='inch'?'active':''}`} onClick={()=>setUnit('inch')}>INCH</button>
                       </div>
                     </div>
-                    <div className="row g-3">
-                      <div className="col-6">
-                        <span className="text-muted d-block small mb-0 fw-bold">Length (L):</span>
-                        <strong className="fs-5 d-block text-dark fw-extrabold">{unit === 'mm' ? dimensions.mm.l : dimensions.inches.l} {unit}</strong>
-                      </div>
-                      <div className="col-6">
-                        <span className="text-muted d-block small mb-0 fw-bold">Width (W):</span>
-                        <strong className="fs-5 d-block text-dark fw-extrabold">{unit === 'mm' ? dimensions.mm.w : dimensions.inches.w} {unit}</strong>
-                      </div>
-                      <div className="col-6">
-                        <span className="text-muted d-block small mb-0 fw-bold text-danger">Thickness (T):</span>
-                        <strong className="fs-5 d-block text-danger fw-extrabold">{unit === 'mm' ? dimensions.mm.t : dimensions.inches.t} {unit}</strong>
-                      </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6 }}>
+                      {[
+                        {label:'L', key:'l', color:'#3b82f6', bg:'#eff6ff'},
+                        {label:'W', key:'w', color:'#22c55e', bg:'#f0fdf4'},
+                        {label:'T', key:'t', color:'#f97316', bg:'#fff7ed'},
+                      ].map(item => (
+                        <div key={item.key} style={{ background:item.bg, border:'1px solid #e8eaed', borderRadius:8, padding:'8px 10px' }}>
+                          <div style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>{item.label}</div>
+                          <div style={{ fontSize:'14px', fontWeight:900, color:item.color, fontFamily:'monospace', lineHeight:1.2 }}>{unit==='mm'?dimensions.mm[item.key]:dimensions.inches[item.key]}</div>
+                          <div style={{ fontSize:'9px', fontWeight:600, color:'#94a3b8' }}>{unit}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="col-lg-4 h-100 bg-white overflow-auto p-5 border-start">
+              <div className="ip-qf-mid">
                 {!selectedProductionService ? (
                   <div className="animate-fade-in p-2">
-                    <div className="d-flex justify-content-between align-items-center mb-5">
-                      <h2 className="fs-4 fw-bold m-0">Select production method:</h2>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h2 className="fs-5 fw-bold m-0">Select production method:</h2>
                       <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-10 rounded-pill px-3 py-1 fw-normal text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
                         {allServices.filter(s => !!s.is_production || s.is_production == "1").length} active
                       </span>
                     </div>
-                    <div className="d-flex flex-column gap-4">
+                    <div className="d-flex flex-column gap-2">
                       {allServices.filter(s => !!s.is_production || s.is_production == "1").map(svc => {
                         const { fits, reason } = (() => {
                           if (!dimensions) return { fits: true };
@@ -1265,22 +1394,39 @@ const InstantPricing = () => {
                           <button
                             key={svc.id}
                             disabled={!fits}
-                            className={`btn text-start p-5 rounded-5 border-2 transition-all d-flex flex-column gap-3 position-relative ${fits
+                            className={`btn text-start p-3 rounded-4 border-2 transition-all d-flex flex-column gap-2 position-relative ${fits
                               ? 'bg-white border-light-subtle shadow-sm hover-shadow hover-translate-y'
                               : 'bg-light opacity-50 cursor-not-allowed grayscale'
                               }`}
                             style={{
-                              border: fits ? '2px solid #f8f9fa' : '2px solid transparent',
+                              border: fits ? '1.5px solid #e8eaed' : '1.5px solid transparent',
                               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                             }}
-                            onClick={() => setSelectedProductionService(svc)}
+                            onClick={() => {
+                              const title = svc.title.toLowerCase();
+                              const isCNC = title.includes('cnc');
+
+                              if (isCNC) {
+                                const config = svc.pricing_config || {};
+                                if (!config.base_setup && !config.price_per_width) {
+                                  toast('This service (CNC) is not yet configured for pricing by admin.', 'error');
+                                  return;
+                                }
+                              } else {
+                                if (!svc.base_price && (!svc.pricing_rules || svc.pricing_rules.length === 0)) {
+                                  // We'll be more lenient here as standard services might use the new decoupled model
+                                  // but let's check if it has a base price at least
+                                }
+                              }
+                              setSelectedProductionService(svc);
+                            }}
                           >
                             <div className="d-flex justify-content-between align-items-center w-100">
-                              <div className="d-flex align-items-center gap-3">
-                                <div className={`p-3 rounded-4 ${fits ? 'bg-danger bg-opacity-10 text-danger' : 'bg-secondary bg-opacity-10 text-muted'}`}>
-                                  {svc.title.toLowerCase().includes('cnc') ? <Box size={24} /> : <Zap size={24} />}
+                              <div className="d-flex align-items-center gap-2">
+                                <div className={`p-2 rounded-3 ${fits ? 'bg-danger bg-opacity-10 text-danger' : 'bg-secondary bg-opacity-10 text-muted'}`}>
+                                  {svc.title.toLowerCase().includes('cnc') ? <Box size={18} /> : <Zap size={18} />}
                                 </div>
-                                <strong className={`fs-3 d-block m-0 ${fits ? 'text-dark' : 'text-muted'}`}>{svc.title}</strong>
+                                <strong className={`fs-5 d-block m-0 ${fits ? 'text-dark' : 'text-muted'}`}>{svc.title}</strong>
                               </div>
                               {!fits && (
                                 <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2 small fw-bold">
@@ -1293,7 +1439,7 @@ const InstantPricing = () => {
                                 </div>
                               )}
                             </div>
-                            <span className="fs-6 text-muted opacity-75 fw-medium leading-relaxed max-w-md">
+                            <span className="text-muted fw-medium" style={{ fontSize: '12px', lineHeight: '1.4' }}>
                               {svc.description}
                             </span>
                             {!fits && (
@@ -1306,57 +1452,210 @@ const InstantPricing = () => {
                       })}
                     </div>
                   </div>
+                ) : !selectedCategory ? (
+                  <div className="animate-fade-in p-2">
+                    <div style={{ background:'#f8fafc', border:'1.5px solid #e8eaed', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <Zap size={13} color="#ef4444" />
+                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Method</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedProductionService.title}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => setSelectedProductionService(null)}>CHANGE</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                      <h2 style={{ fontSize:'15px', fontWeight:800, margin:0, color:'#1e293b' }}>Select Category</h2>
+                      <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 fw-bold text-uppercase" style={{ fontSize:'9px' }}>
+                        {allCategories.filter(cat => allMetals.some(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id))).length} Categories
+                      </span>
+                    </div>
+
+                    <div className="row g-4">
+                      {allCategories
+                        .filter(cat => allMetals.some(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id)))
+                        .map(cat => {
+                          const catMetals = allMetals.filter(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id));
+                          return (
+                            <div key={cat.id} className="col-12 col-md-6">
+                              <button
+                                className="w-100 btn text-start p-2 rounded-4 border-2 transition-all d-flex align-items-center gap-3 bg-white border-light-subtle shadow-sm hover-shadow-sm hover-translate-y group px-3"
+                                style={{
+                                  border: '1px solid #f1f5f9',
+                                  transition: 'all 0.2s ease-in-out',
+                                  backgroundColor: '#fff'
+                                }}
+                                onClick={() => setSelectedCategory(cat)}
+                              >
+                                <div className="p-2 rounded-3 bg-light group-hover-bg-danger group-hover-bg-opacity-10 transition-all border border-transparent group-hover-border-danger group-hover-border-opacity-10 flex-shrink-0">
+                                  {cat.slug.includes('aluminum') ? <Layers size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                    cat.slug.includes('steel') ? <Shield size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                      cat.slug.includes('brass') || cat.slug.includes('copper') ? <Zap size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                        <Box size={18} className="group-hover-text-danger transition-all opacity-75" />}
+                                </div>
+                                <div className="flex-grow-1">
+                                  <strong className="d-block m-0 text-dark fw-bold mb-0" style={{ fontSize: '13px' }}>{cat.name}</strong>
+                                  <span className="text-muted opacity-75 fw-bold text-uppercase" style={{ fontSize: '8px', letterSpacing: '0.5px' }}>{catMetals.length} Items</span>
+                                </div>
+                                <div className="text-danger opacity-0 group-hover-opacity-100 transition-all translate-x-1 group-hover-translate-x-0 ms-auto">
+                                  <ArrowRight size={16} />
+                                </div>
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 ) : !selectedMetal ? (
                   <div className="animate-fade-in">
-                    <div className="mb-4 d-flex align-items-center gap-3 bg-light p-3 rounded-4 small fw-bold">
-                      <span className="text-muted text-uppercase letter-spacing-1">METHOD:</span> <span>{selectedProductionService.title}</span>
-                      <button className="btn btn-link text-danger text-decoration-none p-0 ms-auto small fw-bold" onClick={() => setSelectedProductionService(null)}>CHANGE</button>
+                    {/* Compact breadcrumb card */}
+                    <div style={{ background:'#f8fafc', border:'1.5px solid #e8eaed', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:7, marginBottom:7, borderBottom:'1px solid #e8eaed' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <Zap size={13} color="#ef4444" />
+                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Method</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedProductionService.title}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); }}>CHANGE</button>
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <Grid size={13} color="#64748b" />
+                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Category</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedCategory.name}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => setSelectedCategory(null)}>CHANGE</button>
+                        </div>
+                      </div>
                     </div>
-                    <h2 className="h4 fw-bold mb-4">Select Material</h2>
+
+                    {/* Header row */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+                      <button className="btn btn-light rounded-circle border p-1" onClick={() => setSelectedCategory(null)}>
+                        <ChevronLeft size={16} className="text-dark" />
+                      </button>
+                      <h2 style={{ fontSize:'15px', fontWeight:800, margin:0, color:'#1e293b' }}>Select Material</h2>
+                      <div style={{ flex:1, position:'relative' }}>
+                        <input
+                          type="text"
+                          className="form-control rounded-pill border-light-subtle"
+                          placeholder="Search materials..."
+                          value={metalSearch}
+                          onChange={(e) => setMetalSearch(e.target.value)}
+                          style={{ height:'34px', fontSize:'12px', paddingLeft:'32px' }}
+                        />
+                        <Grid className="position-absolute translate-middle-y text-muted" style={{ top:'50%', left:'10px' }} size={13} />
+                      </div>
+                    </div>
+
                     <div className="d-flex flex-column gap-2">
-                      {allMetals.filter(m => m.services?.includes(selectedProductionService.id)).map(metal => (
-                        <button
-                          key={metal.id}
-                          className="btn btn-white text-dark text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center justify-content-between hover-shadow-sm group border-light-subtle hover-border-danger bg-white"
-                          style={{ transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                          onClick={() => setSelectedMetal(metal)}
-                        >
-                          <div className="d-flex align-items-center gap-3">
-                            <div className="p-3 bg-light rounded-4 group-hover-bg-danger group-hover-bg-opacity-10 transition-all border border-transparent group-hover-border-danger group-hover-border-opacity-10">
-                              <Shield size={20} className="text-secondary group-hover-text-danger transition-all opacity-75" />
-                            </div>
-                            <div className="d-flex flex-column">
-                              <span className="fw-extrabold text-uppercase letter-spacing-1 small d-block mb-1">{metal.name}</span>
-                              <div className="d-flex align-items-center gap-2">
-                                <span className="bg-light px-2 py-0.5 rounded text-muted font-monospace" style={{ fontSize: '9px', letterSpacing: '0.5px' }}>PREMIUM GRADE</span>
-                                <div className="rounded-circle bg-success" style={{ width: '6px', height: '6px' }} />
-                                <span className="text-muted" style={{ fontSize: '9px' }}>IN STOCK</span>
+                      {allMetals
+                        .filter(m => Number(m.category_id) === Number(selectedCategory?.id))
+                        .filter(m => (m.services || []).map(id => Number(id)).includes(Number(selectedProductionService?.id)))
+                        .filter(m => m.name.toLowerCase().includes((metalSearch || '').toLowerCase()))
+                        .map(metal => (
+                          <button
+                            key={metal.id}
+                            className="btn text-dark text-start d-flex align-items-center justify-content-between bg-white"
+                            style={{ padding:'10px 12px', borderRadius:10, border:'1.5px solid #e8eaed', transition:'all 0.2s' }}
+                            onClick={() => setSelectedMetal(metal)}
+                          >
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                              <div style={{ width:34, height:34, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                <Shield size={16} color="#64748b" />
+                              </div>
+                              <div>
+                                <div style={{ fontSize:'12px', fontWeight:800, color:'#1e293b', textTransform:'uppercase', letterSpacing:'0.5px' }}>{metal.name}</div>
+                                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
+                                  <span style={{ background:'#f1f5f9', borderRadius:4, padding:'1px 6px', fontSize:'9px', fontWeight:700, color:'#64748b', textTransform:'uppercase' }}>PREMIUM GRADE</span>
+                                  <div style={{ width:6, height:6, borderRadius:'50%', background:'#22c55e' }} />
+                                  <span style={{ fontSize:'9px', fontWeight:600, color:'#94a3b8' }}>IN STOCK</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="opacity-0 group-hover-opacity-100 transition-all text-danger translate-x-1 group-hover-translate-x-0 me-2">
-                            <ArrowRight size={20} />
-                          </div>
-                        </button>
-                      ))}
+                            <ArrowRight size={15} color="#ef4444" />
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ) : (
                   <div className="animate-fade-in">
-                    <div className="mb-4 bg-light p-4 rounded-4 small fw-bold d-flex flex-column gap-3">
+                    <div className="mb-4 bg-light p-4 rounded-5 small fw-bold d-flex flex-column gap-3 border border-light-subtle shadow-sm">
                       <div className="d-flex justify-content-between align-items-center">
-                        <div><span className="text-muted text-uppercase letter-spacing-1 me-2">Method:</span> <span className="text-dark">{selectedProductionService.title}</span></div>
-                        <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold" onClick={() => { setSelectedProductionService(null); setSelectedMetal(null); }}>CHANGE</button>
+                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
+                          <Zap size={14} className="text-danger" /> Method
+                        </div>
+                        <div className="d-flex align-items-center gap-3">
+                          <span className="text-dark fw-black">{selectedProductionService.title}</span>
+                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); setSelectedMetal(null); }}>CHANGE</button>
+                        </div>
                       </div>
                       <div className="d-flex justify-content-between align-items-center">
-                        <div><span className="text-muted text-uppercase letter-spacing-1 me-2">Metal:</span> <span className="text-dark">{selectedMetal.name}</span></div>
-                        <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold" onClick={() => setSelectedMetal(null)}>CHANGE</button>
+                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
+                          <Grid size={14} className="text-dark" /> Category
+                        </div>
+                        <div className="d-flex align-items-center gap-3">
+                          <span className="text-dark fw-black">{selectedCategory?.name}</span>
+                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => { setSelectedCategory(null); setSelectedMetal(null); }}>CHANGE</button>
+                        </div>
                       </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
+                          <Shield size={14} className="text-dark" /> Metal
+                        </div>
+                        <div className="d-flex align-items-center gap-3">
+                          <span className="text-dark fw-black">{selectedMetal.name}</span>
+                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => setSelectedMetal(null)}>CHANGE</button>
+                        </div>
+                      </div>
+                      {selectedThickness && (
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
+                            <TrendingDown size={14} className="text-dark" /> Thickness
+                          </div>
+                          <div className="d-flex align-items-center gap-3">
+                            <span className="text-dark fw-black">{selectedThickness}"</span>
+                            <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => setSelectedThickness(null)}>CHANGE</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <h2 className="h4 fw-bold mb-2">Additional Services</h2>
                     <p className="text-muted small mb-4">Enhance your part with extra processes</p>
                     <div className="d-flex flex-column gap-3">
-                      {allServices.filter(s => s.parent_id === selectedProductionService.id).map(svc => {
+                      {allServices.filter(svc => {
+                        // 1. Basic hierarchy check
+                        const isChild = (svc.parent_ids || []).includes(selectedProductionService?.id);
+                        if (!isChild) return false;
+
+                        // 2. Compatibility check (Metal + Thickness)
+                        if (isCNC) {
+                          // For CNC Machining, we show all available sub-services linked to the method
+                          return true;
+                        }
+
+                        let tStr = null;
+                        if (dimensions?.inches?.t) {
+                          const rawT = dimensions.inches.t.toFixed(3);
+                          rawT.startsWith('0.') ? tStr = rawT.substring(1) + '"' : tStr = rawT + '"';
+                        }
+
+                        const currentThickness = selectedThickness || tStr;
+
+                        if (currentThickness) {
+                          const thicknessSpecs = selectedMetal.thickness_specs?.[currentThickness] || {};
+                          const available = (thicknessSpecs.available_services || []).map(id => Number(id));
+                          return available.includes(Number(svc.id));
+                        }
+
+                        return false; // If no thickness selected and not CNC, show nothing yet
+                      }).map(svc => {
                         const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
                         const isTap = svc.title.toLowerCase().includes('tap');
                         const isAnodiz = svc.title.toLowerCase().includes('anodiz');
@@ -1425,7 +1724,7 @@ const InstantPricing = () => {
                 )}
               </div>
 
-              <div className="col-lg-3 h-100 p-4 overflow-hidden bg-white border-start">
+              <div className="ip-qf-right">
                 {selectedMetal ? (
                   <div className="animate-fade-in d-flex flex-column h-100">
                     <div className="bg-white p-3 rounded-4 mb-2 border border-light shadow-none">
@@ -1479,36 +1778,29 @@ const InstantPricing = () => {
                           <div className="d-flex flex-column gap-3 mb-4 p-4 rounded-4 border border-white border-opacity-10" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
                             <div className="d-flex justify-content-between align-items-center">
                               <div className="d-flex flex-column">
-                                <span className="opacity-70 small">Fabrication Total</span>
-                                <span className="text-white-50" style={{ fontSize: '10px' }}>Base manufacturing cost</span>
+                                <span className="opacity-70 small">Material Cost</span>
+                                <span className="text-white-50" style={{ fontSize: '10px' }}>Based on square inches</span>
                               </div>
-                              <span className="fw-black fs-5">${(parseFloat(priceEstimate || 0)).toFixed(2)}</span>
+                              <span className="fw-black fs-5">${(priceEstimate?.breakdown?.material_cost || 0).toFixed(2)}</span>
                             </div>
 
-                            {Object.keys(selectedTaps).length > 0 && (
+                            <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
+                              <div className="d-flex flex-column">
+                                <span className="opacity-70 small">Fabrication cost</span>
+                                <span className="text-white-50" style={{ fontSize: '10px' }}>{selectedProductionService?.title} setup & process</span>
+                              </div>
+                              <span className="fw-black fs-5">${(priceEstimate?.breakdown?.production_cost || 0).toFixed(2)}</span>
+                            </div>
+
+                            {(priceEstimate?.breakdown?.additional_services_cost || 0) > 0 && (
                               <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-danger">
                                 <div className="d-flex flex-column">
-                                  <span className="opacity-90 fw-bold small">Tapping ({Object.keys(selectedTaps).length} holes)</span>
-                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Flat-rate processing fee</span>
+                                  <span className="opacity-90 fw-bold small">Sub-Services Total</span>
+                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Tapping, Anodizing, etc.</span>
                                 </div>
-                                <span className="fw-black fs-5">+${(Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0)).toFixed(2)}</span>
+                                <span className="fw-black fs-5">+${(priceEstimate.breakdown.additional_services_cost).toFixed(2)}</span>
                               </div>
                             )}
-
-                            {(() => {
-                              const anoSvc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'));
-                              const anoPrice = parseFloat(anoSvc?.base_price || 15);
-                              if (!selectedAnodizingColor) return null;
-                              return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-info">
-                                  <div className="d-flex flex-column">
-                                    <span className="opacity-90 fw-bold small">Anodizing Finish</span>
-                                    <span className="opacity-50" style={{ fontSize: '10px' }}>Flat-rate batch treatment</span>
-                                  </div>
-                                  <span className="fw-black fs-5">+${(anoPrice).toFixed(2)}</span>
-                                </div>
-                              );
-                            })()}
                           </div>
 
                           <div className="text-center">
@@ -1516,11 +1808,7 @@ const InstantPricing = () => {
                             <div className="d-flex align-items-baseline justify-content-center gap-2">
                               <span className="fs-4 text-danger fw-black">$</span>
                               <strong className="fs-huge fw-black text-danger">
-                                {(
-                                  parseFloat(priceEstimate || 0) +
-                                  Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
-                                  (selectedAnodizingColor ? parseFloat(selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.base_price || 15) : 0)
-                                ).toFixed(2)}
+                                {(priceEstimate?.total_price || 0).toFixed(2)}
                               </strong>
                             </div>
                           </div>

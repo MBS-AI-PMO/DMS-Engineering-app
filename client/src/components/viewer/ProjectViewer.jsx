@@ -42,8 +42,8 @@ const ProjectViewer = ({
 
     try {
       const viewer = new OV.EmbeddedViewer(currentContainer, {
-        backgroundColor: new OV.RGBAColor(248, 249, 250, 255),
-        edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(65, 105, 225), 1),
+        backgroundColor: new OV.RGBAColor(255, 255, 255, 255),
+        edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(0, 0, 0), 1),
         onModelLoaded: () => {
           const threeViewer = viewer.GetViewer();
 
@@ -170,19 +170,27 @@ const ProjectViewer = ({
             const radius = mmDia / 2;
             const height = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
 
-            const geometry = new THREE.CylinderGeometry(radius, radius, height + 2, 32);
-            const material = new THREE.MeshStandardMaterial({
-              color: 0x4169E1, // Royal Blue High-Contrast
-              transparent: true,
-              opacity: 0.9,
-              emissive: 0x4169E1,
-              emissiveIntensity: 0.2
+            const safeRadius = Math.max(radius, 0.5);
+            const geometry = new THREE.CylinderGeometry(safeRadius, safeRadius, height, 32, 1, true);
+            const material = new THREE.MeshBasicMaterial({
+              color: 0x4169E1,
+              side: THREE.DoubleSide
             });
             const marker = new THREE.Mesh(geometry, material);
             marker.isTapMarker = true;
 
-            // Placement in design world coordinates
             marker.position.set(pos.x, pos.y, pos.z);
+
+            // Orient along hole axis — identical to InstantPricing sleeve logic
+            const rawAxis = tap.hole.axis;
+            if (rawAxis) {
+              const axisVec = new THREE.Vector3(
+                Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
+                Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
+                Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
+              );
+              marker.lookAt(new THREE.Vector3(pos.x, pos.y, pos.z).add(axisVec));
+            }
             marker.rotateX(Math.PI / 2);
 
             threeViewer.scene.add(marker);
@@ -206,7 +214,7 @@ const ProjectViewer = ({
         width: '100%',
         height: '100%',
         position: 'relative',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#ffffff',
         borderRadius: '12px',
         overflow: 'hidden',
         boxShadow: isPreview ? 'none' : 'inset 0 4px 12px rgba(0,0,0,0.05)'

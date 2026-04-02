@@ -2,12 +2,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Save, ArrowLeft, ChevronDown, ChevronRight, Code, FormInput, Upload } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, ChevronDown, ChevronRight, Code, FormInput, Upload, Layers, AlertCircle, Hash, Zap } from 'lucide-react';
 import { fetchMetalBySlug, fetchCategories, fetchServices, createMetal, updateMetal, uploadMetalImage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
 
-const TABS = ['Quick Look', 'Specifications', 'About', 'Services', 'FAQs'];
+const TABS = ['Quick Look', 'Pricing', 'Specifications', 'About', 'Services', 'FAQs'];
 
 const SPEC_SECTIONS = [
     { key: 'generalDetails', label: 'General Details', fields: ['label', 'inch', 'mm'] },
@@ -38,6 +38,7 @@ const emptyMetal = {
     services: [],
     faqs: [],
     custom_fields: {},
+    pricing_config: {}
 };
 
 // ── Showcase Editor for thicknesses ──────────────────────
@@ -192,20 +193,37 @@ export default function MetalEdit() {
         fetchServices().then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
         if (!isNew) {
             fetchMetalBySlug(slug)
-                .then(data => setMetal({
-                    name: data.name || '',
-                    category_id: data.category_id || '',
-                    thickness: data.thickness || '',
-                    description: data.description || '',
-                    image_path: data.image_path || '',
-                    quick_look: data.quick_look || emptyMetal.quick_look,
-                    specifications: data.specifications || {},
-                    thickness_specs: data.thickness_specs || {},
-                    about_section: data.about_section || null,
-                    services: data.services || [],
-                    faqs: data.faqs || [],
-                    custom_fields: data.custom_fields || {},
-                }))
+                .then(data => {
+                    // Migration: extract services from legacy quick_look.thicknesses 
+                    // into the new thickness_specs if not already present.
+                    const migratedSpecs = { ...(data.thickness_specs || {}) };
+                    const thicknesses = data.quick_look?.thicknesses || [];
+                    thicknesses.forEach(t => {
+                        if (t.value && t.services?.length > 0) {
+                            if (!migratedSpecs[t.value]) {
+                                migratedSpecs[t.value] = { available_services: t.services.map(id => Number(id)) };
+                            } else if (!migratedSpecs[t.value].available_services) {
+                                migratedSpecs[t.value].available_services = t.services.map(id => Number(id));
+                            }
+                        }
+                    });
+
+                    setMetal({
+                        name: data.name || '',
+                        category_id: data.category_id || '',
+                        thickness: data.thickness || '',
+                        description: data.description || '',
+                        image_path: data.image_path || '',
+                        quick_look: data.quick_look || emptyMetal.quick_look,
+                        specifications: data.specifications || {},
+                        thickness_specs: migratedSpecs,
+                        about_section: data.about_section || null,
+                        services: data.services || [],
+                        faqs: data.faqs || [],
+                        custom_fields: data.custom_fields || {},
+                        pricing_config: data.pricing_config || {}
+                    });
+                })
                 .catch(err => toast('Failed to load metal details: ' + err.message, 'error'))
                 .finally(() => setLoading(false));
         }
@@ -526,6 +544,97 @@ export default function MetalEdit() {
                                 }}
                             />
                         )}
+                    </div>
+                )}
+
+                {/* ── Pricing Tab ── */}
+                {activeTab === 'Pricing' && (
+                    <div className="admin-pricing-tab animate-fade-in">
+                        <div className="admin-edit-card">
+                            <div className="admin-section-header">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Hash size={18} />
+                                    <h3>Thickness-Based Pricing & Compatibility</h3>
+                                </div>
+                            </div>
+                            <p className="admin-card-tip">Configure the material cost (Price per Square Inch) and compatible sub-services for each thickness. This ensures users only see valid options during quoting.</p>
+
+                            <div className="admin-pricing-table-wrapper" style={{ marginTop: '20px' }}>
+                                <table className="admin-pricing-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Thickness</th>
+                                            <th>Price per Sq/In ($)</th>
+                                            <th>Compatible Sub-Services</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(metal.quick_look?.thicknesses || []).map((t, idx) => (
+                                            <tr key={idx}>
+                                                <td style={{ fontWeight: 800 }}>{t.label || t.value}</td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className="admin-input-small"
+                                                        value={metal.pricing_config?.[t.value] || 0}
+                                                        onChange={e => {
+                                                            setMetal(prev => ({
+                                                                ...prev,
+                                                                pricing_config: {
+                                                                    ...(prev.pricing_config || {}),
+                                                                    [t.value]: parseFloat(e.target.value) || 0
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <div className="compatibility-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                        {allServices.filter(s => !s.is_production).map(svc => {
+                                                            const currentSpecs = metal.thickness_specs?.[t.value] || {};
+                                                            const isAvailable = (currentSpecs.available_services || []).map(id => Number(id)).includes(Number(svc.id));
+
+                                                            return (
+                                                                <button
+                                                                    key={svc.id}
+                                                                    className={`pill-toggle ${isAvailable ? 'active' : ''}`}
+                                                                    onClick={() => {
+                                                                        const existing = (currentSpecs.available_services || []).map(id => Number(id));
+                                                                        const next = isAvailable
+                                                                            ? existing.filter(id => id !== Number(svc.id))
+                                                                            : [...existing, Number(svc.id)];
+
+                                                                        setMetal(prev => ({
+                                                                            ...prev,
+                                                                            thickness_specs: {
+                                                                                ...(prev.thickness_specs || {}),
+                                                                                [t.value]: {
+                                                                                    ...currentSpecs,
+                                                                                    available_services: next
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                >
+                                                                    {svc.title}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {(metal.quick_look?.thicknesses || []).length === 0 && (
+                                            <tr>
+                                                <td colSpan="3" style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                                                    First, add thicknesses in the <strong>Quick Look</strong> tab.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -859,48 +968,54 @@ export default function MetalEdit() {
 
                 {activeTab === 'Services' && (
                     <div className="admin-structured-editor">
-                        {/* ── Metal-level Services ── */}
-                        <div className="admin-repeatable-section">
+                        {/* ── Metal-level Production Methods ── */}
+                        <div className="admin-repeatable-section mb-4">
                             <div className="admin-section-header">
-                                <h4>Metal-level Services</h4>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <Zap size={20} className="text-secondary" />
+                                    <h4 style={{ margin: 0 }}>Global Production Methods</h4>
+                                </div>
                             </div>
-                            <p className="admin-field-hint" style={{ margin: '0 0 10px' }}>
-                                Services available for this metal across all thicknesses.
+                            <p className="admin-field-hint" style={{ margin: '0 0 20px' }}>
+                                Select which **main production methods** (e.g., Laser Cutting, CNC) this metal is compatible with. This determines if the metal appears in the quoting tool for that method.
                             </p>
                             <div className="admin-services-grid">
-                                {allServices.map(svc => {
-                                    const checked = (metal.services || []).some(id => Number(id) === Number(svc.id));
+                                {allServices.filter(svc => svc.is_production).map(svc => {
+                                    const checked = (metal.services || []).map(id => Number(id)).includes(Number(svc.id));
                                     return (
                                         <label key={svc.id} className={`admin-service-checkbox ${checked ? 'checked' : ''}`}>
                                             <input
                                                 type="checkbox"
                                                 checked={checked}
                                                 onChange={() => {
-                                                    const arr = metal.services || [];
-                                                    set('services', checked
-                                                        ? arr.filter(id => Number(id) !== Number(svc.id))
-                                                        : [...arr, svc.id]
-                                                    );
+                                                    const numericServices = (metal.services || []).map(id => Number(id));
+                                                    const nextServices = checked
+                                                        ? numericServices.filter(id => id !== Number(svc.id))
+                                                        : [...numericServices, Number(svc.id)];
+                                                    set('services', nextServices);
                                                 }}
                                             />
                                             <span>{svc.title}</span>
                                         </label>
                                     );
                                 })}
-                                {allServices.length === 0 && (
-                                    <p className="admin-empty-hint">No services found. Create services first.</p>
+                                {allServices.filter(svc => svc.is_production).length === 0 && (
+                                    <p className="admin-empty-hint">No production methods found.</p>
                                 )}
                             </div>
                         </div>
 
-                        {/* ── Per-Thickness Services ── */}
-                        {thicknesses.length > 0 && (
+                        {/* ── Per-Thickness Sub-Services ── */}
+                        {thicknesses.length > 0 ? (
                             <div className="admin-repeatable-section">
                                 <div className="admin-section-header">
-                                    <h4>Per-Thickness Services</h4>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <Layers size={20} className="text-secondary" />
+                                        <h4 style={{ margin: 0 }}>Thickness-Specific Sub-Services</h4>
+                                    </div>
                                 </div>
-                                <p className="admin-field-hint" style={{ margin: '0 0 10px' }}>
-                                    Override available services for each thickness. Leave empty to inherit metal-level services.
+                                <p className="admin-field-hint" style={{ margin: '0 0 20px' }}>
+                                    Select which **additional processes** (e.g., Tapping, Anodizing) are available for each thickness.
                                 </p>
                                 <div className="admin-thickness-tabs">
                                     {thicknesses.map((t, i) => (
@@ -916,44 +1031,62 @@ export default function MetalEdit() {
                                 {(() => {
                                     const t = thicknesses[selectedServicesThicknessIdx];
                                     if (!t) return null;
-                                    const thicknessServices = t.services || [];
+                                    const currentSpecs = metal.thickness_specs?.[t.value] || {};
+                                    const thicknessServices = currentSpecs.available_services || [];
+
                                     return (
-                                        <div className="admin-services-grid">
-                                            {allServices.map(svc => {
-                                                const checked = thicknessServices.some(id => Number(id) === Number(svc.id));
+                                        <div className="admin-services-grid" style={{ marginTop: '20px' }}>
+                                            {allServices.filter(svc => !svc.is_production).map(svc => {
+                                                const checked = (thicknessServices || []).map(id => Number(id)).includes(Number(svc.id));
                                                 return (
                                                     <label key={svc.id} className={`admin-service-checkbox ${checked ? 'checked' : ''}`}>
                                                         <input
                                                             type="checkbox"
                                                             checked={checked}
                                                             onChange={() => {
-                                                                const newServices = checked
-                                                                    ? thicknessServices.filter(id => Number(id) !== Number(svc.id))
-                                                                    : [...thicknessServices, svc.id];
-                                                                updateThickness(selectedServicesThicknessIdx, 'services', newServices);
+                                                                const numericServices = (thicknessServices || []).map(id => Number(id));
+                                                                const nextServices = checked
+                                                                    ? numericServices.filter(id => id !== Number(svc.id))
+                                                                    : [...numericServices, Number(svc.id)];
+
+                                                                set('thickness_specs', {
+                                                                    ...metal.thickness_specs,
+                                                                    [t.value]: {
+                                                                        ...currentSpecs,
+                                                                        available_services: nextServices
+                                                                    }
+                                                                });
                                                             }}
                                                         />
                                                         <span>{svc.title}</span>
                                                     </label>
                                                 );
                                             })}
+                                            {allServices.filter(svc => !svc.is_production).length === 0 && (
+                                                <p className="admin-empty-hint">No sub-services found. Create services first.</p>
+                                            )}
                                         </div>
                                     );
                                 })()}
                             </div>
+                        ) : (
+                            <div className="admin-empty-state p-5 text-center border rounded-4 bg-light">
+                                <AlertCircle size={40} className="text-muted mb-3" />
+                                <p>Please add thicknesses in the <strong>Quick Look</strong> tab first.</p>
+                            </div>
                         )}
 
                         {/* Raw JSON fallback */}
-                        <button className="admin-btn-ghost raw-json-toggle" onClick={() => toggleRawJson('services')}>
+                        <button className="admin-btn-ghost raw-json-toggle mt-4" onClick={() => toggleRawJson('services')}>
                             <Code size={14} /> {rawJsonMode.services ? 'Hide' : 'Show'} Raw JSON
                         </button>
                         {rawJsonMode.services && (
                             <textarea
                                 className="admin-raw-json"
-                                rows={4}
-                                value={JSON.stringify(metal.services, null, 2)}
+                                rows={8}
+                                value={JSON.stringify(metal.thickness_specs, null, 2)}
                                 onChange={e => {
-                                    try { set('services', JSON.parse(e.target.value)); } catch { /* invalid json */ }
+                                    try { set('thickness_specs', JSON.parse(e.target.value)); } catch { /* invalid json */ }
                                 }}
                             />
                         )}

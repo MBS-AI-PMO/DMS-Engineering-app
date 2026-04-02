@@ -436,19 +436,19 @@ def detect_holes_in_step(filepath: str) -> list:
                 continue
             other = raw[j]
 
-            # Same radius within 0.5 %
+            # Same radius within 1.5 % (machined holes can have split faces with slight variation)
             max_r = max(cyl["radius"], other["radius"]) + 1e-9
-            if abs(cyl["radius"] - other["radius"]) / max_r > 0.005:
+            if abs(cyl["radius"] - other["radius"]) / max_r > 0.015:
                 continue
 
-            # Parallel axes
-            if abs(float(np.dot(cyl["axis"], other["axis"]))) < 0.995:
+            # Parallel axes within ~10°
+            if abs(float(np.dot(cyl["axis"], other["axis"]))) < 0.985:
                 continue
 
-            # Centers colinear with cyl axis
+            # Centers colinear with cyl axis — wider tolerance for machined parts
             diff = other["center"] - cyl["center"]
             perp = diff - np.dot(diff, cyl["axis"]) * cyl["axis"]
-            if float(np.linalg.norm(perp)) > cyl["radius"] * 0.5 + 0.5:
+            if float(np.linalg.norm(perp)) > cyl["radius"] * 1.0 + 1.0:
                 continue
 
             seen.add(j)

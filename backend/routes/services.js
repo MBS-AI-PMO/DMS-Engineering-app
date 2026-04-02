@@ -38,12 +38,19 @@ const upload = multer({
 
 // ── Public ───────────────────────────────────────────────
 
-// GET /api/services — List all services
+// GET /api/services — List all services with their parent IDs
 router.get('/', async (req, res) => {
     try {
-        const result = await db.query(
-            'SELECT * FROM services ORDER BY parent_id NULLS FIRST, display_order, id'
-        );
+        const result = await db.query(`
+            SELECT s.*, 
+                   COALESCE((
+                       SELECT jsonb_agg(parent_id) 
+                       FROM service_relationships 
+                       WHERE service_id = s.id
+                   ), '[]'::jsonb) as parent_ids
+            FROM services s 
+            ORDER BY s.display_order, s.id
+        `);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('Error fetching services:', err);
@@ -56,6 +63,11 @@ router.get('/usage', async (req, res) => {
     try {
         const result = await db.query(`
             SELECT s.*,
+                (SELECT jsonb_agg(parent_id) 
+                 FROM service_relationships 
+                 WHERE service_id = s.id
+                ) as parent_ids,
+                s.pricing_config,
                 (SELECT COUNT(*) FROM metals m
                  WHERE m.services IS NOT NULL
                    AND jsonb_typeof(m.services) = 'array'
@@ -109,45 +121,73 @@ router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'),
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
-    
+
     // Optimize the uploaded image immediately
     const optimizedFilename = await optimizeImage(req.file.path);
     const relativePath = `/uploads/services/${optimizedFilename}`;
-    
+
     res.json({ success: true, data: { path: relativePath } });
 });
 
 // POST /api/services/admin
 router.post('/admin', authenticate, requireAdmin, async (req, res) => {
+    const {
+        title, description, image_path, display_order, is_production, parent_ids,
+        min_length, max_length, min_width, max_width, min_height, max_height,
+        dimensions_unit, service_options, base_price, pricing_config
+    } = req.body;
+
     try {
-        const result = await db.query(
+        await db.query('BEGIN');
+
+        const serviceResult = await db.query(
             `INSERT INTO services (
-                title, description, image_path, display_order, is_production, parent_id,
+                title, description, image_path, display_order, is_production,
                 min_length, max_length, min_width, max_width, min_height, max_height,
-                dimensions_unit, service_options, base_price
+                dimensions_unit, service_options, base_price, pricing_config
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
             [
-                title, description, image_path, display_order || 0, is_production || false, parent_id || null,
+                title, description, image_path, display_order || 0, is_production || false,
                 min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
-                dimensions_unit || 'in', JSON.stringify(req.body.service_options || []),
-                parseFloat(req.body.base_price) || 0
+                dimensions_unit || 'in', JSON.stringify(service_options || []),
+                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {})
             ]
         );
-        res.status(201).json({ success: true, data: result.rows[0] });
+
+        const newService = serviceResult.rows[0];
+
+        // Handle multiple parents
+        if (parent_ids && Array.isArray(parent_ids) && parent_ids.length > 0) {
+            for (const parentId of parent_ids) {
+                await db.query(
+                    'INSERT INTO service_relationships (service_id, parent_id) VALUES ($1, $2)',
+                    [newService.id, parentId]
+                );
+            }
+        }
+
+        await db.query('COMMIT');
+
+        // Return service with parent_ids
+        newService.parent_ids = parent_ids || [];
+        res.status(201).json({ success: true, data: newService });
     } catch (err) {
+        await db.query('ROLLBACK');
         console.error('Error creating service:', err);
-        res.status(500).json({ success: false, error: 'Failed to create service' });
+        res.status(500).json({ success: false, error: 'Failed to create service: ' + err.message });
     }
 });
 
 // PUT /api/services/admin/:id
 router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
+    const {
+        title, description, image_path, display_order, is_production, parent_ids,
+        min_length, max_length, min_width, max_width, min_height, max_height,
+        dimensions_unit, service_options, base_price
+    } = req.body;
+
     try {
-        const {
-            title, description, image_path, display_order, is_production, parent_id,
-            min_length, max_length, min_width, max_width, min_height, max_height,
-            dimensions_unit
-        } = req.body;
+        await db.query('BEGIN');
 
         const result = await db.query(`
             UPDATE services SET
@@ -156,34 +196,51 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
                 image_path = COALESCE($3, image_path),
                 display_order = COALESCE($4, display_order),
                 is_production = COALESCE($5, is_production),
-                parent_id = $6,
-                min_length = COALESCE($7, min_length),
-                max_length = COALESCE($8, max_length),
-                min_width = COALESCE($9, min_width),
-                max_width = COALESCE($10, max_width),
-                min_height = COALESCE($11, min_height),
-                max_height = COALESCE($12, max_height),
-                dimensions_unit = COALESCE($13, dimensions_unit),
-                service_options = COALESCE($14, service_options),
-                base_price = COALESCE($15, base_price)
-            WHERE id = $16
+                min_length = COALESCE($6, min_length),
+                max_length = COALESCE($7, max_length),
+                min_width = COALESCE($8, min_width),
+                max_width = COALESCE($9, max_width),
+                min_height = COALESCE($10, min_height),
+                max_height = COALESCE($11, max_height),
+                dimensions_unit = COALESCE($12, dimensions_unit),
+                service_options = COALESCE($13, service_options),
+                base_price = COALESCE($14, base_price)
+            WHERE id = $15
             RETURNING *
         `, [
-            title, description, image_path, display_order, is_production, parent_id || null,
+            title, description, image_path, display_order, is_production,
             min_length, max_length, min_width, max_width, min_height, max_height,
             dimensions_unit,
-            JSON.stringify(req.body.service_options),
-            parseFloat(req.body.base_price) || 0,
+            JSON.stringify(service_options),
+            parseFloat(base_price) || 0,
             req.params.id
         ]);
 
         if (result.rows.length === 0) {
+            await db.query('ROLLBACK');
             return res.status(404).json({ success: false, error: 'Service not found' });
         }
-        res.json({ success: true, data: result.rows[0] });
+
+        // Update parents
+        await db.query('DELETE FROM service_relationships WHERE service_id = $1', [req.params.id]);
+        if (parent_ids && Array.isArray(parent_ids)) {
+            for (const parentId of parent_ids) {
+                await db.query(
+                    'INSERT INTO service_relationships (service_id, parent_id) VALUES ($1, $2)',
+                    [req.params.id, parentId]
+                );
+            }
+        }
+
+        await db.query('COMMIT');
+
+        const updatedService = result.rows[0];
+        updatedService.parent_ids = parent_ids || [];
+        res.json({ success: true, data: updatedService });
     } catch (err) {
+        await db.query('ROLLBACK');
         console.error('Error updating service:', err);
-        res.status(500).json({ success: false, error: 'Failed to update service' });
+        res.status(500).json({ success: false, error: 'Failed to update service: ' + err.message });
     }
 });
 

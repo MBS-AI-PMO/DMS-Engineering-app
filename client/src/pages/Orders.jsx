@@ -58,11 +58,7 @@ const ItemRow = React.memo(({ item, onPreview }) => {
                     <a href={`/${item.configured_file_path}`} download className="btn-icon" title="Download STEP File">
                         <FileText size={16} />
                     </a>
-                    {item.flat_file_path && (
-                        <a href={`/${item.flat_file_path}`} download className="btn-icon" title="Download DXF Flat Pattern">
-                            <Download size={16} style={{ transform: 'rotate(180deg)' }} />
-                        </a>
-                    )}
+
                 </div>
             </div>
         </div>

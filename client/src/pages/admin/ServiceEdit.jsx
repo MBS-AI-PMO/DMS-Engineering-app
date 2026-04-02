@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, Loader2, Wrench, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, Loader2, Wrench, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight } from 'lucide-react';
 import { fetchServices, createService, updateService, uploadServiceImage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
 const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
-    is_production: false, parent_id: null,
+    is_production: false, parent_ids: [],
     min_length: 0, max_length: 0, min_width: 0, max_width: 0, min_height: 0, max_height: 0,
-    dimensions_unit: 'in', service_options: [], base_price: 0
+    dimensions_unit: 'in', service_options: [], base_price: 0,
+    pricing_config: {}
 };
 
 export default function ServiceEdit() {
@@ -41,7 +42,9 @@ export default function ServiceEdit() {
                     if (match) {
                         setService({
                             ...match,
-                            service_options: Array.isArray(match.service_options) ? match.service_options : []
+                            parent_ids: Array.isArray(match.parent_ids) ? match.parent_ids : [],
+                            service_options: Array.isArray(match.service_options) ? match.service_options : [],
+                            pricing_config: match.pricing_config || {}
                         });
                     }
                 }
@@ -203,7 +206,7 @@ export default function ServiceEdit() {
                             </div>
 
                             <div className="admin-form-group-inline">
-                                <div className="toggle-switch-group" onClick={() => setService(s => ({ ...s, is_production: !s.is_production, parent_id: !s.is_production ? null : s.parent_id }))}>
+                                <div className="toggle-switch-group" onClick={() => setService(s => ({ ...s, is_production: !s.is_production, parent_ids: !s.is_production ? [] : s.parent_ids }))}>
                                     <div className={`toggle-switch ${service.is_production ? 'active' : ''}`}>
                                         <div className="toggle-handle" />
                                     </div>
@@ -220,22 +223,61 @@ export default function ServiceEdit() {
                                         exit={{ height: 0, opacity: 0 }}
                                         style={{ marginTop: '16px' }}
                                     >
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                                             <CornerDownRight size={14} />
-                                            <span>Parent Service (if any)</span>
+                                            <span>Parent Services (Select Multiple)</span>
                                         </label>
-                                        <select
-                                            value={service.parent_id || ''}
-                                            onChange={e => setService(s => ({ ...s, parent_id: parseInt(e.target.value) || null }))}
-                                        >
-                                            <option value="">None (Top Level)</option>
+
+                                        <div className="parent-selection-grid" style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                            gap: '12px',
+                                            padding: '16px',
+                                            background: '#f8fafc',
+                                            borderRadius: '12px',
+                                            border: '1.5px solid #e2e8f0'
+                                        }}>
                                             {allServices
-                                                .filter(s => s.id !== parseInt(id))
+                                                .filter(s => s.id !== parseInt(id) && s.is_production)
                                                 .map(s => (
-                                                    <option key={s.id} value={s.id}>{s.title}</option>
+                                                    <div key={s.id} className="parent-checkbox-item" style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '10px',
+                                                        cursor: 'pointer',
+                                                        padding: '4px'
+                                                    }} onClick={() => {
+                                                        const pids = [...(service.parent_ids || [])];
+                                                        const idx = pids.indexOf(s.id);
+                                                        if (idx >= 0) pids.splice(idx, 1);
+                                                        else pids.push(s.id);
+                                                        setService(prev => ({ ...prev, parent_ids: pids }));
+                                                    }}>
+                                                        <div style={{
+                                                            width: '20px',
+                                                            height: '20px',
+                                                            borderRadius: '6px',
+                                                            border: '2px solid',
+                                                            borderColor: (service.parent_ids || []).includes(s.id) ? '#8b5cf6' : '#cbd5e1',
+                                                            background: (service.parent_ids || []).includes(s.id) ? '#8b5cf6' : 'transparent',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            color: 'white',
+                                                            transition: 'all 0.2s'
+                                                        }}>
+                                                            {(service.parent_ids || []).includes(s.id) && <Check size={14} />}
+                                                        </div>
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: (service.parent_ids || []).includes(s.id) ? '#1e293b' : '#64748b' }}>
+                                                            {s.title}
+                                                        </span>
+                                                    </div>
                                                 ))
                                             }
-                                        </select>
+                                            {allServices.filter(s => s.id !== parseInt(id) && s.is_production).length === 0 && (
+                                                <div className="text-muted small">No production services available to be parents.</div>
+                                            )}
+                                        </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -404,6 +446,54 @@ export default function ServiceEdit() {
                                         {(!service.service_options || service.service_options.length === 0) && (
                                             <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>
                                         )}
+                                    </div>
+                                </div>
+                            );
+
+                            const isCNC = (service?.title?.toLowerCase()?.includes('cnc')) || (parseInt(id) === 2);
+                            if (isCNC) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Maximize size={16} />
+                                            <span>CNC Pricing Configuration</span>
+                                        </div>
+                                    </div>
+                                    <p className="admin-card-tip">Configure global pricing parameters for CNC Machining. These are added to the material cost in the quote flow.</p>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Base Setup Fee ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.base_setup || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, base_setup: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><ArrowRight size={10} style={{ marginRight: '4px' }} /> Price per Inch Width ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.price_per_width || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_width: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><ArrowUp size={10} style={{ marginRight: '4px' }} /> Price per Inch Length ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.price_per_length || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_length: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><Maximize size={10} style={{ marginRight: '4px' }} /> Price per Inch Thickness ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.price_per_thickness || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_thickness: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             );

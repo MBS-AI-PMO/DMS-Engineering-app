@@ -31,15 +31,29 @@ export default function ServicesList() {
     }, [fetchAllData]);
 
     // Build hierarchical tree and flatten it for display
-    const getFlattenedHierarchy = (items, parentId = null, depth = 0) => {
+    const getFlattenedHierarchy = (items, parentId = null, depth = 0, seen = new Set()) => {
         const levelItems = items
-            .filter(item => item.parent_id === parentId)
+            .filter(item => {
+                const pids = item.parent_ids || [];
+                if (parentId === null) {
+                    return pids.length === 0 || item.is_production;
+                }
+                return pids.includes(parentId);
+            })
             .sort((a, b) => a.display_order - b.display_order);
 
         let result = [];
         levelItems.forEach(item => {
+            // Avoid infinite recursion if there's a circular relationship (safety)
+            const itemKey = `${item.id}-${parentId}`;
+            if (seen.has(itemKey)) return;
+            seen.add(itemKey);
+
             result.push({ ...item, depth });
-            result = result.concat(getFlattenedHierarchy(items, item.id, depth + 1));
+            // Only recurse if we are not too deep (safety)
+            if (depth < 5) {
+                result = result.concat(getFlattenedHierarchy(items, item.id, depth + 1, seen));
+            }
         });
         return result;
     };
@@ -53,10 +67,14 @@ export default function ServicesList() {
         // If we want to show parents of matched children (highly recommended for tree context)
         const toShow = new Set();
         matches.forEach(m => {
-            let curr = m;
-            while (curr) {
+            let stack = [m];
+            while (stack.length > 0) {
+                let curr = stack.pop();
+                if (toShow.has(curr.id)) continue;
                 toShow.add(curr.id);
-                curr = services.find(s => s.id === curr.parent_id);
+                // Find all parents of this service
+                const parents = services.filter(s => (curr.parent_ids || []).includes(s.id));
+                stack.push(...parents);
             }
         });
 
@@ -126,7 +144,7 @@ export default function ServicesList() {
                                         <td>
                                             {svc.is_production ? (
                                                 <span className="badge-production">Main</span>
-                                            ) : svc.parent_id ? (
+                                            ) : (svc.parent_ids && svc.parent_ids.length > 0) ? (
                                                 <span className="badge-sub">Sub</span>
                                             ) : (
                                                 <span className="table-cell-muted">Standard</span>

@@ -14,7 +14,7 @@ router.get('/admin/metadata', authenticate, requireAdmin, async (req, res) => {
         const [metalsRes, servicesRes] = await Promise.all([
             db.query(`
                 SELECT m.id, m.name, m.slug, m.image_path, m.services AS assigned_services,
-                       (SELECT COALESCE(jsonb_agg(DISTINCT thickness_value), '[]'::jsonb) FROM pricing_rules WHERE metal_id = m.id AND thickness_value != 'variable') AS thicknesses
+                       m.quick_look, m.pricing_config
                 FROM metals m
                 ORDER BY m.name
             `),
@@ -175,93 +175,116 @@ router.get('/discounts', async (req, res) => {
 
 /**
  * POST /api/pricing/calculate
- * Calculates the price for a specific configuration.
+ * Calculates the price for a specific configuration using the decoupled model.
  */
 router.post('/calculate', async (req, res) => {
-    const { metal_id, service_id, thickness_value, length_in, height_in, quantity = 1 } = req.body;
+    const {
+        metal_id,
+        service_id,
+        thickness_value,
+        length_in,
+        height_in,
+        quantity = 1,
+        additional_services = [] // Array of service objects or IDs
+    } = req.body;
 
-    if (!metal_id || !service_id || !thickness_value) {
+    if (!metal_id || !service_id) {
         return res.status(400).json({ success: false, error: 'Missing calculation parameters' });
     }
 
     try {
-        // Special case for CNC Machining (ID 2): uses variable (3D) formula
-        const isCNC = parseInt(service_id) === 2;
-        const lookupThickness = isCNC ? 'variable' : thickness_value.toString();
+        // 1. Fetch Metal and Primary Service Data
+        const [metalRes, serviceRes] = await Promise.all([
+            db.query('SELECT * FROM metals WHERE id = $1', [metal_id]),
+            db.query('SELECT * FROM services WHERE id = $1', [service_id])
+        ]);
 
-        const result = await db.query(`
-            SELECT * FROM pricing_rules 
-            WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3
-        `, [metal_id, service_id, lookupThickness]);
-
-        if (result.rows.length === 0) {
-            return res.json({
-                success: true,
-                total_price: 0,
-                error: 'No pricing rule configured for this combination.'
-            });
+        if (metalRes.rows.length === 0 || serviceRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Metal or Service not found' });
         }
 
-        const rule = result.rows[0];
-        const base = parseFloat(rule.base_price) || 0;
-        const h_cost = (parseFloat(height_in) || 0) * (parseFloat(rule.price_per_inch_height) || 0);
-        const l_cost = (parseFloat(length_in) || 0) * (parseFloat(rule.price_per_inch_length) || 0);
+        const metal = metalRes.rows[0];
+        const mainService = serviceRes.rows[0];
 
-        // Add thickness cost for CNC
-        let t_cost = 0;
+        // ── MATERIAL COST ─────────────────────────────────────
+        const isCNC = parseInt(mainService.id) === 2;
+        let material_cost = 0;
+
+        if (!isCNC) {
+            // Pricing config is { "thickness_val": price_per_sqin }
+            const metalPricing = metal.pricing_config || {};
+            const material_sqin_price = parseFloat(metalPricing[thickness_value]) || 0;
+            const area = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0);
+            material_cost = area * material_sqin_price;
+        }
+
+        // ── MAIN SERVICE COST ──────────────────────────────────
+        let main_service_cost = 0;
+
         if (isCNC) {
-            t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
+            const config = mainService.pricing_config || {};
+            const base = parseFloat(config.base_setup) || 25;
+            const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
+            const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
+            const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
+            main_service_cost = base + w_cost + l_cost + t_cost;
+        } else {
+            // Standard service (e.g., Laser Cutting)
+            main_service_cost = parseFloat(mainService.base_price) || 0;
         }
 
-        const unit_total = base + h_cost + l_cost + t_cost;
+        // ── ADDITIONAL SERVICES COST ──────────────────────────
+        let additional_cost = 0;
+        if (Array.isArray(additional_services) && additional_services.length > 0) {
+            const addSvcIds = additional_services.map(s => typeof s === 'object' ? s.id : s);
+            const addSvcsRes = await db.query('SELECT * FROM services WHERE id = ANY($1)', [addSvcIds]);
 
-        // Fetch applicable discounts based on quantity
+            for (const s of addSvcsRes.rows) {
+                // For now, simple base price sum
+                // (Tapping or other complex logic can be added here)
+                additional_cost += parseFloat(s.base_price) || 0;
+            }
+        }
+
+        const unit_total = material_cost + main_service_cost + additional_cost;
+
+        // ── DISCOUNTS ─────────────────────────────────────────
         let discount_percent = 0;
         let applied_tier = null;
 
-        try {
-            // Find ALL active discounts and find the best match for the current quantity
-            const discountRes = await db.query(`
-                SELECT * FROM quantity_discounts 
-                WHERE is_active = true 
-                ORDER BY (quantities->>0)::int DESC
-            `);
+        const discountRes = await db.query(`
+            SELECT * FROM quantity_discounts 
+            WHERE is_active = true 
+            ORDER BY (quantities->>0)::int DESC
+        `);
 
-            if (discountRes.rows.length > 0) {
-                // Find the first tier where the current quantity meets or exceeds any of its triggers
-                const matchedTier = discountRes.rows.find(tier => {
-                    const triggers = Array.isArray(tier.quantities) ? tier.quantities : [];
-                    return triggers.some(q => parseInt(quantity) >= parseInt(q));
-                });
+        if (discountRes.rows.length > 0) {
+            const matchedTier = discountRes.rows.find(tier => {
+                const triggers = Array.isArray(tier.quantities) ? tier.quantities : [];
+                return triggers.some(q => parseInt(quantity) >= parseInt(q));
+            });
 
-                if (matchedTier) {
-                    discount_percent = parseFloat(matchedTier.discount_percent);
-                    applied_tier = matchedTier;
-                }
+            if (matchedTier) {
+                discount_percent = parseFloat(matchedTier.discount_percent);
+                applied_tier = matchedTier;
             }
-        } catch (err) {
-            console.error('Error fetching discounts during calculation:', err);
         }
 
-        // Apply discount directly to the unit total
         const unit_discount_amount = unit_total * (discount_percent / 100);
-        const final_unit_price = unit_total - unit_discount_amount;
-
-        // Final total is clean: (Discounted Unit) * Qty
+        const final_unit_price = Math.max(0, unit_total - unit_discount_amount);
         const final_total = final_unit_price * (parseInt(quantity) || 1);
 
         res.json({
             success: true,
             total_price: final_total,
             breakdown: {
-                base,
-                height_cost: h_cost,
-                length_cost: l_cost,
-                thickness_cost: t_cost,
-                unit_total, // Original unit cost
-                final_unit_price, // Discounted unit cost
+                material_cost,
+                production_cost: main_service_cost,
+                additional_cost,
+                unit_total,
+                final_unit_price,
                 discount_percent,
-                discount_amount: unit_discount_amount * quantity, // Total saved
+                discount_amount: unit_discount_amount * quantity,
                 applied_tier
             }
         });
