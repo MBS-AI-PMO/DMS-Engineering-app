@@ -227,6 +227,10 @@ export default function ServiceEdit() {
                                             <CornerDownRight size={14} />
                                             <span>Parent Services (Select Multiple)</span>
                                         </label>
+                                        <p className="admin-card-tip" style={{ marginBottom: '12px' }}>
+                                            Linking a parent service makes this a sub-process (e.g. Bending for Laser Cutting).
+                                            <strong> Note:</strong> You must also assign this service to specific <strong>Metals & Thicknesses</strong> using the "Configure Metals" button in the services list for it to appear in the quote flow.
+                                        </p>
 
                                         <div className="parent-selection-grid" style={{
                                             display: 'grid',
@@ -363,12 +367,12 @@ export default function ServiceEdit() {
                                         <button
                                             className="admin-btn admin-btn-outline"
                                             style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000' }] }))}
+                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0 }] }))}
                                         >
                                             <Plus size={14} /> Add Color
                                         </button>
                                     </div>
-                                    <p className="admin-card-tip">Define available anodizing colors. These appear as selectable swatches in the quote flow and are reflected on the 3D model.</p>
+                                    <p className="admin-card-tip">Define available anodizing colors with their pricing. These appear as selectable swatches in the quote flow and are reflected on the 3D model.</p>
                                     <div className="options-list">
                                         {(service.service_options || []).map((opt, idx) => (
                                             <div key={idx} className="option-item-row">
@@ -382,6 +386,10 @@ export default function ServiceEdit() {
                                                         <input type="color" value={opt.color || '#000000'} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
                                                         <input type="text" value={opt.color || ''} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
                                                     </div>
+                                                </div>
+                                                <div className="option-input-group" style={{ maxWidth: '130px' }}>
+                                                    <label><Hash size={10} style={{ marginRight: '4px' }} /> Price ($)</label>
+                                                    <input type="number" step="0.01" min="0" value={opt.price ?? 0} onChange={e => { const n = [...service.service_options]; n[idx].price = parseFloat(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }} placeholder="0.00" />
                                                 </div>
                                                 <button className="option-remove-btn" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}><X size={14} /></button>
                                             </div>
@@ -446,6 +454,55 @@ export default function ServiceEdit() {
                                         {(!service.service_options || service.service_options.length === 0) && (
                                             <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>
                                         )}
+                                    </div>
+                                </div>
+                            );
+
+                            const isLaser = service?.title?.toLowerCase()?.includes('laser');
+                            if (isLaser) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Maximize size={16} />
+                                            <span>Laser Cutting Pricing Configuration</span>
+                                        </div>
+                                    </div>
+                                    <p className="admin-card-tip">Configure pricing parameters for Laser Cutting. These are added to the material cost in the quote flow.</p>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Base Setup Fee ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.base_setup || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, base_setup: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><Maximize size={10} style={{ marginRight: '4px' }} /> Price per Sq Inch ($/sq-in)</label>
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                value={service.pricing_config?.price_per_sq_inch || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_sq_inch: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><ArrowRight size={10} style={{ marginRight: '4px' }} /> Price per Inch Width ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.price_per_width || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_width: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label><ArrowUp size={10} style={{ marginRight: '4px' }} /> Price per Inch Length ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.price_per_length || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_length: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             );

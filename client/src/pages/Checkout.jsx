@@ -14,7 +14,8 @@ import {
     MapPin,
     Phone,
     User,
-    Mail
+    Mail,
+    Zap
 } from 'lucide-react';
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
@@ -294,9 +295,19 @@ const Checkout = () => {
                                                 {item.configuration?.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
                                                     <span>Taped Holes: <strong>{Object.keys(item.configuration.selectedTaps).length}</strong></span>
                                                 )}
+                                                {item.configuration?.dimensions && (
+                                                    <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>
+                                                        Measurement: {item.configuration.dimensions.mm.l} × {item.configuration.dimensions.mm.w} × {item.configuration.dimensions.mm.t} mm, {item.configuration.dimensions.mm.volume} mm³ | {item.configuration.dimensions.inches.l} × {item.configuration.dimensions.inches.w} × {item.configuration.dimensions.inches.t} in, {item.configuration.dimensions.inches.volume} in³
+                                                    </span>
+                                                )}
                                             </div>
                                             <span className="meta" style={{ marginTop: '10px', display: 'block' }}>
                                                 Qty: <strong>{item.quantity || 1}</strong> × ${(item.pricing?.total || 0).toFixed(2)}
+                                                {item.quantity > 1 && (
+                                                    <span style={{ color: '#e31b23', fontSize: '0.7rem', fontWeight: 900, marginLeft: '8px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Zap size={8} fill="#e31b23" /> Discounted
+                                                    </span>
+                                                )}
                                             </span>
                                         </div>
                                         <span className="price">${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}</span>

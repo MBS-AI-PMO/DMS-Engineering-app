@@ -63,10 +63,10 @@ router.get('/usage', async (req, res) => {
     try {
         const result = await db.query(`
             SELECT s.*,
-                (SELECT jsonb_agg(parent_id) 
-                 FROM service_relationships 
-                 WHERE service_id = s.id
-                ) as parent_ids,
+                COALESCE((SELECT jsonb_agg(parent_id) 
+                  FROM service_relationships 
+                  WHERE service_id = s.id
+                ), '[]'::jsonb) as parent_ids,
                 s.pricing_config,
                 (SELECT COUNT(*) FROM metals m
                  WHERE m.services IS NOT NULL
@@ -183,8 +183,10 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
     const {
         title, description, image_path, display_order, is_production, parent_ids,
         min_length, max_length, min_width, max_width, min_height, max_height,
-        dimensions_unit, service_options, base_price
+        dimensions_unit, service_options, base_price, pricing_config
     } = req.body;
+
+    console.log('UPDATING SERVICE:', req.params.id, 'with parent_ids:', parent_ids);
 
     try {
         await db.query('BEGIN');
@@ -204,8 +206,9 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
                 max_height = COALESCE($11, max_height),
                 dimensions_unit = COALESCE($12, dimensions_unit),
                 service_options = COALESCE($13, service_options),
-                base_price = COALESCE($14, base_price)
-            WHERE id = $15
+                base_price = COALESCE($14, base_price),
+                pricing_config = COALESCE($15, pricing_config)
+            WHERE id = $16
             RETURNING *
         `, [
             title, description, image_path, display_order, is_production,
@@ -213,6 +216,7 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
             dimensions_unit,
             JSON.stringify(service_options),
             parseFloat(base_price) || 0,
+            JSON.stringify(pricing_config || {}),
             req.params.id
         ]);
 

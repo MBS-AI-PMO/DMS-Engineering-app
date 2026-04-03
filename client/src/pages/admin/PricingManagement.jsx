@@ -1,12 +1,8 @@
-import React, { Component, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';// eslint-disable-line no-unused-vars
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-    ChevronRight, Save, Loader2, Info, AlertCircle, Check, X,
-    Layers, Wrench, Box, DollarSign, ArrowLeft, Trash2
+    ChevronRight, Loader2, DollarSign, Trash2, Info
 } from 'lucide-react';
 import {
-    fetchPricingMetadata, updateMetal,
     fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
@@ -15,112 +11,32 @@ import VolumeDiscountModal from '../../components/admin/modals/VolumeDiscountMod
 
 export default function PricingManagement() {
     const toast = useToast();
-    const navigate = useNavigate(); // eslint-disable-line no-unused-vars
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-
-    // Metadata
-    const [metals, setMetals] = useState([]);
-    const [services, setServices] = useState([]); // eslint-disable-line no-unused-vars
-
-    // Selection state
-    const [selectedMetal, setSelectedMetal] = useState(null);
-    const [selectedService, setSelectedService] = useState(null);
-
-    // Pricing Rules for the current selection
-    const [rules, setRules] = useState([]);
 
     // Global Quantity Discounts
     const [discounts, setDiscounts] = useState([]);
     const [loadingDiscounts, setLoadingDiscounts] = useState(false);
     const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
-    const [discountDisplayMode, setDiscountDisplayMode] = useState('range'); // 'range' or 'unit'
+    const [discountDisplayMode, setDiscountDisplayMode] = useState('range');
     const [selectedDiscountTier, setSelectedDiscountTier] = useState(null);
 
     const loadDiscounts = useCallback(async () => {
         try {
             setLoadingDiscounts(true);
             const discRes = await fetchAdminDiscounts();
-            // fetchAdminDiscounts() returns the array directly
             setDiscounts(discRes || []);
         } catch (err) {
             toast('Failed to load discounts: ' + err.message, 'error');
         } finally {
             setLoadingDiscounts(false);
+            setLoading(false);
         }
     }, [toast]);
 
     useEffect(() => {
-        const loadMetadata = async () => {
-            try {
-                const { data } = await fetchPricingMetadata();
-                setMetals(data.metals || []);
-                setServices(data.services || []);
-
-                await loadDiscounts();
-            } catch (err) {
-                toast('Failed to load metadata: ' + err.message, 'error');
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadMetadata();
-    }, [toast, loadDiscounts]);
-
-    useEffect(() => {
-        if (selectedMetal) {
-            // Initializing rules from the metal's own pricing_config
-            const config = selectedMetal.pricing_config || {};
-            // Support both old and new metadata structure
-            const thicknessData = selectedMetal.quick_look?.thicknesses || selectedMetal.thicknesses || [];
-
-            const merged = thicknessData.map(t => {
-                // Handle both object {value, label} and legacy string formats
-                const val = typeof t === 'object' ? t.value : t.toString();
-                const lbl = typeof t === 'object' ? t.label : (t.toString() + '"');
-                return {
-                    thickness_value: val,
-                    label: lbl,
-                    price_per_sq_inch: config[val] || 0
-                };
-            });
-
-            setRules(merged);
-        } else {
-            setRules([]);
-        }
-    }, [selectedMetal]);
-
-    const handleRuleChange = (thickness, field, value) => {
-        setRules(prev => prev.map(r =>
-            r.thickness_value === thickness
-                ? { ...r, [field]: value === '' ? 0 : parseFloat(value) }
-                : r
-        ));
-    };
-
-    const handleSave = async () => {
-        if (!selectedMetal) return;
-        setSaving(true);
-        try {
-            // Convert array back to object for storage
-            const newConfig = {};
-            rules.forEach(r => {
-                newConfig[r.thickness_value] = r.price_per_sq_inch;
-            });
-
-            await updateMetal(selectedMetal.slug, {
-                ...selectedMetal,
-                pricing_config: newConfig
-            });
-
-            toast('Material pricing updated successfully', 'success');
-        } catch (err) {
-            toast('Failed to save material pricing: ' + err.message, 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
+        loadDiscounts();
+    }, [loadDiscounts]);
 
     // --- Discount Handlers ---
     const handleAddDiscount = () => {
@@ -209,47 +125,15 @@ export default function PricingManagement() {
     return (
         <div className="admin-page pricing-management-page">
             <header className="admin-page-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    {(selectedMetal || selectedService) && (
-                        <button
-                            className="admin-icon-btn"
-                            onClick={() => {
-                                if (selectedService) setSelectedService(null);
-                                else setSelectedMetal(null);
-                            }}
-                        >
-                            <ArrowLeft size={20} />
-                        </button>
-                    )}
-                    <div>
-                        <h1 className="admin-page-title">Pricing Management</h1>
-                        <p className="admin-page-subtitle">Configure per-inch pricing rules for your catalog.</p>
-                    </div>
+                <div>
+                    <h1 className="admin-page-title">Discounts</h1>
+                    <p className="admin-page-subtitle">Configure volume-based quantity discounts for bulk orders.</p>
                 </div>
-                {selectedMetal && (
-                    <div className="admin-page-actions">
-                        <button
-                            className="admin-btn-primary"
-                            onClick={handleSave}
-                            disabled={saving}
-                        >
-                            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            {saving ? 'Saving...' : 'Save Material Prices'}
-                        </button>
-                    </div>
-                )}
             </header>
 
             <div className="pricing-flow-container">
-                {/* ─── STEP 1: SELECT METAL ─── */}
-                {!selectedMetal && (
-                    <motion.div
-                        className="pricing-step-section"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                    >
-                        {/* PREMIUM GLOBAL DISCOUNTS SECTION */}
-                        <div className="admin-card volume-discounts-premium-card mb-12">
+                {/* PREMIUM GLOBAL DISCOUNTS SECTION */}
+                <div className="admin-card volume-discounts-premium-card mb-12">
                             <div className="premium-card-header">
                                 <div className="header-info">
                                     <div className="icon-badge">
@@ -363,95 +247,7 @@ export default function PricingManagement() {
                                     </div>
                                 )}
                             </div>
-                        </div>
-
-                        <div className="pricing-section-header">
-                            <Box size={24} />
-                            <h2>Select a Metal</h2>
-                        </div>
-                        <div className="pricing-grid-selection">
-                            {metals.map(metal => (
-                                <button
-                                    key={metal.id}
-                                    className="pricing-selection-card"
-                                    onClick={() => setSelectedMetal(metal)}
-                                >
-                                    {metal.image_path ? (
-                                        <img src={metal.image_path} alt={metal.name} loading="lazy" decoding="async" />
-                                    ) : (
-                                        <div className="fallback-img"><Box size={32} /></div>
-                                    )}
-                                    <div className="card-info">
-                                        <h3>{metal.name}</h3>
-                                        {(metal.quick_look?.thicknesses || []).length > 0 ? (
-                                            <span className="badge">{(metal.quick_look?.thicknesses || []).length} Thicknesses</span>
-                                        ) : (
-                                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>Configure Catalog</span>
-                                        )}
-                                    </div>
-                                    <ChevronRight size={20} />
-                                </button>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-                {/* ─── STEP 2: CONFIGURE RULES ─── */}
-                {selectedMetal && (
-                    <motion.div
-                        className="pricing-step-section"
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                    >
-                        <div className="pricing-selection-header-banner multi">
-                            <div className="selection-info">
-                                <span className="label">Selected Metal:</span>
-                                <strong className="value">{selectedMetal.name}</strong>
-                            </div>
-                        </div>
-
-                        <div className="pricing-table-container admin-card">
-                            <div className="admin-section-header">
-                                <DollarSign size={20} />
-                                <h3>Thickness-Based Material Pricing</h3>
-                                <div className="info-tooltip">
-                                    <Info size={14} />
-                                    <span>Set the raw material cost per square inch ($/sq-in) for each thickness. Manufacturing costs are set in the Services section.</span>
-                                </div>
-                            </div>
-
-                            <div className="pricing-table-scroll">
-                                <table className="pricing-config-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Thickness Label</th>
-                                            <th>Value (in)</th>
-                                            <th>Price per Square Inch ($/sq-in)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rules.map((rule) => (
-                                            <tr key={rule.thickness_value}>
-                                                <td><span className="thickness-badge">{rule.label || rule.thickness_value}</span></td>
-                                                <td><span className="thickness-val">{rule.thickness_value}&quot;</span></td>
-                                                <td>
-                                                    <div className="price-input-wrapper" style={{ maxWidth: '200px' }}>
-                                                        <span>$</span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.001"
-                                                            value={rule.price_per_sq_inch}
-                                                            onChange={(e) => handleRuleChange(rule.thickness_value, 'price_per_sq_inch', e.target.value)}
-                                                        />
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
+                </div>
             </div>
             <VolumeDiscountModal
                 key={isDiscountModalOpen ? (selectedDiscountTier?.id || 'new') : 'closed'}
@@ -463,58 +259,7 @@ export default function PricingManagement() {
 
             <style>{`
                 .pricing-management-page {
-                    padding-bottom: 80px;        
-                }   
-                .selection-separator {
-                    color: #94a3b8;
-                    display: flex;
-                    align-items: center;    
-                }
-                .pricing-selection-header-banner {
-                    display: flex;
-                    gap: 16px;
-                    background: #f8fafc;
-                    padding: 16px 24px;
-                    border-radius: 12px;
-                    border: 1px solid #e2e8f0;
-                    margin-bottom: 24px;
-                }
-                .pricing-selection-header-banner.multi {
-                    align-items: center;
-                    background: #f1f5f9;
-                }
-                .selection-info {
-                    display: flex;
-                    flex-direction: column;
-                }
-                .selection-info .label {
-                    font-size: 11px;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    color: #64748b;
-                    letter-spacing: 0.05em;
-                }
-                .selection-info .value {
-                    font-size: 16px;
-                    color: #1e293b;
-                }
-
-                .pricing-section-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    margin-bottom: 24px;
-                    color: #1e293b;
-                }
-                .pricing-section-header h2 {
-                    font-size: 20px;
-                    font-weight: 800;
-                }
-
-                .pricing-grid-selection {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                    gap: 16px;
+                    padding-bottom: 80px;
                 }
                 .pricing-selection-card {
                     display: flex;

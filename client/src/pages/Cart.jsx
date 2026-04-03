@@ -2,13 +2,15 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, ArrowRight, ShoppingCart, Info, ChevronRight, Package, Box, PlusCircle, ShieldCheck } from 'lucide-react';
+import { Trash2, ArrowRight, ShoppingCart, Info, ChevronRight, Package, Box, PlusCircle, ShieldCheck, Zap, Layers, Settings, TrendingDown } from 'lucide-react';
 import { useCart } from '../context/CartContext.js';
 import ProjectViewer from '../components/viewer/ProjectViewer';
+import DiscountTable from '../components/DiscountTable';
+import Skeleton from '../components/Skeleton';
 import '../styles/PremiumCart.css';
 
 const Cart = () => {
-  const { cartItems, removeFromCart, updateQuantity, cartTotal } = useCart();
+  const { cartItems, removeFromCart, updateQuantity, cartTotal, allDiscounts } = useCart();
   const navigate = useNavigate();
 
   if (cartItems.length === 0) {
@@ -79,40 +81,68 @@ const Cart = () => {
                   <div className="item-main-info">
                     <h2>{item.fileName}</h2>
 
-                    {/* Metadata Spacing Fix */}
+                    {/* Metadata Sub-Services Display */}
                     <div className="item-metadata-labels">
                       <span className="meta-tag">
-                        <Box size={14} style={{ marginRight: '6px' }} />
-                        {item.configuration?.metal?.name || 'Standard Metal'}
+                        <Box size={14} />
+                        {item.isUpdating ? <Skeleton style={{ width: '80px', height: '14px', marginLeft: '6px' }} /> : (item.configuration?.metal?.name || 'Standard Metal')}
                       </span>
                       <span className="meta-tag secondary">
-                        {item.configuration.thickness}mm Thickness
+                        <TrendingDown size={14} />
+                        {item.isUpdating ? <Skeleton style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness`}
                       </span>
-                      {item.configuration.anodizingColor && (
-                        <span className="meta-tag">
-                          Anodized: {item.configuration.anodizingColor.name}
+
+                      {/* Detailed Sub-Services */}
+                      {(item.configuration.additionalServices || []).map(svc => (
+                        <span key={svc.id} className="meta-tag premium">
+                          {svc.title.toLowerCase().includes('anodiz') ? <Zap size={14} /> :
+                            svc.title.toLowerCase().includes('bend') ? <Layers size={14} /> :
+                              <Settings size={14} />}
+                          {svc.title}
+                          {svc.title.toLowerCase().includes('anodiz') && item.configuration.anodizingColor && (
+                            <span className="sub-detail">: {item.configuration.anodizingColor.name}</span>
+                          )}
                         </span>
-                      )}
+                      ))}
+
                       {item.configuration.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
                         <span className="meta-tag secondary">
+                          <Settings size={14} />
                           {Object.keys(item.configuration.selectedTaps).length} Taped Holes
                         </span>
                       )}
+
+                      {item.configuration?.dimensions && (
+                        <span className="meta-tag" style={{ fontFamily: 'monospace', fontSize: '11px', letterSpacing: 0 }}>
+                          {item.configuration.dimensions.mm.l} × {item.configuration.dimensions.mm.w} × {item.configuration.dimensions.mm.t} mm, {item.configuration.dimensions.mm.volume} mm³
+                          {' | '}
+                          {item.configuration.dimensions.inches.l} × {item.configuration.dimensions.inches.w} × {item.configuration.dimensions.inches.t} in, {item.configuration.dimensions.inches.volume} in³
+                        </span>
+                      )}
                     </div>
+
+                    {/* Volume Discount Table */}
+                    <DiscountTable
+                      allDiscounts={allDiscounts}
+                      currentQuantity={item.quantity}
+                    />
 
                     <div className="item-interaction-row">
                       <div className="qty-control-premium">
                         <button
                           className="qty-btn"
                           onClick={() => updateQuantity(item.cartId, item.quantity - 1)}
-                          disabled={item.quantity <= 1}
+                          disabled={item.quantity <= 1 || item.isUpdating}
                         >
                           <Info size={16} />
                         </button>
-                        <span className="qty-value">{item.quantity}</span>
+                        <span className="qty-value">
+                          {item.isUpdating ? <Skeleton style={{ width: '20px', height: '24px' }} /> : item.quantity}
+                        </span>
                         <button
                           className="qty-btn"
                           onClick={() => updateQuantity(item.cartId, item.quantity + 1)}
+                          disabled={item.isUpdating}
                         >
                           <PlusCircle size={16} />
                         </button>
@@ -128,10 +158,29 @@ const Cart = () => {
                   </div>
 
                   <div className="item-pricing-summary">
-                    <span className="price-unit">${(item.pricing?.total || 0).toFixed(2)} / unit</span>
-                    <span className="price-total">
-                      ${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}
+                    <span className="price-unit">
+                      {item.isUpdating ? <Skeleton style={{ width: '80px', height: '16px' }} /> : `$${(item.pricing?.total || 0).toFixed(2)} / unit`}
                     </span>
+                    <span className="price-total">
+                      {item.isUpdating ? <Skeleton style={{ width: '100px', height: '28px' }} /> : `$${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}`}
+                    </span>
+
+                    {/* Discount Badge */}
+                    {!item.isUpdating && item.quantity > 1 && (
+                      <div className="applied-discount-badge animate-fade-in">
+                        <Zap size={10} fill="#e31b23" />
+                        <span>
+                          {(() => {
+                            const applicableTiers = (allDiscounts || []).filter(d => (d.quantities || []).some(q => q <= item.quantity));
+                            if (applicableTiers.length === 0) return 'Volume Discount Applied';
+                            const bestTier = applicableTiers.reduce((prev, current) =>
+                              (prev.discount_percent > current.discount_percent) ? prev : current
+                            );
+                            return `${bestTier.discount_percent}% Volume Discount Applied`;
+                          })()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -158,7 +207,9 @@ const Cart = () => {
 
                 <div className="summary-row total">
                   <span>Estimate Total</span>
-                  <span>${cartTotal.toFixed(2)}</span>
+                  <span>
+                    {cartItems.some(i => i.isUpdating) ? <Skeleton style={{ width: '100px', height: '24px' }} /> : `$${cartTotal.toFixed(2)}`}
+                  </span>
                 </div>
 
                 <Link to="/checkout" className="btn-checkout-premium">

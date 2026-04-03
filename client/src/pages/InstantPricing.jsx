@@ -102,6 +102,7 @@ const InstantPricing = () => {
       productionService: selectedProductionService,
       metal: selectedMetal,
       thickness: dimensions.mm.t,
+      selectedThickness: selectedThickness, // Store string value for Laser établissements
       anodizingColor: selectedAnodizingColor,
       selectedTaps,
       additionalServices: selectedAdditionalServices,
@@ -243,8 +244,8 @@ const InstantPricing = () => {
       return;
     }
 
-    // Guard: For Laser, need thickness selection
-    if (!isCNC && !selectedThickness) {
+    // Guard: Need thickness selection for all services
+    if (!selectedThickness) {
       setPriceEstimate(null);
       return;
     }
@@ -255,7 +256,7 @@ const InstantPricing = () => {
         const payload = {
           metal_id: selectedMetal.id,
           service_id: selectedProductionService.id,
-          thickness_value: isCNC ? dimensions.inches.t : selectedThickness,
+          thickness_value: selectedThickness,
           length_in: dimensions.inches.l,
           height_in: dimensions.inches.w,
           quantity: quantity,
@@ -547,7 +548,7 @@ const InstantPricing = () => {
         const s = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].sort((a, b) => a - b);
         let vol = 0; try { vol = OV.CalculateVolume(model); } catch (e) { console.warn("Error calculating volume:", e); }
         dimensionsRef.current = {
-          mm: { l: s[2].toFixed(2), w: s[1].toFixed(2), t: s[0].toFixed(2), volume: (vol / 1000).toFixed(2) },
+          mm: { l: s[2].toFixed(2), w: s[1].toFixed(2), t: s[0].toFixed(2), volume: vol.toFixed(2) },
           inches: { l: (s[2] / 25.4).toFixed(3), w: (s[1] / 25.4).toFixed(3), t: (s[0] / 25.4).toFixed(3), volume: (vol / 16387).toFixed(3) }
         };
         setDimensions(dimensionsRef.current);
@@ -1155,7 +1156,7 @@ const InstantPricing = () => {
                           <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
                             {unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume}
                           </span>
-                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'cm³' : 'in³'}</span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'mm³' : 'in³'}</span>
                         </div>
                         <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
                           <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Footprint</span>
@@ -1200,19 +1201,19 @@ const InstantPricing = () => {
             <div className="ip-panel-layout">
               <div className="ip-qf-left">
                 <div className="ip-toolbar">
-                  <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
-                      <button className={`ip-pill-btn ${viewMode==='3d'?'active':''}`} onClick={()=>setViewMode('3d')}>3D VIEW</button>
-                      <button className={`ip-pill-btn ${viewMode==='2d'?'active':''}`} onClick={()=>{setViewMode('2d');handleUnfold();}}>2D FLAT</button>
+                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D VIEW</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); }}>2D FLAT</button>
                     </div>
-                    <button className="ip-pill-btn" style={{ background:isModelFadedManually?'#ef4444':'transparent', color:isModelFadedManually?'#fff':'#64748b', border:'none' }} onClick={()=>setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
+                    <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
                   </div>
-                  <button className="ip-back-btn" onClick={()=>setIsQuoteFlowActive(false)}>
+                  <button className="ip-back-btn" onClick={() => setIsQuoteFlowActive(false)}>
                     <ChevronLeft size={13} /> BACK
                   </button>
                 </div>
                 <div className="ip-qf-viewer">
-                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width:'100%', height:'100%' }} />}
+                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
 
                   {/* Premium Vibrant Legend */}
                   {isTappingActive && currentIsStep && (
@@ -1337,23 +1338,23 @@ const InstantPricing = () => {
                 </div>
                 {dimensions && (
                   <div className="ip-qf-dims">
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                      <span style={{ fontSize:'9px', fontWeight:800, letterSpacing:'1.5px', textTransform:'uppercase', color:'#94a3b8' }}>{unit==='mm'?'Metric':'Imperial'} Dims</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>{unit === 'mm' ? 'Metric' : 'Imperial'} Dims</span>
                       <div className="ip-pill-toggle">
-                        <button className={`ip-pill-btn ${unit==='mm'?'active':''}`} onClick={()=>setUnit('mm')}>MM</button>
-                        <button className={`ip-pill-btn ${unit==='inch'?'active':''}`} onClick={()=>setUnit('inch')}>INCH</button>
+                        <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
+                        <button className={`ip-pill-btn ${unit === 'inch' ? 'active' : ''}`} onClick={() => setUnit('inch')}>INCH</button>
                       </div>
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                       {[
-                        {label:'L', key:'l', color:'#3b82f6', bg:'#eff6ff'},
-                        {label:'W', key:'w', color:'#22c55e', bg:'#f0fdf4'},
-                        {label:'T', key:'t', color:'#f97316', bg:'#fff7ed'},
+                        { label: 'L', key: 'l', color: '#3b82f6', bg: '#eff6ff' },
+                        { label: 'W', key: 'w', color: '#22c55e', bg: '#f0fdf4' },
+                        { label: 'T', key: 't', color: '#f97316', bg: '#fff7ed' },
                       ].map(item => (
-                        <div key={item.key} style={{ background:item.bg, border:'1px solid #e8eaed', borderRadius:8, padding:'8px 10px' }}>
-                          <div style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>{item.label}</div>
-                          <div style={{ fontSize:'14px', fontWeight:900, color:item.color, fontFamily:'monospace', lineHeight:1.2 }}>{unit==='mm'?dimensions.mm[item.key]:dimensions.inches[item.key]}</div>
-                          <div style={{ fontSize:'9px', fontWeight:600, color:'#94a3b8' }}>{unit}</div>
+                        <div key={item.key} style={{ background: item.bg, border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
+                          <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: item.color, fontFamily: 'monospace', lineHeight: 1.2 }}>{unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}</div>
+                          <div style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>{unit}</div>
                         </div>
                       ))}
                     </div>
@@ -1386,8 +1387,18 @@ const InstantPricing = () => {
                           const fitsMaxL = svcMax === 0 || partMax <= svcMax;
                           const fitsMaxW = svcMin === 0 || partMin <= svcMin;
                           const fitsMaxH = maxH === 0 || t <= maxH;
-                          if (!fitsMaxL || !fitsMaxW) return { fits: false, reason: `Exceeds max dimensions (${Math.round(svcMax)}x${Math.round(svcMin)}mm)` };
+                          const minL = (parseFloat(svc.min_length) || 0) * unitRatio;
+                          const minW = (parseFloat(svc.min_width) || 0) * unitRatio;
+                          const minH = (parseFloat(svc.min_height) || 0) * unitRatio;
+                          const svcMinLong = Math.max(minL, minW);
+                          const svcMinShort = Math.min(minL, minW);
+                          const fitMinL = svcMinLong === 0 || partMax >= svcMinLong;
+                          const fitMinW = svcMinShort === 0 || partMin >= svcMinShort;
+                          const fitMinH = minH === 0 || t >= minH;
+                          if (!fitsMaxL || !fitsMaxW) return { fits: false, reason: `Exceeds max dimensions (${Math.round(svcMax)}×${Math.round(svcMin)}mm)` };
                           if (!fitsMaxH) return { fits: false, reason: `Exceeds max thickness (${Math.round(maxH)}mm)` };
+                          if (!fitMinL || !fitMinW) return { fits: false, reason: `Below min dimensions (${Math.round(svcMinLong)}×${Math.round(svcMinShort)}mm)` };
+                          if (!fitMinH) return { fits: false, reason: `Below min thickness (${Math.round(minH)}mm)` };
                           return { fits: true };
                         })();
                         return (
@@ -1454,22 +1465,22 @@ const InstantPricing = () => {
                   </div>
                 ) : !selectedCategory ? (
                   <div className="animate-fade-in p-2">
-                    <div style={{ background:'#f8fafc', border:'1.5px solid #e8eaed', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <div style={{ background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Zap size={13} color="#ef4444" />
-                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Method</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Method</span>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedProductionService.title}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => setSelectedProductionService(null)}>CHANGE</button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedProductionService.title}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => setSelectedProductionService(null)}>CHANGE</button>
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                      <h2 style={{ fontSize:'15px', fontWeight:800, margin:0, color:'#1e293b' }}>Select Category</h2>
-                      <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 fw-bold text-uppercase" style={{ fontSize:'9px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <h2 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#1e293b' }}>Select Category</h2>
+                      <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 fw-bold text-uppercase" style={{ fontSize: '9px' }}>
                         {allCategories.filter(cat => allMetals.some(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id))).length} Categories
                       </span>
                     </div>
@@ -1512,76 +1523,110 @@ const InstantPricing = () => {
                 ) : !selectedMetal ? (
                   <div className="animate-fade-in">
                     {/* Compact breadcrumb card */}
-                    <div style={{ background:'#f8fafc', border:'1.5px solid #e8eaed', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:7, marginBottom:7, borderBottom:'1px solid #e8eaed' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <div style={{ background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 7, marginBottom: 7, borderBottom: '1px solid #e8eaed' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Zap size={13} color="#ef4444" />
-                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Method</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Method</span>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedProductionService.title}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); }}>CHANGE</button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedProductionService.title}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); }}>CHANGE</button>
                         </div>
                       </div>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Grid size={13} color="#64748b" />
-                          <span style={{ fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px' }}>Category</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Category</span>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <span style={{ fontSize:'12px', fontWeight:700, color:'#1e293b' }}>{selectedCategory.name}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize:'10px' }} onClick={() => setSelectedCategory(null)}>CHANGE</button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedCategory.name}</span>
+                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => setSelectedCategory(null)}>CHANGE</button>
                         </div>
                       </div>
                     </div>
 
                     {/* Header row */}
-                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                       <button className="btn btn-light rounded-circle border p-1" onClick={() => setSelectedCategory(null)}>
                         <ChevronLeft size={16} className="text-dark" />
                       </button>
-                      <h2 style={{ fontSize:'15px', fontWeight:800, margin:0, color:'#1e293b' }}>Select Material</h2>
-                      <div style={{ flex:1, position:'relative' }}>
+                      <h2 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#1e293b' }}>Select Material</h2>
+                      <div style={{ flex: 1, position: 'relative' }}>
                         <input
                           type="text"
                           className="form-control rounded-pill border-light-subtle"
                           placeholder="Search materials..."
                           value={metalSearch}
                           onChange={(e) => setMetalSearch(e.target.value)}
-                          style={{ height:'34px', fontSize:'12px', paddingLeft:'32px' }}
+                          style={{ height: '34px', fontSize: '12px', paddingLeft: '32px' }}
                         />
-                        <Grid className="position-absolute translate-middle-y text-muted" style={{ top:'50%', left:'10px' }} size={13} />
+                        <Grid className="position-absolute translate-middle-y text-muted" style={{ top: '50%', left: '10px' }} size={13} />
                       </div>
                     </div>
 
                     <div className="d-flex flex-column gap-2">
-                      {allMetals
-                        .filter(m => Number(m.category_id) === Number(selectedCategory?.id))
-                        .filter(m => (m.services || []).map(id => Number(id)).includes(Number(selectedProductionService?.id)))
-                        .filter(m => m.name.toLowerCase().includes((metalSearch || '').toLowerCase()))
-                        .map(metal => (
-                          <button
-                            key={metal.id}
-                            className="btn text-dark text-start d-flex align-items-center justify-content-between bg-white"
-                            style={{ padding:'10px 12px', borderRadius:10, border:'1.5px solid #e8eaed', transition:'all 0.2s' }}
-                            onClick={() => setSelectedMetal(metal)}
-                          >
-                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                              <div style={{ width:34, height:34, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                <Shield size={16} color="#64748b" />
-                              </div>
-                              <div>
-                                <div style={{ fontSize:'12px', fontWeight:800, color:'#1e293b', textTransform:'uppercase', letterSpacing:'0.5px' }}>{metal.name}</div>
-                                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
-                                  <span style={{ background:'#f1f5f9', borderRadius:4, padding:'1px 6px', fontSize:'9px', fontWeight:700, color:'#64748b', textTransform:'uppercase' }}>PREMIUM GRADE</span>
-                                  <div style={{ width:6, height:6, borderRadius:'50%', background:'#22c55e' }} />
-                                  <span style={{ fontSize:'9px', fontWeight:600, color:'#94a3b8' }}>IN STOCK</span>
+                      {(() => {
+                        const parseCutSizeStr = (sizeStr) => {
+                          if (!sizeStr) return null;
+                          const clean = sizeStr.replace(/['"]/g, '').replace(/\b(min|max)\b/gi, '').trim();
+                          const parts = clean.split(/\s*[xX×]\s*/);
+                          if (parts.length < 2) return null;
+                          const a = parseFloat(parts[0]);
+                          const b = parseFloat(parts[1]);
+                          return (isNaN(a) || isNaN(b)) ? null : { l: Math.max(a, b), w: Math.min(a, b) };
+                        };
+                        return allMetals
+                          .filter(m => Number(m.category_id) === Number(selectedCategory?.id))
+                          .filter(m => (m.services || []).map(id => Number(id)).includes(Number(selectedProductionService?.id)))
+                          .filter(m => m.name.toLowerCase().includes((metalSearch || '').toLowerCase()))
+                          .map(m => {
+                            const cutSizes = m.quick_look?.cutSizes || [];
+                            const minEntry = cutSizes.find(cs => cs.label?.trim().toUpperCase() === 'A');
+                            const maxEntry = cutSizes.find(cs => cs.label?.trim().toUpperCase() === 'B');
+                            const minSize = parseCutSizeStr(minEntry?.size);
+                            const maxSize = parseCutSizeStr(maxEntry?.size);
+                            if (!dimensions || (!minSize && !maxSize)) return { ...m, _sizeBlock: null };
+                            const ratio = 25.4;
+                            const partLong = Math.max(parseFloat(dimensions.mm.l) || 0, parseFloat(dimensions.mm.w) || 0);
+                            const partShort = Math.min(parseFloat(dimensions.mm.l) || 0, parseFloat(dimensions.mm.w) || 0);
+                            const aboveMin = !minSize || (partLong >= minSize.l * ratio && partShort >= minSize.w * ratio);
+                            const belowMax = !maxSize || (partLong <= maxSize.l * ratio && partShort <= maxSize.w * ratio);
+                            let _sizeBlock = null;
+                            if (!aboveMin) _sizeBlock = `Too small (min ${minEntry.size})`;
+                            else if (!belowMax) _sizeBlock = `Too large (max ${maxEntry.size})`;
+                            return { ...m, _sizeBlock };
+                          })
+                          .map(metal => (
+                            <button
+                              key={metal.id}
+                              disabled={!!metal._sizeBlock}
+                              className={`btn text-start d-flex align-items-center justify-content-between ${metal._sizeBlock ? 'bg-light opacity-50 cursor-not-allowed grayscale' : 'text-dark bg-white'}`}
+                              style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${metal._sizeBlock ? 'transparent' : '#e8eaed'}`, transition: 'all 0.2s' }}
+                              onClick={() => !metal._sizeBlock && setSelectedMetal(metal)}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <Shield size={16} color="#64748b" />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{metal.name}</div>
+                                  {metal._sizeBlock ? (
+                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase' }}>SIZE OUT OF RANGE — {metal._sizeBlock}</span>
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                      <span style={{ background: '#f1f5f9', borderRadius: 4, padding: '1px 6px', fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>PREMIUM GRADE</span>
+                                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                                      <span style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>IN STOCK</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            </div>
-                            <ArrowRight size={15} color="#ef4444" />
-                          </button>
-                        ))}
+                              {!metal._sizeBlock && <ArrowRight size={15} color="#ef4444" />}
+                              {metal._sizeBlock && <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2 small fw-bold ms-2">SIZE OUT OF RANGE</span>}
+                            </button>
+                          ));
+                      })()}
                     </div>
                   </div>
                 ) : (
@@ -1626,6 +1671,36 @@ const InstantPricing = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Step: Select Thickness ── */}
+                    {!selectedThickness ? (
+                      <div className="animate-fade-in">
+                        <h2 className="h4 fw-bold mb-2">Select Thickness</h2>
+                        <p className="text-muted small mb-4">Choose the standard thickness for {selectedMetal.name}</p>
+                        <div className="d-flex flex-column gap-2">
+                          {(selectedMetal.quick_look?.thicknesses || []).map(t => (
+                            <button
+                              key={t.value}
+                              className="btn text-start p-3 rounded-4 border-2 bg-white border-light-subtle shadow-sm"
+                              style={{ border: '1.5px solid #e8eaed', transition: 'all 0.2s' }}
+                              onClick={() => setSelectedThickness(t.value)}
+                            >
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                  <strong>{t.label || t.value}"</strong>
+                                  {t.metric && <span className="text-muted ms-2 small">({t.metric})</span>}
+                                </div>
+                                <ArrowRight size={15} color="#ef4444" />
+                              </div>
+                            </button>
+                          ))}
+                          {!(selectedMetal.quick_look?.thicknesses?.length) && (
+                            <p className="text-muted small">No standard thicknesses configured for this material.</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
                     <h2 className="h4 fw-bold mb-2">Additional Services</h2>
                     <p className="text-muted small mb-4">Enhance your part with extra processes</p>
                     <div className="d-flex flex-column gap-3">
@@ -1634,22 +1709,9 @@ const InstantPricing = () => {
                         const isChild = (svc.parent_ids || []).includes(selectedProductionService?.id);
                         if (!isChild) return false;
 
-                        // 2. Compatibility check (Metal + Thickness)
-                        if (isCNC) {
-                          // For CNC Machining, we show all available sub-services linked to the method
-                          return true;
-                        }
-
-                        let tStr = null;
-                        if (dimensions?.inches?.t) {
-                          const rawT = dimensions.inches.t.toFixed(3);
-                          rawT.startsWith('0.') ? tStr = rawT.substring(1) + '"' : tStr = rawT + '"';
-                        }
-
-                        const currentThickness = selectedThickness || tStr;
-
-                        if (currentThickness) {
-                          const thicknessSpecs = selectedMetal.thickness_specs?.[currentThickness] || {};
+                        // 2. Thickness-based compatibility check (applies to all production services)
+                        if (selectedThickness) {
+                          const thicknessSpecs = selectedMetal.thickness_specs?.[selectedThickness] || {};
                           const available = (thicknessSpecs.available_services || []).map(id => Number(id));
                           return available.includes(Number(svc.id));
                         }
@@ -1720,6 +1782,8 @@ const InstantPricing = () => {
                         );
                       })}
                     </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

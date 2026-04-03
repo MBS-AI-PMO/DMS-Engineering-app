@@ -595,29 +595,14 @@ export default function MetalEdit() {
                                                             const isAvailable = (currentSpecs.available_services || []).map(id => Number(id)).includes(Number(svc.id));
 
                                                             return (
-                                                                <button
+                                                                <span
                                                                     key={svc.id}
                                                                     className={`pill-toggle ${isAvailable ? 'active' : ''}`}
-                                                                    onClick={() => {
-                                                                        const existing = (currentSpecs.available_services || []).map(id => Number(id));
-                                                                        const next = isAvailable
-                                                                            ? existing.filter(id => id !== Number(svc.id))
-                                                                            : [...existing, Number(svc.id)];
-
-                                                                        setMetal(prev => ({
-                                                                            ...prev,
-                                                                            thickness_specs: {
-                                                                                ...(prev.thickness_specs || {}),
-                                                                                [t.value]: {
-                                                                                    ...currentSpecs,
-                                                                                    available_services: next
-                                                                                }
-                                                                            }
-                                                                        }));
-                                                                    }}
+                                                                    style={{ cursor: 'default', opacity: isAvailable ? 1 : 0.4 }}
+                                                                    title={isAvailable ? 'Available for this thickness' : 'Not available — configure in Services tab'}
                                                                 >
                                                                     {svc.title}
-                                                                </button>
+                                                                </span>
                                                             );
                                                         })}
                                                     </div>
@@ -633,6 +618,9 @@ export default function MetalEdit() {
                                         )}
                                     </tbody>
                                 </table>
+                                <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: 8 }}>
+                                    ℹ️ Sub-service availability is configured per thickness in the <strong>Services</strong> tab.
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -174,6 +174,23 @@
     color: var(--text-secondary);
 }
 
+.meta-tag.premium {
+    background: rgba(227, 27, 35, 0.15);
+    border: 1px solid rgba(227, 27, 35, 0.4);
+    color: #fff;
+    box-shadow: 0 0 15px rgba(227, 27, 35, 0.1);
+}
+
+.meta-tag.premium svg {
+    color: var(--premium-red);
+}
+
+.meta-tag .sub-detail {
+    opacity: 0.6;
+    font-weight: 400;
+    margin-left: 2px;
+}
+
 /* Interactive Controls Dashboard */
 .item-interaction-row {
     display: flex;
@@ -255,6 +272,22 @@
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+}
+
+.applied-discount-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(227, 27, 35, 0.1);
+    color: var(--premium-red);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-top: 10px;
+    border: 1px solid rgba(227, 27, 35, 0.2);
+    align-self: flex-end;
 }
 
 /* Premium Sidebar Summary - Sticky Fix */
@@ -366,5 +399,42 @@
         text-align: left;
         border-top: 1px solid var(--premium-border);
         padding-top: 20px;
+    }
+
+    .applied-discount-badge {
+        align-self: flex-start;
+    }
+}
+
+/* Skeleton Animation establishments */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.skeleton-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CartContext } from './CartContext';
+import { calculatePrice, fetchPublicDiscounts } from '../utils/api';
 
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState(() => {
@@ -25,6 +26,20 @@ export const CartProvider = ({ children }) => {
       return [];
     }
   });
+
+  const [allDiscounts, setAllDiscounts] = useState([]);
+
+  useEffect(() => {
+    const loadDiscounts = async () => {
+      try {
+        const discounts = await fetchPublicDiscounts();
+        setAllDiscounts(discounts || []);
+      } catch (err) {
+        console.error('Failed to load discounts in CartProvider:', err);
+      }
+    };
+    loadDiscounts();
+  }, []);
 
   useEffect(() => {
     // Only persist serializable data établissement
@@ -54,10 +69,70 @@ export const CartProvider = ({ children }) => {
     setCartItems(prev => prev.filter(item => item.cartId !== cartId));
   };
 
-  const updateQuantity = (cartId, quantity) => {
+  const updateQuantity = async (cartId, quantity) => {
+    const newQuantity = Math.max(1, quantity);
+    
+    // 1. Update quantity and set loading state immediately établissements
     setCartItems(prev => prev.map(item =>
-      item.cartId === cartId ? { ...item, quantity: Math.max(1, quantity) } : item
+      item.cartId === cartId ? { ...item, quantity: newQuantity, isUpdating: true } : item
     ));
+
+    // 2. Fetch new pricing based on updated quantity établissements
+    try {
+      const itemToUpdate = cartItems.find(item => item.cartId === cartId);
+      if (!itemToUpdate) return;
+
+      const { configuration } = itemToUpdate;
+      const isCNC = configuration.productionService?.title?.toLowerCase()?.includes('cnc');
+      
+      const payload = {
+        metal_id: configuration.metal?.id,
+        service_id: configuration.productionService?.id,
+        thickness_value: isCNC ? configuration.dimensions?.inches?.t : configuration.selectedThickness,
+        length_in: configuration.dimensions?.inches?.l,
+        height_in: configuration.dimensions?.inches?.w,
+        quantity: newQuantity,
+        additional_services: (configuration.additionalServices || []).map(s => s.id),
+        taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price }))
+      };
+
+      const res = await calculatePrice(payload);
+      
+      if (res.success) {
+        // Sync with InstantPricing logic établissements
+        const totalTaps = Object.values(configuration.selectedTaps || {}).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
+        const anodizingSvc = (configuration.additionalServices || []).find(s => s.title?.toLowerCase().includes('anodiz'));
+        const anodizingCost = (configuration.anodizingColor ? parseFloat(anodizingSvc?.base_price || 15) : 0);
+
+        const totalBatch = parseFloat(res.total_price || 0) + totalTaps + anodizingCost;
+        const unitPrice = totalBatch / newQuantity;
+
+        setCartItems(prev => prev.map(item =>
+          item.cartId === cartId 
+            ? { 
+                ...item, 
+                pricing: {
+                  ...item.pricing,
+                  base: parseFloat(res.breakdown?.material_cost || 0) + parseFloat(res.breakdown?.production_cost || 0),
+                  taps: totalTaps / newQuantity,
+                  finish: anodizingCost / newQuantity,
+                  total: unitPrice
+                },
+                isUpdating: false 
+              } 
+            : item
+        ));
+      } else {
+        setCartItems(prev => prev.map(item =>
+          item.cartId === cartId ? { ...item, isUpdating: false } : item
+        ));
+      }
+    } catch (err) {
+      console.error('Failed to recalculate price in cart:', err);
+      setCartItems(prev => prev.map(item =>
+        item.cartId === cartId ? { ...item, isUpdating: false } : item
+      ));
+    }
   };
 
   const clearCart = () => {
@@ -73,6 +148,7 @@ export const CartProvider = ({ children }) => {
   return (
     <CartContext.Provider value={{
       cartItems,
+      allDiscounts,
       addToCart,
       removeFromCart,
       updateQuantity,
