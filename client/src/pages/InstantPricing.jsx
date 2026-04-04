@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
@@ -87,8 +87,13 @@ const InstantPricing = () => {
   const dimensionsRef = useRef(null);
   const modelRef = useRef(null);
   const pendingAxisRef = useRef(null);
+  const modelOriginalDataRef = useRef(null);
 
   const isCNC = selectedProductionService?.title?.toLowerCase()?.includes('cnc');
+  const selectedThicknessMM = useMemo(
+    () => selectedThickness ? parseFloat(selectedThickness) * 25.4 : null,
+    [selectedThickness]
+  );
   const handleProceedToReview = () => {
     if (!selectedFile || !selectedMetal || !dimensions) return;
 
@@ -198,9 +203,11 @@ const InstantPricing = () => {
     setSelectedAnodizingColor(null);
     setDetectedHoles([]);
     setIsDetectingHoles(false);
+    setSelectedThickness(null);
     setHighlightBends(false);
     parsedDxfRef.current = null;
     stepHolesDetectedRef.current = false;
+    modelOriginalDataRef.current = null;
   }, [selectedFile]);
 
   // ── STEP Hole Detection for Tapping ──────────────────
@@ -238,14 +245,8 @@ const InstantPricing = () => {
 
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
-    // Guard: Need metal and production service
-    if (!selectedMetal || !selectedProductionService || !dimensions) {
-      setPriceEstimate(null);
-      return;
-    }
-
-    // Guard: Need thickness selection for all services
-    if (!selectedThickness) {
+    // Guard: Need dimensions and at least one selection
+    if (!dimensions || (!selectedMetal && !selectedProductionService)) {
       setPriceEstimate(null);
       return;
     }
@@ -457,7 +458,8 @@ const InstantPricing = () => {
         const loader = new SVGLoader();
         const svgData = loader.parse(dxfSvg);
         const group = new THREE.Group();
-        const thicknessNative = dimensionsRef.current?.isNativeInches ? (2 / 25.4) : 2;
+        const selectedThicknessMM = selectedThickness ? parseFloat(selectedThickness) * 25.4 : 2;
+        const thicknessNative = dimensionsRef.current?.isNativeInches ? (selectedThicknessMM / 25.4) : selectedThicknessMM;
         const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
         const extrudeSettings = { depth: thicknessNative, bevelEnabled: false };
 
@@ -529,7 +531,7 @@ const InstantPricing = () => {
     };
     initViewer();
     return () => { cancelAnimationFrame(reqId); controls?.dispose(); renderer?.dispose(); if (currentRef) currentRef.innerHTML = ''; };
-  }, [selectedFile, viewMode, dxfSvg, selectedAnodizingColor]);
+  }, [selectedFile, viewMode, dxfSvg, selectedAnodizingColor, selectedThickness]);
 
   // ─── STEP 3D Viewer Effect ────────────────────────────
   useEffect(() => {
@@ -611,6 +613,24 @@ const InstantPricing = () => {
                 });
               }
             });
+
+            // Capture root group for thickness-scaling (scale group, not individual meshes)
+            const modelRoot = v?.scene?.children.find(c => c.isGroup);
+            if (modelRoot && bb?.min && bb?.max) {
+              const axes = [
+                { axis: 'x', size: Math.abs(bb.max.x - bb.min.x), localCenter: (bb.min.x + bb.max.x) / 2 },
+                { axis: 'y', size: Math.abs(bb.max.y - bb.min.y), localCenter: (bb.min.y + bb.max.y) / 2 },
+                { axis: 'z', size: Math.abs(bb.max.z - bb.min.z), localCenter: (bb.min.z + bb.max.z) / 2 },
+              ].sort((a, b) => a.size - b.size);
+              modelOriginalDataRef.current = {
+                root: modelRoot,
+                origScale: modelRoot.scale.clone(),
+                origPosition: modelRoot.position.clone(),
+                thicknessAxis: axes[0].axis,
+                origThicknessMM: axes[0].size,
+                localCenter: axes[0].localCenter,
+              };
+            }
           } catch { /* ignored */ }
           setModelLoadCount(c => c + 1);
           setTimeout(() => {
@@ -641,6 +661,38 @@ const InstantPricing = () => {
       };
     } catch (err) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", err); }
   }, [selectedFile, viewMode, isQuoteFlowActive, detectedHoles]);
+
+  // ── Apply selected thickness scaling to STEP model ───────
+  useEffect(() => {
+    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
+    if (modelLoadCount === 0) return;
+    const data = modelOriginalDataRef.current;
+    if (!data?.root) return;
+
+    try {
+      const { root, origScale, origPosition, thicknessAxis, origThicknessMM, localCenter } = data;
+
+      if (!selectedThickness) {
+        root.scale.copy(origScale);
+        root.position.copy(origPosition);
+      } else {
+        const newThicknessMM = parseFloat(selectedThickness) * 25.4;
+        const scaleFactor = origThicknessMM > 0 ? newThicknessMM / origThicknessMM : 1;
+        root.scale[thicknessAxis] = origScale[thicknessAxis] * scaleFactor;
+        // Re-center: newPos = origPos + localCenter × (1 - scaleFactor)
+        root.position[thicknessAxis] = origPosition[thicknessAxis] + localCenter * (1 - scaleFactor);
+      }
+
+      setTimeout(() => {
+        try {
+          const v = viewerInstance.current?.GetViewer();
+          if (v) { v.FitToWindow(); v.Render(); }
+        } catch { /* ignore */ }
+      }, 50);
+    } catch (e) {
+      console.warn('Thickness scale error:', e);
+    }
+  }, [selectedThickness, selectedFile, modelLoadCount]);
 
   const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
 
@@ -1145,6 +1197,24 @@ const InstantPricing = () => {
                           </div>
                         </div>
                       ))}
+                      {selectedThickness && (
+                        <div className="ip-dim-row" style={{ background: '#fdf4ff', border: '1.5px solid #e9d5ff' }}>
+                          <div>
+                            <div className="ip-dim-label">New Thickness <span style={{ opacity: 0.5 }}>(NT)</span></div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
+                              <span className="ip-dim-value" style={{ color: '#a855f7' }}>
+                                {unit === 'mm'
+                                  ? (selectedThicknessMM || 0).toFixed(2)
+                                  : parseFloat(selectedThickness).toFixed(3)}
+                              </span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{unit}</span>
+                            </div>
+                          </div>
+                          <div className="ip-dim-icon" style={{ background: '#f3e8ff' }}>
+                            <Layers size={14} color="#a855f7" />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Analysis */}
@@ -1358,6 +1428,17 @@ const InstantPricing = () => {
                         </div>
                       ))}
                     </div>
+                    {selectedThickness && (
+                      <div style={{ marginTop: 6, background: '#fdf4ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Thickness</div>
+                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#a855f7', fontFamily: 'monospace', lineHeight: 1.2 }}>
+                          {unit === 'mm'
+                            ? (selectedThicknessMM || 0).toFixed(2)
+                            : parseFloat(selectedThickness).toFixed(3)}
+                        </div>
+                        <div style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>{unit}</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1485,37 +1566,34 @@ const InstantPricing = () => {
                       </span>
                     </div>
 
-                    <div className="row g-4">
+                    <div className="d-flex flex-column gap-2 pb-3">
                       {allCategories
                         .filter(cat => allMetals.some(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id)))
                         .map(cat => {
                           const catMetals = allMetals.filter(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id));
                           return (
-                            <div key={cat.id} className="col-12 col-md-6">
-                              <button
-                                className="w-100 btn text-start p-2 rounded-4 border-2 transition-all d-flex align-items-center gap-3 bg-white border-light-subtle shadow-sm hover-shadow-sm hover-translate-y group px-3"
-                                style={{
-                                  border: '1px solid #f1f5f9',
-                                  transition: 'all 0.2s ease-in-out',
-                                  backgroundColor: '#fff'
-                                }}
-                                onClick={() => setSelectedCategory(cat)}
-                              >
-                                <div className="p-2 rounded-3 bg-light group-hover-bg-danger group-hover-bg-opacity-10 transition-all border border-transparent group-hover-border-danger group-hover-border-opacity-10 flex-shrink-0">
-                                  {cat.slug.includes('aluminum') ? <Layers size={18} className="group-hover-text-danger transition-all opacity-75" /> :
-                                    cat.slug.includes('steel') ? <Shield size={18} className="group-hover-text-danger transition-all opacity-75" /> :
-                                      cat.slug.includes('brass') || cat.slug.includes('copper') ? <Zap size={18} className="group-hover-text-danger transition-all opacity-75" /> :
-                                        <Box size={18} className="group-hover-text-danger transition-all opacity-75" />}
-                                </div>
-                                <div className="flex-grow-1">
-                                  <strong className="d-block m-0 text-dark fw-bold mb-0" style={{ fontSize: '13px' }}>{cat.name}</strong>
-                                  <span className="text-muted opacity-75 fw-bold text-uppercase" style={{ fontSize: '8px', letterSpacing: '0.5px' }}>{catMetals.length} Items</span>
-                                </div>
-                                <div className="text-danger opacity-0 group-hover-opacity-100 transition-all translate-x-1 group-hover-translate-x-0 ms-auto">
-                                  <ArrowRight size={16} />
-                                </div>
-                              </button>
-                            </div>
+                            <button
+                              key={cat.id}
+                              className="btn text-start p-2 rounded-4 border transition-all d-flex align-items-center gap-3 bg-white border-light-subtle shadow-sm hover-shadow-sm hover-translate-y group px-4 w-100"
+                              style={{
+                                transition: 'all 0.2s ease-in-out',
+                                backgroundColor: '#fff',
+                                minHeight: '60px'
+                              }}
+                              onClick={() => setSelectedCategory(cat)}
+                            >
+                              <div className="p-2 rounded-3 bg-light group-hover-bg-danger group-hover-bg-opacity-10 transition-all border border-transparent group-hover-border-danger group-hover-border-opacity-10 flex-shrink-0">
+                                {cat.slug.includes('aluminum') ? <Layers size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                  cat.slug.includes('steel') ? <Shield size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                    cat.slug.includes('brass') || cat.slug.includes('copper') ? <Zap size={18} className="group-hover-text-danger transition-all opacity-75" /> :
+                                      <Box size={18} className="group-hover-text-danger transition-all opacity-75" />}
+                              </div>
+                              <div className="flex-grow-1">
+                                <strong className="d-block m-0 text-dark fw-bold mb-0" style={{ fontSize: '14px' }}>{cat.name}</strong>
+                                <span className="text-muted opacity-75 fw-bold text-uppercase d-block" style={{ fontSize: '10px', letterSpacing: '0.5px' }}>{catMetals.length} Items</span>
+                              </div>
+                              <ArrowRight size={16} className="text-danger opacity-0 group-hover-opacity-100 transition-all" />
+                            </button>
                           );
                         })}
                     </div>
@@ -1681,8 +1759,8 @@ const InstantPricing = () => {
                           {(selectedMetal.quick_look?.thicknesses || []).map(t => (
                             <button
                               key={t.value}
-                              className="btn text-start p-3 rounded-4 border-2 bg-white border-light-subtle shadow-sm"
-                              style={{ border: '1.5px solid #e8eaed', transition: 'all 0.2s' }}
+                              className="btn text-start p-3 rounded-4 border-2 bg-white border-light-subtle shadow-sm transition-all hover-border-danger translate-y-hover"
+                              style={{ border: '1.5px solid #e8eaed' }}
                               onClick={() => setSelectedThickness(t.value)}
                             >
                               <div className="d-flex justify-content-between align-items-center">
@@ -1701,87 +1779,78 @@ const InstantPricing = () => {
                       </div>
                     ) : (
                       <>
-                    <h2 className="h4 fw-bold mb-2">Additional Services</h2>
-                    <p className="text-muted small mb-4">Enhance your part with extra processes</p>
-                    <div className="d-flex flex-column gap-3">
-                      {allServices.filter(svc => {
-                        // 1. Basic hierarchy check
-                        const isChild = (svc.parent_ids || []).includes(selectedProductionService?.id);
-                        if (!isChild) return false;
+                        <h2 className="h4 fw-bold mb-2">Additional Services</h2>
+                        <p className="text-muted small mb-4">Enhance your part with extra processes</p>
+                        <div className="d-flex flex-column gap-3">
+                          {allServices.filter(svc => {
+                            // Show all sub-services that are children of the selected production service
+                            const parentIds = (svc.parent_ids || []).map(id => Number(id));
+                            return parentIds.includes(Number(selectedProductionService?.id));
+                          }).map(svc => {
+                            const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
+                            const isTap = svc.title.toLowerCase().includes('tap');
+                            const isAnodiz = svc.title.toLowerCase().includes('anodiz');
 
-                        // 2. Thickness-based compatibility check (applies to all production services)
-                        if (selectedThickness) {
-                          const thicknessSpecs = selectedMetal.thickness_specs?.[selectedThickness] || {};
-                          const available = (thicknessSpecs.available_services || []).map(id => Number(id));
-                          return available.includes(Number(svc.id));
-                        }
-
-                        return false; // If no thickness selected and not CNC, show nothing yet
-                      }).map(svc => {
-                        const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
-                        const isTap = svc.title.toLowerCase().includes('tap');
-                        const isAnodiz = svc.title.toLowerCase().includes('anodiz');
-
-                        return (
-                          <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none'}`}>
-                            <div className="d-flex align-items-center gap-3 cursor-pointer" onClick={() => {
-                              const title = svc.title.toLowerCase();
-                              if (title.includes('anodiz')) {
-                                if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setIsAnodizingModalOpen(true); }
-                                else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedAnodizingColor(null); }
-                              } else if (title.includes('tap')) {
-                                if (!isSelected) {
-                                  setSelectedAdditionalServices(p => [...p, svc]);
-                                  if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]);
-                                } else {
-                                  setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null);
-                                }
-                              } else {
-                                setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
-                              }
-                            }}>
-                              <div className={`rounded-circle border d-flex align-items-center justify-content-center ${isSelected ? 'bg-white border-white text-danger' : 'bg-white border-secondary border-opacity-25'}`} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
-                                {isSelected ? <Check size={16} strokeWidth={4} /> : <div />}
-                              </div>
-                              <div className="flex-grow-1 overflow-hidden">
-                                <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
-                                <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{svc.description || 'Premium process'}</p>
-                              </div>
-                            </div>
-
-                            {isSelected && isTap && detectedHoles.length > 0 && (
-                              <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                <div className="d-flex gap-5">
-                                  <div className="d-flex flex-column">
-                                    <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
-                                    <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
+                            return (
+                              <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none'}`}>
+                                <div className="d-flex align-items-center gap-3 cursor-pointer" onClick={() => {
+                                  const title = svc.title.toLowerCase();
+                                  if (title.includes('anodiz')) {
+                                    if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setIsAnodizingModalOpen(true); }
+                                    else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedAnodizingColor(null); }
+                                  } else if (title.includes('tap')) {
+                                    if (!isSelected) {
+                                      setSelectedAdditionalServices(p => [...p, svc]);
+                                      if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]);
+                                    } else {
+                                      setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null);
+                                    }
+                                  } else {
+                                    setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
+                                  }
+                                }}>
+                                  <div className={`rounded-circle border d-flex align-items-center justify-content-center ${isSelected ? 'bg-white border-white text-danger' : 'bg-white border-secondary border-opacity-25'}`} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
+                                    {isSelected ? <Check size={16} strokeWidth={4} /> : <div />}
                                   </div>
-                                  <div className="d-flex flex-column">
-                                    <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>TAPPED</span>
-                                    <span className={`fw-black fs-4 ${Object.keys(selectedTaps).length === detectedHoles.length ? 'text-white' : 'text-white'}`}>
-                                      {Object.keys(selectedTaps).length}
-                                    </span>
+                                  <div className="flex-grow-1 overflow-hidden">
+                                    <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
+                                    <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{svc.description || 'Premium process'}</p>
                                   </div>
                                 </div>
-                                <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm text-danger h-auto py-2" style={{ fontSize: '12px', background: 'white', border: 'none' }} onClick={(e) => { e.stopPropagation(); setActiveTapHole(detectedHoles[0]); }}>
-                                  MANAGE
-                                </button>
-                              </div>
-                            )}
 
-                            {isSelected && isAnodiz && selectedAnodizingColor && (
-                              <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                <div className="d-flex align-items-center gap-3">
-                                  <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedAnodizingColor.color, width: '24px', height: '24px', border: '3px solid white' }} />
-                                  <span className="fw-black text-white fs-6">{(selectedAnodizingColor.name || '').toUpperCase()}</span>
-                                </div>
-                                <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setIsAnodizingModalOpen(true); }}>CHANGE</button>
+                                {isSelected && isTap && detectedHoles.length > 0 && (
+                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
+                                    <div className="d-flex gap-5">
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
+                                        <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
+                                      </div>
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>TAPPED</span>
+                                        <span className={`fw-black fs-4 ${Object.keys(selectedTaps).length === detectedHoles.length ? 'text-white' : 'text-white'}`}>
+                                          {Object.keys(selectedTaps).length}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm text-danger h-auto py-2" style={{ fontSize: '12px', background: 'white', border: 'none' }} onClick={(e) => { e.stopPropagation(); setActiveTapHole(detectedHoles[0]); }}>
+                                      MANAGE
+                                    </button>
+                                  </div>
+                                )}
+
+                                {isSelected && isAnodiz && selectedAnodizingColor && (
+                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
+                                    <div className="d-flex align-items-center gap-3">
+                                      <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedAnodizingColor.color, width: '24px', height: '24px', border: '3px solid white' }} />
+                                      <span className="fw-black text-white fs-6">{(selectedAnodizingColor.name || '').toUpperCase()}</span>
+                                    </div>
+                                    <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setIsAnodizingModalOpen(true); }}>CHANGE</button>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                        </div>
                       </>
                     )}
                   </div>
@@ -1835,15 +1904,20 @@ const InstantPricing = () => {
                       )}
                     </div>
 
-                    <div className="bg-dark text-white p-4 pb-5 rounded-5 shadow-22xl position-relative overflow-hidden mb-3 mt-auto" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
-                      <div className="position-relative z-1">
-                        <div className="mb-4">
+                    <div className="bg-dark text-white rounded-5 shadow-22xl position-relative mb-3 mt-auto d-flex flex-column" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', maxHeight: '60vh', overflow: 'hidden' }}>
+                      <div className="position-relative z-1 d-flex flex-column h-100" style={{ overflow: 'hidden' }}>
+                        <div className="p-4 pb-2 ip-breakdown-scroll" style={{ overflowY: 'auto', flex: 1 }}>
                           <span className="small text-white opacity-50 fw-bold text-uppercase letter-spacing-1 d-block mb-3">Project Breakdown</span>
                           <div className="d-flex flex-column gap-3 mb-4 p-4 rounded-4 border border-white border-opacity-10" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
                             <div className="d-flex justify-content-between align-items-center">
                               <div className="d-flex flex-column">
                                 <span className="opacity-70 small">Material Cost</span>
-                                <span className="text-white-50" style={{ fontSize: '10px' }}>Based on square inches</span>
+                                <span className="text-white-50" style={{ fontSize: '10px' }}>
+                                  Based on length &amp; width dimensions
+                                  {priceEstimate?.breakdown?.material_formula && (
+                                    <> &middot; {dimensions?.inches?.l}&Prime; &times; ${priceEstimate.breakdown.material_formula.price_per_length}/in + {dimensions?.inches?.w}&Prime; &times; ${priceEstimate.breakdown.material_formula.price_per_width}/in</>
+                                  )}
+                                </span>
                               </div>
                               <span className="fw-black fs-5">${(priceEstimate?.breakdown?.material_cost || 0).toFixed(2)}</span>
                             </div>
@@ -1860,11 +1934,26 @@ const InstantPricing = () => {
                               <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-danger">
                                 <div className="d-flex flex-column">
                                   <span className="opacity-90 fw-bold small">Sub-Services Total</span>
-                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Tapping, Anodizing, etc.</span>
+                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Anodizing, finishing, etc.</span>
                                 </div>
                                 <span className="fw-black fs-5">+${(priceEstimate.breakdown.additional_services_cost).toFixed(2)}</span>
                               </div>
                             )}
+
+                            {(() => {
+                              const tapTotal = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
+                              if (tapTotal <= 0) return null;
+                              const tapCount = Object.values(selectedTaps).length;
+                              return (
+                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-warning">
+                                  <div className="d-flex flex-column">
+                                    <span className="opacity-90 fw-bold small">Tapping Cost</span>
+                                    <span className="opacity-50" style={{ fontSize: '10px' }}>{tapCount} hole{tapCount !== 1 ? 's' : ''} configured</span>
+                                  </div>
+                                  <span className="fw-black fs-5">+${tapTotal.toFixed(2)}</span>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="text-center">
@@ -1872,11 +1961,15 @@ const InstantPricing = () => {
                             <div className="d-flex align-items-baseline justify-content-center gap-2">
                               <span className="fs-4 text-danger fw-black">$</span>
                               <strong className="fs-huge fw-black text-danger">
-                                {(priceEstimate?.total_price || 0).toFixed(2)}
+                                {(
+                                  (priceEstimate?.total_price || 0) +
+                                  Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0)
+                                ).toFixed(2)}
                               </strong>
                             </div>
                           </div>
                         </div>
+                        <div className="p-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                         <button
                           className="btn btn-danger w-100 py-3 rounded-4 fw-bold fs-6 shadow-lg border-0 transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2 hover-bg-danger-dark"
                           onClick={handleProceedToReview}
@@ -1888,6 +1981,7 @@ const InstantPricing = () => {
                             <>{selectedFile?.tempPath ? 'PROCEED TO REVIEW' : 'WAITING FOR UPLOAD...'}<ArrowRight size={18} className="opacity-75" /></>
                           )}
                         </button>
+                        </div>
                       </div>
                     </div>
                   </div>

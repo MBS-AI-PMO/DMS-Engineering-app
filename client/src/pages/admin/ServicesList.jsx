@@ -139,6 +139,14 @@ export default function ServicesList() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 {indent > 0 && <span style={{ color: '#cbd5e1' }}>└</span>}
                                                 <strong>{svc.title}</strong>
+                                {svc.is_production && svc.pricing_config?.base_setup !== undefined && (
+                                    <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 2 }}>
+                                        Base: ${svc.pricing_config.base_setup}
+                                        {svc.pricing_config.price_per_length ? ` + ${svc.pricing_config.price_per_length}/in(L)` : ''}
+                                        {svc.pricing_config.price_per_width ? ` + ${svc.pricing_config.price_per_width}/in(W)` : ''}
+                                        {svc.pricing_config.price_per_thickness ? ` + ${svc.pricing_config.price_per_thickness}/in(T)` : ''}
+                                    </span>
+                                )}
                                             </div>
                                         </td>
                                         <td>

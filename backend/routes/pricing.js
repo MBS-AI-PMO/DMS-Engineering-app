@@ -188,49 +188,54 @@ router.post('/calculate', async (req, res) => {
         additional_services = [] // Array of service objects or IDs
     } = req.body;
 
-    if (!metal_id || !service_id) {
-        return res.status(400).json({ success: false, error: 'Missing calculation parameters' });
+    // Allow partial calculations for real-time UI updates
+    if (!metal_id && !service_id) {
+        return res.status(400).json({ success: false, error: 'Select either a material or a production method to see pricing.' });
     }
 
     try {
         // 1. Fetch Metal and Primary Service Data
         const [metalRes, serviceRes] = await Promise.all([
-            db.query('SELECT * FROM metals WHERE id = $1', [metal_id]),
-            db.query('SELECT * FROM services WHERE id = $1', [service_id])
+            metal_id ? db.query('SELECT * FROM metals WHERE id = $1', [metal_id]) : Promise.resolve({ rows: [] }),
+            service_id ? db.query('SELECT * FROM services WHERE id = $1', [service_id]) : Promise.resolve({ rows: [] })
         ]);
 
-        if (metalRes.rows.length === 0 || serviceRes.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Metal or Service not found' });
-        }
-
-        const metal = metalRes.rows[0];
-        const mainService = serviceRes.rows[0];
+        const metal = metalRes.rows[0] || null;
+        const mainService = serviceRes.rows[0] || null;
 
         // ── MATERIAL COST ─────────────────────────────────────
-        const isCNC = parseInt(mainService.id) === 2;
+        const isCNC = mainService ? parseInt(mainService.id) === 2 : false;
         let material_cost = 0;
 
-        if (!isCNC) {
-            // Pricing config is { "thickness_val": price_per_sqin }
-            const metalPricing = metal.pricing_config || {};
-            const material_sqin_price = parseFloat(metalPricing[thickness_value]) || 0;
-            const area = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0);
-            material_cost = area * material_sqin_price;
+        let price_per_length = 0, price_per_width = 0;
+        if (metal && thickness_value) {
+            const entry = (metal.pricing_config || {})[thickness_value];
+            if (entry && typeof entry === 'object') {
+                price_per_length = parseFloat(entry.price_per_length) || 0;
+                price_per_width = parseFloat(entry.price_per_width) || 0;
+                material_cost = (parseFloat(length_in) || 0) * price_per_length + (parseFloat(height_in) || 0) * price_per_width;
+            } else if (entry) {
+                // Legacy flat price-per-sqin format
+                const sqin = parseFloat(entry) || 0;
+                material_cost = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0) * sqin;
+            }
         }
 
         // ── MAIN SERVICE COST ──────────────────────────────────
         let main_service_cost = 0;
 
-        if (isCNC) {
-            const config = mainService.pricing_config || {};
-            const base = parseFloat(config.base_setup) || 25;
-            const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
-            const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
-            const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
-            main_service_cost = base + w_cost + l_cost + t_cost;
-        } else {
-            // Standard service (e.g., Laser Cutting)
-            main_service_cost = parseFloat(mainService.base_price) || 0;
+        if (mainService) {
+            if (isCNC) {
+                const config = mainService.pricing_config || {};
+                const base = parseFloat(config.base_setup) || 25;
+                const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
+                const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
+                const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
+                main_service_cost = base + w_cost + l_cost + t_cost;
+            } else {
+                // Standard service (e.g., Laser Cutting)
+                main_service_cost = parseFloat(mainService.base_price) || 0;
+            }
         }
 
         // ── ADDITIONAL SERVICES COST ──────────────────────────
@@ -279,8 +284,9 @@ router.post('/calculate', async (req, res) => {
             total_price: final_total,
             breakdown: {
                 material_cost,
+                material_formula: { price_per_length, price_per_width },
                 production_cost: main_service_cost,
-                additional_cost,
+                additional_services_cost: additional_cost,
                 unit_total,
                 final_unit_price,
                 discount_percent,

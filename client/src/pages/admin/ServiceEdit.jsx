@@ -504,6 +504,14 @@ export default function ServiceEdit() {
                                             />
                                         </div>
                                     </div>
+                                    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 6 }}>PRICING FORMULA</div>
+                                        <code style={{ fontSize: 12, color: '#1e293b' }}>
+                                            Price = ${service.pricing_config?.base_setup || 0} (setup)
+                                            {service.pricing_config?.price_per_length ? ` + ${service.pricing_config.price_per_length} × Length (in)` : ''}
+                                            {service.pricing_config?.price_per_width ? ` + ${service.pricing_config.price_per_width} × Width (in)` : ''}
+                                        </code>
+                                    </div>
                                 </div>
                             );
 
@@ -551,6 +559,15 @@ export default function ServiceEdit() {
                                                 onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_thickness: parseFloat(e.target.value) || 0 } }))}
                                             />
                                         </div>
+                                    </div>
+                                    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 6 }}>PRICING FORMULA</div>
+                                        <code style={{ fontSize: 12, color: '#1e293b' }}>
+                                            Price = ${service.pricing_config?.base_setup || 0} (setup)
+                                            {service.pricing_config?.price_per_length ? ` + ${service.pricing_config.price_per_length} × Length (in)` : ''}
+                                            {service.pricing_config?.price_per_width ? ` + ${service.pricing_config.price_per_width} × Width (in)` : ''}
+                                            {service.pricing_config?.price_per_thickness ? ` + ${service.pricing_config.price_per_thickness} × Thickness (in)` : ''}
+                                        </code>
                                     </div>
                                 </div>
                             );

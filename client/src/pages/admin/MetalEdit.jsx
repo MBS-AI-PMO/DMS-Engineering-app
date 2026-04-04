@@ -169,6 +169,42 @@ function SpecSectionEditor({ sectionKey, label, fields, data, onChange }) {
     );
 }
 
+// ── Skeleton Loader ─────────────────────────────────────
+function MetalEditSkeleton() {
+    return (
+        <div className="admin-page animate-pulse-slow">
+            <div className="admin-page-header">
+                <div className="skeleton rounded-pill" style={{ width: 80, height: 32 }} />
+                <div className="skeleton rounded-3 ms-3" style={{ width: 300, height: 36 }} />
+                <div className="skeleton rounded-pill ms-auto" style={{ width: 100, height: 36 }} />
+            </div>
+
+            <div className="admin-form-grid mt-4">
+                {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="admin-form-group">
+                        <div className="skeleton rounded-2 mb-2" style={{ width: 60, height: 14 }} />
+                        <div className="skeleton rounded-3" style={{ width: '100%', height: 42 }} />
+                    </div>
+                ))}
+                <div className="admin-form-group full-width">
+                    <div className="skeleton rounded-2 mb-2" style={{ width: 100, height: 14 }} />
+                    <div className="skeleton rounded-3" style={{ width: '100%', height: 100 }} />
+                </div>
+            </div>
+
+            <div className="admin-editor-tabs border-bottom mt-5 gap-3">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="skeleton rounded-pill" style={{ width: 100, height: 32 }} />
+                ))}
+            </div>
+
+            <div className="admin-tab-panel mt-4">
+                <div className="skeleton rounded-4" style={{ width: '100%', height: 300 }} />
+            </div>
+        </div>
+    );
+}
+
 // ── Main Component ───────────────────────────────────────
 export default function MetalEdit() {
     const { slug } = useParams();
@@ -319,7 +355,7 @@ export default function MetalEdit() {
         setRawJsonMode(prev => ({ ...prev, [section]: !prev[section] }));
     };
 
-    if (loading) return <div className="admin-page"><div className="skeleton skeleton-card" style={{ height: 400 }} /></div>;
+    if (loading) return <MetalEditSkeleton />;
 
     return (
         <div className="admin-page">
@@ -557,14 +593,15 @@ export default function MetalEdit() {
                                     <h3>Thickness-Based Pricing & Compatibility</h3>
                                 </div>
                             </div>
-                            <p className="admin-card-tip">Configure the material cost (Price per Square Inch) and compatible sub-services for each thickness. This ensures users only see valid options during quoting.</p>
+                            <p className="admin-card-tip">Configure the material cost (Price per Length and Price per Width in $/inch) for each thickness.</p>
 
                             <div className="admin-pricing-table-wrapper" style={{ marginTop: '20px' }}>
                                 <table className="admin-pricing-table">
                                     <thead>
                                         <tr>
                                             <th>Thickness</th>
-                                            <th>Price per Sq/In ($)</th>
+                                            <th>Price per Length ($/in)</th>
+                                            <th>Price per Width ($/in)</th>
                                             <th>Compatible Sub-Services</th>
                                         </tr>
                                     </thead>
@@ -575,21 +612,47 @@ export default function MetalEdit() {
                                                 <td>
                                                     <input
                                                         type="number"
+                                                        step="any"
                                                         className="admin-input-small"
-                                                        value={metal.pricing_config?.[t.value] || 0}
+                                                        value={metal.pricing_config?.[t.value]?.price_per_length ?? ''}
                                                         onChange={e => {
+                                                            const val = e.target.value;
                                                             setMetal(prev => ({
                                                                 ...prev,
                                                                 pricing_config: {
                                                                     ...(prev.pricing_config || {}),
-                                                                    [t.value]: parseFloat(e.target.value) || 0
+                                                                    [t.value]: {
+                                                                        ...(prev.pricing_config?.[t.value] || {}),
+                                                                        price_per_length: val
+                                                                    }
                                                                 }
                                                             }));
                                                         }}
                                                     />
                                                 </td>
                                                 <td>
-                                                    <div className="compatibility-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        className="admin-input-small"
+                                                        value={metal.pricing_config?.[t.value]?.price_per_width ?? ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setMetal(prev => ({
+                                                                ...prev,
+                                                                pricing_config: {
+                                                                    ...(prev.pricing_config || {}),
+                                                                    [t.value]: {
+                                                                        ...(prev.pricing_config?.[t.value] || {}),
+                                                                        price_per_width: val
+                                                                    }
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <div className="compatibility-grid">
                                                         {allServices.filter(s => !s.is_production).map(svc => {
                                                             const currentSpecs = metal.thickness_specs?.[t.value] || {};
                                                             const isAvailable = (currentSpecs.available_services || []).map(id => Number(id)).includes(Number(svc.id));

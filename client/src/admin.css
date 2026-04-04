@@ -2494,115 +2494,144 @@ select.spec-row-input {
     padding: 0;
   }
 }
+
 /* -- Admin Toasts ------------------------------------- */
 .admin-toast-container {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    pointer-events: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
 }
 
 .admin-toast-item {
-    pointer-events: auto;
-    width: 340px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(12px) saturate(180%);
-    -webkit-backdrop-filter: blur(12px) saturate(180%);
-    border-radius: 16px;
-    padding: 16px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    overflow: hidden;
-    position: relative;
-    display: flex;
-    flex-direction: column;
+  pointer-events: auto;
+  width: 340px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .toast-content {
-    display: flex;
-    align-items: center;
-    gap: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .toast-icon-wrapper {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.icon-success { background: #ecfdf5; color: #10b981; }
-.icon-error   { background: #fef2f2; color: #ef4444; }
-.icon-warning { background: #fffbeb; color: #f59e0b; }
-.icon-info    { background: #eff6ff; color: #3b82f6; }
+.icon-success {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.icon-error {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.icon-warning {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.icon-info {
+  background: #eff6ff;
+  color: #3b82f6;
+}
 
 .toast-text-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .toast-message {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: #1e293b;
-    line-height: 1.4;
-    white-space: normal;
-    word-break: break-word;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .toast-close-btn {
-    background: none;
-    border: none;
-    color: #94a3b8;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .toast-close-btn:hover {
-    background: rgba(0,0,0,0.05);
-    color: #64748b;
+  background: rgba(0, 0, 0, 0.05);
+  color: #64748b;
 }
 
 .toast-progress-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: rgba(0, 0, 0, 0.05);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .toast-progress-bar {
-    height: 100%;
+  height: 100%;
 }
 
-.toast-success .toast-progress-bar { background: #10b981; }
-.toast-error   .toast-progress-bar { background: #ef4444; }
-.toast-warning .toast-progress-bar { background: #f59e0b; }
-.toast-info    .toast-progress-bar { background: #3b82f6; }
+.toast-success .toast-progress-bar {
+  background: #10b981;
+}
+
+.toast-error .toast-progress-bar {
+  background: #ef4444;
+}
+
+.toast-warning .toast-progress-bar {
+  background: #f59e0b;
+}
+
+.toast-info .toast-progress-bar {
+  background: #3b82f6;
+}
 
 @media (max-width: 480px) {
-    .admin-toast-container {
-        top: 16px;
-        right: 16px;
-        left: 16px;
-        width: calc(100%% - 32px);
-    }
-    .admin-toast-item {
-        width: 100%%;
-    }
+  .admin-toast-container {
+    bottom: 16px;
+    top: auto;
+    right: 16px;
+    left: 16px;
+    width: calc(100% - 32px);
+  }
+
+  .admin-toast-item {
+    width: 100%;
+  }
 }
