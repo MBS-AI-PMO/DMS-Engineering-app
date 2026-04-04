@@ -38,7 +38,7 @@ export default function ServicesList() {
                 if (parentId === null) {
                     return pids.length === 0 || item.is_production;
                 }
-                return pids.includes(parentId);
+                return pids.some(pid => Number(pid) === Number(parentId));
             })
             .sort((a, b) => a.display_order - b.display_order);
 
