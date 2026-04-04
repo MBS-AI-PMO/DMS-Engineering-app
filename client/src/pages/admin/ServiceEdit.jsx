@@ -252,9 +252,10 @@ export default function ServiceEdit() {
                                                         padding: '4px'
                                                     }} onClick={() => {
                                                         const pids = [...(service.parent_ids || [])];
-                                                        const idx = pids.indexOf(s.id);
+                                                        const numericSId = Number(s.id);
+                                                        const idx = pids.findIndex(pid => Number(pid) === numericSId);
                                                         if (idx >= 0) pids.splice(idx, 1);
-                                                        else pids.push(s.id);
+                                                        else pids.push(numericSId);
                                                         setService(prev => ({ ...prev, parent_ids: pids }));
                                                     }}>
                                                         <div style={{
@@ -262,17 +263,17 @@ export default function ServiceEdit() {
                                                             height: '20px',
                                                             borderRadius: '6px',
                                                             border: '2px solid',
-                                                            borderColor: (service.parent_ids || []).includes(s.id) ? '#8b5cf6' : '#cbd5e1',
-                                                            background: (service.parent_ids || []).includes(s.id) ? '#8b5cf6' : 'transparent',
+                                                            borderColor: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : '#cbd5e1',
+                                                            background: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : 'transparent',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
                                                             color: 'white',
                                                             transition: 'all 0.2s'
                                                         }}>
-                                                            {(service.parent_ids || []).includes(s.id) && <Check size={14} />}
+                                                            {(service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) && <Check size={14} />}
                                                         </div>
-                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: (service.parent_ids || []).includes(s.id) ? '#1e293b' : '#64748b' }}>
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#1e293b' : '#64748b' }}>
                                                             {s.title}
                                                         </span>
                                                     </div>
