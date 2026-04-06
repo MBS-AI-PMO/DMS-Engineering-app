@@ -1033,11 +1033,6 @@ export default function ServiceEdit() {
                 .tap-min-depth-group { display: flex; flex-direction: column; gap: 8px; }
                 .tap-min-depth-group .toggle-switch-group { margin-top: 4px; }
 
-                .animate-spin { animation: spin 1s linear infinite; }
-                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-                .admin-loading-full { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 16px; color: #64748b; }
-
                 /* New Tap Bar Styles */
                 .tap-bar-list {
                     display: flex;

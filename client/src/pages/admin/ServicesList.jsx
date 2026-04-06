@@ -7,6 +7,43 @@ import { fetchServices, deleteService, fetchServicesWithUsage } from '../../util
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
 
+const TableSkeleton = () => (
+    <>
+        {[...Array(8)].map((_, i) => (
+            <tr key={i}>
+                <td style={{ paddingLeft: `${20 + (i % 3 === 0 ? 0 : 24)}px` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {i % 3 !== 0 && <div className="skeleton" style={{ width: '8px', height: '8px', borderRadius: '2px', opacity: 0.3 }} />}
+                        <div className="skeleton-inline skeleton" style={{ width: i % 2 === 0 ? '160px' : '120px', height: '18px', borderRadius: '4px' }} />
+                    </div>
+                </td>
+                <td>
+                    <div className="skeleton" style={{ width: '45px', height: '22px', borderRadius: '6px' }} />
+                </td>
+                <td>
+                    <div className="skeleton-text skeleton" style={{ width: i % 2 === 0 ? '240px' : '180px', height: '12px' }} />
+                </td>
+                <td>
+                    <div className="skeleton skeleton-thumb" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+                </td>
+                <td>
+                    <div className="skeleton" style={{ width: '28px', height: '20px', borderRadius: '12px' }} />
+                </td>
+                <td>
+                    <div className="skeleton" style={{ width: '20px', height: '16px', borderRadius: '4px' }} />
+                </td>
+                <td>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                    </div>
+                </td>
+            </tr>
+        ))}
+    </>
+);
+
 export default function ServicesList() {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -114,24 +151,24 @@ export default function ServicesList() {
                 />
             </div>
 
-            {loading ? (
-                [...Array(6)].map((_, i) => <div key={i} className="skeleton skeleton-table-row" />)
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Type</th>
-                                <th>Description</th>
-                                <th>Image</th>
-                                <th>Metals</th>
-                                <th>Order</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {displayServices.map(svc => {
+            <div className="admin-table-wrapper" style={{ minHeight: '400px' }}>
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Image</th>
+                            <th>Metals</th>
+                            <th>Order</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableSkeleton />
+                        ) : (
+                            displayServices.map(svc => {
                                 const indent = svc.depth || 0;
                                 return (
                                     <tr key={svc.id}>
@@ -212,12 +249,12 @@ export default function ServicesList() {
                                         </td>
                                     </tr>
                                 );
-                            })}
-                        </tbody>
-                    </table>
-                    {displayServices.length === 0 && <div className="admin-empty">No services found.</div>}
-                </div>
-            )}
+                            })
+                        )}
+                    </tbody>
+                </table>
+                {!loading && displayServices.length === 0 && <div className="admin-empty">No services found.</div>}
+            </div>
 
             {/* Delete confirmation remains in separate modal for safety */}
             <AnimatePresence>

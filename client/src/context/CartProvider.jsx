@@ -99,27 +99,25 @@ export const CartProvider = ({ children }) => {
       const res = await calculatePrice(payload);
       
       if (res.success) {
-        // Sync with InstantPricing logic établissements
+        // res.total_price already includes anodizing (sent via additional_services to the API)
         const totalTaps = Object.values(configuration.selectedTaps || {}).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
-        const anodizingSvc = (configuration.additionalServices || []).find(s => s.title?.toLowerCase().includes('anodiz'));
-        const anodizingCost = (configuration.anodizingColor ? parseFloat(anodizingSvc?.base_price || 15) : 0);
 
-        const totalBatch = parseFloat(res.total_price || 0) + totalTaps + anodizingCost;
+        const totalBatch = parseFloat(res.total_price || 0) + totalTaps;
         const unitPrice = totalBatch / newQuantity;
 
         setCartItems(prev => prev.map(item =>
-          item.cartId === cartId 
-            ? { 
-                ...item, 
+          item.cartId === cartId
+            ? {
+                ...item,
                 pricing: {
                   ...item.pricing,
                   base: parseFloat(res.breakdown?.material_cost || 0) + parseFloat(res.breakdown?.production_cost || 0),
                   taps: totalTaps / newQuantity,
-                  finish: anodizingCost / newQuantity,
+                  finish: 0,
                   total: unitPrice
                 },
-                isUpdating: false 
-              } 
+                isUpdating: false
+              }
             : item
         ));
       } else {

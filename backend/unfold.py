@@ -372,6 +372,41 @@ def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=N
     return coords
 
 
+def _compute_cluster_angular_span(cluster_items, axis):
+    """
+    Returns total angular span (degrees) of tessellated cluster faces projected
+    around `axis`.  A full drilled hole = ~360°; a slot end = ~180°.
+    Uses the largest gap in the angle distribution to compute span = 360 - gap.
+    Works correctly for cylinders in any orientation (vertical, horizontal, etc.).
+    """
+    # Build two orthogonal basis vectors in the plane perpendicular to axis
+    axis = np.asarray(axis, dtype=float)
+    u = np.array([1.0, 0.0, 0.0])
+    if abs(np.dot(u, axis)) > 0.9:   # axis is nearly along X, pick Y instead
+        u = np.array([0.0, 1.0, 0.0])
+    u = u - np.dot(u, axis) * axis
+    u /= np.linalg.norm(u)
+    w = np.cross(axis, u)             # w is the second basis vector
+
+    all_angles = []
+    for face, cyl_center in cluster_items:
+        verts, _ = _tessellate_face(face)
+        if verts.shape[0] == 0:
+            continue
+        rel = verts - cyl_center
+        proj = np.dot(rel, axis)[:, None] * axis
+        in_plane = rel - proj
+        for v in in_plane:
+            if np.linalg.norm(v) > 1e-6:
+                all_angles.append(math.atan2(float(np.dot(v, w)), float(np.dot(v, u))))
+    if len(all_angles) < 3:
+        return 0.0
+    all_angles = sorted(all_angles)
+    n = len(all_angles)
+    gaps = [(all_angles[(i + 1) % n] - all_angles[i]) % (2 * math.pi) for i in range(n)]
+    return math.degrees(2 * math.pi - max(gaps))
+
+
 def detect_holes_in_step(filepath: str) -> list:
     """
     Detect cylindrical holes in a STEP file.
@@ -458,6 +493,15 @@ def detect_holes_in_step(filepath: str) -> list:
         total_area = sum(_face_area(faces[c["fi"]]) for c in cluster)
         effective_depth = total_area / (2 * math.pi * cyl["radius"])
         if effective_depth < MIN_DEPTH_MM:
+            continue
+
+        # Filter: slot ends and edge bosses span only ~180°; real drilled holes ≥ ~300°
+        MIN_ANGULAR_SPAN_DEG = 300.0
+        angular_span = _compute_cluster_angular_span(
+            [(faces[c["fi"]], cyl["center"]) for c in cluster],
+            cyl["axis"]
+        )
+        if angular_span < MIN_ANGULAR_SPAN_DEG:
             continue
 
         all_pts = []
