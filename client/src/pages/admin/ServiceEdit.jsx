@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler } from 'lucide-react';
 import {
     fetchServices, createService, updateService, uploadServiceImage,
     fetchHardwareTypes, fetchHardwareItemsByType, uploadHardwareTypeImage,
@@ -43,15 +43,29 @@ export default function ServiceEdit() {
     const [editingHwItem, setEditingHwItem] = useState(null);
     const [hwItemForm, setHwItemForm] = useState({
         name: '', size_spec: '', price: '', notes: '', is_active: true,
-        length: '', min_edge_distance: '', tooling_diameter: ''
+        length: '', min_edge_distance: '', tooling_diameter: '',
+        base_width: '', shank: ''
     });
     const [savingHwItem, setSavingHwItem] = useState(false);
     const [hwTypeImgUploading, setHwTypeImgUploading] = useState(false);
     const [zoomedImage, setZoomedImage] = useState(null);
     const [confirmDeleteHwItem, setConfirmDeleteHwItem] = useState(null);
+    const [hwUnit, setHwUnit] = useState('in');
     const hwTypeImgRef = useRef(null);
 
     const isHardware = service?.title?.toLowerCase()?.includes('hardware');
+
+    const toMM = (val) => val ? (parseFloat(val) * 25.4).toFixed(4) : '';
+    const toIN = (val) => val ? (parseFloat(val) / 25.4).toFixed(4) : '';
+
+    const loadHwTypes = useCallback(async () => {
+        try {
+            const hwRes = await fetchHardwareTypes();
+            setHwTypes(hwRes.data || []);
+        } catch (err) {
+            toast('Failed to load hardware types: ' + err.message, 'error');
+        }
+    }, [toast]);
 
     useEffect(() => {
         const load = async () => {
@@ -72,8 +86,7 @@ export default function ServiceEdit() {
 
                         // If it's Hardware, fetch its types
                         if (match.title?.toLowerCase()?.includes('hardware')) {
-                            const hwRes = await fetchHardwareTypes();
-                            setHwTypes(hwRes.data || []);
+                            await loadHwTypes();
                         }
                     }
                 }
@@ -84,7 +97,7 @@ export default function ServiceEdit() {
             }
         };
         load();
-    }, [id, isNew, toast]);
+    }, [id, isNew, toast, loadHwTypes]);
 
     const loadHwItems = useCallback(async (typeId) => {
         setLoadingHw(true);
@@ -124,16 +137,22 @@ export default function ServiceEdit() {
 
 
     const handleSaveHwItem = async () => {
-        if (!hwItemForm.name.trim()) { toast('Name is required', 'error'); return; }
+        const nameStr = (hwItemForm.name || '').toString().trim();
+        if (!nameStr) { toast('Name is required', 'error'); return; }
         setSavingHwItem(true);
         try {
             const payload = {
                 hardware_type_id: selectedHwType.id,
-                name: hwItemForm.name.trim(),
-                size_spec: hwItemForm.size_spec.trim() || null,
+                name: nameStr,
+                size_spec: (hwItemForm.size_spec || '').toString().trim() || null,
                 price: parseFloat(hwItemForm.price) || 0,
-                notes: hwItemForm.notes.trim() || null,
-                is_active: hwItemForm.is_active
+                notes: (hwItemForm.notes || '').toString().trim() || null,
+                is_active: hwItemForm.is_active,
+                length: parseFloat(hwItemForm.length) || null,
+                min_edge_distance: parseFloat(hwItemForm.min_edge_distance) || null,
+                tooling_diameter: parseFloat(hwItemForm.tooling_diameter) || null,
+                base_width: parseFloat(hwItemForm.base_width) || null,
+                shank: parseFloat(hwItemForm.shank) || null
             };
 
             if (editingHwItem === 'new') {
@@ -144,8 +163,13 @@ export default function ServiceEdit() {
 
             toast(editingHwItem === 'new' ? 'Item added' : 'Item updated', 'success');
             setEditingHwItem(null);
-            setHwItemForm({ name: '', size_spec: '', price: '', notes: '', is_active: true });
+            setHwItemForm({
+                name: '', size_spec: '', price: '', notes: '', is_active: true,
+                length: '', min_edge_distance: '', tooling_diameter: '',
+                base_width: '', shank: ''
+            });
             loadHwItems(selectedHwType.id);
+            loadHwTypes(); // Refresh counts
         } catch (err) {
             toast('Failed to save item: ' + err.message, 'error');
         } finally {
@@ -159,6 +183,7 @@ export default function ServiceEdit() {
             await deleteHardwareItem(confirmDeleteHwItem.id);
             setHwItems(prev => prev.filter(i => i.id !== confirmDeleteHwItem.id));
             toast('Item deleted', 'success');
+            loadHwTypes(); // Refresh counts
         } catch (err) {
             toast('Delete failed: ' + err.message, 'error');
         } finally {
@@ -688,8 +713,8 @@ export default function ServiceEdit() {
                             if (isHardware) return (
                                 <div className="admin-edit-card hardware-config-card">
                                     <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <div className="icon-badge" style={{ width: '32px', height: '32px', background: '#eff6ff', color: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div className="icon-badge" style={{ width: '40px', height: '40px', background: '#f5f3ff', color: '#8b5cf6', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                 <Cpu size={18} />
                                             </div>
                                             <div>
@@ -697,15 +722,23 @@ export default function ServiceEdit() {
                                                 <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Manage hardware types and specific items for quote flow.</p>
                                             </div>
                                         </div>
-                                        {selectedHwType && (
-                                            <button
-                                                className="admin-btn admin-btn-outline"
-                                                style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                                                onClick={() => setSelectedHwType(null)}
-                                            >
-                                                <ChevronLeft size={14} /> Back to Types
-                                            </button>
-                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            {selectedHwType && (
+                                                <div className="unit-toggle-pills" style={{ marginRight: '8px' }}>
+                                                    <button className={`unit-pill ${hwUnit === 'in' ? 'active' : ''}`} onClick={() => setHwUnit('in')}>IN</button>
+                                                    <button className={`unit-pill ${hwUnit === 'mm' ? 'active' : ''}`} onClick={() => setHwUnit('mm')}>MM</button>
+                                                </div>
+                                            )}
+                                            {selectedHwType && (
+                                                <button
+                                                    className="admin-btn admin-btn-outline"
+                                                    style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                                    onClick={() => setSelectedHwType(null)}
+                                                >
+                                                    <ChevronLeft size={14} /> Back to Types
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {!selectedHwType ? (
@@ -726,7 +759,7 @@ export default function ServiceEdit() {
                                                         )}
                                                         <div style={{ flex: 1 }}>
                                                             <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{type.name}</h4>
-                                                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{type.item_count} Items</span>
+                                                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{type.item_count} {type.item_count === 1 ? 'Item' : 'Items'}</span>
                                                         </div>
                                                         <ChevronRight size={16} color="#cbd5e1" />
                                                     </div>
@@ -768,28 +801,52 @@ export default function ServiceEdit() {
                                                 </button>
                                             </div>
 
-                                            {/* Items Table */}
-                                            {loadingHw ? (
-                                                <div style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
-                                            ) : hwItems.length === 0 ? (
-                                                <div className="empty-options-state">No items found for this hardware type.</div>
-                                            ) : (
-                                                <div className="admin-table-wrapper" style={{ boxShadow: 'none', border: '1px solid #f1f5f9' }}>
-                                                    <table className="admin-table">
-                                                        <thead>
+                                            {/* Items Table / Skeleton */}
+                                            <div className="admin-table-wrapper" style={{ boxShadow: 'none', border: '1px solid #f1f5f9' }}>
+                                                <table className="admin-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={{ width: '40px' }}>#</th>
+                                                            <th style={{ width: '60px' }}>Image</th>
+                                                            <th style={{ width: '25%' }}>Name</th>
+                                                            <th style={{ width: '15%' }}>Size Spec</th>
+                                                            <th style={{ width: '25%' }}>Tech Specs ({hwUnit})</th>
+                                                            <th style={{ width: '15%' }}>Price</th>
+                                                            <th style={{ width: '10%' }}>Status</th>
+                                                            <th style={{ textAlign: 'right', width: '100px' }}>Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {loadingHw ? (
+                                                            // Skeleton Rows
+                                                            [1, 2, 3, 4].map((_, i) => (
+                                                                <tr key={`skeleton-${i}`}>
+                                                                    <td><div className="skeleton-box" style={{ width: 16, height: 16 }} /></td>
+                                                                    <td><div className="skeleton-box" style={{ width: 32, height: 32, borderRadius: 4 }} /></td>
+                                                                    <td><div className="skeleton-box" style={{ width: '80%', height: 16 }} /></td>
+                                                                    <td><div className="skeleton-box" style={{ width: '60%', height: 16 }} /></td>
+                                                                    <td>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                                            <div className="skeleton-box" style={{ width: '40%', height: 10 }} />
+                                                                            <div className="skeleton-box" style={{ width: '60%', height: 10 }} />
+                                                                            <div className="skeleton-box" style={{ width: '50%', height: 10 }} />
+                                                                        </div>
+                                                                    </td>
+                                                                    <td><div className="skeleton-box" style={{ width: '50px', height: 16 }} /></td>
+                                                                    <td><div className="skeleton-box" style={{ width: '50px', height: 16, borderRadius: 10 }} /></td>
+                                                                    <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}><div className="skeleton-box" style={{ width: 28, height: 28, borderRadius: 8 }} /><div className="skeleton-box" style={{ width: 28, height: 28, borderRadius: 8 }} /></div></td>
+                                                                </tr>
+                                                            ))
+                                                        ) : hwItems.length === 0 ? (
                                                             <tr>
-                                                                <th>Image</th>
-                                                                <th>Name</th>
-                                                                <th>Size Spec</th>
-                                                                <th>Tech Specs</th>
-                                                                <th>Price</th>
-                                                                <th>Status</th>
-                                                                <th style={{ textAlign: 'right' }}>Actions</th>
+                                                                <td colSpan={8} style={{ padding: '40px' }}>
+                                                                    <div className="empty-options-state" style={{ margin: 0 }}>No items found for this hardware type.</div>
+                                                                </td>
                                                             </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {hwItems.map(item => (
+                                                        ) : (
+                                                            hwItems.map((item, index) => (
                                                                 <tr key={item.id}>
+                                                                    <td style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{index + 1}</td>
                                                                     <td>
                                                                         <img
                                                                             src={selectedHwType.image_path}
@@ -802,12 +859,30 @@ export default function ServiceEdit() {
                                                                     <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.size_spec || '—'}</td>
                                                                     <td style={{ fontSize: '0.75rem', color: '#444' }}>
                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                                                            {item.length && <div>L: {item.length}</div>}
-                                                                            {item.min_edge_distance && <div>Edge: {item.min_edge_distance}</div>}
-                                                                            {item.tooling_diameter && <div>Tool: {item.tooling_diameter}</div>}
+                                                                            {/* Dynamic Labels based on Type */}
+                                                                            {selectedHwType.id === 4 ? ( // Flush Nut
+                                                                                <>
+                                                                                    {item.length && <div>A: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
+                                                                                    {item.base_width && <div>H: {hwUnit === 'mm' ? toMM(item.base_width) : item.base_width}</div>}
+                                                                                    {item.shank && <div>Shank: {item.shank}</div>}
+                                                                                </>
+                                                                            ) : selectedHwType.id === 3 ? ( // Nuts
+                                                                                <>
+                                                                                    {item.length && <div>T: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
+                                                                                    {item.base_width && <div>E: {hwUnit === 'mm' ? toMM(item.base_width) : item.base_width}</div>}
+                                                                                </>
+                                                                            ) : ( // Default (Studs/Standoffs)
+                                                                                <>
+                                                                                    {item.length && <div>L: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
+                                                                                </>
+                                                                            )}
+                                                                            {item.min_edge_distance && <div>Edge: {hwUnit === 'mm' ? toMM(item.min_edge_distance) : item.min_edge_distance}</div>}
+                                                                            {item.tooling_diameter && <div>Tool: {hwUnit === 'mm' ? toMM(item.tooling_diameter) : item.tooling_diameter}</div>}
                                                                         </div>
                                                                     </td>
-                                                                    <td style={{ fontSize: '0.85rem' }}>${parseFloat(item.price || 0).toFixed(4)}</td>
+                                                                    <td style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+                                                                        ${parseFloat(item.price || 0).toFixed(4)}
+                                                                    </td>
                                                                     <td>
                                                                         <span className={`hw-badge ${item.is_active ? 'hw-badge-active' : 'hw-badge-inactive'}`} style={{ fontSize: '0.65rem' }}>
                                                                             {item.is_active ? 'Active' : 'Inactive'}
@@ -815,16 +890,30 @@ export default function ServiceEdit() {
                                                                     </td>
                                                                     <td>
                                                                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                                                                            <button className="admin-icon-btn" onClick={() => { setHwItemForm({ ...item, is_active: item.is_active !== false }); setEditingHwItem(item); }}><Edit2 size={12} /></button>
+                                                                            <button className="admin-icon-btn" onClick={() => {
+                                                                                setHwItemForm({
+                                                                                    ...item,
+                                                                                    name: item.name || '',
+                                                                                    size_spec: item.size_spec || '',
+                                                                                    notes: item.notes || '',
+                                                                                    length: item.length || '',
+                                                                                    min_edge_distance: item.min_edge_distance || '',
+                                                                                    tooling_diameter: item.tooling_diameter || '',
+                                                                                    base_width: item.base_width || '',
+                                                                                    shank: item.shank || '',
+                                                                                    is_active: item.is_active !== false
+                                                                                });
+                                                                                setEditingHwItem(item);
+                                                                            }}><Edit2 size={12} /></button>
                                                                             <button className="admin-icon-btn danger" onClick={() => setConfirmDeleteHwItem(item)}><Trash2 size={12} /></button>
                                                                         </div>
                                                                     </td>
                                                                 </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            )}
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -905,7 +994,7 @@ export default function ServiceEdit() {
                                 <button className="modal-close-btn" onClick={() => setIsTapModalOpen(false)}><X size={20} /></button>
                             </div>
 
-                            <div className="admin-modal-body">
+                            <div className="admin-modal-body admin-modal-scroll-area" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                                 <div className="admin-form-group">
                                     <label>Tap Name</label>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1421,138 +1510,269 @@ export default function ServiceEdit() {
                     margin: 0 !important;
                     background: white !important;
                 }
+
+                /* Premium Scrollbar Design */
+                .admin-modal-scroll-area::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .admin-modal-scroll-area::-webkit-scrollbar-track {
+                    background: #f1f5f9;
+                    border-radius: 10px;
+                }
+                .admin-modal-scroll-area::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 10px;
+                    transition: all 0.2s;
+                }
+                .admin-modal-scroll-area::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                }
+                
+                /* Applying to the whole page as well for consistency */
+                ::-webkit-scrollbar {
+                    width: 8px;
+                }
+                ::-webkit-scrollbar-track {
+                    background: #f8fafc;
+                }
+                ::-webkit-scrollbar-thumb {
+                    background: #e2e8f0;
+                    border-radius: 10px;
+                }
+                ::-webkit-scrollbar-thumb:hover {
+                    background: #cbd5e1;
+                }
             `}</style>
-            <ImageModal src={zoomedImage} onClose={() => setZoomedImage(null)} />
 
             {/* ── Add / Edit Hardware Item Modal ─────────────────────── */}
             <AnimatePresence>
                 {editingHwItem !== null && (
                     <motion.div className="admin-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingHwItem(null)}>
-                        <motion.div className="admin-modal admin-modal-wide" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={e => e.stopPropagation()}>
-                            <div className="admin-modal-header">
-                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>
-                                    {editingHwItem === 'new' ? `Add Hardware — ${selectedHwType?.name}` : `Edit Hardware: ${editingHwItem.name}`}
-                                </h3>
-                                <button className="admin-icon-btn" onClick={() => setEditingHwItem(null)}><X size={16} /></button>
+                        <motion.div
+                            className="admin-modal"
+                            style={{ width: '100%', maxWidth: '680px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', background: 'white' }}
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Modal Header */}
+                            <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                                        {editingHwItem === 'new' ? 'Add New Hardware' : 'Edit Hardware Item'}
+                                    </h3>
+                                    <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b' }}>Configure specifications & pricing for {selectedHwType?.name}</p>
+                                </div>
+                                <button className="modal-close-btn" onClick={() => setEditingHwItem(null)} style={{ padding: '8px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #f1f5f9', cursor: 'pointer', color: '#64748b' }}>
+                                    <X size={20} />
+                                </button>
                             </div>
 
-                            <div style={{ padding: '24px' }} className="admin-form-grid">
-                                <div className="full-width" style={{
+                            <div className="admin-modal-scroll-area" style={{ padding: '32px', maxHeight: '70vh', overflowY: 'auto' }}>
+                                {/* Category Banner - Inherited Asset Style */}
+                                <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: 16,
-                                    padding: '16px',
-                                    background: '#f8fafc',
-                                    borderRadius: 12,
+                                    gap: 20,
+                                    padding: '24px',
+                                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                    borderRadius: '20px',
                                     border: '1px solid #e2e8f0',
-                                    marginBottom: '8px'
+                                    marginBottom: '32px'
                                 }}>
                                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                                        <img
-                                            src={selectedHwType?.image_path}
-                                            alt="category"
-                                            style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                                        <div style={{ width: 72, height: 72, borderRadius: '16px', overflow: 'hidden', border: '2px solid white', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                            <img src={selectedHwType?.image_path} alt="category" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        </div>
+                                        <div style={{ position: 'absolute', bottom: -6, right: -6, background: '#3b82f6', borderRadius: '10px', padding: '5px', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                            <Shield size={14} color="white" />
+                                        </div>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shared Visual Asset</span>
+                                        <h4 style={{ margin: '2px 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#0f172a' }}>{selectedHwType?.name}</h4>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                                    {/* Name Field */}
+                                    <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: '#475569', display: 'block' }}>Hardware Name *</label>
+                                        <input
+                                            value={hwItemForm.name}
+                                            onChange={e => setHwItemForm(p => ({ ...p, name: e.target.value }))}
+                                            placeholder="e.g. M4 x 10mm Flush Stud"
+                                            style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #e2e8f0', fontSize: '1rem', background: '#fafafa', transition: 'all 0.2s' }}
                                         />
-                                        <div style={{ position: 'absolute', bottom: -4, right: -4, background: 'white', borderRadius: '50%', padding: '2px', border: '1px solid #e2e8f0' }}>
-                                            <Shield size={12} color="#3b82f6" />
-                                        </div>
                                     </div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.025em', fontWeight: 600 }}>Category Image</p>
-                                        <h4 style={{ margin: '2px 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>
-                                            {selectedHwType?.name}
-                                        </h4>
-                                    </div>
-                                    <div style={{
-                                        background: '#eff6ff',
-                                        color: '#2563eb',
-                                        fontSize: '0.65rem',
-                                        fontWeight: 700,
-                                        padding: '4px 8px',
-                                        borderRadius: '6px',
-                                        border: '1px solid #bfdbfe',
-                                        textTransform: 'uppercase',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 4,
-                                        marginLeft: '12px',
-                                        flexShrink: 0
-                                    }}>
-                                        Shared Image
-                                    </div>
-                                </div>
 
-                                <div className="admin-form-group full-width">
-                                    <label>Name *</label>
-                                    <input value={hwItemForm.name} onChange={e => setHwItemForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. M4 x 10mm Flush Stud" />
-                                </div>
-
-                                <div className="admin-form-group">
-                                    <label>Size / Spec</label>
-                                    <input value={hwItemForm.size_spec} onChange={e => setHwItemForm(p => ({ ...p, size_spec: e.target.value }))} placeholder="e.g. M4, 1/4-20" />
-                                </div>
-
-                                <div className="admin-form-group">
-                                    <label>Price ($)</label>
-                                    <input type="number" step="0.0001" value={hwItemForm.price} onChange={e => setHwItemForm(p => ({ ...p, price: e.target.value }))} placeholder="0.0000" />
-                                </div>
-
-                                <div className="full-width" style={{ marginTop: '4px' }}>
-                                    <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: '12px', display: 'block', letterSpacing: '0.05em' }}>
-                                        Technical Specifications
-                                    </label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    {/* Spec & Price Grid */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                                         <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Length (in)</label>
+                                            <label style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: '#475569', display: 'block' }}>Size / Specification</label>
                                             <input
-                                                type="number"
-                                                step="0.001"
-                                                value={hwItemForm.length || ''}
-                                                onChange={e => setHwItemForm(p => ({ ...p, length: e.target.value }))}
-                                                placeholder=".000"
-                                                style={{ background: 'white' }}
+                                                value={hwItemForm.size_spec}
+                                                onChange={e => setHwItemForm(p => ({ ...p, size_spec: e.target.value }))}
+                                                placeholder="e.g. M4, 1/4-20"
+                                                style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #e2e8f0', fontSize: '0.95rem' }}
                                             />
                                         </div>
                                         <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Min Edge Distance (in)</label>
+                                            <label style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: '#475569', display: 'block' }}>Unit Price ($)</label>
                                             <input
                                                 type="number"
-                                                step="0.001"
-                                                value={hwItemForm.min_edge_distance || ''}
-                                                onChange={e => setHwItemForm(p => ({ ...p, min_edge_distance: e.target.value }))}
-                                                placeholder=".000"
-                                                style={{ background: 'white' }}
-                                            />
-                                        </div>
-                                        <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Tooling Diameter (in)</label>
-                                            <input
-                                                type="number"
-                                                step="0.001"
-                                                value={hwItemForm.tooling_diameter || ''}
-                                                onChange={e => setHwItemForm(p => ({ ...p, tooling_diameter: e.target.value }))}
-                                                placeholder=".000"
-                                                style={{ background: 'white' }}
+                                                step="0.0001"
+                                                value={hwItemForm.price}
+                                                onChange={e => setHwItemForm(p => ({ ...p, price: e.target.value }))}
+                                                placeholder="0.0000"
+                                                style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #e2e8f0', fontSize: '0.95rem' }}
                                             />
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="admin-form-group full-width">
-                                    <label>Notes</label>
-                                    <textarea rows={2} value={hwItemForm.notes || ''} onChange={e => setHwItemForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes..." style={{ resize: 'vertical' }} />
-                                </div>
+                                    {/* Engineering Specifications Grid */}
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '20px' }}>
+                                            <div style={{ width: 32, height: 32, borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Layers size={16} color="#3b82f6" />
+                                            </div>
+                                            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b' }}>Engineering Specifications</span>
+                                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                                            <div className="unit-toggle-pills" style={{ marginLeft: '12px' }}>
+                                                <button className={`unit-pill ${hwUnit === 'in' ? 'active' : ''}`} onClick={() => setHwUnit('in')}>IN</button>
+                                                <button className={`unit-pill ${hwUnit === 'mm' ? 'active' : ''}`} onClick={() => setHwUnit('mm')}>MM</button>
+                                            </div>
+                                        </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                    <input type="checkbox" id="hw-active-check" checked={hwItemForm.is_active} onChange={e => setHwItemForm(p => ({ ...p, is_active: e.target.checked }))} />
-                                    <label htmlFor="hw-active-check" style={{ fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem' }}>Active</label>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px 32px' }}>
+                                            <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <Ruler size={13} /> {selectedHwType?.id === 4 ? `Thickness (A) (${hwUnit})` : selectedHwType?.id === 3 ? `Thickness (T) (${hwUnit})` : `Length (${hwUnit})`}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={hwUnit === 'mm' ? toMM(hwItemForm.length) : (hwItemForm.length || '')}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setHwItemForm(p => ({ ...p, length: hwUnit === 'mm' ? toIN(val) : val }));
+                                                    }}
+                                                    placeholder={hwUnit === 'mm' ? "0.00" : ".000"}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                />
+                                            </div>
+
+                                            {(selectedHwType?.id === 3 || selectedHwType?.id === 4) && (
+                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <Maximize size={13} /> {selectedHwType?.id === 4 ? `Base width (H) (${hwUnit})` : `Outside Dimension (E) (${hwUnit})`}
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.001"
+                                                        value={hwUnit === 'mm' ? toMM(hwItemForm.base_width) : (hwItemForm.base_width || '')}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setHwItemForm(p => ({ ...p, base_width: hwUnit === 'mm' ? toIN(val) : val }));
+                                                        }}
+                                                        placeholder={hwUnit === 'mm' ? "0.00" : ".000"}
+                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {selectedHwType?.id === 4 && (
+                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <Hash size={13} /> Shank
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="1"
+                                                        value={hwItemForm.shank || ''}
+                                                        onChange={e => setHwItemForm(p => ({ ...p, shank: e.target.value }))}
+                                                        placeholder="e.g. 2, 3"
+                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <Package size={13} /> {selectedHwType?.id === 3 || selectedHwType?.id === 4 ? `Min Centerline to Edge (${hwUnit})` : `Min Edge (${hwUnit})`}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={hwUnit === 'mm' ? toMM(hwItemForm.min_edge_distance) : (hwItemForm.min_edge_distance || '')}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setHwItemForm(p => ({ ...p, min_edge_distance: hwUnit === 'mm' ? toIN(val) : val }));
+                                                    }}
+                                                    placeholder={hwUnit === 'mm' ? "0.00" : ".000"}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                />
+                                            </div>
+
+                                            <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <Wrench size={13} /> Tooling Diameter ({hwUnit})
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={hwUnit === 'mm' ? toMM(hwItemForm.tooling_diameter) : (hwItemForm.tooling_diameter || '')}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setHwItemForm(p => ({ ...p, tooling_diameter: hwUnit === 'mm' ? toIN(val) : val }));
+                                                    }}
+                                                    placeholder={hwUnit === 'mm' ? "0.00" : ".000"}
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Notes Field */}
+                                    <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: '#475569', display: 'block' }}>Notes</label>
+                                        <textarea
+                                            rows={2}
+                                            value={hwItemForm.notes || ''}
+                                            onChange={e => setHwItemForm(p => ({ ...p, notes: e.target.value }))}
+                                            placeholder="Optional engineering or usage notes..."
+                                            style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #e2e8f0', fontSize: '0.95rem', resize: 'vertical', minHeight: '80px', outline: 'none' }}
+                                        />
+                                    </div>
+
+                                    {/* Visibility Toggle */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: '#eff6ff', borderRadius: '16px', border: '1px solid #dbeafe' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="hw-active-check"
+                                            checked={hwItemForm.is_active}
+                                            onChange={e => setHwItemForm(p => ({ ...p, is_active: e.target.checked }))}
+                                            style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="hw-active-check" style={{ fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', color: '#1e293b' }}>Active Status (Visible to customers)</label>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="admin-modal-actions">
-                                <button className="admin-btn admin-btn-secondary" onClick={() => setEditingHwItem(null)} disabled={savingHwItem}>Cancel</button>
-                                <button className="admin-btn admin-btn-primary" onClick={handleSaveHwItem} disabled={savingHwItem}>
-                                    {savingHwItem ? 'Saving...' : <><Save size={14} /> Save Item</>}
+                            {/* Modal Actions */}
+                            <div style={{ padding: '24px 32px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+                                <button className="admin-btn admin-btn-secondary" onClick={() => setEditingHwItem(null)} disabled={savingHwItem} style={{ padding: '12px 24px', borderRadius: '12px', background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>
+                                    Cancel
+                                </button>
+                                <button
+                                    className="admin-btn admin-btn-primary"
+                                    onClick={handleSaveHwItem}
+                                    disabled={savingHwItem}
+                                    style={{ padding: '12px 32px', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)' }}
+                                >
+                                    {savingHwItem ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                    {savingHwItem ? 'Saving...' : 'Save Item Changes'}
                                 </button>
                             </div>
                         </motion.div>
@@ -1582,6 +1802,8 @@ export default function ServiceEdit() {
                 )}
             </AnimatePresence>
             <ImageModal src={zoomedImage} alt="Hardware Image" onClose={() => setZoomedImage(null)} />
-        </div>
+        </div >
     );
 }
+
+
