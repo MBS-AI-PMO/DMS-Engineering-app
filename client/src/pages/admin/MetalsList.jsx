@@ -22,7 +22,7 @@ export default function MetalsList() {
             .then(([m, c]) => { setMetals(m); setCategories(c); })
             .catch(err => toast('Failed to load metals: ' + err.message, 'error'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const filtered = useMemo(() => {
         return metals.filter(m => {
@@ -32,10 +32,10 @@ export default function MetalsList() {
         });
     }, [metals, search, filterCat]);
 
-    const handleDelete = async (slug) => {
+    const handleDelete = async (id) => {
         try {
-            await deleteMetal(slug);
-            setMetals(prev => prev.filter(m => m.slug !== slug));
+            await deleteMetal(id);
+            setMetals(prev => prev.filter(m => m.id !== id));
             setConfirmDelete(null);
             toast('Metal deleted successfully', 'success');
         } catch (err) {
@@ -153,7 +153,7 @@ export default function MetalsList() {
                                         </td>
                                         <td>
                                             <div className="table-actions">
-                                                <Link to={`/admin/metals/${metal.slug}`} className="admin-icon-btn" title="Edit Metal">
+                                                <Link to={`/admin/metals/${metal.id}`} className="admin-icon-btn" title="Edit Metal">
                                                     <Edit2 size={16} />
                                                 </Link>
                                                 <button
@@ -202,7 +202,7 @@ export default function MetalsList() {
                                 <button className="admin-btn-secondary" onClick={() => setConfirmDelete(null)}>
                                     Cancel
                                 </button>
-                                <button className="admin-btn-danger" onClick={() => handleDelete(confirmDelete.slug)}>
+                                <button className="admin-btn-danger" onClick={() => handleDelete(confirmDelete.id)}>
                                     Delete
                                 </button>
                             </div>

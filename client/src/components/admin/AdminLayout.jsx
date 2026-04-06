@@ -16,7 +16,6 @@ const navItems = [
     { to: '/admin/faqs', label: 'FAQs', icon: HelpCircle },
     { to: '/admin/faq-categories', label: 'FAQ Categories', icon: FolderOpen },
     { to: '/admin/services', label: 'Services', icon: Wrench },
-    { to: '/admin/hardware', label: 'Hardware', icon: Cpu },
     { to: '/admin/pricing', label: 'Discounts', icon: DollarSign },
     { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
 

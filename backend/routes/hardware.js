@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
     fileFilter: (req, file, cb) => {
         const allowed = /jpeg|jpg|png|webp|svg/;
         const ext = allowed.test(path.extname(file.originalname).toLowerCase());
@@ -94,16 +94,19 @@ router.post('/admin/types/:id/image', authenticate, requireAdmin, upload.single(
 // POST /api/hardware/admin/items — create item
 router.post('/admin/items', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { hardware_type_id, name, size_spec, price, image_path, notes, is_active } = req.body;
+        const { hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter } = req.body;
         if (!hardware_type_id || !name) {
             return res.status(400).json({ success: false, error: 'hardware_type_id and name are required' });
         }
 
         const result = await db.query(
-            `INSERT INTO hardware_items (hardware_type_id, name, size_spec, price, image_path, notes, is_active)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `INSERT INTO hardware_items (hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
-            [hardware_type_id, name, size_spec || null, price || 0, image_path || null, notes || null, is_active !== false]
+            [
+                hardware_type_id, name, size_spec || null, price || 0, notes || null, is_active !== false,
+                parseFloat(length) || null, parseFloat(min_edge_distance) || null, parseFloat(tooling_diameter) || null
+            ]
         );
         res.json({ success: true, data: result.rows[0] });
     } catch (err) {
@@ -118,14 +121,19 @@ router.put('/admin/items/:id', authenticate, requireAdmin, async (req, res) => {
         const itemId = parseInt(req.params.id);
         if (isNaN(itemId)) return res.status(400).json({ success: false, error: 'Invalid item ID' });
 
-        const { name, size_spec, price, image_path, notes, is_active } = req.body;
+        const { name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter } = req.body;
 
         const result = await db.query(
             `UPDATE hardware_items
-             SET name = $1, size_spec = $2, price = $3, image_path = $4, notes = $5, is_active = $6
-             WHERE id = $7
+             SET name = $1, size_spec = $2, price = $3, notes = $4, is_active = $5,
+                 length = $6, min_edge_distance = $7, tooling_diameter = $8
+             WHERE id = $9
              RETURNING *`,
-            [name, size_spec || null, price || 0, image_path || null, notes || null, is_active !== false, itemId]
+            [
+                name, size_spec || null, price || 0, notes || null, is_active !== false,
+                parseFloat(length) || null, parseFloat(min_edge_distance) || null, parseFloat(tooling_diameter) || null,
+                itemId
+            ]
         );
 
         if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Item not found' });

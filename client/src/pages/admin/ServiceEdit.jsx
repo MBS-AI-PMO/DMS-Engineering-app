@@ -1,9 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, Loader2, Wrench, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight } from 'lucide-react';
-import { fetchServices, createService, updateService, uploadServiceImage } from '../../utils/api';
+import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera } from 'lucide-react';
+import {
+    fetchServices, createService, updateService, uploadServiceImage,
+    fetchHardwareTypes, fetchHardwareItemsByType, uploadHardwareTypeImage,
+    createHardwareItem, updateHardwareItem, deleteHardwareItem
+} from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
+import ImageModal from '../../components/admin/ImageModal';
 
 const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
@@ -30,6 +35,24 @@ export default function ServiceEdit() {
     const [editingTapIndex, setEditingTapIndex] = useState(null);
     const [tempTap, setTempTap] = useState({ name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', price: '', notes: '' });
 
+    // ── Hardware Management State ──────────────────────────
+    const [hwTypes, setHwTypes] = useState([]);
+    const [selectedHwType, setSelectedHwType] = useState(null);
+    const [hwItems, setHwItems] = useState([]);
+    const [loadingHw, setLoadingHw] = useState(false);
+    const [editingHwItem, setEditingHwItem] = useState(null);
+    const [hwItemForm, setHwItemForm] = useState({
+        name: '', size_spec: '', price: '', notes: '', is_active: true,
+        length: '', min_edge_distance: '', tooling_diameter: ''
+    });
+    const [savingHwItem, setSavingHwItem] = useState(false);
+    const [hwTypeImgUploading, setHwTypeImgUploading] = useState(false);
+    const [zoomedImage, setZoomedImage] = useState(null);
+    const [confirmDeleteHwItem, setConfirmDeleteHwItem] = useState(null);
+    const hwTypeImgRef = useRef(null);
+
+    const isHardware = service?.title?.toLowerCase()?.includes('hardware');
+
     useEffect(() => {
         const load = async () => {
             setLoading(true);
@@ -46,6 +69,12 @@ export default function ServiceEdit() {
                             service_options: Array.isArray(match.service_options) ? match.service_options : [],
                             pricing_config: match.pricing_config || {}
                         });
+
+                        // If it's Hardware, fetch its types
+                        if (match.title?.toLowerCase()?.includes('hardware')) {
+                            const hwRes = await fetchHardwareTypes();
+                            setHwTypes(hwRes.data || []);
+                        }
                     }
                 }
             } catch (err) {
@@ -56,6 +85,86 @@ export default function ServiceEdit() {
         };
         load();
     }, [id, isNew, toast]);
+
+    const loadHwItems = useCallback(async (typeId) => {
+        setLoadingHw(true);
+        try {
+            const res = await fetchHardwareItemsByType(typeId);
+            setHwItems(res.data || []);
+        } catch (err) {
+            toast('Failed to load hardware items: ' + err.message, 'error');
+        } finally {
+            setLoadingHw(false);
+        }
+    }, [toast]);
+
+    useEffect(() => {
+        if (selectedHwType) {
+            loadHwItems(selectedHwType.id);
+        }
+    }, [selectedHwType, loadHwItems]);
+
+    const handleHwTypeImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !selectedHwType) return;
+        setHwTypeImgUploading(true);
+        try {
+            const res = await uploadHardwareTypeImage(selectedHwType.id, file);
+            const updatedPath = res.data.path;
+            setSelectedHwType(prev => ({ ...prev, image_path: updatedPath }));
+            setHwTypes(prev => prev.map(t => t.id === selectedHwType.id ? { ...t, image_path: updatedPath } : t));
+            toast('Hardware type image updated', 'success');
+        } catch (err) {
+            toast('Upload failed: ' + err.message, 'error');
+        } finally {
+            setHwTypeImgUploading(false);
+            e.target.value = '';
+        }
+    };
+
+
+    const handleSaveHwItem = async () => {
+        if (!hwItemForm.name.trim()) { toast('Name is required', 'error'); return; }
+        setSavingHwItem(true);
+        try {
+            const payload = {
+                hardware_type_id: selectedHwType.id,
+                name: hwItemForm.name.trim(),
+                size_spec: hwItemForm.size_spec.trim() || null,
+                price: parseFloat(hwItemForm.price) || 0,
+                notes: hwItemForm.notes.trim() || null,
+                is_active: hwItemForm.is_active
+            };
+
+            if (editingHwItem === 'new') {
+                await createHardwareItem(payload);
+            } else {
+                await updateHardwareItem(editingHwItem.id, payload);
+            }
+
+            toast(editingHwItem === 'new' ? 'Item added' : 'Item updated', 'success');
+            setEditingHwItem(null);
+            setHwItemForm({ name: '', size_spec: '', price: '', notes: '', is_active: true });
+            loadHwItems(selectedHwType.id);
+        } catch (err) {
+            toast('Failed to save item: ' + err.message, 'error');
+        } finally {
+            setSavingHwItem(false);
+        }
+    };
+
+    const handleDeleteHwItem = async () => {
+        if (!confirmDeleteHwItem) return;
+        try {
+            await deleteHardwareItem(confirmDeleteHwItem.id);
+            setHwItems(prev => prev.filter(i => i.id !== confirmDeleteHwItem.id));
+            toast('Item deleted', 'success');
+        } catch (err) {
+            toast('Delete failed: ' + err.message, 'error');
+        } finally {
+            setConfirmDeleteHwItem(null);
+        }
+    };
 
     const handleSave = async () => {
         if (!service.title) {
@@ -576,6 +685,151 @@ export default function ServiceEdit() {
                                 </div>
                             );
 
+                            if (isHardware) return (
+                                <div className="admin-edit-card hardware-config-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div className="icon-badge" style={{ width: '32px', height: '32px', background: '#eff6ff', color: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Cpu size={18} />
+                                            </div>
+                                            <div>
+                                                <span style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>Hardware Configuration</span>
+                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Manage hardware types and specific items for quote flow.</p>
+                                            </div>
+                                        </div>
+                                        {selectedHwType && (
+                                            <button
+                                                className="admin-btn admin-btn-outline"
+                                                style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                                onClick={() => setSelectedHwType(null)}
+                                            >
+                                                <ChevronLeft size={14} /> Back to Types
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {!selectedHwType ? (
+                                        <div className="hardware-type-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                                            {loading ? (
+                                                [1, 2, 3, 4].map(i => <div key={i} className="skeleton-box" style={{ height: '100px', borderRadius: '12px' }} />)
+                                            ) : hwTypes.length === 0 ? (
+                                                <div className="empty-options-state" style={{ gridColumn: '1 / -1' }}>No hardware types found.</div>
+                                            ) : hwTypes.map(type => (
+                                                <div key={type.id} className="hardware-type-card" style={{ cursor: 'pointer', border: '1.5px solid #f1f5f9' }} onClick={() => setSelectedHwType(type)}>
+                                                    <div className="hardware-type-card-header" style={{ padding: '16px' }}>
+                                                        {type.image_path ? (
+                                                            <img src={type.image_path} alt={type.name} style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <div style={{ width: 48, height: 48, borderRadius: 8, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <Package size={20} color="#94a3b8" />
+                                                            </div>
+                                                        )}
+                                                        <div style={{ flex: 1 }}>
+                                                            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{type.name}</h4>
+                                                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{type.item_count} Items</span>
+                                                        </div>
+                                                        <ChevronRight size={16} color="#cbd5e1" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="hardware-items-container">
+                                            {/* Type Banner */}
+                                            <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 20, padding: '16px 20px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+                                                {selectedHwType.image_path ? (
+                                                    <img
+                                                        src={selectedHwType.image_path}
+                                                        alt={selectedHwType.name}
+                                                        style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, cursor: 'zoom-in', border: '1px solid #e2e8f0' }}
+                                                        onClick={() => setZoomedImage(selectedHwType.image_path)}
+                                                    />
+                                                ) : (
+                                                    <div style={{ width: 64, height: 64, borderRadius: 8, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <Package size={24} color="#94a3b8" />
+                                                    </div>
+                                                )}
+                                                <div style={{ flex: 1 }}>
+                                                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>{selectedHwType.name}</h3>
+                                                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                                        <button
+                                                            className="admin-btn admin-btn-outline"
+                                                            style={{ padding: '4px 10px', fontSize: '0.7rem' }}
+                                                            onClick={() => hwTypeImgRef.current?.click()}
+                                                            disabled={hwTypeImgUploading}
+                                                        >
+                                                            {hwTypeImgUploading ? 'Uploading...' : <><Upload size={12} /> Change Photo</>}
+                                                        </button>
+                                                        <input type="file" ref={hwTypeImgRef} hidden accept="image/*" onChange={handleHwTypeImageUpload} />
+                                                    </div>
+                                                </div>
+                                                <button className="admin-btn admin-btn-primary" onClick={() => setEditingHwItem('new')} style={{ padding: '8px 16px', fontSize: '0.8rem' }}>
+                                                    <Plus size={14} /> Add Item
+                                                </button>
+                                            </div>
+
+                                            {/* Items Table */}
+                                            {loadingHw ? (
+                                                <div style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
+                                            ) : hwItems.length === 0 ? (
+                                                <div className="empty-options-state">No items found for this hardware type.</div>
+                                            ) : (
+                                                <div className="admin-table-wrapper" style={{ boxShadow: 'none', border: '1px solid #f1f5f9' }}>
+                                                    <table className="admin-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Image</th>
+                                                                <th>Name</th>
+                                                                <th>Size Spec</th>
+                                                                <th>Tech Specs</th>
+                                                                <th>Price</th>
+                                                                <th>Status</th>
+                                                                <th style={{ textAlign: 'right' }}>Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {hwItems.map(item => (
+                                                                <tr key={item.id}>
+                                                                    <td>
+                                                                        <img
+                                                                            src={selectedHwType.image_path}
+                                                                            className="table-thumb"
+                                                                            style={{ width: 32, height: 32, cursor: 'zoom-in', borderRadius: 4, objectFit: 'cover' }}
+                                                                            onClick={() => setZoomedImage(selectedHwType.image_path)}
+                                                                        />
+                                                                    </td>
+                                                                    <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.name}</td>
+                                                                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.size_spec || '—'}</td>
+                                                                    <td style={{ fontSize: '0.75rem', color: '#444' }}>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                                            {item.length && <div>L: {item.length}</div>}
+                                                                            {item.min_edge_distance && <div>Edge: {item.min_edge_distance}</div>}
+                                                                            {item.tooling_diameter && <div>Tool: {item.tooling_diameter}</div>}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td style={{ fontSize: '0.85rem' }}>${parseFloat(item.price || 0).toFixed(4)}</td>
+                                                                    <td>
+                                                                        <span className={`hw-badge ${item.is_active ? 'hw-badge-active' : 'hw-badge-inactive'}`} style={{ fontSize: '0.65rem' }}>
+                                                                            {item.is_active ? 'Active' : 'Inactive'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                                                            <button className="admin-icon-btn" onClick={() => { setHwItemForm({ ...item, is_active: item.is_active !== false }); setEditingHwItem(item); }}><Edit2 size={12} /></button>
+                                                                            <button className="admin-icon-btn danger" onClick={() => setConfirmDeleteHwItem(item)}><Trash2 size={12} /></button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+
                             return null;
                         })()}
                     </section>
@@ -619,6 +873,17 @@ export default function ServiceEdit() {
                                         value={service.display_order}
                                         onChange={e => setService(s => ({ ...s, display_order: parseInt(e.target.value) || 0 }))}
                                     />
+                                </div>
+                            </div>
+                        )}
+
+                        {isHardware && !loading && (
+                            <div className="admin-edit-card" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                    <Info size={16} color="#3b82f6" />
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#475569', lineHeight: 1.4 }}>
+                                        <strong>Pro Tip:</strong> Hardware items are managed in the main configuration card. These appear as options for the customer in the quote flow.
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -1157,6 +1422,166 @@ export default function ServiceEdit() {
                     background: white !important;
                 }
             `}</style>
+            <ImageModal src={zoomedImage} onClose={() => setZoomedImage(null)} />
+
+            {/* ── Add / Edit Hardware Item Modal ─────────────────────── */}
+            <AnimatePresence>
+                {editingHwItem !== null && (
+                    <motion.div className="admin-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingHwItem(null)}>
+                        <motion.div className="admin-modal admin-modal-wide" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={e => e.stopPropagation()}>
+                            <div className="admin-modal-header">
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>
+                                    {editingHwItem === 'new' ? `Add Hardware — ${selectedHwType?.name}` : `Edit Hardware: ${editingHwItem.name}`}
+                                </h3>
+                                <button className="admin-icon-btn" onClick={() => setEditingHwItem(null)}><X size={16} /></button>
+                            </div>
+
+                            <div style={{ padding: '24px' }} className="admin-form-grid">
+                                <div className="full-width" style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 16,
+                                    padding: '16px',
+                                    background: '#f8fafc',
+                                    borderRadius: 12,
+                                    border: '1px solid #e2e8f0',
+                                    marginBottom: '8px'
+                                }}>
+                                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                                        <img
+                                            src={selectedHwType?.image_path}
+                                            alt="category"
+                                            style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                                        />
+                                        <div style={{ position: 'absolute', bottom: -4, right: -4, background: 'white', borderRadius: '50%', padding: '2px', border: '1px solid #e2e8f0' }}>
+                                            <Shield size={12} color="#3b82f6" />
+                                        </div>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.025em', fontWeight: 600 }}>Category Image</p>
+                                        <h4 style={{ margin: '2px 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>
+                                            {selectedHwType?.name}
+                                        </h4>
+                                    </div>
+                                    <div style={{
+                                        background: '#eff6ff',
+                                        color: '#2563eb',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 700,
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #bfdbfe',
+                                        textTransform: 'uppercase',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        marginLeft: '12px',
+                                        flexShrink: 0
+                                    }}>
+                                        Shared Image
+                                    </div>
+                                </div>
+
+                                <div className="admin-form-group full-width">
+                                    <label>Name *</label>
+                                    <input value={hwItemForm.name} onChange={e => setHwItemForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. M4 x 10mm Flush Stud" />
+                                </div>
+
+                                <div className="admin-form-group">
+                                    <label>Size / Spec</label>
+                                    <input value={hwItemForm.size_spec} onChange={e => setHwItemForm(p => ({ ...p, size_spec: e.target.value }))} placeholder="e.g. M4, 1/4-20" />
+                                </div>
+
+                                <div className="admin-form-group">
+                                    <label>Price ($)</label>
+                                    <input type="number" step="0.0001" value={hwItemForm.price} onChange={e => setHwItemForm(p => ({ ...p, price: e.target.value }))} placeholder="0.0000" />
+                                </div>
+
+                                <div className="full-width" style={{ marginTop: '4px' }}>
+                                    <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: '12px', display: 'block', letterSpacing: '0.05em' }}>
+                                        Technical Specifications
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                        <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                            <label style={{ fontSize: '0.7rem' }}>Length (in)</label>
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                value={hwItemForm.length || ''}
+                                                onChange={e => setHwItemForm(p => ({ ...p, length: e.target.value }))}
+                                                placeholder=".000"
+                                                style={{ background: 'white' }}
+                                            />
+                                        </div>
+                                        <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                            <label style={{ fontSize: '0.7rem' }}>Min Edge Distance (in)</label>
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                value={hwItemForm.min_edge_distance || ''}
+                                                onChange={e => setHwItemForm(p => ({ ...p, min_edge_distance: e.target.value }))}
+                                                placeholder=".000"
+                                                style={{ background: 'white' }}
+                                            />
+                                        </div>
+                                        <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                            <label style={{ fontSize: '0.7rem' }}>Tooling Diameter (in)</label>
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                value={hwItemForm.tooling_diameter || ''}
+                                                onChange={e => setHwItemForm(p => ({ ...p, tooling_diameter: e.target.value }))}
+                                                placeholder=".000"
+                                                style={{ background: 'white' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="admin-form-group full-width">
+                                    <label>Notes</label>
+                                    <textarea rows={2} value={hwItemForm.notes || ''} onChange={e => setHwItemForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes..." style={{ resize: 'vertical' }} />
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <input type="checkbox" id="hw-active-check" checked={hwItemForm.is_active} onChange={e => setHwItemForm(p => ({ ...p, is_active: e.target.checked }))} />
+                                    <label htmlFor="hw-active-check" style={{ fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem' }}>Active</label>
+                                </div>
+                            </div>
+
+                            <div className="admin-modal-actions">
+                                <button className="admin-btn admin-btn-secondary" onClick={() => setEditingHwItem(null)} disabled={savingHwItem}>Cancel</button>
+                                <button className="admin-btn admin-btn-primary" onClick={handleSaveHwItem} disabled={savingHwItem}>
+                                    {savingHwItem ? 'Saving...' : <><Save size={14} /> Save Item</>}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Delete Hardware Item Confirm ────────────────────────────── */}
+            <AnimatePresence>
+                {confirmDeleteHwItem && (
+                    <motion.div className="admin-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDeleteHwItem(null)}>
+                        <motion.div className="admin-modal" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={e => e.stopPropagation()}>
+                            <div className="admin-modal-header">
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Delete Item</h3>
+                            </div>
+                            <div style={{ padding: '20px 24px' }}>
+                                <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+                                    Are you sure you want to delete <strong>{confirmDeleteHwItem.name}</strong>? This action cannot be undone.
+                                </p>
+                            </div>
+                            <div className="admin-modal-actions">
+                                <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmDeleteHwItem(null)}>Cancel</button>
+                                <button className="admin-btn admin-btn-danger" onClick={handleDeleteHwItem}>Delete Item</button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <ImageModal src={zoomedImage} alt="Hardware Image" onClose={() => setZoomedImage(null)} />
         </div>
     );
 }

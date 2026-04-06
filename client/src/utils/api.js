@@ -100,12 +100,12 @@ export async function createMetal(metalData) {
     return request('/metals/admin', { method: 'POST', body: metalData });
 }
 
-export async function updateMetal(slug, metalData) {
-    return request(`/metals/admin/${slug}`, { method: 'PUT', body: metalData });
+export async function updateMetal(id, metalData) {
+    return request(`/metals/admin/${id}`, { method: 'PUT', body: metalData });
 }
 
-export async function deleteMetal(slug) {
-    return request(`/metals/admin/${slug}`, { method: 'DELETE' });
+export async function deleteMetal(id) {
+    return request(`/metals/admin/${id}`, { method: 'DELETE' });
 }
 
 export async function uploadMetalImage(file) {

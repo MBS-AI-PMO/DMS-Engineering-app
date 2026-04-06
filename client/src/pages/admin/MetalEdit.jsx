@@ -207,9 +207,9 @@ function MetalEditSkeleton() {
 
 // ── Main Component ───────────────────────────────────────
 export default function MetalEdit() {
-    const { slug } = useParams();
+    const { id } = useParams();
     const navigate = useNavigate();
-    const isNew = !slug;
+    const isNew = !id;
     const toast = useToast();
 
     const [metal, setMetal] = useState(emptyMetal);
@@ -228,10 +228,9 @@ export default function MetalEdit() {
         fetchCategories().then(setCategories).catch(err => toast('Failed to load categories: ' + err.message, 'error'));
         fetchServices().then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
         if (!isNew) {
-            fetchMetalBySlug(slug)
+            fetchMetalBySlug(id)
                 .then(data => {
-                    // Migration: extract services from legacy quick_look.thicknesses 
-                    // into the new thickness_specs if not already present.
+                    // ... (migration logic stays the same)
                     const migratedSpecs = { ...(data.thickness_specs || {}) };
                     const thicknesses = data.quick_look?.thicknesses || [];
                     thicknesses.forEach(t => {
@@ -263,7 +262,7 @@ export default function MetalEdit() {
                 .catch(err => toast('Failed to load metal details: ' + err.message, 'error'))
                 .finally(() => setLoading(false));
         }
-    }, [slug, isNew, toast]);
+    }, [id, isNew, toast]);
 
     const set = useCallback((key, value) => setMetal(prev => ({ ...prev, [key]: value })), []);
 
@@ -274,7 +273,7 @@ export default function MetalEdit() {
             if (isNew) {
                 await createMetal(metal);
             } else {
-                await updateMetal(slug, metal);
+                await updateMetal(id, metal);
             }
             toast('Metal saved successfully', 'success');
             navigate('/admin/metals');

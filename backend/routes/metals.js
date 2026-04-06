@@ -36,12 +36,15 @@ router.get('/', async (req, res) => {
 // GET /api/metals/:slug — Get single metal by slug
 router.get('/:slug', async (req, res) => {
     try {
-        const result = await db.query(`
-            SELECT m.*, mc.name as category_name, mc.slug as category_slug
-            FROM metals m
-            LEFT JOIN metal_categories mc ON m.category_id = mc.id
-            WHERE m.slug = $1
-        `, [req.params.slug]);
+        const identifier = req.params.slug;
+        const isId = /^\d+$/.test(identifier);
+        const query = `
+        SELECT m.*, mc.name as category_name, mc.slug as category_slug
+        FROM metals m
+        LEFT JOIN metal_categories mc ON m.category_id = mc.id
+        WHERE ${isId ? 'm.id = $1' : 'm.slug = $1'}
+    `;
+        const result = await db.query(query, [identifier]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Metal not found' });
@@ -56,10 +59,12 @@ router.get('/:slug', async (req, res) => {
 // GET /api/metals/:slug/services — Get hierarchical services for a metal
 router.get('/:slug/services', async (req, res) => {
     try {
+        const identifier = req.params.slug;
+        const isId = /^\d+$/.test(identifier);
         const metalResult = await db.query(`
             SELECT name, services, quick_look
-            FROM metals WHERE slug = $1
-        `, [req.params.slug]);
+            FROM metals WHERE ${isId ? 'id = $1' : 'slug = $1'}
+        `, [identifier]);
 
         if (metalResult.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Metal not found' });
@@ -174,7 +179,7 @@ const metalStorage = multer.diskStorage({
 });
 const metalUpload = multer({
     storage: metalStorage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
     fileFilter: (req, file, cb) => {
         const allowed = /jpeg|jpg|png|webp|avif/;
         const ext = allowed.test(path.extname(file.originalname).toLowerCase());
@@ -203,8 +208,11 @@ router.put('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
             quick_look, services, specifications, thickness_specs,
             about_section, faqs, custom_fields, display_order, pricing_config } = req.body;
 
+        const identifier = req.params.slug;
+        const isId = /^\d+$/.test(identifier);
+
         // Check if exists
-        const existing = await db.query('SELECT id FROM metals WHERE slug = $1', [req.params.slug]);
+        const existing = await db.query(`SELECT id, slug FROM metals WHERE ${isId ? 'id = $1' : 'slug = $1'}`, [identifier]);
         if (existing.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Metal not found' });
         }
@@ -248,7 +256,9 @@ router.put('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
 // DELETE /api/admin/metals/:slug — Delete metal
 router.delete('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
     try {
-        const result = await db.query('DELETE FROM metals WHERE slug = $1 RETURNING id, name', [req.params.slug]);
+        const identifier = req.params.slug;
+        const isId = /^\d+$/.test(identifier);
+        const result = await db.query(`DELETE FROM metals WHERE ${isId ? 'id = $1' : 'slug = $1'} RETURNING id, name`, [identifier]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Metal not found' });
         }

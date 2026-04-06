@@ -64,6 +64,17 @@ app.use('/api/pricing', pricingRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/hardware', hardwareRoutes);
 
+// Global Error Handler for Multer errors
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ success: false, error: 'File too large. Max limit is 25MB.' });
+        }
+        return res.status(400).json({ success: false, error: err.code || err.message });
+    }
+    next(err);
+});
+
 // Setup multer for file uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -557,6 +568,11 @@ app.listen(port, async () => {
         // Ensure all columns exist for world-class persistence
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
+
+        // Hardware Item Specification Migration
+        await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);
+        await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS min_edge_distance NUMERIC(12,4);`);
+        await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS tooling_diameter NUMERIC(12,4);`);
     } catch (err) {
         console.log(`\x1b[41m\x1b[37m Database Connection Failed: ${err.message} \x1b[0m`);
     }
