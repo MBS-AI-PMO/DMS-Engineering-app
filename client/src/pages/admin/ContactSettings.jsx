@@ -59,10 +59,8 @@ export default function ContactSettings() {
         setSettings(prev => ({ ...prev, social_links: newSocials }));
     };
 
-    if (loading) return (
-        <div className="admin-page">
-            <div className="skeleton skeleton-card" style={{ height: 400 }} />
-        </div>
+    const FieldSkeleton = ({ height = 42 }) => (
+        <div className="skeleton-box" style={{ width: '100%', height }} />
     );
 
     return (
@@ -91,30 +89,36 @@ export default function ContactSettings() {
                     <div className="admin-form-grid">
                         <div className="admin-form-group">
                             <label><Phone size={14} /> Phone Number</label>
-                            <input
-                                type="text"
-                                value={settings.footer_contact.phone}
-                                onChange={e => updateContact('phone', e.target.value)}
-                                placeholder="+1 (555) 000-0000"
-                            />
+                            {loading ? <FieldSkeleton /> : (
+                                <input
+                                    type="text"
+                                    value={settings.footer_contact.phone}
+                                    onChange={e => updateContact('phone', e.target.value)}
+                                    placeholder="+1 (555) 000-0000"
+                                />
+                            )}
                         </div>
                         <div className="admin-form-group">
                             <label><Mail size={14} /> Email Address</label>
-                            <input
-                                type="email"
-                                value={settings.footer_contact.email}
-                                onChange={e => updateContact('email', e.target.value)}
-                                placeholder="info@dms-metals.com"
-                            />
+                            {loading ? <FieldSkeleton /> : (
+                                <input
+                                    type="email"
+                                    value={settings.footer_contact.email}
+                                    onChange={e => updateContact('email', e.target.value)}
+                                    placeholder="info@dms-metals.com"
+                                />
+                            )}
                         </div>
                         <div className="admin-form-group full-width">
                             <label><MapPin size={14} /> Physical Address</label>
-                            <input
-                                type="text"
-                                value={settings.footer_contact.address}
-                                onChange={e => updateContact('address', e.target.value)}
-                                placeholder="1234 Metal St, Precision City"
-                            />
+                            {loading ? <FieldSkeleton /> : (
+                                <input
+                                    type="text"
+                                    value={settings.footer_contact.address}
+                                    onChange={e => updateContact('address', e.target.value)}
+                                    placeholder="1234 Metal St, Precision City"
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -125,7 +129,15 @@ export default function ContactSettings() {
                         <h3 className="admin-section-title">Social Media Links</h3>
                     </div>
                     <div className="admin-social-list">
-                        {settings.social_links.map((social, i) => (
+                        {loading ? [1, 2, 3].map(i => (
+                            <div key={i} className="admin-social-row">
+                                <div className="skeleton-box" style={{ width: 40, height: 40, borderRadius: 10 }} />
+                                <div className="admin-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                                    <FieldSkeleton />
+                                </div>
+                                <div className="skeleton-box" style={{ width: 60, height: 40, borderRadius: 8 }} />
+                            </div>
+                        )) : settings.social_links.map((social, i) => (
                             <div key={social.platform} className="admin-social-row">
                                 <div className="admin-social-icon-wrapper">
                                     {social.platform === 'linkedin' && <Linkedin size={20} />}

@@ -6,7 +6,7 @@ import { useToast } from '../../../context/ToastContext';
  * VolumeDiscountModal - A fresh, stable rebuild for managing pricing tiers.
  * Replaces the previous DiscountModal to resolve persistent rendering crashes.
  */
-export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
+export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier, isSaving }) {
     const [quantities, setQuantities] = useState(Array.isArray(tier?.quantities) ? [...tier.quantities] : []);
     const [newQty, setNewQty] = useState('');
     const [percent, setPercent] = useState(tier?.discount_percent || 0);
@@ -65,11 +65,13 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
             discount_percent: parseFloat(percent),
             is_active: isActive
         });
-        onClose();
+        // We do NOT call onClose() here anymore, because handleSaveDiscount in parent will do it OR 
+        // we wait for the parent to finish saving. Actually, standard pattern is to close after success.
+        // The parent currently does NOT close it automatically.
     };
 
     return (
-        <div className="vdm-backdrop" onClick={onClose}>
+        <div className="vdm-backdrop" onClick={isSaving ? null : onClose}>
             <div className="vdm-modal-content" onClick={e => e.stopPropagation()}>
                 {/* Header Section */}
                 <header className="vdm-header">
@@ -82,7 +84,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                             <p>Configure automated price reductions for volume orders.</p>
                         </div>
                     </div>
-                    <button className="vdm-close-btn" onClick={onClose}>
+                    <button className="vdm-close-btn" onClick={onClose} disabled={isSaving}>
                         <X size={20} />
                     </button>
                 </header>
@@ -101,6 +103,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                                     placeholder="0"
                                     min="0"
                                     max="100"
+                                    disabled={isSaving}
                                 />
                                 <span className="vdm-suffix">% OFF</span>
                             </div>
@@ -115,7 +118,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                                 quantities.map(q => (
                                     <div key={q} className="vdm-tag">
                                         <span>{q} Units</span>
-                                        <button onClick={() => handleRemoveQty(q)}><X size={12} /></button>
+                                        <button onClick={() => handleRemoveQty(q)} disabled={isSaving}><X size={12} /></button>
                                     </div>
                                 ))
                             ) : (
@@ -130,8 +133,9 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                                 onChange={e => setNewQty(e.target.value)}
                                 onKeyPress={e => e.key === 'Enter' && handleAddQty()}
                                 placeholder="e.g. 50 or 10-25"
+                                disabled={isSaving}
                             />
-                            <button onClick={handleAddQty} className="vdm-add-inline-btn">
+                            <button onClick={handleAddQty} className="vdm-add-inline-btn" disabled={isSaving}>
                                 <Plus size={16} />
                                 <span>Add Trigger</span>
                             </button>
@@ -148,6 +152,7 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
                         <button
                             className={`vdm-toggle-btn ${isActive ? 'active' : ''}`}
                             onClick={() => setIsActive(!isActive)}
+                            disabled={isSaving}
                         >
                             <div className="vdm-toggle-slider" />
                         </button>
@@ -156,10 +161,14 @@ export default function VolumeDiscountModal({ isOpen, onClose, onSave, tier }) {
 
                 {/* Footer Actions */}
                 <footer className="vdm-footer">
-                    <button className="vdm-btn-secondary" onClick={onClose}>Cancel</button>
-                    <button className="vdm-btn-primary" onClick={handleSave}>
-                        <Check size={18} />
-                        <span>{tier ? 'Update Configuration' : 'Create Configuration'}</span>
+                    <button className="vdm-btn-secondary" onClick={onClose} disabled={isSaving}>Cancel</button>
+                    <button className="vdm-btn-primary" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? (
+                            <div className="animate-spin" style={{ width: 18, height: 18, border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                        ) : (
+                            <Check size={18} />
+                        )}
+                        <span>{isSaving ? 'Processing...' : (tier ? 'Update Configuration' : 'Create Configuration')}</span>
                     </button>
                 </footer>
 

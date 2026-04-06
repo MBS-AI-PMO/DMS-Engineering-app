@@ -9,6 +9,23 @@ import { useToast } from '../../context/ToastContext';
 import PricingSkeleton from '../../components/admin/PricingSkeleton';
 import VolumeDiscountModal from '../../components/admin/modals/VolumeDiscountModal';
 
+const DiscountRowSkeleton = () => (
+    <tr className="premium-tier-row">
+        <td>
+            <div className="skeleton-box" style={{ width: '120px', height: '28px' }} />
+        </td>
+        <td>
+            <div className="skeleton-box" style={{ width: '100px', height: '24px' }} />
+        </td>
+        <td className="actions-cell">
+            <div className="premium-mini-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                <div className="skeleton-box" style={{ width: '38px', height: '38px', borderRadius: '10px' }} />
+                <div className="skeleton-box" style={{ width: '38px', height: '38px', borderRadius: '10px' }} />
+            </div>
+        </td>
+    </tr>
+);
+
 export default function PricingManagement() {
     const toast = useToast();
     const [loading, setLoading] = useState(true);
@@ -54,6 +71,7 @@ export default function PricingManagement() {
         try {
             await saveDiscountTier(data);
             toast('Discount tier saved successfully', 'success');
+            setIsDiscountModalOpen(false); // Close modal on success
             await loadDiscounts();
         } catch (err) {
             toast(`Error: ${err.message}`, 'error');
@@ -118,9 +136,6 @@ export default function PricingManagement() {
         return ranges.join(', ');
     };
 
-    if (loading) {
-        return <PricingSkeleton />;
-    }
 
     return (
         <div className="admin-page pricing-management-page">
@@ -134,119 +149,135 @@ export default function PricingManagement() {
             <div className="pricing-flow-container">
                 {/* PREMIUM GLOBAL DISCOUNTS SECTION */}
                 <div className="admin-card volume-discounts-premium-card mb-12">
-                            <div className="premium-card-header">
-                                <div className="header-info">
-                                    <div className="icon-badge">
-                                        <DollarSign size={22} />
-                                    </div>
-                                    <div>
-                                        <h3>Volume Pricing Tiers</h3>
-                                        <p>Configure global percentage discounts based on order quantity.</p>
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '12px' }}>
-                                    <div className="display-toggle-group" style={{
-                                        background: '#ecf2f8', padding: '4px', borderRadius: '10px',
-                                        display: 'flex', gap: '4px', border: '1px solid #e2e8f0'
-                                    }}>
-                                        <button
-                                            type="button"
-                                            className={`toggle-tab ${discountDisplayMode === 'range' ? 'active' : ''}`}
-                                            onClick={() => setDiscountDisplayMode('range')}
-                                            style={{
-                                                padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                                                background: discountDisplayMode === 'range' ? '#fff' : 'transparent',
-                                                boxShadow: discountDisplayMode === 'range' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                                color: discountDisplayMode === 'range' ? '#3b82f6' : '#64748b', fontWeight: '800',
-                                                transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
-                                            }}
-                                        >Range View</button>
-                                        <button
-                                            type="button"
-                                            className={`toggle-tab ${discountDisplayMode === 'unit' ? 'active' : ''}`}
-                                            onClick={() => setDiscountDisplayMode('unit')}
-                                            style={{
-                                                padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                                                background: discountDisplayMode === 'unit' ? '#fff' : 'transparent',
-                                                boxShadow: discountDisplayMode === 'unit' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                                color: discountDisplayMode === 'unit' ? '#3b82f6' : '#64748b', fontWeight: '800',
-                                                transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
-                                            }}
-                                        >Unit View</button>
-                                    </div>
-                                    <button type="button" className="add-tier-btn" onClick={handleAddDiscount}>
-                                        <span>+ Add New Tier</span>
-                                    </button>
-                                </div>
+                    <div className="premium-card-header">
+                        <div className="header-info">
+                            <div className="icon-badge">
+                                <DollarSign size={22} />
                             </div>
+                            <div>
+                                <h3>Volume Pricing Tiers</h3>
+                                <p>Configure global percentage discounts based on order quantity.</p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <div className="display-toggle-group" style={{
+                                background: '#ecf2f8', padding: '4px', borderRadius: '10px',
+                                display: 'flex', gap: '4px', border: '1px solid #e2e8f0',
+                                opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto'
+                            }}>
+                                <button
+                                    type="button"
+                                    className={`toggle-tab ${discountDisplayMode === 'range' ? 'active' : ''}`}
+                                    onClick={() => setDiscountDisplayMode('range')}
+                                    disabled={loading}
+                                    style={{
+                                        padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                                        background: discountDisplayMode === 'range' ? '#fff' : 'transparent',
+                                        boxShadow: discountDisplayMode === 'range' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                        color: discountDisplayMode === 'range' ? '#3b82f6' : '#64748b', fontWeight: '800',
+                                        transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
+                                    }}
+                                >Range View</button>
+                                <button
+                                    type="button"
+                                    className={`toggle-tab ${discountDisplayMode === 'unit' ? 'active' : ''}`}
+                                    onClick={() => setDiscountDisplayMode('unit')}
+                                    disabled={loading}
+                                    style={{
+                                        padding: '6px 14px', fontSize: '11px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                                        background: discountDisplayMode === 'unit' ? '#fff' : 'transparent',
+                                        boxShadow: discountDisplayMode === 'unit' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                        color: discountDisplayMode === 'unit' ? '#3b82f6' : '#64748b', fontWeight: '800',
+                                        transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.02em'
+                                    }}
+                                >Unit View</button>
+                            </div>
+                            <button type="button" className="add-tier-btn" onClick={handleAddDiscount} disabled={loading} style={{ opacity: loading ? 0.6 : 1 }}>
+                                <span>+ Add New Tier</span>
+                            </button>
+                        </div>
+                    </div>
 
-                            <div className="premium-discounts-content">
-                                {loadingDiscounts ? (
-                                    <div className="mini-loader"><Loader2 className="animate-spin" size={24} /></div>
-                                ) : discounts.length === 0 ? (
-                                    <div className="premium-empty-state">
-                                        <Info size={32} />
-                                        <p>No volume discounts configured yet. Build your first tier to reward bulk orders.</p>
-                                    </div>
-                                ) : (
-                                    <div className="premium-table-container">
-                                        <table className="premium-discounts-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Quantity Triggers</th>
-                                                    <th>Discount Applied</th>
-                                                    <th className="actions-cell">Management</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {discounts.map((d, idx) => (
-                                                    <tr key={d.id || `new-${idx}`} className="premium-tier-row">
-                                                        <td>
-                                                            <div className="premium-qty-list-display">
-                                                                {discountDisplayMode === 'range' ? (
-                                                                    <span className="trigger-badge" style={{ background: '#f8fafc', color: '#1e293b', padding: '6px 12px', border: '1.5px solid #e2e8f0' }}>
-                                                                        {getRangeString(d.quantities, discounts)} Units
-                                                                    </span>
-                                                                ) : (
-                                                                    d.quantities?.map(q => (
-                                                                        <span key={q} className="trigger-badge">{q} Units</span>
-                                                                    ))
-                                                                )}
-                                                                {!d.is_active && <span className="inactive-badge">Inactive</span>}
-                                                            </div>
-                                                        </td>
-                                                        <td>
-                                                            <div className="discount-value-display">
-                                                                <span className="premium-discount-badge-v2">{d.discount_percent}% OFF</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="actions-cell">
-                                                            <div className="premium-mini-actions">
-                                                                <button
-                                                                    type="button"
-                                                                    className="premium-action-btn edit"
-                                                                    onClick={() => handleEditDiscount(d)}
-                                                                    title="Edit Tier"
-                                                                >
-                                                                    <ChevronRight size={16} />
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="premium-action-btn delete"
-                                                                    onClick={(e) => handleDeleteDiscount(e, d.id, idx)}
-                                                                    title="Remove Tier"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                    <div className="premium-discounts-content">
+                        {(loadingDiscounts || loading) ? (
+                            <div className="premium-table-container">
+                                <table className="premium-discounts-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Quantity Triggers</th>
+                                            <th>Discount Applied</th>
+                                            <th className="actions-cell">Management</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {[1, 2, 3, 4, 5].map(i => <DiscountRowSkeleton key={i} />)}
+                                    </tbody>
+                                </table>
                             </div>
+                        ) : discounts.length === 0 ? (
+                            <div className="premium-empty-state">
+                                <Info size={32} />
+                                <p>No volume discounts configured yet. Build your first tier to reward bulk orders.</p>
+                            </div>
+                        ) : (
+                            <div className="premium-table-container">
+                                <table className="premium-discounts-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Quantity Triggers</th>
+                                            <th>Discount Applied</th>
+                                            <th className="actions-cell">Management</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {discounts.map((d, idx) => (
+                                            <tr key={d.id || `new-${idx}`} className="premium-tier-row">
+                                                <td>
+                                                    <div className="premium-qty-list-display">
+                                                        {discountDisplayMode === 'range' ? (
+                                                            <span className="trigger-badge" style={{ background: '#f8fafc', color: '#1e293b', padding: '6px 12px', border: '1.5px solid #e2e8f0' }}>
+                                                                {getRangeString(d.quantities, discounts)} Units
+                                                            </span>
+                                                        ) : (
+                                                            d.quantities?.map(q => (
+                                                                <span key={q} className="trigger-badge">{q} Units</span>
+                                                            ))
+                                                        )}
+                                                        {!d.is_active && <span className="inactive-badge">Inactive</span>}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="discount-value-display">
+                                                        <span className="premium-discount-badge-v2">{d.discount_percent}% OFF</span>
+                                                    </div>
+                                                </td>
+                                                <td className="actions-cell">
+                                                    <div className="premium-mini-actions">
+                                                        <button
+                                                            type="button"
+                                                            className="premium-action-btn edit"
+                                                            onClick={() => handleEditDiscount(d)}
+                                                            title="Edit Tier"
+                                                        >
+                                                            <ChevronRight size={16} />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="premium-action-btn delete"
+                                                            onClick={(e) => handleDeleteDiscount(e, d.id, idx)}
+                                                            title="Remove Tier"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
             <VolumeDiscountModal
@@ -255,6 +286,7 @@ export default function PricingManagement() {
                 onClose={() => setIsDiscountModalOpen(false)}
                 onSave={handleSaveDiscount}
                 tier={selectedDiscountTier}
+                isSaving={saving}
             />
 
             <style>{`

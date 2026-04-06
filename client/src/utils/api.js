@@ -209,6 +209,40 @@ export async function uploadServiceImage(file) {
     });
 }
 
+// ── Hardware Insertion ──────────────────────────────────
+
+export async function fetchHardwareTypes() {
+    return request('/hardware/types');
+}
+
+export async function fetchHardwareItemsByType(typeId) {
+    return request(`/hardware/types/${typeId}/items`);
+}
+
+export async function uploadHardwareTypeImage(typeId, file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    return request(`/hardware/admin/types/${typeId}/image`, { method: 'POST', body: formData, headers: {} });
+}
+
+export async function createHardwareItem(data) {
+    return request('/hardware/admin/items', { method: 'POST', body: data });
+}
+
+export async function updateHardwareItem(id, data) {
+    return request(`/hardware/admin/items/${id}`, { method: 'PUT', body: data });
+}
+
+export async function deleteHardwareItem(id) {
+    return request(`/hardware/admin/items/${id}`, { method: 'DELETE' });
+}
+
+export async function uploadHardwareItemImage(itemId, file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    return request(`/hardware/admin/items/${itemId}/image`, { method: 'POST', body: formData, headers: {} });
+}
+
 // ── User Registration & Profile ─────────────────────────
 
 export async function registerUser(data) {

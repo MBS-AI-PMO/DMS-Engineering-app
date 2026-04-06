@@ -24,6 +24,7 @@ const guidelinesRoutes = require('./routes/guidelines');
 const configurationsRoutes = require('./routes/configurations');
 const pricingRoutes = require('./routes/pricing');
 const orderRoutes = require('./routes/orders');
+const hardwareRoutes = require('./routes/hardware');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -61,6 +62,7 @@ app.use('/api/guidelines', guidelinesRoutes);
 app.use('/api/configurations', configurationsRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/hardware', hardwareRoutes);
 
 // Setup multer for file uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');

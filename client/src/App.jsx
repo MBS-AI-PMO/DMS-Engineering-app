@@ -37,6 +37,8 @@ import GuidelineEdit from './pages/admin/GuidelineEdit';
 import ServiceMetalsConfig from './pages/admin/ServiceMetalsConfig';
 import Customers from './pages/admin/Customers';
 import PricingManagement from './pages/admin/PricingManagement';
+import HardwareList from './pages/admin/HardwareList';
+import HardwareEdit from './pages/admin/HardwareEdit';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -129,6 +131,12 @@ function App() {
                 } />
                 <Route path="/admin/services/:id/metals" element={
                   <ProtectedRoute><AdminLayout><ServiceMetalsConfig /></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/hardware" element={
+                  <ProtectedRoute><AdminLayout><HardwareList /></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/hardware/:id" element={
+                  <ProtectedRoute><AdminLayout><HardwareEdit /></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/admins" element={
                   <ProtectedRoute><AdminLayout><AdminsList /></AdminLayout></ProtectedRoute>

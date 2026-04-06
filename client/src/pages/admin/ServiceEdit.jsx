@@ -137,13 +137,12 @@ export default function ServiceEdit() {
         setIsTapModalOpen(false);
     };
 
-    if (loading) return (
-        <div className="admin-loading-full">
-            <Loader2 className="animate-spin" size={48} />
-            <p>Loading service details...</p>
+    const CardSkeleton = ({ height = 200, title = '' }) => (
+        <div className="admin-edit-card">
+            {title && <div className="skeleton-box" style={{ width: '150px', height: '24px', marginBottom: '20px' }} />}
+            <div className="skeleton-box" style={{ width: '100%', height }} />
         </div>
     );
-
 
     return (
         <div className="admin-edit-page">
@@ -166,127 +165,131 @@ export default function ServiceEdit() {
 
                 <div className="admin-edit-grid">
                     <section className="admin-edit-main">
-                        <div className="admin-edit-card">
-                            <h3>General Information</h3>
-                            <div className="admin-form-group">
-                                <label>Title</label>
-                                <input
-                                    type="text"
-                                    value={service.title}
-                                    onChange={e => setService(s => ({ ...s, title: e.target.value }))}
-                                    placeholder="e.g., CNC Machining"
-                                />
-                            </div>
-                            <div className="admin-form-group">
-                                <label>Description</label>
-                                <textarea
-                                    rows={4}
-                                    value={service.description}
-                                    onChange={e => setService(s => ({ ...s, description: e.target.value }))}
-                                    placeholder="Enter service details..."
-                                />
-                            </div>
-                            <div className="admin-form-group">
-                                <label>Base Price ($)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={service.base_price}
-                                    onChange={e => setService(s => ({ ...s, base_price: parseFloat(e.target.value) || 0 }))}
-                                    placeholder="0.00"
-                                />
-                                <p className="admin-card-tip" style={{ marginTop: '8px', marginBottom: 0 }}>Global price applied to this service (e.g., per part for Anodizing).</p>
-                            </div>
-                        </div>
-
-                        <div className="admin-edit-card">
-                            <div className="admin-hierarchy-header" style={{ marginBottom: '16px' }}>
-                                <Shield size={16} />
-                                <span>Hierarchy & Relationships</span>
-                            </div>
-
-                            <div className="admin-form-group-inline">
-                                <div className="toggle-switch-group" onClick={() => setService(s => ({ ...s, is_production: !s.is_production, parent_ids: !s.is_production ? [] : s.parent_ids }))}>
-                                    <div className={`toggle-switch ${service.is_production ? 'active' : ''}`}>
-                                        <div className="toggle-handle" />
-                                    </div>
-                                    <span>Is Main Production Service</span>
+                        {loading ? <CardSkeleton title="General Information" height={360} /> : (
+                            <div className="admin-edit-card">
+                                <h3>General Information</h3>
+                                <div className="admin-form-group">
+                                    <label>Title</label>
+                                    <input
+                                        type="text"
+                                        value={service.title}
+                                        onChange={e => setService(s => ({ ...s, title: e.target.value }))}
+                                        placeholder="e.g., CNC Machining"
+                                    />
+                                </div>
+                                <div className="admin-form-group">
+                                    <label>Description</label>
+                                    <textarea
+                                        rows={4}
+                                        value={service.description}
+                                        onChange={e => setService(s => ({ ...s, description: e.target.value }))}
+                                        placeholder="Enter service details..."
+                                    />
+                                </div>
+                                <div className="admin-form-group">
+                                    <label>Base Price ($)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={service.base_price}
+                                        onChange={e => setService(s => ({ ...s, base_price: parseFloat(e.target.value) || 0 }))}
+                                        placeholder="0.00"
+                                    />
+                                    <p className="admin-card-tip" style={{ marginTop: '8px', marginBottom: 0 }}>Global price applied to this service (e.g., per part for Anodizing).</p>
                                 </div>
                             </div>
+                        )}
 
-                            <AnimatePresence>
-                                {!service.is_production && (
-                                    <motion.div
-                                        className="admin-form-group"
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        style={{ marginTop: '16px' }}
-                                    >
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                            <CornerDownRight size={14} />
-                                            <span>Parent Services (Select Multiple)</span>
-                                        </label>
-                                        <p className="admin-card-tip" style={{ marginBottom: '12px' }}>
-                                            Linking a parent service makes this a sub-process (e.g. Bending for Laser Cutting).
-                                            <strong> Note:</strong> You must also assign this service to specific <strong>Metals & Thicknesses</strong> using the "Configure Metals" button in the services list for it to appear in the quote flow.
-                                        </p>
+                        {loading ? <CardSkeleton title="Hierarchy & Relationships" height={150} /> : (
+                            <div className="admin-edit-card">
+                                <div className="admin-hierarchy-header" style={{ marginBottom: '16px' }}>
+                                    <Shield size={16} />
+                                    <span>Hierarchy & Relationships</span>
+                                </div>
 
-                                        <div className="parent-selection-grid" style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                                            gap: '12px',
-                                            padding: '16px',
-                                            background: '#f8fafc',
-                                            borderRadius: '12px',
-                                            border: '1.5px solid #e2e8f0'
-                                        }}>
-                                            {allServices
-                                                .filter(s => s.id !== parseInt(id) && s.is_production)
-                                                .map(s => (
-                                                    <div key={s.id} className="parent-checkbox-item" style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '10px',
-                                                        cursor: 'pointer',
-                                                        padding: '4px'
-                                                    }} onClick={() => {
-                                                        const pids = [...(service.parent_ids || [])];
-                                                        const numericSId = Number(s.id);
-                                                        const idx = pids.findIndex(pid => Number(pid) === numericSId);
-                                                        if (idx >= 0) pids.splice(idx, 1);
-                                                        else pids.push(numericSId);
-                                                        setService(prev => ({ ...prev, parent_ids: pids }));
-                                                    }}>
-                                                        <div style={{
-                                                            width: '20px',
-                                                            height: '20px',
-                                                            borderRadius: '6px',
-                                                            border: '2px solid',
-                                                            borderColor: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : '#cbd5e1',
-                                                            background: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : 'transparent',
+                                <div className="admin-form-group-inline">
+                                    <div className="toggle-switch-group" onClick={() => setService(s => ({ ...s, is_production: !s.is_production, parent_ids: !s.is_production ? [] : s.parent_ids }))}>
+                                        <div className={`toggle-switch ${service.is_production ? 'active' : ''}`}>
+                                            <div className="toggle-handle" />
+                                        </div>
+                                        <span>Is Main Production Service</span>
+                                    </div>
+                                </div>
+
+                                <AnimatePresence>
+                                    {!service.is_production && (
+                                        <motion.div
+                                            className="admin-form-group"
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            style={{ marginTop: '16px' }}
+                                        >
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                                <CornerDownRight size={14} />
+                                                <span>Parent Services (Select Multiple)</span>
+                                            </label>
+                                            <p className="admin-card-tip" style={{ marginBottom: '12px' }}>
+                                                Linking a parent service makes this a sub-process (e.g. Bending for Laser Cutting).
+                                                <strong> Note:</strong> You must also assign this service to specific <strong>Metals & Thicknesses</strong> using the "Configure Metals" button in the services list for it to appear in the quote flow.
+                                            </p>
+
+                                            <div className="parent-selection-grid" style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                                gap: '12px',
+                                                padding: '16px',
+                                                background: '#f8fafc',
+                                                borderRadius: '12px',
+                                                border: '1.5px solid #e2e8f0'
+                                            }}>
+                                                {allServices
+                                                    .filter(s => s.id !== parseInt(id) && s.is_production)
+                                                    .map(s => (
+                                                        <div key={s.id} className="parent-checkbox-item" style={{
                                                             display: 'flex',
                                                             alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            color: 'white',
-                                                            transition: 'all 0.2s'
+                                                            gap: '10px',
+                                                            cursor: 'pointer',
+                                                            padding: '4px'
+                                                        }} onClick={() => {
+                                                            const pids = [...(service.parent_ids || [])];
+                                                            const numericSId = Number(s.id);
+                                                            const idx = pids.findIndex(pid => Number(pid) === numericSId);
+                                                            if (idx >= 0) pids.splice(idx, 1);
+                                                            else pids.push(numericSId);
+                                                            setService(prev => ({ ...prev, parent_ids: pids }));
                                                         }}>
-                                                            {(service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) && <Check size={14} />}
+                                                            <div style={{
+                                                                width: '20px',
+                                                                height: '20px',
+                                                                borderRadius: '6px',
+                                                                border: '2px solid',
+                                                                borderColor: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : '#cbd5e1',
+                                                                background: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#8b5cf6' : 'transparent',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                color: 'white',
+                                                                transition: 'all 0.2s'
+                                                            }}>
+                                                                {(service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) && <Check size={14} />}
+                                                            </div>
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#1e293b' : '#64748b' }}>
+                                                                {s.title}
+                                                            </span>
                                                         </div>
-                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: (service.parent_ids || []).some(pid => Number(pid) === Number(s.id)) ? '#1e293b' : '#64748b' }}>
-                                                            {s.title}
-                                                        </span>
-                                                    </div>
-                                                ))
-                                            }
-                                            {allServices.filter(s => s.id !== parseInt(id) && s.is_production).length === 0 && (
-                                                <div className="text-muted small">No production services available to be parents.</div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                                                    ))
+                                                }
+                                                {allServices.filter(s => s.id !== parseInt(id) && s.is_production).length === 0 && (
+                                                    <div className="text-muted small">No production services available to be parents.</div>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        )}
 
                         <AnimatePresence>
                             {service.is_production && (
@@ -578,43 +581,47 @@ export default function ServiceEdit() {
                     </section>
 
                     <aside className="admin-edit-sidebar">
-                        <div className="admin-edit-card image-upload-card">
-                            <h3>Service Image</h3>
-                            <div className="admin-image-preview-large">
-                                {service.image_path ? (
-                                    <img src={service.image_path} alt="Preview" loading="lazy" decoding="async" />
-                                ) : (
-                                    <div className="image-placeholder">No Image</div>
-                                )}
+                        {loading ? <CardSkeleton title="Service Image" height={280} /> : (
+                            <div className="admin-edit-card image-upload-card">
+                                <h3>Service Image</h3>
+                                <div className="admin-image-preview-large">
+                                    {service.image_path ? (
+                                        <img src={service.image_path} alt="Preview" loading="lazy" decoding="async" />
+                                    ) : (
+                                        <div className="image-placeholder">No Image</div>
+                                    )}
+                                </div>
+                                <div className="admin-form-group">
+                                    <label>Image Path</label>
+                                    <input
+                                        type="text"
+                                        value={service.image_path}
+                                        onChange={e => setService(s => ({ ...s, image_path: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="upload-btn-container">
+                                    <label className="admin-btn admin-btn-outline upload-btn">
+                                        {uploading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
+                                        Upload New Image
+                                        <input type="file" onChange={handleImageUpload} hidden accept="image/*" />
+                                    </label>
+                                </div>
                             </div>
-                            <div className="admin-form-group">
-                                <label>Image Path</label>
-                                <input
-                                    type="text"
-                                    value={service.image_path}
-                                    onChange={e => setService(s => ({ ...s, image_path: e.target.value }))}
-                                />
-                            </div>
-                            <div className="upload-btn-container">
-                                <label className="admin-btn admin-btn-outline upload-btn">
-                                    {uploading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                                    Upload New Image
-                                    <input type="file" onChange={handleImageUpload} hidden accept="image/*" />
-                                </label>
-                            </div>
-                        </div>
+                        )}
 
-                        <div className="admin-edit-card">
-                            <h3>Metadata</h3>
-                            <div className="admin-form-group">
-                                <label>Display Order</label>
-                                <input
-                                    type="number"
-                                    value={service.display_order}
-                                    onChange={e => setService(s => ({ ...s, display_order: parseInt(e.target.value) || 0 }))}
-                                />
+                        {loading ? <CardSkeleton title="Metadata" height={100} /> : (
+                            <div className="admin-edit-card">
+                                <h3>Metadata</h3>
+                                <div className="admin-form-group">
+                                    <label>Display Order</label>
+                                    <input
+                                        type="number"
+                                        value={service.display_order}
+                                        onChange={e => setService(s => ({ ...s, display_order: parseInt(e.target.value) || 0 }))}
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </aside>
                 </div>
             </main>
