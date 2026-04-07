@@ -11,21 +11,19 @@ const UNITS = [
 const FIELDS = [
     { key: 'width', label: 'Width' },
     { key: 'length', label: 'Length' },
-    { key: 'thickness', label: 'Thickness' },
     { key: 'cost', label: 'Sheet Cost', unit: '$' },
     { key: 'markup', label: 'Markup', unit: '%' },
 ];
 
 const ROWS = [
     { label: 'Per sq %U%', rawKey: 'perSqIn', muKey: 'perSqInMu', dec: 4 },
-    { label: 'Per cubic %U%', rawKey: 'perCuIn', muKey: 'perCuInMu', dec: 5 },
     { label: 'Per %U% of width', rawKey: 'perInWidth', muKey: 'perInWidthMu', dec: 4 },
     { label: 'Per %U% of length', rawKey: 'perInLength', muKey: 'perInLengthMu', dec: 4 },
-    { label: 'Per %U% of thickness', rawKey: 'perInThick', muKey: 'perInThickMu', dec: 4 },
+    { label: 'Total Cost', rawKey: 'total', muKey: 'totalMu', dec: 2 },
 ];
 
 export default function PricingCalculator() {
-    const [calc, setCalc] = useState({ width: '', length: '', thickness: '', cost: '', markup: '' });
+    const [calc, setCalc] = useState({ width: '', length: '', cost: '', markup: '' });
     const [unit, setUnit] = useState('inch');
 
     // Unit conversion factors relative to Inch
@@ -41,24 +39,22 @@ export default function PricingCalculator() {
             ...prev,
             width: prev.width ? (parseFloat(prev.width) * ratio).toFixed(3) : '',
             length: prev.length ? (parseFloat(prev.length) * ratio).toFixed(3) : '',
-            thickness: prev.thickness ? (parseFloat(prev.thickness) * ratio).toFixed(3) : '',
         }));
         setUnit(newUnit);
     };
 
     const results = useMemo(() => {
         const w = parseFloat(calc.width), l = parseFloat(calc.length);
-        const t = parseFloat(calc.thickness), c = parseFloat(calc.cost);
+        const c = parseFloat(calc.cost);
         const m = parseFloat(calc.markup) || 0;
-        if (!w || !l || !t || !c || w <= 0 || l <= 0 || t <= 0 || c <= 0) return null;
+        if (!w || !l || !c || w <= 0 || l <= 0 || c <= 0) return null;
 
-        const area = w * l, volume = w * l * t, mul = 1 + m / 100;
+        const area = w * l, mul = 1 + m / 100;
         return {
             perSqIn: c / area, perSqInMu: (c / area) * mul,
-            perCuIn: c / volume, perCuInMu: (c / volume) * mul,
             perInWidth: c / w, perInWidthMu: (c / w) * mul,
             perInLength: c / l, perInLengthMu: (c / l) * mul,
-            perInThick: c / t, perInThickMu: (c / t) * mul,
+            total: c, totalMu: c * mul,
         };
     }, [calc]);
 

@@ -172,12 +172,14 @@ export default function ServicesList() {
                                 const indent = svc.depth || 0;
                                 return (
                                     <tr key={svc.id}>
-                                        <td style={{ paddingLeft: `${20 + indent * 24}px` }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {indent > 0 && <span style={{ color: '#cbd5e1' }}>└</span>}
-                                                <strong>{svc.title}</strong>
+                                        <td style={{ paddingLeft: `${12 + indent * 10}px` }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    {indent > 0 && <span style={{ color: '#cbd5e1', fontSize: '10px' }}>└</span>}
+                                                    <strong style={{ fontSize: '14px', lineHeight: '1.2' }}>{svc.title}</strong>
+                                                </div>
                                                 {svc.is_production && svc.pricing_config?.base_setup !== undefined && (
-                                                    <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 2 }}>
+                                                    <span style={{ fontSize: 9, color: '#64748b', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                         Base: ${svc.pricing_config.base_setup}
                                                         {svc.pricing_config.price_per_length ? ` + ${svc.pricing_config.price_per_length}/in(L)` : ''}
                                                         {svc.pricing_config.price_per_width ? ` + ${svc.pricing_config.price_per_width}/in(W)` : ''}
@@ -192,11 +194,11 @@ export default function ServicesList() {
                                             ) : (svc.parent_ids && svc.parent_ids.length > 0) ? (
                                                 <span className="badge-sub">Sub</span>
                                             ) : (
-                                                <span className="table-cell-muted">Standard</span>
+                                                <span className="table-cell-muted hide-on-mobile">Standard</span>
                                             )}
                                         </td>
-                                        <td className="table-cell-muted">{svc.description?.substring(0, 40)}{svc.description?.length > 40 ? '...' : ''}</td>
-                                        <td>
+                                        <td className="hide-on-mobile">{svc.description?.substring(0, 40)}{svc.description?.length > 40 ? '...' : ''}</td>
+                                        <td className="hide-on-mobile">
                                             {svc.image_path ? (
                                                 <img
                                                     src={svc.image_path}
@@ -208,7 +210,7 @@ export default function ServicesList() {
                                                 <span className="table-cell-muted">—</span>
                                             )}
                                         </td>
-                                        <td>
+                                        <td className="hide-on-mobile">
                                             <span style={{
                                                 background: parseInt(svc.metal_count) > 0 ? '#ecfdf5' : '#f3f4f6',
                                                 color: parseInt(svc.metal_count) > 0 ? '#065f46' : '#6b7280',
@@ -220,7 +222,7 @@ export default function ServicesList() {
                                                 {svc.metal_count != null ? svc.metal_count : '—'}
                                             </span>
                                         </td>
-                                        <td>{svc.display_order}</td>
+                                        <td className="hide-on-mobile">{svc.display_order}</td>
                                         <td>
                                             <div className="table-actions">
                                                 <button

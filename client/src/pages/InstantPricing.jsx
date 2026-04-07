@@ -69,8 +69,12 @@ const InstantPricing = () => {
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedThickness, setSelectedThickness] = useState(null);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
-  const [selectedAnodizingColor, setSelectedAnodizingColor] = useState(null);
+  const [selectedFinishColors, setSelectedFinishColors] = useState({});
+  const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
   const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
+  const activeFinishKey = Object.keys(selectedFinishColors || {})[0];
+  const activeFinishColor = selectedFinishColors?.[activeFinishKey] || null;
+  const isFinishPowderCoating = selectedAdditionalServices.find(s => s.id?.toString() === activeFinishKey?.toString())?.title?.toLowerCase().includes('powder coat');
   const [selectedTaps, setSelectedTaps] = useState({});
   const [activeTapHole, setActiveTapHole] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -99,6 +103,59 @@ const InstantPricing = () => {
   const modelRef = useRef(null);
   const pendingAxisRef = useRef(null);
   const modelOriginalDataRef = useRef(null);
+  const wrinkleTexture = useRef(null);
+
+  // ── Procedural textures for 'Wrinkled' finish & cellular grain ─────────
+  const wrinkleNormal = useRef(null);
+  useEffect(() => {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Generate Cellular (Voronoi) Height Map
+    const points = Array.from({ length: 1800 }, () => ({ x: Math.random() * size, y: Math.random() * size }));
+    const heights = new Float32Array(size * size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let minDist = size;
+        for (let p of points) {
+          const dx = x - p.x, dy = y - p.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < minDist) minDist = d;
+        }
+        heights[y * size + x] = Math.min(1.0, minDist / 20.0);
+      }
+    }
+
+    // Convert Cellular Map to Normal Map
+    const imgData = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = (y * size + x) * 4;
+        const hL = heights[y * size + (x - 1 + size) % size];
+        const hR = heights[y * size + (x + 1) % size];
+        const hU = heights[((y - 1 + size) % size) * size + x];
+        const hD = heights[((y + 1) % size) * size + x];
+
+        const nx = (hL - hR) * 1.5;
+        const ny = (hU - hD) * 1.5;
+        const nz = 0.6;
+
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        imgData.data[idx] = ((nx / len) * 0.5 + 0.5) * 255;
+        imgData.data[idx + 1] = ((ny / len) * 0.5 + 0.5) * 255;
+        imgData.data[idx + 2] = ((nz / len) * 0.5 + 0.5) * 255;
+        imgData.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(35, 35);
+    wrinkleNormal.current = tex;
+    wrinkleTexture.current = tex;
+  }, []);
 
   const holeGroups = useMemo(() => {
     const groups = {};
@@ -120,7 +177,7 @@ const InstantPricing = () => {
 
     // priceEstimate.total_price already includes anodizing (sent via additional_services to API)
     // so only taps and hardware need to be added separately (they are not included in the backend total)
-    const tapCost      = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
+    const tapCost = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
     const hardwareCost = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
     const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost;
 
@@ -131,7 +188,7 @@ const InstantPricing = () => {
       metal: selectedMetal,
       thickness: dimensions.mm.t,
       selectedThickness: selectedThickness, // Store string value for Laser établissements
-      anodizingColor: selectedAnodizingColor,
+      anodizingColor: activeFinishColor,
       selectedTaps,
       selectedHardware,
       additionalServices: selectedAdditionalServices,
@@ -165,7 +222,7 @@ const InstantPricing = () => {
   useEffect(() => {
     const hwSvc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('hardware'));
     if (hwSvc && hwItems.length === 0) {
-      fetchHardwareItemsByType(3).then(items => setHwItems(items || [])).catch(() => {});
+      fetchHardwareItemsByType(3).then(items => setHwItems(items || [])).catch(() => { });
     }
   }, [selectedAdditionalServices]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -233,7 +290,8 @@ const InstantPricing = () => {
     setSelectedMetal(null);
     setQuantity(1);
     setSelectedAdditionalServices([]);
-    setSelectedAnodizingColor(null);
+    setSelectedFinishColors({});
+    setActiveFinishSvcId(null);
     setDetectedHoles([]);
     setIsDetectingHoles(false);
     setSelectedThickness(null);
@@ -295,7 +353,10 @@ const InstantPricing = () => {
           length_in: dimensions.inches.l,
           height_in: dimensions.inches.w,
           quantity: quantity,
-          additional_services: selectedAdditionalServices.map(s => s.id),
+          additional_services: selectedAdditionalServices.map(s => {
+            const opt = selectedFinishColors[s.id];
+            return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
+          }),
           taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price }))
         };
         const res = await calculatePrice(payload);
@@ -318,7 +379,7 @@ const InstantPricing = () => {
 
     const timeoutId = setTimeout(getEstimate, 500); // Debounce
     return () => clearTimeout(timeoutId);
-  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, dimensions, quantity, toast, isCNC]);
+  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedFinishColors, dimensions, quantity, toast, isCNC]);
 
 
   // ── Dimension Validation Helper ────────────────────────
@@ -538,11 +599,21 @@ const InstantPricing = () => {
           }
         }
         metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
+
+        const applyGloss = !!(activeFinishColor && isFinishPowderCoating);
+        const isWrinkled = !!(activeFinishColor?.is_wrinkled || activeFinishColor?.name?.toUpperCase().includes('WRINKLED'));
+
         const extrudeMat = new THREE.MeshStandardMaterial({
-          color: selectedAnodizingColor ? new THREE.Color(selectedAnodizingColor.color) : 0xcecece,
-          roughness: 0.4,
-          metalness: 0.7
+          color: activeFinishColor ? new THREE.Color(activeFinishColor.color) : 0xcecece,
+          roughness: applyGloss ? (isWrinkled ? 0.68 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6,
+          metalness: isWrinkled ? 0.15 : 0.05,
+          emissive: (activeFinishColor && !isFinishPowderCoating) ? new THREE.Color(activeFinishColor.color) : 0x000000,
+          emissiveIntensity: (activeFinishColor && !isFinishPowderCoating) ? 0.15 : 0,
+          normalMap: isWrinkled ? wrinkleNormal.current : null,
+          normalScale: isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0),
+          bumpScale: isWrinkled ? 2.5 : 0
         });
+        extrudeMat.needsUpdate = true;
 
         metaShapes.forEach(m => { if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat)); else m.parent.shape.holes.push(m.shape); });
 
@@ -556,8 +627,10 @@ const InstantPricing = () => {
         camera.lookAt(0, 0, 0);
         controls.update();
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-        scene.add(new THREE.DirectionalLight(0xffffff, 1.0));
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
+        const dl = new THREE.DirectionalLight(0xffffff, 0.7);
+        dl.position.set(100, 200, 100);
+        scene.add(dl);
 
         const animate = () => { reqId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
         animate();
@@ -565,7 +638,7 @@ const InstantPricing = () => {
     };
     initViewer();
     return () => { cancelAnimationFrame(reqId); controls?.dispose(); renderer?.dispose(); if (currentRef) currentRef.innerHTML = ''; };
-  }, [selectedFile, viewMode, dxfSvg, selectedAnodizingColor, selectedThickness]);
+  }, [selectedFile, viewMode, dxfSvg, selectedFinishColors, activeFinishColor, isFinishPowderCoating, selectedThickness]);
 
   // ─── STEP 3D Viewer Effect ────────────────────────────
   useEffect(() => {
@@ -613,7 +686,9 @@ const InstantPricing = () => {
             const bb = OV.GetBoundingBox(m);
             const center = new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2);
 
-            v?.scene?.add(new THREE.AmbientLight(0xffffff, 0.3));
+            v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
+            const dl1 = new THREE.DirectionalLight(0xffffff, 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
+            const dl2 = new THREE.DirectionalLight(0xffffff, 0.4); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
             v?.scene?.traverse(obj => {
               if (obj.isMesh && obj.material) {
                 // Identify Native Hole Geometry
@@ -739,11 +814,30 @@ const InstantPricing = () => {
         if (!v?.scene) return;
         v.scene.traverse(obj => {
           if (!obj.isMesh || obj.userData.isHoleMarker) return;
+
+          if (!obj.geometry.attributes.uv && obj.geometry.attributes.position) {
+            const pos = obj.geometry.attributes.position;
+            if (!obj.geometry.attributes.normal) obj.geometry.computeVertexNormals();
+            const norm = obj.geometry.attributes.normal;
+            const uvs = new Float32Array(pos.count * 2);
+            const scale = 35; // Calibrated for industrial micro-grain
+            for (let i = 0; i < pos.count; i++) {
+              const nx = Math.abs(norm.getX(i)), ny = Math.abs(norm.getY(i)), nz = Math.abs(norm.getZ(i));
+              const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+              if (nx > ny && nx > nz) { uvs[i * 2] = z / scale; uvs[i * 2 + 1] = y / scale; }
+              else if (ny > nx && ny > nz) { uvs[i * 2] = x / scale; uvs[i * 2 + 1] = z / scale; }
+              else { uvs[i * 2] = x / scale; uvs[i * 2 + 1] = y / scale; }
+            }
+            obj.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+            obj.geometry.attributes.uv.needsUpdate = true;
+          }
+
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
           mats.forEach((mat, idx) => {
             if (!mat?.color) return;
             if (!obj.userData._matCloned) {
-              obj.material = Array.isArray(obj.material) ? obj.material.map(m => m.clone()) : obj.material.clone();
+              const upgrade = (m) => new THREE.MeshStandardMaterial({ color: m.color, transparent: m.transparent, opacity: m.opacity, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.05 });
+              obj.material = Array.isArray(obj.material) ? obj.material.map(upgrade) : upgrade(obj.material);
               obj.userData._matCloned = true;
             }
             const fm = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
@@ -761,10 +855,16 @@ const InstantPricing = () => {
               fm.color.set(0x000000); // Black for active hole
               fm.emissive.set(0x000000);
               fm.emissiveIntensity = 0;
-            } else if (selectedAnodizingColor) {
-              fm.color.set(selectedAnodizingColor.color);
-              fm.emissive.set(0x000000);
-              fm.emissiveIntensity = 0;
+            } else if (activeFinishColor) {
+              fm.color.set(activeFinishColor.color);
+              if (!isFinishPowderCoating) {
+                // Anodizing: Make it vibrant and light without adding gloss
+                fm.emissive.set(activeFinishColor.color);
+                fm.emissiveIntensity = 0.15;
+              } else {
+                fm.emissive.set(0x000000);
+                fm.emissiveIntensity = 0;
+              }
             } else {
               const oc = obj.userData.origColor;
               fm.color.setRGB(oc.r, oc.g, oc.b);
@@ -772,9 +872,23 @@ const InstantPricing = () => {
               fm.emissiveIntensity = 0;
             }
 
-            // Standard Material properties
-            fm.roughness = 0.4;
-            fm.metalness = 0.7;
+            // Standard Material properties - Dynamic gloss & wrinkle from Admin
+            if (activeFinishColor && isFinishPowderCoating) {
+              const gloss = activeFinishColor.gloss ?? 35;
+              const isWrinkled = !!(activeFinishColor.is_wrinkled || activeFinishColor.name?.toUpperCase().includes('WRINKLED'));
+              fm.roughness = isWrinkled ? 0.68 : Math.max(0.32, 0.9 - (gloss / 100));
+              fm.metalness = isWrinkled ? 0.15 : 0.1;
+              fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
+              fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
+              fm.needsUpdate = true;
+            } else {
+              fm.roughness = 0.6; // Standard/Anodized Light Matte
+              fm.metalness = 0.05;
+              fm.normalMap = null;
+              fm.normalScale = new THREE.Vector2(0, 0);
+              fm.needsUpdate = true;
+            }
+            if (fm.bumpMap) fm.bumpMap.needsUpdate = true;
 
             // Fade logic: ONLY ghost when manually toggled OR actively configuring a specific hole
             const shouldFade = isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen);
@@ -794,7 +908,7 @@ const InstantPricing = () => {
     apply();
     const tid = setTimeout(apply, 200);
     return () => clearTimeout(tid);
-  }, [selectedAnodizingColor, selectedFile?.file?.name, modelLoadCount, isTappingActive, activeTapHole, isAnodizingModalOpen, isModelFadedManually, detectedHoles, selectedTaps]);
+  }, [selectedFinishColors, activeFinishColor, isFinishPowderCoating, selectedFile?.file?.name, modelLoadCount, isTappingActive, activeTapHole, isAnodizingModalOpen, isModelFadedManually, detectedHoles, selectedTaps]);
 
   const holeMarkersRef = useRef([]);
   useEffect(() => {
@@ -1043,6 +1157,46 @@ const InstantPricing = () => {
           .ip-qf-left { width:100% !important; min-width:unset !important; border-right:none !important; border-bottom:1.5px solid #e8eaed; height:55vw; min-height:280px; max-height:400px; flex-shrink:0; }
           .ip-qf-mid { border-right:none !important; border-bottom:1.5px solid #e8eaed; padding:16px 14px; }
           .ip-qf-right { width:100% !important; min-width:unset !important; padding-bottom:24px; }
+        }
+
+        /* Modern Scrollbar Styling */
+        .ip-right-panel::-webkit-scrollbar,
+        .ip-qf-mid::-webkit-scrollbar,
+        .ip-qf-right::-webkit-scrollbar,
+        .instant-pricing-container::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        .ip-right-panel::-webkit-scrollbar-track,
+        .ip-qf-mid::-webkit-scrollbar-track,
+        .ip-qf-right::-webkit-scrollbar-track,
+        .instant-pricing-container::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .ip-right-panel::-webkit-scrollbar-thumb,
+        .ip-qf-mid::-webkit-scrollbar-thumb,
+        .ip-qf-right::-webkit-scrollbar-thumb,
+        .instant-pricing-container::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+
+        .ip-right-panel::-webkit-scrollbar-thumb:hover,
+        .ip-qf-mid::-webkit-scrollbar-thumb:hover,
+        .ip-qf-right::-webkit-scrollbar-thumb:hover,
+        .instant-pricing-container::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+          background-clip: padding-box;
+        }
+
+        /* Firefox Support */
+        .ip-right-panel, .ip-qf-mid, .ip-qf-right, .instant-pricing-container {
+          scrollbar-width: thin;
+          scrollbar-color: #e2e8f0 transparent;
         }
       `}</style>
       {!isQuoteFlowActive && (
@@ -1364,9 +1518,9 @@ const InstantPricing = () => {
                             .dxf-svg-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
                             .dxf-svg-content svg { width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
                             .dxf-svg-content svg * {
-                              fill: ${selectedAnodizingColor ? (selectedAnodizingColor.color || selectedAnodizingColor.hex || 'rgba(0,0,0,0.4)') : 'rgba(0,0,0,0.05)'} !important;
-                              fill-opacity: ${(isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen)) ? 0.05 : (selectedAnodizingColor ? 0.8 : 0.1)} !important;
-                              stroke: ${selectedAnodizingColor ? (selectedAnodizingColor.color || selectedAnodizingColor.hex) : '#000'} !important;
+                              fill: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex || 'rgba(0,0,0,0.4)') : 'rgba(0,0,0,0.05)'} !important;
+                              fill-opacity: ${(isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen)) ? 0.05 : (activeFinishColor ? 0.8 : 0.1)} !important;
+                              stroke: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex) : '#000'} !important;
                               stroke-opacity: ${(isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen)) ? 0.1 : 1.0} !important;
                               stroke-width: 2px !important;
                               transition: all 0.3s ease;
@@ -1893,41 +2047,31 @@ const InstantPricing = () => {
                         </div>
                       </div>
                     ) : (
-                      <>
+                      <div className="animate-fade-in">
                         <h2 className="h4 fw-bold mb-2">Additional Services</h2>
                         <p className="text-muted small mb-4">Enhance your part with extra processes</p>
                         <div className="d-flex flex-column gap-3">
                           {allServices.filter(svc => {
-                            // Show all sub-services that are children of the selected production service
                             const parentIds = (svc.parent_ids || []).map(id => Number(id));
                             return parentIds.includes(Number(selectedProductionService?.id));
                           }).map(svc => {
                             const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
-                            const isTap = svc.title.toLowerCase().includes('tap');
-                            const isAnodiz = svc.title.toLowerCase().includes('anodiz');
-                            const isHardware = svc.title.toLowerCase().includes('hardware');
+                            const title = svc.title.toLowerCase();
+                            const isTap = title.includes('tap');
+                            const isFinish = title.includes('anodiz') || title.includes('powder coat');
+                            const isHardware = title.includes('hardware');
 
                             return (
                               <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none'}`} style={{ cursor: 'pointer' }} onClick={() => {
-                                const title = svc.title.toLowerCase();
-                                if (title.includes('anodiz')) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setIsAnodizingModalOpen(true); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedAnodizingColor(null); }
-                                } else if (title.includes('tap')) {
-                                  if (!isSelected) {
-                                    setSelectedAdditionalServices(p => [...p, svc]);
-                                    if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]);
-                                  } else {
-                                    setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null);
-                                  }
-                                } else if (title.includes('hardware')) {
-                                  if (!isSelected) {
-                                    setSelectedAdditionalServices(p => [...p, svc]);
-                                    if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]);
-                                  } else {
-                                    setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id));
-                                    setSelectedHardware({}); setActiveHwHole(null);
-                                  }
+                                if (isFinish) {
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedFinishColors(p => { const n = { ...p }; delete n[svc.id]; return n; }); }
+                                } else if (isTap) {
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null); }
+                                } else if (isHardware) {
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedHardware({}); setActiveHwHole(null); }
                                 } else {
                                   setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
                                 }
@@ -1940,31 +2084,22 @@ const InstantPricing = () => {
                                     <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
                                     <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{svc.description || 'Premium process'}</p>
 
-                                    {/* Size Constraints Display for Sub-Services */}
                                     <div className="mt-2 d-flex flex-wrap gap-2">
                                       {(() => {
                                         const unitRatio = svc.dimensions_unit === 'in' ? 25.4 : 1;
-                                        const convert = (val) => {
-                                          if (!val) return '0';
-                                          const mmVal = parseFloat(val) * unitRatio;
-                                          return mmVal.toFixed(1); // Fixed unit for sub-services after removing toggle
-                                        };
+                                        const convert = (val) => { if (!val) return '0'; return (parseFloat(val) * unitRatio).toFixed(1); };
                                         return (
                                           <>
                                             {(svc.max_length > 0 || svc.max_width > 0) && (
                                               <div className={`d-flex align-items-center gap-1 px-2 py-0.5 rounded-2 ${isSelected ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`}>
                                                 <Maximize2 size={9} />
-                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>
-                                                  MAX: {convert(svc.max_length)}mm × {convert(svc.max_width)}mm
-                                                </span>
+                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>MAX: {convert(svc.max_length)}mm × {convert(svc.max_width)}mm</span>
                                               </div>
                                             )}
                                             {(svc.max_height > 0 || svc.min_height > 0) && (
                                               <div className={`d-flex align-items-center gap-1 px-2 py-0.5 rounded-2 ${isSelected ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`}>
                                                 <Layers size={9} />
-                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>
-                                                  THICKNESS: {svc.min_height > 0 ? `${convert(svc.min_height)}mm - ` : ''}{convert(svc.max_height)}mm
-                                                </span>
+                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>THICKNESS: {svc.min_height > 0 ? `${convert(svc.min_height)}mm - ` : ''}{convert(svc.max_height)}mm</span>
                                               </div>
                                             )}
                                           </>
@@ -1983,14 +2118,10 @@ const InstantPricing = () => {
                                       </div>
                                       <div className="d-flex flex-column">
                                         <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>TAPPED</span>
-                                        <span className={`fw-black fs-4 ${Object.keys(selectedTaps).length === detectedHoles.length ? 'text-white' : 'text-white'}`}>
-                                          {Object.keys(selectedTaps).length}
-                                        </span>
+                                        <span className="fw-black text-white fs-4">{Object.keys(selectedTaps).length}</span>
                                       </div>
                                     </div>
-                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm text-danger h-auto py-2" style={{ fontSize: '12px', background: 'white', border: 'none' }} onClick={(e) => { e.stopPropagation(); setActiveTapHole(detectedHoles[0]); }}>
-                                      MANAGE
-                                    </button>
+                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm text-danger h-auto py-2" onClick={(e) => { e.stopPropagation(); setActiveTapHole(detectedHoles[0]); }}>MANAGE</button>
                                   </div>
                                 )}
 
@@ -2006,26 +2137,24 @@ const InstantPricing = () => {
                                         <span className="fw-black text-white fs-4">{Object.keys(selectedHardware).length}</span>
                                       </div>
                                     </div>
-                                    <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ fontSize: '12px', background: 'white', border: 'none', color: '#B8860B' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>
-                                      MANAGE
-                                    </button>
+                                    <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ background: 'white', color: '#B8860B' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>MANAGE</button>
                                   </div>
                                 )}
 
-                                {isSelected && isAnodiz && selectedAnodizingColor && (
+                                {isSelected && isFinish && selectedFinishColors[svc.id] && (
                                   <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
                                     <div className="d-flex align-items-center gap-3">
-                                      <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedAnodizingColor.color, width: '24px', height: '24px', border: '3px solid white' }} />
-                                      <span className="fw-black text-white fs-6">{(selectedAnodizingColor.name || '').toUpperCase()}</span>
+                                      <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedFinishColors[svc.id].color, width: '24px', height: '24px', border: '3px solid white' }} />
+                                      <span className="fw-black text-white fs-6">{(selectedFinishColors[svc.id].name || '').toUpperCase()} {selectedFinishColors[svc.id].is_wrinkled ? '(WRINKLED)' : ''}</span>
                                     </div>
-                                    <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setIsAnodizingModalOpen(true); }}>CHANGE</button>
+                                    <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }}>CHANGE</button>
                                   </div>
                                 )}
                               </div>
                             );
                           })}
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2108,17 +2237,18 @@ const InstantPricing = () => {
                               )}
                             </div>
 
-                            {(priceEstimate?.breakdown?.additional_services_cost || 0) > 0 && (
-                              <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-danger">
+                            {/* Detailed Service Breakdown */}
+                            {(priceEstimate?.breakdown?.service_breakdown || []).map((svc, idx) => (
+                              <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-danger">
                                 <div className="d-flex flex-column">
-                                  <span className="opacity-90 fw-bold small">Sub-Services Total</span>
-                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Anodizing, finishing, etc.</span>
+                                  <span className="opacity-90 fw-bold small">{svc.name}</span>
+                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Configured Finish</span>
                                 </div>
                                 {isCalculatingPrice ? <PriceSkeleton /> : (
-                                  <span className="fw-black fs-5">+${(priceEstimate.breakdown.additional_services_cost).toFixed(2)}</span>
+                                  <span className="fw-black fs-5">+${parseFloat(svc.price || 0).toFixed(2)}</span>
                                 )}
                               </div>
-                            )}
+                            ))}
 
                             {(() => {
                               const tapTotal = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
@@ -2438,11 +2568,11 @@ const InstantPricing = () => {
         )}
 
         {activeHwHole && (
-          <motion.div key="hardware-modal" className="position-fixed inset-0 d-flex flex-column z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(16px)', top: 0, left: 0, right: 0, bottom: 0 }}>
-            <motion.div className="d-flex flex-column bg-white w-100 h-100" style={{ position: 'relative', zIndex: 10001 }} initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 28 }}>
+          <motion.div key="hardware-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
+            <motion.div className="bg-white rounded-5 shadow-22xl overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1100px', height: '85vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.95, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
 
               {/* Header */}
-              <div className="p-5 border-bottom bg-white d-flex justify-content-between align-items-center" style={{ flexShrink: 0 }}>
+              <div className="p-5 border-bottom d-flex justify-content-between align-items-center bg-white">
                 <div>
                   <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HARDWARE INSERTION</h3>
                   <div className="d-flex align-items-center gap-3 mt-2">
@@ -2617,7 +2747,7 @@ const InstantPricing = () => {
                 </div>
               </div>
 
-              <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center" style={{ flexShrink: 0 }}>
+              <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
                 <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}>CLEAR SELECTION</button>
                 <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveHwHole(null)}>DISMISS CONFIGURATOR</button>
               </div>
@@ -2627,48 +2757,58 @@ const InstantPricing = () => {
 
         {isAnodizingModalOpen && (
           <motion.div key="anodizing-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
-            <motion.div className="bg-white rounded-5 shadow-22xl p-0 overflow-hidden w-100 mx-4" style={{ maxWidth: '850px', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.9, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25 }}>
-              <div className="p-5 bg-white border-bottom d-flex justify-content-between align-items-center">
-                <div>
-                  <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">PREMIUM FINISH COLOR</h3>
-                  <p className="small text-muted fw-bold text-uppercase letter-spacing-2 mt-2">Selected metal will be treated with the chosen anodizing process</p>
-                </div>
-                <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setIsAnodizingModalOpen(false)} />
-              </div>
-              <div className="p-5 bg-light-subtle bg-opacity-30">
-                <div className="d-grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                  {(() => {
-                    const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'));
-                    const options = svc?.service_options || [];
-                    return options.map((opt, i) => {
-                      const isActive = selectedAnodizingColor?.name === opt.name;
-                      return (
-                        <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedAnodizingColor(opt); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
-                          <div className="position-relative">
-                            <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ backgroundColor: opt.color, width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
-                            {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}
-                          </div>
-                          <div className="text-center">
-                            <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{(opt.name || '').toUpperCase()}</span>
-                            <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{(opt.color || '').toUpperCase()}</span>
-                          </div>
-                        </motion.button>
-                      );
-                    });
-                  })()}
-                </div>
+            {(() => {
+              const svc = selectedAdditionalServices.find(s => s.id === activeFinishSvcId) || selectedAdditionalServices.find(s => {
+                const t = (s.title || '').toLowerCase();
+                return t.includes('anodiz') || t.includes('powder coat');
+              });
+              const isPowderCoating = svc?.title?.toLowerCase().includes('powder coat');
+              const processName = isPowderCoating ? 'powder coating' : 'anodizing';
 
-                {(!selectedAdditionalServices.find(s => s.title.toLowerCase().includes('anodiz'))?.service_options?.length) && (
-                  <div className="py-5 text-center">
-                    <Shield size={48} className="text-muted opacity-20 mb-3" />
-                    <p className="text-muted fw-bold small">NO PREMIUM FINISHES CONFIGURED IN DASHBOARD</p>
+              return (
+                <motion.div className="bg-white rounded-5 shadow-22xl p-0 overflow-hidden w-100 mx-4 d-flex flex-column" style={{ maxWidth: '850px', maxHeight: '90vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.9, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25 }}>
+                  <div className="p-5 bg-white border-bottom d-flex justify-content-between align-items-center flex-shrink-0">
+                    <div>
+                      <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">PREMIUM FINISH COLOR</h3>
+                      <p className="small text-muted fw-bold text-uppercase letter-spacing-2 mt-2">Selected metal will be treated with the chosen {processName} process</p>
+                    </div>
+                    <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setIsAnodizingModalOpen(false)} />
                   </div>
-                )}
-              </div>
-              <div className="p-4 bg-white border-top text-center">
-                <button className="btn btn-link text-muted text-decoration-none fw-bold small hover-text-dark" onClick={() => { setSelectedAnodizingColor(null); setIsAnodizingModalOpen(false); }}>SKIP ANODIZING</button>
-              </div>
-            </motion.div>
+                  <div className="p-5 bg-light-subtle bg-opacity-30 overflow-y-auto flex-grow-1">
+                    <div className="d-grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                      {(() => {
+                        const options = svc?.service_options || [];
+                        return options.map((opt, i) => {
+                          const isActive = selectedFinishColors[svc?.id]?.name === opt.name;
+                          return (
+                            <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedFinishColors(p => ({ ...p, [svc.id]: opt })); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
+                              <div className="position-relative">
+                                <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ backgroundColor: opt.color, width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
+                                {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}
+                              </div>
+                              <div className="text-center">
+                                <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{(opt.name || '').toUpperCase()}</span>
+                                <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{(opt.color || '').toUpperCase()}</span>
+                              </div>
+                            </motion.button>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {(!svc?.service_options?.length) && (
+                      <div className="py-5 text-center">
+                        <Shield size={48} className="text-muted opacity-20 mb-3" />
+                        <p className="text-muted fw-bold small">NO PREMIUM FINISHES CONFIGURED IN DASHBOARD</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 bg-white border-top text-center flex-shrink-0">
+                    <button className="btn btn-link text-muted text-decoration-none fw-bold small hover-text-dark" onClick={() => { setSelectedFinishColors(p => { const n = { ...p }; delete n[svc?.id]; return n; }); setIsAnodizingModalOpen(false); }}>SKIP {processName.toUpperCase()}</button>
+                  </div>
+                </motion.div>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler, Grid } from 'lucide-react';
 import {
     fetchServices, createService, updateService, uploadServiceImage,
     fetchHardwareTypes, fetchHardwareItemsByType, uploadHardwareTypeImage,
@@ -29,6 +29,7 @@ export default function ServiceEdit() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
 
     // Tapping Modal State
     const [isTapModalOpen, setIsTapModalOpen] = useState(false);
@@ -152,7 +153,8 @@ export default function ServiceEdit() {
                 min_edge_distance: parseFloat(hwItemForm.min_edge_distance) || null,
                 tooling_diameter: parseFloat(hwItemForm.tooling_diameter) || null,
                 base_width: parseFloat(hwItemForm.base_width) || null,
-                shank: parseFloat(hwItemForm.shank) || null
+                shank: parseFloat(hwItemForm.shank) || null,
+                is_wrinkled: hwItemForm.is_wrinkled ?? false
             };
 
             if (editingHwItem === 'new') {
@@ -493,47 +495,31 @@ export default function ServiceEdit() {
 
                         {(() => {
                             const isAnodizing = service.title.toLowerCase().includes('anodiz');
+                            const isPowderCoating = service.title.toLowerCase().includes('powder coat');
                             const isTapping = service.title.toLowerCase().includes('tap');
 
-                            if (isAnodizing) return (
-                                <div className="admin-edit-card service-options-card">
-                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Shield size={16} />
-                                            <span>Anodizing Colors</span>
+                            if (isAnodizing || isPowderCoating) return (
+                                <div className="admin-edit-card service-options-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '32px', border: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                                        <div style={{ width: '60px', height: '60px', borderRadius: '18px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #eef2f6' }}>
+                                            <Shield size={28} color="#64748b" />
                                         </div>
-                                        <button
-                                            className="admin-btn admin-btn-outline"
-                                            style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                                            onClick={() => setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0 }] }))}
-                                        >
-                                            <Plus size={14} /> Add Color
-                                        </button>
+                                        <div>
+                                            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                {isAnodizing ? 'Anodizing Finishes' : 'Powder Coating Finishes'}
+                                            </h3>
+                                            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600 }}>
+                                                {(service.service_options || []).length} colors currently configured
+                                            </p>
+                                        </div>
                                     </div>
-                                    <p className="admin-card-tip">Define available anodizing colors with their pricing. These appear as selectable swatches in the quote flow and are reflected on the 3D model.</p>
-                                    <div className="options-list">
-                                        {(service.service_options || []).map((opt, idx) => (
-                                            <div key={idx} className="option-item-row">
-                                                <div className="option-input-group">
-                                                    <label><Hash size={10} style={{ marginRight: '4px' }} /> Color Name</label>
-                                                    <input type="text" value={opt.name} onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }} placeholder="e.g. Clear" />
-                                                </div>
-                                                <div className="option-input-group color-picker-group">
-                                                    <label><Shield size={10} style={{ marginRight: '4px' }} /> Hex Code</label>
-                                                    <div className="color-input-wrapper">
-                                                        <input type="color" value={opt.color || '#000000'} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
-                                                        <input type="text" value={opt.color || ''} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} />
-                                                    </div>
-                                                </div>
-                                                <div className="option-input-group" style={{ maxWidth: '130px' }}>
-                                                    <label><Hash size={10} style={{ marginRight: '4px' }} /> Price ($)</label>
-                                                    <input type="number" step="0.01" min="0" value={opt.price ?? 0} onChange={e => { const n = [...service.service_options]; n[idx].price = parseFloat(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }} placeholder="0.00" />
-                                                </div>
-                                                <button className="option-remove-btn" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}><X size={14} /></button>
-                                            </div>
-                                        ))}
-                                        {(!service.service_options || service.service_options.length === 0) && <div className="empty-options-state">No anodizing colors defined.</div>}
-                                    </div>
+                                    <button
+                                        className="admin-btn admin-btn-primary"
+                                        onClick={() => setIsFinishModalOpen(true)}
+                                        style={{ borderRadius: '14px', padding: '14px 28px', background: '#1e293b', color: 'white', fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 16px rgba(30, 41, 59, 0.15)' }}
+                                    >
+                                        <Edit2 size={18} /> Manage Colors & Finish Settings
+                                    </button>
                                 </div>
                             );
 
@@ -607,7 +593,7 @@ export default function ServiceEdit() {
                                     </div>
                                     <p className="admin-card-tip">Configure pricing parameters for Laser Cutting. These are added to the material cost in the quote flow.</p>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
                                         <div className="option-input-group">
                                             <label><Hash size={10} style={{ marginRight: '4px' }} /> Base Setup Fee ($)</label>
                                             <input
@@ -769,7 +755,7 @@ export default function ServiceEdit() {
                                     ) : (
                                         <div className="hardware-items-container">
                                             {/* Type Banner */}
-                                            <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 20, padding: '16px 20px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+                                            <div className="hw-type-banner" style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 20, padding: '16px 20px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9' }}>
                                                 {selectedHwType.image_path ? (
                                                     <img
                                                         src={selectedHwType.image_path}
@@ -846,8 +832,8 @@ export default function ServiceEdit() {
                                                         ) : (
                                                             hwItems.map((item, index) => (
                                                                 <tr key={item.id}>
-                                                                    <td style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{index + 1}</td>
-                                                                    <td>
+                                                                    <td data-label="#" style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{index + 1}</td>
+                                                                    <td data-label="Image">
                                                                         <img
                                                                             src={selectedHwType.image_path}
                                                                             className="table-thumb"
@@ -855,23 +841,22 @@ export default function ServiceEdit() {
                                                                             onClick={() => setZoomedImage(selectedHwType.image_path)}
                                                                         />
                                                                     </td>
-                                                                    <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.name}</td>
-                                                                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.size_spec || '—'}</td>
-                                                                    <td style={{ fontSize: '0.75rem', color: '#444' }}>
+                                                                    <td data-label="Name" style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.name}</td>
+                                                                    <td data-label="Size Spec" style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.size_spec || '—'}</td>
+                                                                    <td data-label="Tech Specs" style={{ fontSize: '0.75rem', color: '#444' }}>
                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                                                            {/* Dynamic Labels based on Type */}
-                                                                            {selectedHwType.id === 4 ? ( // Flush Nut
+                                                                            {selectedHwType.id === 4 ? (
                                                                                 <>
                                                                                     {item.length && <div>A: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
                                                                                     {item.base_width && <div>H: {hwUnit === 'mm' ? toMM(item.base_width) : item.base_width}</div>}
                                                                                     {item.shank && <div>Shank: {item.shank}</div>}
                                                                                 </>
-                                                                            ) : selectedHwType.id === 3 ? ( // Nuts
+                                                                            ) : selectedHwType.id === 3 ? (
                                                                                 <>
                                                                                     {item.length && <div>T: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
                                                                                     {item.base_width && <div>E: {hwUnit === 'mm' ? toMM(item.base_width) : item.base_width}</div>}
                                                                                 </>
-                                                                            ) : ( // Default (Studs/Standoffs)
+                                                                            ) : (
                                                                                 <>
                                                                                     {item.length && <div>L: {hwUnit === 'mm' ? toMM(item.length) : item.length}</div>}
                                                                                 </>
@@ -880,15 +865,15 @@ export default function ServiceEdit() {
                                                                             {item.tooling_diameter && <div>Tool: {hwUnit === 'mm' ? toMM(item.tooling_diameter) : item.tooling_diameter}</div>}
                                                                         </div>
                                                                     </td>
-                                                                    <td style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+                                                                    <td data-label="Price" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
                                                                         ${parseFloat(item.price || 0).toFixed(4)}
                                                                     </td>
-                                                                    <td>
+                                                                    <td data-label="Status">
                                                                         <span className={`hw-badge ${item.is_active ? 'hw-badge-active' : 'hw-badge-inactive'}`} style={{ fontSize: '0.65rem' }}>
                                                                             {item.is_active ? 'Active' : 'Inactive'}
                                                                         </span>
                                                                     </td>
-                                                                    <td>
+                                                                    <td data-label="Actions">
                                                                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                                                                             <button className="admin-icon-btn" onClick={() => {
                                                                                 setHwItemForm({
@@ -1066,6 +1051,163 @@ export default function ServiceEdit() {
                                 <button className="admin-btn admin-btn-outline" onClick={() => setIsTapModalOpen(false)}>Cancel</button>
                                 <button className="admin-btn admin-btn-primary" onClick={saveTap}>
                                     <Check size={18} /> {editingTapIndex !== null ? 'Update Tap' : 'Add Tap'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {isFinishModalOpen && (
+                    <div className="admin-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="admin-modal-content"
+                            style={{
+                                width: '100%',
+                                maxWidth: '1000px',
+                                maxHeight: '90vh',
+                                background: '#ffffff',
+                                borderRadius: '32px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'hidden',
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
+                            }}
+                        >
+                            <div className="admin-modal-header" style={{ padding: '32px 40px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                    <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Shield size={24} color="white" />
+                                    </div>
+                                    <div>
+                                        <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                            {service.title.toLowerCase().includes('anodiz') ? 'Anodizing Finishes' : 'Powder Coating Finishes'}
+                                        </h2>
+                                        <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Configure professional-grade colors, textures, and pricing.</p>
+                                    </div>
+                                </div>
+                                <button className="admin-btn admin-btn-secondary" onClick={() => {
+                                    setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false }] }))
+                                }} style={{ borderRadius: '14px', padding: '12px 24px', border: '2px solid #e2e8f0', background: 'white', fontWeight: 800, color: '#1e293b' }}>
+                                    <Plus size={18} /> Add Color
+                                </button>
+                            </div>
+
+                            <div className="admin-modal-body" style={{ padding: '40px', overflowY: 'auto', background: '#ffffff', flex: 1 }}>
+                                <div className="premium-options-grid" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                    {(service.service_options || []).map((opt, idx) => (
+                                        <div key={idx} className="premium-option-card" style={{ background: '#f8fafc', borderRadius: '24px', padding: '28px', border: '1.5px solid #f1f5f9', position: 'relative', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                            {/* Row 1 */}
+                                            <div style={{ display: 'flex', gap: '24px' }}>
+                                                <div className="premium-field" style={{ flex: 1.2 }}>
+                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
+                                                        <Hash size={10} style={{ marginRight: '6px' }} /> Color Name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={opt.name}
+                                                        onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }}
+                                                        placeholder="e.g. Matte Black"
+                                                        style={{ width: '100%', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 600, fontSize: '0.95rem' }}
+                                                    />
+                                                </div>
+
+                                                <div className="premium-field" style={{ flex: 1.5 }}>
+                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
+                                                        <Grid size={10} style={{ marginRight: '6px' }} /> Hex Code
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                                                        <div style={{ width: '54px', height: '54px', borderRadius: '16px', background: opt.color || '#000000', border: '4px solid white', boxShadow: '0 8px 16px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
+                                                            <input type="color" value={opt.color || '#000000'} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            value={opt.color || ''}
+                                                            onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }}
+                                                            placeholder="#000000"
+                                                            style={{ flex: 1, padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 700, fontSize: '0.95rem' }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {service.title.toLowerCase().includes('powder coat') && (
+                                                    <div className="premium-field" style={{ width: '100px', flexShrink: 0 }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.55rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.8px', marginBottom: '12px' }}>
+                                                            <Info size={10} style={{ marginRight: '4px' }} /> Gloss (%)
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="0" max="100"
+                                                            value={opt.gloss ?? 50}
+                                                            onChange={e => { const n = [...service.service_options]; n[idx].gloss = parseInt(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }}
+                                                            style={{ width: '100%', height: '54px', textAlign: 'center', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 800, fontSize: '0.95rem' }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Row 2 */}
+                                            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-end' }}>
+                                                <div className="premium-field" style={{ width: '80px', flexShrink: 0 }}>
+                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
+                                                        <Layers size={10} style={{ marginRight: '6px' }} /> Wrinkle
+                                                    </label>
+                                                    <div
+                                                        onClick={() => {
+                                                            const n = service.service_options.map((o, i) => i === idx ? { ...o, is_wrinkled: !o.is_wrinkled } : o);
+                                                            setService(s => ({ ...s, service_options: n }));
+                                                        }}
+                                                        style={{ width: '54px', height: '54px', borderRadius: '16px', background: '#eef2f6', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', border: opt.is_wrinkled ? '2px solid #3b82f6' : '1.5px solid transparent' }}>
+                                                        <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: opt.is_wrinkled ? '#3b82f6' : '#cbd5e1', boxShadow: opt.is_wrinkled ? '0 0 12px rgba(59, 130, 246, 0.4)' : 'none', transition: 'all 0.2s' }} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="premium-field" style={{ flex: 1 }}>
+                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
+                                                        <Hash size={10} style={{ marginRight: '6px' }} /> Price ($)
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01" min="0"
+                                                        value={opt.price ?? 0}
+                                                        onChange={e => { const n = [...service.service_options]; n[idx].price = parseFloat(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }}
+                                                        placeholder="0.00"
+                                                        style={{ width: '100%', height: '54px', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 800, fontSize: '0.95rem' }}
+                                                    />
+                                                </div>
+
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0' }}>
+                                                    <button
+                                                        className="admin-btn"
+                                                        onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}
+                                                        style={{ width: '54px', height: '54px', borderRadius: '16px', background: '#fff1f2', border: 'none', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                                                    >
+                                                        <Trash2 size={22} color="#ef4444" strokeWidth={2.5} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!service.service_options || service.service_options.length === 0) && (
+                                        <div style={{ textAlign: 'center', padding: '80px 40px', background: '#f8fafc', borderRadius: '32px', border: '2px dashed #e2e8f0', color: '#64748b' }}>
+                                            <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '1.5px solid #eef2f6' }}>
+                                                <Shield size={32} color="#cbd5e1" />
+                                            </div>
+                                            <p style={{ fontWeight: 800, marginBottom: '8px', fontSize: '1rem' }}>No finishes defined</p>
+                                            <p style={{ fontSize: '0.85rem', fontWeight: 600, opacity: 0.7 }}>Click "Add Color" above to start configuring your finishes.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="admin-modal-footer" style={{ padding: '24px 40px', borderTop: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', background: '#f8fafc' }}>
+                                <button className="admin-btn admin-btn-primary" onClick={() => setIsFinishModalOpen(false)} style={{ borderRadius: '14px', padding: '14px 40px', background: '#1e293b', color: 'white', fontWeight: 900, boxShadow: '0 8px 16px rgba(30, 41, 59, 0.15)' }}>
+                                    Done
                                 </button>
                             </div>
                         </motion.div>
@@ -1509,6 +1651,37 @@ export default function ServiceEdit() {
                     max-width: 150px;
                     margin: 0 !important;
                     background: white !important;
+                }
+
+                @media (max-width: 768px) {
+                    .admin-edit-page { padding: 16px 16px 60px; }
+                    .admin-edit-top-actions { flex-direction: column; align-items: flex-start; gap: 16px; }
+                    .admin-edit-actions-row { width: 100%; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; }
+                    .admin-edit-actions-row button { width: 100%; justify-content: center; padding: 10px 8px; font-size: 0.8rem; }
+                    .admin-edit-grid { grid-template-columns: 1fr; gap: 20px; }
+                    .admin-edit-sidebar { order: -1; }
+                    .capacity-row { grid-template-columns: 1fr 1fr; gap: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; }
+                    .capacity-row.header { display: none; }
+                    .capacity-label-cell { grid-column: span 2; font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; margin-bottom: 1px; }
+                    .option-item-row { grid-template-columns: 1fr; gap: 16px; position: relative; padding-top: 40px; }
+                    .option-remove-btn { position: absolute; top: 12px; right: 12px; }
+                    
+                    .admin-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+                    .admin-table thead { display: none; }
+                    .admin-table tr { display: flex; flexDirection: column; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+                    .admin-table td { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border: none; text-align: left; }
+                    .admin-table td:last-child { display: flex; justify-content: flex-end; }
+                    .admin-table td::before { content: attr(data-label); font-size: 11px; font-weight: 800; text-transform: uppercase; color: #94a3b8; margin-right: 12px; }
+
+                    .hw-type-banner { flex-direction: column; align-items: stretch !important; padding: 20px !important; gap: 16px !important; }
+                    .hw-type-banner img { width: 48px !important; height: 48px !important; }
+                    .hw-type-banner .admin-btn-primary { width: 100%; justify-content: center; }
+
+                    .laser-pricing-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+                    .parent-selection-grid { grid-template-columns: 1fr !important; }
+
+                    .tap-bar-list { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+                    .tap-bar-header, .tap-option-bar { min-width: 650px; }
                 }
 
                 /* Premium Scrollbar Design */

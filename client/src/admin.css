@@ -180,12 +180,24 @@
 }
 
 @media (max-width: 768px) {
+  .admin-shell {
+    overflow-x: hidden;
+  }
+
   .admin-topbar {
     padding: 0 16px;
   }
 
   .admin-content {
     padding: 16px 16px 32px;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .admin-login-card {
+    padding: 32px 24px !important;
+    margin: 0 16px;
+    width: calc(100% - 32px);
   }
 
   .admin-dashboard-hero {
@@ -334,9 +346,61 @@
   .admin-table td:nth-child(2),
   .admin-table th:nth-child(3),
   .admin-table td:nth-child(3),
-  .admin-table th:nth-child(4),
-  .admin-table td:nth-child(4) {
+  .admin-table th:nth-child(4):not(:last-child),
+  .admin-table td:nth-child(4):not(:last-child) {
     display: none;
+  }
+
+  /* Specific fix for tables where actions are in the 4th column but it's the last one */
+  .admin-table td:last-child {
+    display: table-cell !important;
+    width: 60px;
+    text-align: right;
+  }
+
+  .admin-search,
+  .admin-filter-select,
+  .admin-search input,
+  .admin-filter select {
+    width: 100% !important;
+    height: 48px !important;
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 0 16px !important;
+    font-size: 14px !important;
+    color: #1e293b !important;
+    outline: none !important;
+    appearance: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-search {
+    position: relative;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .admin-search svg {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #64748b;
+  }
+
+  .admin-search input {
+    padding-left: 44px !important;
+  }
+
+  .admin-filter-select,
+  .admin-filter select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 16px center !important;
+    padding-right: 40px !important;
   }
 
   .admin-table th,
@@ -348,6 +412,16 @@
   .admin-table td:first-child {
     max-width: none;
     white-space: normal;
+    word-break: break-word;
+  }
+
+  .admin-toolbar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hide-on-mobile {
+    display: none !important;
   }
 
   .admin-form-grid {

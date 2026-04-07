@@ -240,14 +240,30 @@ router.post('/calculate', async (req, res) => {
 
         // ── ADDITIONAL SERVICES COST ──────────────────────────
         let additional_cost = 0;
+        const service_breakdown = [];
         if (Array.isArray(additional_services) && additional_services.length > 0) {
-            const addSvcIds = additional_services.map(s => typeof s === 'object' ? s.id : s);
-            const addSvcsRes = await db.query('SELECT * FROM services WHERE id = ANY($1)', [addSvcIds]);
+            for (const sReq of additional_services) {
+                const sId = typeof sReq === 'object' ? sReq.id : sReq;
+                const optId = typeof sReq === 'object' ? sReq.option_id : null;
 
-            for (const s of addSvcsRes.rows) {
-                // For now, simple base price sum
-                // (Tapping or other complex logic can be added here)
-                additional_cost += parseFloat(s.base_price) || 0;
+                const sRes = await db.query('SELECT * FROM services WHERE id = $1', [sId]);
+                if (sRes.rows.length === 0) continue;
+                const s = sRes.rows[0];
+
+                let sPrice = parseFloat(s.base_price) || 0;
+                let sName = s.title;
+
+                // If an option (color) is selected, find its specific price
+                if (optId !== null && s.service_options && Array.isArray(s.service_options)) {
+                    const opt = s.service_options.find(o => o.id === optId || o.index === optId);
+                    if (opt) {
+                        sPrice += parseFloat(opt.base_price || opt.price) || 0;
+                        sName = `${s.title} - ${opt.name || opt.color}`;
+                    }
+                }
+
+                additional_cost += sPrice;
+                service_breakdown.push({ name: sName, price: sPrice });
             }
         }
 
