@@ -3,23 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    ShieldCheck,
-    CreditCard,
-    Truck,
-    ArrowRight,
-    ChevronLeft,
-    AlertCircle,
-    CheckCircle2,
-    Package,
-    MapPin,
-    Phone,
-    User,
-    Mail,
-    Zap
+    ShieldCheck, CreditCard, Truck, ArrowRight, ChevronLeft,
+    AlertCircle, CheckCircle2, Package, MapPin, Phone, User, Mail, Zap
 } from 'lucide-react';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder } from '../utils/api';
 import '../styles/PremiumCheckout.css';
 
 const Checkout = () => {
@@ -31,6 +22,8 @@ const Checkout = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [orderId, setOrderId] = useState(null);
+    const [selectedPayment, setSelectedPayment] = useState(null);
+    const [paymentConfig, setPaymentConfig] = useState({ cod_enabled: true, paypal_enabled: false, paypal_client_id: '', paypal_mode: 'sandbox' });
 
     const [formData, setFormData] = useState({
         email: user?.email || '',
@@ -40,6 +33,21 @@ const Checkout = () => {
         city: '',
         zipCode: ''
     });
+
+    useEffect(() => {
+        fetchPaymentConfig()
+            .then(cfg => {
+                setPaymentConfig(cfg);
+                // Default to first enabled method
+                if (cfg.cod_enabled) setSelectedPayment('cod');
+                else if (cfg.paypal_enabled) setSelectedPayment('paypal');
+            })
+            .catch(() => {
+                // Fallback: COD only
+                setPaymentConfig({ cod_enabled: true, paypal_enabled: false, paypal_client_id: '', paypal_mode: 'sandbox' });
+                setSelectedPayment('cod');
+            });
+    }, []);
 
     useEffect(() => {
         if (cartItems.length === 0 && !isSuccess) {
@@ -54,27 +62,26 @@ const Checkout = () => {
 
     const formRef = React.useRef(null);
 
-    const handlePlaceOrder = (e) => {
-        if (e) e.preventDefault();
-        console.log('Place order triggered');
-        if (formRef.current && formRef.current.reportValidity()) {
-            console.log('Form is valid, submitting...');
-            handleSubmit(e);
-        } else {
-            console.warn('Form validation failed');
+    const validateForm = () => {
+        if (!formRef.current) return false;
+        if (!formRef.current.reportValidity()) {
             showToast('Please fill in all shipping details.', 'error');
+            return false;
         }
+        return true;
     };
 
-    const handleSubmit = async (e) => {
+    const handlePlaceOrder = (e, paymentMethod = 'cod', paymentId = null) => {
         if (e) e.preventDefault();
-        if (isSubmitting) return;
+        if (!validateForm()) return;
+        submitOrder(paymentMethod, paymentId);
+    };
 
+    const submitOrder = async (paymentMethod = 'cod', paymentId = null) => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
-        console.log('Submitting order with payload...', { cartItems, cartTotal, formData });
 
         try {
-            // Safety check for cart items and pricing
             if (!cartItems || cartItems.length === 0) {
                 showToast('Your cart is empty', 'error');
                 return;
@@ -82,6 +89,8 @@ const Checkout = () => {
 
             const payload = {
                 ...formData,
+                payment_method: paymentMethod,
+                payment_id: paymentId,
                 items: cartItems.map(item => ({
                     fileName: item.fileName || item.file_name,
                     tempPath: item.tempPath || item.temp_path || '',
@@ -99,19 +108,17 @@ const Checkout = () => {
             });
 
             const data = await response.json();
-            console.log('API Response:', data);
 
             if (data.success) {
                 setIsSuccess(true);
                 setOrderId(data.orderId);
                 clearCart();
-                showToast('Order placed successfully!', 'success');
+                showToast({ title: 'Order Confirmed!', message: `Order #${data.orderId} placed successfully` }, 'success');
             } else {
-                showToast(data.error || 'Failed to place order', 'error');
+                showToast({ title: 'Order Failed', message: data.error || 'Failed to place order' }, 'error');
             }
         } catch (err) {
-            console.error('Checkout error:', err);
-            showToast('A network error occurred. Please try again.', 'error');
+            showToast({ title: 'Network Error', message: 'Please check your connection and try again.' }, 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -143,6 +150,14 @@ const Checkout = () => {
         );
     }
 
+    const paypalInitialOptions = paymentConfig.paypal_client_id
+        ? {
+            'client-id': paymentConfig.paypal_client_id,
+            currency: 'USD',
+            intent: 'capture',
+        }
+        : null;
+
     return (
         <div className="checkout-page">
             <div className="container">
@@ -167,7 +182,7 @@ const Checkout = () => {
                             <form
                                 id="checkout-form"
                                 ref={formRef}
-                                onSubmit={handleSubmit}
+                                onSubmit={e => e.preventDefault()}
                                 className="premium-form"
                             >
                                 <div className="form-group" style={{ marginBottom: '35px' }}>
@@ -244,25 +259,87 @@ const Checkout = () => {
                                     </div>
                                 </div>
 
+                                {/* ── Payment Method Selection ─────────────── */}
                                 <div className="section-header" style={{ marginTop: '60px' }}>
                                     <CreditCard size={24} />
                                     <h2>Payment Method</h2>
                                 </div>
 
-                                <div className="payment-gateway-card">
-                                    <div className="gateway-info">
-                                        <div className="gateway-icon" style={{ color: '#e31b23' }}>
-                                            <Truck size={30} />
+                                <div className="checkout-payment-methods">
+                                    {paymentConfig.cod_enabled && (
+                                        <div
+                                            className={`payment-gateway-card${selectedPayment === 'cod' ? ' selected' : ''}`}
+                                            onClick={() => setSelectedPayment('cod')}
+                                        >
+                                            <div className="gateway-info">
+                                                <div className="gateway-icon" style={{ color: '#e31b23' }}>
+                                                    <Truck size={30} />
+                                                </div>
+                                                <div className="gateway-text">
+                                                    <span className="gateway-name" style={{ color: 'white' }}>Cash on Delivery (COD)</span>
+                                                    <span className="gateway-desc" style={{ color: 'white' }}>Pay when your parts arrive at your doorstep.</span>
+                                                </div>
+                                            </div>
+                                            <div className="gateway-check">
+                                                <div className={`check-circle${selectedPayment === 'cod' ? ' active' : ''}`} />
+                                            </div>
                                         </div>
-                                        <div className="gateway-text">
-                                            <span className="gateway-name" style={{ color: 'white' }}>Cash on Delivery (COD)</span>
-                                            <span className="gateway-desc" style={{ color: 'white' }}>Pay when your parts arrive at your doorstep.</span>
+                                    )}
+
+                                    {paymentConfig.paypal_enabled && paypalInitialOptions && (
+                                        <div
+                                            className={`payment-gateway-card${selectedPayment === 'paypal' ? ' selected' : ''}`}
+                                            onClick={() => setSelectedPayment('paypal')}
+                                        >
+                                            <div className="gateway-info">
+                                                <div className="gateway-icon">
+                                                    <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
+                                                        <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106z" fill="#009cde"/>
+                                                    </svg>
+                                                </div>
+                                                <div className="gateway-text">
+                                                    <span className="gateway-name" style={{ color: 'white' }}>PayPal</span>
+                                                    <span className="gateway-desc" style={{ color: 'white' }}>
+                                                        Pay securely via PayPal{paymentConfig.paypal_mode === 'sandbox' ? ' (Sandbox)' : ''}.
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="gateway-check">
+                                                <div className={`check-circle${selectedPayment === 'paypal' ? ' active' : ''}`} />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="gateway-check">
-                                        <div className="check-circle" />
-                                    </div>
+                                    )}
                                 </div>
+
+                                {/* PayPal Buttons — shown inline when PayPal is selected */}
+                                {selectedPayment === 'paypal' && paypalInitialOptions && (
+                                    <div style={{ marginTop: 20 }}>
+                                        <PayPalScriptProvider options={paypalInitialOptions}>
+                                            <PayPalButtons
+                                                style={{ layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' }}
+                                                disabled={isSubmitting}
+                                                createOrder={async () => {
+                                                    if (!validateForm()) throw new Error('Form incomplete');
+                                                    return createPaypalOrder(cartTotal);
+                                                }}
+                                                onApprove={async (data) => {
+                                                    try {
+                                                        const result = await capturePaypalOrder(data.orderID);
+                                                        await submitOrder('paypal', result.paymentId || data.orderID);
+                                                    } catch (err) {
+                                                        showToast({ title: 'Payment Failed', message: err.message || 'PayPal capture failed' }, 'error');
+                                                    }
+                                                }}
+                                                onError={(err) => {
+                                                    showToast({ title: 'PayPal Error', message: String(err) }, 'error');
+                                                }}
+                                                onCancel={() => {
+                                                    showToast('PayPal payment cancelled.', 'info');
+                                                }}
+                                            />
+                                        </PayPalScriptProvider>
+                                    </div>
+                                )}
                             </form>
                         </motion.div>
                     </div>
@@ -330,15 +407,24 @@ const Checkout = () => {
                                 </div>
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={handlePlaceOrder}
-                                className="btn-place-order"
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? 'Processing Order...' : 'Complete Purchase'}
-                                <ArrowRight size={22} />
-                            </button>
+                            {/* COD place order button — hidden when PayPal is selected */}
+                            {selectedPayment !== 'paypal' && (
+                                <button
+                                    type="button"
+                                    onClick={handlePlaceOrder}
+                                    className="btn-place-order"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? 'Processing Order...' : 'Complete Purchase'}
+                                    <ArrowRight size={22} />
+                                </button>
+                            )}
+
+                            {selectedPayment === 'paypal' && (
+                                <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.82rem', marginTop: 16 }}>
+                                    Use the PayPal button above to complete your payment.
+                                </p>
+                            )}
 
                             <div className="security-badges">
                                 <div className="badge-item">

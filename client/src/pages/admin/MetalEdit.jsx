@@ -607,8 +607,8 @@ export default function MetalEdit() {
                                     <tbody>
                                         {(metal.quick_look?.thicknesses || []).map((t, idx) => (
                                             <tr key={idx}>
-                                                <td style={{ fontWeight: 800 }}>{t.label || t.value}</td>
-                                                <td>
+                                                <td data-label="Thickness" style={{ fontWeight: 800 }}>{t.label || t.value}</td>
+                                                <td data-label="Price/L ($)">
                                                     <input
                                                         type="number"
                                                         step="any"
@@ -629,7 +629,7 @@ export default function MetalEdit() {
                                                         }}
                                                     />
                                                 </td>
-                                                <td>
+                                                <td data-label="Price/W ($)">
                                                     <input
                                                         type="number"
                                                         step="any"
@@ -650,7 +650,7 @@ export default function MetalEdit() {
                                                         }}
                                                     />
                                                 </td>
-                                                <td>
+                                                <td data-label="Services">
                                                     <div className="compatibility-grid">
                                                         {allServices.filter(s => !s.is_production).map(svc => {
                                                             const currentSpecs = metal.thickness_specs?.[t.value] || {};

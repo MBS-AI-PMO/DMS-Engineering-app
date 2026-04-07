@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Box } from 'lucide-react';
 import { fetchMetals, fetchCategories, deleteMetal } from '../../utils/api';
+import { StatsCardSkeleton, MetalRowSkeleton } from '../../components/admin/AdminSkeletons';
 import ImageModal from '../../components/admin/ImageModal';
 import { useToast } from '../../context/ToastContext';
 
@@ -56,22 +57,26 @@ export default function MetalsList() {
             </div>
 
             {/* Quick Metrics */}
-            <div className="admin-stats-grid mini">
-                <div className="admin-stat-card">
-                    <div className="stat-card-icon"><Box size={20} /></div>
-                    <div className="stat-card-body">
-                        <span className="stat-count">{metals.length}</span>
-                        <span className="stat-label">Total Metals</span>
+            {loading ? (
+                <StatsCardSkeleton count={2} />
+            ) : (
+                <div className="admin-stats-grid mini">
+                    <div className="admin-stat-card">
+                        <div className="stat-card-icon"><Box size={20} /></div>
+                        <div className="stat-card-body">
+                            <span className="stat-count">{metals.length}</span>
+                            <span className="stat-label">Total Metals</span>
+                        </div>
+                    </div>
+                    <div className="admin-stat-card mt-3">
+                        <div className="stat-card-icon"><Filter size={20} /></div>
+                        <div className="stat-card-body">
+                            <span className="stat-count">{categories.length}</span>
+                            <span className="stat-label">Categories</span>
+                        </div>
                     </div>
                 </div>
-                <div className="admin-stat-card mt-3">
-                    <div className="stat-card-icon"><Filter size={20} /></div>
-                    <div className="stat-card-body">
-                        <span className="stat-count">{categories.length}</span>
-                        <span className="stat-label">Categories</span>
-                    </div>
-                </div>
-            </div>
+            )}
 
             <div className="admin-toolbar premium">
                 <div className="admin-search mt-3">
@@ -94,25 +99,21 @@ export default function MetalsList() {
                 </div>
             </div>
 
-            {loading ? (
-                <div className="admin-table-skeleton">
-                    {[...Array(6)].map((_, i) => (
-                        <div key={i} className="skeleton skeleton-table-row" />
-                    ))}
-                </div>
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th width="30%">Material Name</th>
-                                <th width="20%">Slug</th>
-                                <th width="15%">Category</th>
-                                <th width="20%">Thickness Range</th>
-                                <th width="15%"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th width="30%">Material Name</th>
+                            <th width="20%">Slug</th>
+                            <th width="15%">Category</th>
+                            <th width="20%">Thickness Range</th>
+                            <th width="15%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <MetalRowSkeleton rows={6} />
+                        ) : (
                             <AnimatePresence mode='popLayout'>
                                 {filtered.map((metal, idx) => (
                                     <motion.tr
@@ -168,16 +169,16 @@ export default function MetalsList() {
                                     </motion.tr>
                                 ))}
                             </AnimatePresence>
-                        </tbody>
-                    </table>
-                    {filtered.length === 0 && (
-                        <div className="admin-empty">
-                            <Search size={40} />
-                            <p>No materials matching your search found.</p>
-                        </div>
-                    )}
-                </div>
-            )}
+                        )}
+                    </tbody>
+                </table>
+                {!loading && filtered.length === 0 && (
+                    <div className="admin-empty">
+                        <Search size={40} />
+                        <p>No materials matching your search found.</p>
+                    </div>
+                )}
+            </div>
 
             {/* Delete confirmation modal */}
             <AnimatePresence>

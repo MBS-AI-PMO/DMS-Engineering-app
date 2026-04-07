@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Save, Send, Trash2, Mail, CheckCircle, AlertTriangle } from 'lucide-react';
 import { fetchEmailConfig, saveEmailConfig, testEmailConfig, deleteEmailConfig, sendTestEmail } from '../../utils/api';
+import { EmailFormSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 const emptyForm = {
@@ -104,7 +105,14 @@ export default function EmailConfig() {
     };
 
     if (loading) {
-        return <div className="admin-page"><div className="skeleton skeleton-card" style={{ height: 300 }} /></div>;
+        return (
+            <div className="admin-page">
+                <div className="admin-page-header">
+                    <h1 className="admin-page-title">Email Configuration</h1>
+                </div>
+                <EmailFormSkeleton />
+            </div>
+        );
     }
 
     return (

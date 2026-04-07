@@ -37,6 +37,7 @@ import GuidelineEdit from './pages/admin/GuidelineEdit';
 import ServiceMetalsConfig from './pages/admin/ServiceMetalsConfig';
 import Customers from './pages/admin/Customers';
 import PricingManagement from './pages/admin/PricingManagement';
+import PricingCalculator from './pages/admin/PricingCalculator';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -49,6 +50,7 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import OrdersList from './pages/admin/OrdersList';
+import PaymentMethods from './pages/admin/PaymentMethods';
 
 const PublicShell = ({ children }) => (
   <div className="app-container">
@@ -136,6 +138,9 @@ function App() {
                 <Route path="/admin/email" element={
                   <ProtectedRoute><AdminLayout><EmailConfig /></AdminLayout></ProtectedRoute>
                 } />
+                <Route path="/admin/payment" element={
+                  <ProtectedRoute><AdminLayout><PaymentMethods /></AdminLayout></ProtectedRoute>
+                } />
                 <Route path="/admin/subscribers" element={
                   <ProtectedRoute><AdminLayout><SubscribersList /></AdminLayout></ProtectedRoute>
                 } />
@@ -153,6 +158,9 @@ function App() {
                 } />
                 <Route path="/admin/pricing" element={
                   <ProtectedRoute><AdminLayout><PricingManagement /></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/pricing-calculator" element={
+                  <ProtectedRoute><AdminLayout><PricingCalculator /></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/orders" element={
                   <ProtectedRoute><AdminLayout><OrdersList /></AdminLayout></ProtectedRoute>

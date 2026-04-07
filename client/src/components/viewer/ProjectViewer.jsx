@@ -197,6 +197,38 @@ const ProjectViewer = ({
           });
         }
 
+        // Hardware markers (gold/amber)
+        if (configuration.selectedHardware) {
+          Object.values(configuration.selectedHardware).forEach(({ item, hole }) => {
+            if (!hole?.position) return;
+            const rawPos = hole.position;
+            const pos = {
+              x: Array.isArray(rawPos) ? rawPos[0] : (rawPos.x || 0),
+              y: Array.isArray(rawPos) ? rawPos[1] : (rawPos.y || 0),
+              z: Array.isArray(rawPos) ? rawPos[2] : (rawPos.z || 0),
+            };
+            const mmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
+            const radius = Math.max(mmDia / 2, 0.5);
+            const height = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
+            const geometry = new THREE.CylinderGeometry(radius, radius, height, 32, 1, true);
+            const material = new THREE.MeshBasicMaterial({ color: 0xB8860B, side: THREE.DoubleSide });
+            const marker = new THREE.Mesh(geometry, material);
+            marker.isHardwareMarker = true;
+            marker.position.set(pos.x, pos.y, pos.z);
+            const rawAxis = hole.axis;
+            if (rawAxis) {
+              const axisVec = new THREE.Vector3(
+                Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
+                Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
+                Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
+              );
+              marker.lookAt(new THREE.Vector3(pos.x, pos.y, pos.z).add(axisVec));
+            }
+            marker.rotateX(Math.PI / 2);
+            threeViewer.scene.add(marker);
+          });
+        }
+
         threeViewer.Render();
       } catch (styleError) {
         console.warn("Marker Precision Error:", styleError);

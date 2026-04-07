@@ -1,13 +1,22 @@
 import React from 'react';
 
-const Skeleton = ({ className = '', style = {} }) => {
+const Skeleton = ({ className = '', style = {}, variant = 'rectangle' }) => {
+  const getVariantStyles = () => {
+    switch (variant) {
+      case 'circle':
+        return { borderRadius: '50%' };
+      case 'text':
+        return { height: '1em', borderRadius: '4px' };
+      default:
+        return { borderRadius: '8px' };
+    }
+  };
+
   return (
     <div
-      className={`skeleton-pulse ${className}`}
+      className={`skeleton ${className}`}
       style={{
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: '8px',
-        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        ...getVariantStyles(),
         ...style
       }}
     />
@@ -15,3 +24,4 @@ const Skeleton = ({ className = '', style = {} }) => {
 };
 
 export default Skeleton;
+

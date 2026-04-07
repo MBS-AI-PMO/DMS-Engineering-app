@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, Info, Loader2 } from 'lucide-react';
 import { fetchGuidelines } from '../../utils/api';
-import GuidelinesEditor from '../../components/admin/GuidelinesEditor';
+import { TableRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 export default function GuidelinesList() {
@@ -28,7 +28,7 @@ export default function GuidelinesList() {
         loadData();
     }, [loadData]);
 
-    const filtered = guidelines.filter(g => 
+    const filtered = guidelines.filter(g =>
         g.title.toLowerCase().includes(search.toLowerCase())
     );
 
@@ -48,25 +48,23 @@ export default function GuidelinesList() {
                 />
             </div>
 
-            {loading ? (
-                <div className="flex justify-center p-20">
-                    <Loader2 className="animate-spin text-blue-600" size={40} />
-                </div>
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Service</th>
-                                <th>ID</th>
-                                <th>Requirements</th>
-                                <th>Tables</th>
-                                <th>Last Updated</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(g => (
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>ID</th>
+                            <th>Requirements</th>
+                            <th>Tables</th>
+                            <th>Last Updated</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableRowSkeleton columns={5} rows={7} />
+                        ) : (
+                            filtered.map(g => (
                                 <tr key={g.id}>
                                     <td>
                                         <div className="flex items-center gap-2">
@@ -90,8 +88,8 @@ export default function GuidelinesList() {
                                     </td>
                                     <td>
                                         <div className="table-actions">
-                                            <button 
-                                                className="admin-btn-secondary btn-sm" 
+                                            <button
+                                                className="admin-btn-secondary btn-sm"
                                                 onClick={() => navigate(`/admin/guidelines/${g.service_id}`)}
                                             >
                                                 Configure
@@ -99,14 +97,14 @@ export default function GuidelinesList() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {filtered.length === 0 && (
-                        <div className="admin-empty">No guidelines found matching your search.</div>
-                    )}
-                </div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {!loading && filtered.length === 0 && (
+                    <div className="admin-empty">No guidelines found matching your search.</div>
+                )}
+            </div>
         </div>
     );
 }

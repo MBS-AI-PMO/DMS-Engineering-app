@@ -24,6 +24,73 @@
     align-items: flex-end;
 }
 
+@media (max-width: 768px) {
+    .admin-orders-container {
+        padding: 15px 0;
+    }
+
+    .align-items-center {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 12px !important;
+        margin-bottom: 24px !important;
+    }
+
+    .admin-search-wrapper {
+        margin-bottom: 0 !important;
+    }
+
+    .admin-orders-grid {
+        margin-top: 10px;
+    }
+
+    .admin-page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .page-titles h1 {
+        font-size: 1.75rem !important;
+        line-height: 1.2;
+    }
+
+    .admin-tabs {
+        width: 100%;
+    }
+
+    .admin-tab-btn {
+        flex: 1;
+        padding: 10px !important;
+        font-size: 0.75rem !important;
+    }
+
+    .admin-search-wrapper {
+        width: 100% !important;
+        margin-bottom: 20px;
+        padding: 10px 15px;
+    }
+
+    .queue-header-row {
+        display: none !important;
+    }
+
+    .admin-order-card {
+        grid-template-columns: 1fr !important;
+        padding: 16px 14px !important;
+        gap: 12px !important;
+        border-radius: 12px !important;
+    }
+
+    .order-action-hub {
+        justify-content: flex-start;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--admin-border);
+    }
+}
+
 .page-titles h1 {
     font-size: 2.5rem;
     font-weight: 900;
@@ -210,6 +277,10 @@
 }
 
 /* Table Header Row */
+.admin-content {
+    padding: 0 14px 32px;
+}
+
 .queue-header-row {
     padding: 0 32px 16px;
     display: grid;

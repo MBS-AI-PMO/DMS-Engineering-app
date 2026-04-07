@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X, AlertTriangle } from 'lucide-react';
 import { fetchAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '../../utils/api';
+import { TableRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 const empty = { name: '', email: '', password: '', confirmPassword: '' };
@@ -87,21 +88,21 @@ export default function AdminsList() {
                 </button>
             </div>
 
-            {loading ? (
-                [...Array(3)].map((_, i) => <div key={i} className="skeleton skeleton-table-row" />)
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Created</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {admins.map(admin => (
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Created</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableRowSkeleton columns={3} rows={5} />
+                        ) : (
+                            admins.map(admin => (
                                 <tr key={admin.id}>
                                     <td><strong>{admin.name || '—'}</strong></td>
                                     <td>{admin.email}</td>
@@ -117,12 +118,12 @@ export default function AdminsList() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {admins.length === 0 && <div className="admin-empty">No admin accounts found.</div>}
-                </div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {!loading && admins.length === 0 && <div className="admin-empty">No admin accounts found.</div>}
+            </div>
 
             {/* Edit / New modal */}
             <AnimatePresence>

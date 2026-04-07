@@ -215,13 +215,13 @@ const AdminOrdersList = () => {
                             <>
                                 <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
                                 {[1, 2, 3, 4, 5].map(i => (
-                                    <div key={i} className="admin-order-card" style={{ display: 'grid', gridTemplateColumns: '80px 1fr 120px 100px 130px 80px', alignItems: 'center', gap: '12px', padding: '18px 20px' }}>
-                                        <div style={{ width: '50px', height: '28px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 25%, rgba(99,102,241,0.14) 50%, rgba(99,102,241,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
-                                        <div><div style={{ width: '120px', height: '14px', borderRadius: '6px', marginBottom: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /><div style={{ width: '170px', height: '11px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
-                                        <div style={{ width: '90px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
-                                        <div style={{ width: '65px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
-                                        <div style={{ width: '110px', height: '32px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(245,158,11,0.06) 25%, rgba(245,158,11,0.12) 50%, rgba(245,158,11,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
-                                        <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                    <div key={i} className="admin-order-card skeleton-card">
+                                        <div className="order-id-chip skeleton-chip" style={{ width: '50px', height: '28px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 25%, rgba(99,102,241,0.14) 50%, rgba(99,102,241,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div className="customer-info"><div style={{ width: '120px', height: '14px', borderRadius: '6px', marginBottom: '6px', background: 'linear-gradient(90deg, rgba(15,23,42,0.04) 25%, rgba(15,23,42,0.08) 50%, rgba(15,23,42,0.04) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /><div style={{ width: '170px', height: '11px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(15,23,42,0.03) 25%, rgba(15,23,42,0.06) 50%, rgba(15,23,42,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
+                                        <div className="order-timestamp"><div style={{ width: '90px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(15,23,42,0.03) 25%, rgba(15,23,42,0.06) 50%, rgba(15,23,42,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
+                                        <div className="order-price-total"><div style={{ width: '65px', height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(15,23,42,0.03) 25%, rgba(15,23,42,0.06) 50%, rgba(15,23,42,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
+                                        <div className="order-status"><div style={{ width: '110px', height: '32px', borderRadius: '8px', background: 'linear-gradient(90deg, rgba(245,158,11,0.06) 25%, rgba(245,158,11,0.12) 50%, rgba(245,158,11,0.06) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
+                                        <div className="order-action-hub"><div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'linear-gradient(90deg, rgba(15,23,42,0.03) 25%, rgba(15,23,42,0.06) 50%, rgba(15,23,42,0.03) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} /></div>
                                     </div>
                                 ))}
                             </>
@@ -342,11 +342,12 @@ const AdminOrdersList = () => {
                                 right: 0,
                                 top: 0,
                                 height: '100vh',
-                                width: '520px',
+                                width: '100%',
+                                maxWidth: '520px',
                                 background: 'linear-gradient(180deg, #0a0f1e 0%, #0f172a 100%)',
                                 backdropFilter: 'blur(40px)',
                                 borderLeft: '1px solid rgba(99, 102, 241, 0.2)',
-                                padding: '40px',
+                                padding: 'clamp(20px, 5vw, 40px)',
                                 zIndex: 1000,
                                 boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.3)',
                                 overflowY: 'auto'

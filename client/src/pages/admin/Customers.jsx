@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Users, Search, UserCheck, Phone, MapPin, Calendar, Mail, User } from 'lucide-react';
 import { fetchCustomers } from '../../utils/api';
+import { StatsCardSkeleton, CustomerRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 export default function Customers() {
@@ -42,48 +43,54 @@ export default function Customers() {
             </header>
 
             {/* Stats row */}
-            <div className="customers-stats-row">
-                <motion.div
-                    className="customers-stat-card"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 }}
-                >
-                    <UserCheck size={22} />
-                    <div>
-                        <span className="customers-stat-num">{customers.length}</span>
-                        <span className="customers-stat-label">Total Accounts</span>
-                    </div>
-                </motion.div>
-                <motion.div
-                    className="customers-stat-card"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                >
-                    <Phone size={22} />
-                    <div>
-                        <span className="customers-stat-num">
-                            {customers.filter(c => c.phone).length}
-                        </span>
-                        <span className="customers-stat-label">With Phone</span>
-                    </div>
-                </motion.div>
-                <motion.div
-                    className="customers-stat-card"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                >
-                    <MapPin size={22} />
-                    <div>
-                        <span className="customers-stat-num">
-                            {customers.filter(c => c.address).length}
-                        </span>
-                        <span className="customers-stat-label">With Address</span>
-                    </div>
-                </motion.div>
-            </div>
+            {loading ? (
+                <div style={{ marginBottom: '24px' }}>
+                    <StatsCardSkeleton count={3} />
+                </div>
+            ) : (
+                <div className="customers-stats-row">
+                    <motion.div
+                        className="customers-stat-card"
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.05 }}
+                    >
+                        <UserCheck size={22} />
+                        <div>
+                            <span className="customers-stat-num">{customers.length}</span>
+                            <span className="customers-stat-label">Total Accounts</span>
+                        </div>
+                    </motion.div>
+                    <motion.div
+                        className="customers-stat-card"
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                    >
+                        <Phone size={22} />
+                        <div>
+                            <span className="customers-stat-num">
+                                {customers.filter(c => c.phone).length}
+                            </span>
+                            <span className="customers-stat-label">With Phone</span>
+                        </div>
+                    </motion.div>
+                    <motion.div
+                        className="customers-stat-card"
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                    >
+                        <MapPin size={22} />
+                        <div>
+                            <span className="customers-stat-num">
+                                {customers.filter(c => c.address).length}
+                            </span>
+                            <span className="customers-stat-label">With Address</span>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
 
             {/* Search */}
             <div className="customers-search-bar">
@@ -97,35 +104,31 @@ export default function Customers() {
             </div>
 
             {/* Table */}
-            {loading ? (
-                <div className="admin-loading-inline">
-                    <div className="admin-loading-spinner" />
-                    <span>Loading customers…</span>
-                </div>
-            ) : filtered.length === 0 ? (
-                <div className="admin-empty-state">
-                    <Users size={40} />
-                    <p>{search ? 'No customers match your search.' : 'No registered customers yet.'}</p>
-                </div>
-            ) : (
-                <motion.div
-                    className="customers-table-wrapper"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                >
-                    <table className="customers-table">
-                        <thead>
+            <div className="customers-table-wrapper">
+                <table className="customers-table">
+                    <thead>
+                        <tr>
+                            <th><User size={14} /> Name</th>
+                            <th><Mail size={14} /> Email</th>
+                            <th><Phone size={14} /> Phone</th>
+                            <th><MapPin size={14} /> Shipping Address</th>
+                            <th><Calendar size={14} /> Joined</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <CustomerRowSkeleton rows={8} />
+                        ) : filtered.length === 0 ? (
                             <tr>
-                                <th><User size={14} /> Name</th>
-                                <th><Mail size={14} /> Email</th>
-                                <th><Phone size={14} /> Phone</th>
-                                <th><MapPin size={14} /> Shipping Address</th>
-                                <th><Calendar size={14} /> Joined</th>
+                                <td colSpan="5">
+                                    <div className="admin-empty-state">
+                                        <Users size={40} />
+                                        <p>{search ? 'No customers match your search.' : 'No registered customers yet.'}</p>
+                                    </div>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map((customer, i) => (
+                        ) : (
+                            filtered.map((customer, i) => (
                                 <motion.tr
                                     key={customer.id}
                                     initial={{ opacity: 0, x: -10 }}
@@ -145,11 +148,11 @@ export default function Customers() {
                                     <td className="customer-address">{customer.address || <span className="customer-empty">—</span>}</td>
                                     <td className="customer-date">{formatDate(customer.created_at)}</td>
                                 </motion.tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </motion.div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }

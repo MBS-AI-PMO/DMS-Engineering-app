@@ -13,7 +13,6 @@ const statCards = [
     { label: 'FAQs', icon: HelpCircle, to: '/admin/faqs', fetch: fetchFaqs },
     { label: 'FAQ Categories', icon: FolderOpen, to: '/admin/faq-categories', fetch: fetchFaqCategories },
     { label: 'Services', icon: Wrench, to: '/admin/services', fetch: fetchServices },
-    { label: 'Pricing', icon: DollarSign, to: '/admin/pricing', fetch: fetchPricingMetadata },
     { label: 'Admins', icon: Shield, to: '/admin/admins', fetch: fetchAdminUsers },
 ];
 

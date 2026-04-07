@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, Mail, Users,
-    LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign, ShoppingBag, Cpu
+    LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign, ShoppingBag, Cpu, CreditCard, Calculator
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
@@ -17,11 +17,13 @@ const navItems = [
     { to: '/admin/faq-categories', label: 'FAQ Categories', icon: FolderOpen },
     { to: '/admin/services', label: 'Services', icon: Wrench },
     { to: '/admin/pricing', label: 'Discounts', icon: DollarSign },
+    { to: '/admin/pricing-calculator', label: 'Price Calculator', icon: Calculator },
     { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
 
     { to: '/admin/customers', label: 'Customers', icon: UserCheck },
     { to: '/admin/admins', label: 'Admins', icon: Shield },
     { to: '/admin/email', label: 'Email Config', icon: Mail },
+    { to: '/admin/payment', label: 'Payment Methods', icon: CreditCard },
     { to: '/admin/subscribers', label: 'Subscribers', icon: Users },
     { to: '/admin/contact', label: 'Contact', icon: Mail },
 ];

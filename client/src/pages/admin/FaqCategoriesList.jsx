@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { fetchFaqCategories, createFaqCategory, updateFaqCategory, deleteFaqCategory } from '../../utils/api';
+import { TableRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 const empty = { name: '', slug: '', description: '', display_order: 0 };
@@ -65,21 +66,21 @@ export default function FaqCategoriesList() {
                 </button>
             </div>
 
-            {loading ? (
-                [...Array(4)].map((_, i) => <div key={i} className="skeleton skeleton-table-row" />)
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Slug</th>
-                                <th>Order</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {categories.map(cat => (
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Slug</th>
+                            <th>Order</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableRowSkeleton columns={3} rows={6} />
+                        ) : (
+                            categories.map(cat => (
                                 <tr key={cat.id}>
                                     <td>{cat.name}</td>
                                     <td className="table-cell-muted">{cat.slug}</td>
@@ -91,12 +92,12 @@ export default function FaqCategoriesList() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {categories.length === 0 && <div className="admin-empty">No FAQ categories yet.</div>}
-                </div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {!loading && categories.length === 0 && <div className="admin-empty">No FAQ categories yet.</div>}
+            </div>
 
             <AnimatePresence>
                 {editing !== null && (

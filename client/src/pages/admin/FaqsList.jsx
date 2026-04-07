@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Plus, Trash2, Edit2, Save, X, Search } from 'lucide-react';
 import { fetchFaqs, fetchFaqCategories, createFaq, updateFaq, deleteFaq } from '../../utils/api';
+import { TableRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 const empty = { question: '', answer: '', category_id: '', display_order: 0 };
@@ -85,21 +86,21 @@ export default function FaqsList() {
                 </select>
             </div>
 
-            {loading ? (
-                [...Array(5)].map((_, i) => <div key={i} className="skeleton skeleton-table-row" />)
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Question</th>
-                                <th>Category</th>
-                                <th>Order</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(faq => (
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Question</th>
+                            <th>Category</th>
+                            <th>Order</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableRowSkeleton columns={3} rows={8} />
+                        ) : (
+                            filtered.map(faq => (
                                 <tr key={faq.id}>
                                     <td className="table-cell-truncate">{faq.question}</td>
                                     <td className="table-cell-muted">
@@ -113,12 +114,12 @@ export default function FaqsList() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {filtered.length === 0 && <div className="admin-empty">No FAQs found.</div>}
-                </div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {!loading && filtered.length === 0 && <div className="admin-empty">No FAQs found.</div>}
+            </div>
 
             <AnimatePresence>
                 {editing !== null && (

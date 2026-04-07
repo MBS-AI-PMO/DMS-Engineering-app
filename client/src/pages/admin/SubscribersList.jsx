@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
 import { Trash2, Search } from 'lucide-react';
 import { fetchSubscribers, deleteSubscriber } from '../../utils/api';
+import { TableRowSkeleton } from '../../components/admin/AdminSkeletons';
 import { useToast } from '../../context/ToastContext';
 
 export default function SubscribersList() {
@@ -50,21 +51,21 @@ export default function SubscribersList() {
                 />
             </div>
 
-            {loading ? (
-                [...Array(5)].map((_, i) => <div key={i} className="skeleton skeleton-table-row" />)
-            ) : (
-                <div className="admin-table-wrapper">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th>Status</th>
-                                <th>Subscribed</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(sub => (
+            <div className="admin-table-wrapper">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Subscribed</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <TableRowSkeleton columns={3} rows={6} />
+                        ) : (
+                            filtered.map(sub => (
                                 <tr key={sub.id}>
                                     <td><strong>{sub.email}</strong></td>
                                     <td>
@@ -81,12 +82,12 @@ export default function SubscribersList() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {filtered.length === 0 && <div className="admin-empty">No subscribers found.</div>}
-                </div>
-            )}
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {!loading && filtered.length === 0 && <div className="admin-empty">No subscribers found.</div>}
+            </div>
 
             {/* Delete confirmation */}
             <AnimatePresence>

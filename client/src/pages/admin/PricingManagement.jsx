@@ -232,7 +232,7 @@ export default function PricingManagement() {
                                     <tbody>
                                         {discounts.map((d, idx) => (
                                             <tr key={d.id || `new-${idx}`} className="premium-tier-row">
-                                                <td>
+                                                <td data-label="Triggers">
                                                     <div className="premium-qty-list-display">
                                                         {discountDisplayMode === 'range' ? (
                                                             <span className="trigger-badge" style={{ background: '#f8fafc', color: '#1e293b', padding: '6px 12px', border: '1.5px solid #e2e8f0' }}>
@@ -246,12 +246,12 @@ export default function PricingManagement() {
                                                         {!d.is_active && <span className="inactive-badge">Inactive</span>}
                                                     </div>
                                                 </td>
-                                                <td>
+                                                <td data-label="Discount">
                                                     <div className="discount-value-display">
                                                         <span className="premium-discount-badge-v2">{d.discount_percent}% OFF</span>
                                                     </div>
                                                 </td>
-                                                <td className="actions-cell">
+                                                <td data-label="Actions" className="actions-cell">
                                                     <div className="premium-mini-actions">
                                                         <button
                                                             type="button"

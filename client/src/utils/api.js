@@ -383,6 +383,26 @@ export async function savePricingRules(payload) {
     });
 }
 
+// ── Payment ───────────────────────────────────────────
+
+export async function fetchPaymentConfig() {
+    const { data } = await request('/payment/config');
+    return data;
+}
+
+export async function testPaypalKeys({ mode, client_id, secret }) {
+    return request('/payment/test-paypal', { method: 'POST', body: { mode, client_id, secret } });
+}
+
+export async function createPaypalOrder(amount, currency = 'USD') {
+    const { orderID } = await request('/payment/paypal/create-order', { method: 'POST', body: { amount, currency } });
+    return orderID;
+}
+
+export async function capturePaypalOrder(orderID) {
+    return request('/payment/paypal/capture-order', { method: 'POST', body: { orderID } });
+}
+
 // ── Discounts ───────────────────────────────────────────
 
 export async function fetchAdminDiscounts() {
