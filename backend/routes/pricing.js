@@ -233,8 +233,24 @@ router.post('/calculate', async (req, res) => {
                 const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
                 main_service_cost = base + w_cost + l_cost + t_cost;
             } else {
-                // Standard service (e.g., Laser Cutting)
-                main_service_cost = parseFloat(mainService.base_price) || 0;
+                // Check per-metal/thickness pricing rules first (e.g., Laser Cutting rates vary by material)
+                if (metal_id && thickness_value) {
+                    const ruleRes = await db.query(
+                        'SELECT * FROM pricing_rules WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3',
+                        [metal_id, service_id, thickness_value]
+                    );
+                    if (ruleRes.rows.length > 0) {
+                        const rule = ruleRes.rows[0];
+                        main_service_cost = parseFloat(rule.base_price) || 0;
+                        main_service_cost += (parseFloat(length_in) || 0) * (parseFloat(rule.price_per_inch_length) || 0);
+                        main_service_cost += (parseFloat(height_in) || 0) * (parseFloat(rule.price_per_inch_height) || 0);
+                        main_service_cost += (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
+                    }
+                }
+                // Fall back to the service's flat base_price if no rule found
+                if (main_service_cost === 0) {
+                    main_service_cost = parseFloat(mainService.base_price) || 0;
+                }
             }
         }
 

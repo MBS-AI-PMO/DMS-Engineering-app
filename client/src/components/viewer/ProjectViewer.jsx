@@ -197,9 +197,12 @@ const ProjectViewer = ({
           });
         }
 
-        // Hardware markers (gold/amber)
+        // Hardware markers — distinct geometry per type
         if (configuration.selectedHardware) {
-          Object.values(configuration.selectedHardware).forEach(({ item, hole }) => {
+          // typeId→color map  (1=Flush Stud, 2=Flush Standoff, 3=Nut, 4=Flush Nut)
+          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
+
+          Object.values(configuration.selectedHardware).forEach(({ item, hole, typeId }) => {
             if (!hole?.position) return;
             const rawPos = hole.position;
             const pos = {
@@ -207,14 +210,34 @@ const ProjectViewer = ({
               y: Array.isArray(rawPos) ? rawPos[1] : (rawPos.y || 0),
               z: Array.isArray(rawPos) ? rawPos[2] : (rawPos.z || 0),
             };
+            const thickness = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
             const mmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
-            const radius = Math.max(mmDia / 2, 0.5);
-            const height = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
-            const geometry = new THREE.CylinderGeometry(radius, radius, height, 32, 1, true);
-            const material = new THREE.MeshBasicMaterial({ color: 0xB8860B, side: THREE.DoubleSide });
-            const marker = new THREE.Mesh(geometry, material);
+            const r = Math.max(mmDia / 2, 0.5);
+            const color = HW_COLORS[typeId] || 0xB8860B;
+            const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+
+            let geometry;
+            const type = typeId || 3;
+            if (type === 3) {
+              // Nut — solid hexagonal prism (6-sided), slightly wider than hole
+              geometry = new THREE.CylinderGeometry(r * 1.4, r * 1.4, thickness * 0.6, 6);
+            } else if (type === 2) {
+              // Flush Standoff — truncated cone (wider at base, narrower at top)
+              geometry = new THREE.CylinderGeometry(r * 0.8, r * 1.3, thickness, 24);
+            } else if (type === 1) {
+              // Flush Stud — thin solid cylinder (pin) extending through hole
+              geometry = new THREE.CylinderGeometry(r * 0.5, r * 0.5, thickness * 1.4, 16);
+            } else if (type === 4) {
+              // Flush Nut — wide flat disk (low profile)
+              geometry = new THREE.CylinderGeometry(r * 1.6, r * 1.6, thickness * 0.3, 6);
+            } else {
+              geometry = new THREE.CylinderGeometry(r, r, thickness, 32, 1, true);
+            }
+
+            const marker = new THREE.Mesh(geometry, mat);
             marker.isHardwareMarker = true;
             marker.position.set(pos.x, pos.y, pos.z);
+
             const rawAxis = hole.axis;
             if (rawAxis) {
               const axisVec = new THREE.Vector3(

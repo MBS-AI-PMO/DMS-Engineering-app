@@ -216,7 +216,8 @@ export async function fetchHardwareTypes() {
 }
 
 export async function fetchHardwareItemsByType(typeId) {
-    return request(`/hardware/types/${typeId}/items`);
+    const { data } = await request(`/hardware/types/${typeId}/items`);
+    return data;
 }
 
 export async function uploadHardwareTypeImage(typeId, file) {

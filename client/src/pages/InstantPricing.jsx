@@ -21,6 +21,13 @@ import { useToast } from '../context/ToastContext';
 
 const BACKEND_URL = import.meta.env.VITE_PYTHON_API_URL;
 
+const HW_TYPES = [
+  { id: 3, label: 'Nut', color: '#B8860B', specs: (item) => [item.length && `T ${item.length}"`, item.base_width && `E ${item.base_width}"`] },
+  { id: 2, label: 'Flush Standoff', color: '#6366f1', specs: (item) => [item.length && `L ${item.length}"`] },
+  { id: 1, label: 'Flush Stud', color: '#059669', specs: (item) => [item.length && `L ${item.length}"`] },
+  { id: 4, label: 'Flush Nut', color: '#DC2626', specs: (item) => [item.length && `A ${item.length}"`, item.base_width && `H ${item.base_width}"`, item.shank && `Shank ${item.shank}"`] },
+];
+
 const is2DFile = (filename) => {
   const name = filename?.toLowerCase() ?? '';
   return name.endsWith('.dxf') || name.endsWith('.dwg');
@@ -80,7 +87,8 @@ const InstantPricing = () => {
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedHardware, setSelectedHardware] = useState({});
   const [activeHwHole, setActiveHwHole] = useState(null);
-  const [hwItems, setHwItems] = useState([]);
+  const [hwItemsByType, setHwItemsByType] = useState({});
+  const [activeHwType, setActiveHwType] = useState(3);
   const [expandedHwGroups, setExpandedHwGroups] = useState(new Set());
   const [isDetectingHoles, setIsDetectingHoles] = useState(false);
   const [highlightBends, setHighlightBends] = useState(false);
@@ -218,12 +226,16 @@ const InstantPricing = () => {
     }
   };
 
-  // ── Fetch hardware items when hardware service is selected ──────────
+  // ── Fetch all hardware types when hardware service is selected ──────────
   useEffect(() => {
     const hwSvc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('hardware'));
-    if (hwSvc && hwItems.length === 0) {
-      fetchHardwareItemsByType(3).then(items => setHwItems(items || [])).catch(() => { });
-    }
+    if (!hwSvc) return;
+    HW_TYPES.forEach(({ id }) => {
+      if (hwItemsByType[id] !== undefined) return;
+      fetchHardwareItemsByType(id)
+        .then(items => setHwItemsByType(prev => ({ ...prev, [id]: items || [] })))
+        .catch(() => setHwItemsByType(prev => ({ ...prev, [id]: [] })));
+    });
   }, [selectedAdditionalServices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── File Selection Handler ──────────
@@ -301,10 +313,11 @@ const InstantPricing = () => {
     modelOriginalDataRef.current = null;
   }, [selectedFile]);
 
-  // ── STEP Hole Detection for Tapping ──────────────────
+  // ── STEP Hole Detection for Tapping & Hardware ───────
   useEffect(() => {
     const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
-    if (!hasTapping || !selectedFile || !isStepFile(selectedFile.file.name)) return;
+    const hasHardware = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware'));
+    if ((!hasTapping && !hasHardware) || !selectedFile || !isStepFile(selectedFile.file.name)) return;
     if (stepHolesDetectedRef.current || isDetectingHoles) return;
 
     const detect = async () => {
@@ -334,6 +347,15 @@ const InstantPricing = () => {
     };
     detect();
   }, [selectedAdditionalServices, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-open modals once holes are detected ──────────
+  useEffect(() => {
+    if (detectedHoles.length === 0) return;
+    const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
+    const hasHardware = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware'));
+    if (hasTapping && !activeTapHole && !activeHwHole) setActiveTapHole(detectedHoles[0]);
+    else if (hasHardware && !activeHwHole && !activeTapHole) setActiveHwHole(detectedHoles[0]);
+  }, [detectedHoles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
@@ -2067,11 +2089,11 @@ const InstantPricing = () => {
                                   if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }
                                   else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedFinishColors(p => { const n = { ...p }; delete n[svc.id]; return n; }); }
                                 } else if (isTap) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]); }
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveHwHole(null); if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]); }
                                   else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null); }
                                 } else if (isHardware) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedHardware({}); setActiveHwHole(null); }
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedHardware({}); setActiveHwHole(null); setHwItemsByType({}); }
                                 } else {
                                   setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
                                 }
@@ -2127,7 +2149,7 @@ const InstantPricing = () => {
 
                                 {isSelected && isHardware && detectedHoles.length > 0 && (
                                   <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex gap-5">
+                                    <div className="d-flex gap-4 align-items-end">
                                       <div className="d-flex flex-column">
                                         <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
                                         <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
@@ -2136,8 +2158,15 @@ const InstantPricing = () => {
                                         <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>ASSIGNED</span>
                                         <span className="fw-black text-white fs-4">{Object.keys(selectedHardware).length}</span>
                                       </div>
+                                      {Object.keys(selectedHardware).length > 0 && (
+                                        <div className="d-flex gap-1 flex-wrap mb-1">
+                                          {HW_TYPES.filter(t => Object.values(selectedHardware).some(h => h.typeId === t.id)).map(t => (
+                                            <span key={t.id} className="badge rounded-pill fw-bold" style={{ fontSize: '9px', background: t.color }}>{t.label}</span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
-                                    <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ background: 'white', color: '#B8860B' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>MANAGE</button>
+                                    <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ background: 'white', color: '#B8860B', border: 'none', fontSize: '12px' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>MANAGE</button>
                                   </div>
                                 )}
 
@@ -2239,13 +2268,13 @@ const InstantPricing = () => {
 
                             {/* Detailed Service Breakdown */}
                             {(priceEstimate?.breakdown?.service_breakdown || []).map((svc, idx) => (
-                              <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-danger">
+                              <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                 <div className="d-flex flex-column">
-                                  <span className="opacity-90 fw-bold small">{svc.name}</span>
-                                  <span className="opacity-50" style={{ fontSize: '10px' }}>Configured Finish</span>
+                                  <span className="opacity-70 small">{svc.name}</span>
+                                  <span className="text-white-50" style={{ fontSize: '10px' }}>Configured Finish</span>
                                 </div>
                                 {isCalculatingPrice ? <PriceSkeleton /> : (
-                                  <span className="fw-black fs-5">+${parseFloat(svc.price || 0).toFixed(2)}</span>
+                                  <span className="fw-black fs-5">${parseFloat(svc.price || 0).toFixed(2)}</span>
                                 )}
                               </div>
                             ))}
@@ -2255,13 +2284,13 @@ const InstantPricing = () => {
                               if (tapTotal <= 0) return null;
                               const tapCount = Object.values(selectedTaps).length;
                               return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10 text-warning">
+                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                   <div className="d-flex flex-column">
-                                    <span className="opacity-90 fw-bold small">Tapping Cost</span>
-                                    <span className="opacity-50" style={{ fontSize: '10px' }}>{tapCount} hole{tapCount !== 1 ? 's' : ''} configured</span>
+                                    <span className="opacity-70 small">Tapping Cost</span>
+                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{tapCount} hole{tapCount !== 1 ? 's' : ''} configured</span>
                                   </div>
                                   {isCalculatingPrice ? <PriceSkeleton /> : (
-                                    <span className="fw-black fs-5">+${tapTotal.toFixed(2)}</span>
+                                    <span className="fw-black fs-5">${tapTotal.toFixed(2)}</span>
                                   )}
                                 </div>
                               );
@@ -2271,14 +2300,15 @@ const InstantPricing = () => {
                               const hwTotal = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
                               if (hwTotal <= 0) return null;
                               const hwCount = Object.values(selectedHardware).length;
+                              const usedTypes = HW_TYPES.filter(t => Object.values(selectedHardware).some(h => h.typeId === t.id));
                               return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10" style={{ color: '#F59E0B' }}>
+                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                   <div className="d-flex flex-column">
-                                    <span className="opacity-90 fw-bold small">Hardware Cost</span>
-                                    <span className="opacity-50" style={{ fontSize: '10px' }}>{hwCount} hole{hwCount !== 1 ? 's' : ''} configured</span>
+                                    <span className="opacity-70 small">Hardware Cost</span>
+                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{hwCount} hole{hwCount !== 1 ? 's' : ''} · {usedTypes.map(t => t.label).join(', ')}</span>
                                   </div>
                                   {isCalculatingPrice ? <PriceSkeleton /> : (
-                                    <span className="fw-black fs-5">+${hwTotal.toFixed(2)}</span>
+                                    <span className="fw-black fs-5">${hwTotal.toFixed(2)}</span>
                                   )}
                                 </div>
                               );
@@ -2567,193 +2597,221 @@ const InstantPricing = () => {
           </motion.div>
         )}
 
-        {activeHwHole && (
-          <motion.div key="hardware-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
-            <motion.div className="bg-white rounded-5 shadow-22xl overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1100px', height: '85vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.95, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
+        {activeHwHole && (() => {
+          const activeType = HW_TYPES.find(t => t.id === activeHwType) || HW_TYPES[0];
+          const activeItems = (hwItemsByType[activeHwType] || []).filter(it => it.is_active !== false);
+          return (
+            <motion.div key="hardware-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
+              <motion.div className="bg-white rounded-5 shadow-22xl overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1200px', height: '88vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.95, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
 
-              {/* Header */}
-              <div className="p-5 border-bottom d-flex justify-content-between align-items-center bg-white">
-                <div>
-                  <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HARDWARE INSERTION</h3>
-                  <div className="d-flex align-items-center gap-3 mt-2">
-                    <span className="fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px', color: '#B8860B' }}>&Oslash; {Number(activeHwHole.diameterInches || 0).toFixed(4)}&quot;</span>
-                    <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Depth: {Number(activeHwHole.depth_mm || 0).toFixed(2)} mm</span>
+                {/* Header */}
+                <div className="p-5 border-bottom d-flex justify-content-between align-items-center bg-white">
+                  <div>
+                    <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HARDWARE INSERTION</h3>
+                    <div className="d-flex align-items-center gap-3 mt-2">
+                      <span className="fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px', color: activeType.color }}>&Oslash; {Number(activeHwHole.diameterInches || 0).toFixed(4)}&quot;</span>
+                      <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Depth: {Number(activeHwHole.depthMm || activeHwHole.depth_mm || 0).toFixed(2)} mm</span>
+                      <span className="badge rounded-pill fw-bold text-white" style={{ backgroundColor: activeType.color, fontSize: '11px' }}>{activeType.label}</span>
+                    </div>
                   </div>
+                  {/* Hardware type tabs */}
+                  <div className="d-flex align-items-center gap-2 me-4">
+                    {HW_TYPES.map(t => (
+                      <button
+                        key={t.id}
+                        className="btn btn-sm rounded-pill fw-black px-3 py-1 border-0 transition-all"
+                        style={{
+                          fontSize: '11px',
+                          background: activeHwType === t.id ? t.color : '#f1f5f9',
+                          color: activeHwType === t.id ? '#fff' : '#64748b',
+                          letterSpacing: '0.05em',
+                        }}
+                        onClick={() => setActiveHwType(t.id)}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setActiveHwHole(null)} />
                 </div>
-                <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setActiveHwHole(null)} />
-              </div>
 
-              <div className="flex-grow-1 d-flex overflow-hidden bg-white">
-                {/* Left panel — hole groups */}
-                <div className="border-end bg-light-subtle bg-opacity-20 p-4 overflow-auto hide-scrollbar" style={{ width: '320px' }}>
-                  <div className="mb-4 px-2 d-flex justify-content-between align-items-center">
-                    <h4 className="fw-black text-muted text-uppercase letter-spacing-2 m-0" style={{ fontSize: '13px' }}>Detected Holes</h4>
-                    <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '11px' }}>{detectedHoles.length}</span>
-                  </div>
+                <div className="flex-grow-1 d-flex overflow-hidden bg-white">
+                  {/* Left panel — hole groups */}
+                  <div className="border-end bg-light-subtle bg-opacity-20 p-4 overflow-auto hide-scrollbar" style={{ width: '320px' }}>
+                    <div className="mb-4 px-2 d-flex justify-content-between align-items-center">
+                      <h4 className="fw-black text-muted text-uppercase letter-spacing-2 m-0" style={{ fontSize: '13px' }}>Detected Holes</h4>
+                      <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '11px' }}>{detectedHoles.length}</span>
+                    </div>
 
-                  {holeGroups.map((group) => {
-                    const isExpanded = expandedHwGroups.has(group.dia);
-                    const assignedCount = group.holes.filter(h => !!selectedHardware[h.id]).length;
-                    const allAssigned = assignedCount === group.holes.length;
-                    const firstItem = hwItems[0];
+                    {holeGroups.map((group) => {
+                      const isExpanded = expandedHwGroups.has(group.dia);
+                      const assignedCount = group.holes.filter(h => !!selectedHardware[h.id]).length;
+                      const allAssigned = assignedCount === group.holes.length;
+                      const firstItem = activeItems[0];
 
-                    return (
-                      <div key={group.dia} className="mb-2">
-                        <div
-                          className={`p-3 rounded-4 cursor-pointer border-2 d-flex align-items-center justify-content-between transition-all ${isExpanded ? 'text-white border-2' : 'bg-white border-light-subtle shadow-xs'}`}
-                          style={isExpanded ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
-                          onClick={() => setExpandedHwGroups(prev => {
-                            const next = new Set(prev);
-                            next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia);
-                            return next;
-                          })}
-                        >
-                          <div className="d-flex align-items-center gap-2">
-                            <ChevronDown size={13} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} className={isExpanded ? 'text-white' : 'text-muted'} />
-                            <div>
-                              <span className="fw-black" style={{ fontSize: '14px' }}>&Oslash; {group.dia}&quot;</span>
-                              <span className="ms-2 fw-bold" style={{ fontSize: '12px', opacity: 0.7 }}>&times; {group.holes.length}</span>
+                      return (
+                        <div key={group.dia} className="mb-2">
+                          <div
+                            className={`p-3 rounded-4 cursor-pointer border-2 d-flex align-items-center justify-content-between transition-all ${isExpanded ? 'text-white border-2' : 'bg-white border-light-subtle shadow-xs'}`}
+                            style={isExpanded ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
+                            onClick={() => setExpandedHwGroups(prev => {
+                              const next = new Set(prev);
+                              next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia);
+                              return next;
+                            })}
+                          >
+                            <div className="d-flex align-items-center gap-2">
+                              <ChevronDown size={13} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} className={isExpanded ? 'text-white' : 'text-muted'} />
+                              <div>
+                                <span className="fw-black" style={{ fontSize: '14px' }}>&Oslash; {group.dia}&quot;</span>
+                                <span className="ms-2 fw-bold" style={{ fontSize: '12px', opacity: 0.7 }}>&times; {group.holes.length}</span>
+                              </div>
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              {allAssigned && <Check size={13} className={isExpanded ? 'text-white' : 'text-success'} strokeWidth={3} />}
+                              {!allAssigned && assignedCount > 0 && (
+                                <span className={`badge rounded-pill fw-bold ${isExpanded ? 'bg-white' : 'bg-warning text-dark'}`} style={{ fontSize: '10px', color: isExpanded ? '#B8860B' : undefined }}>
+                                  {assignedCount}/{group.holes.length}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="d-flex align-items-center gap-2">
-                            {allAssigned && <Check size={13} className={isExpanded ? 'text-white' : 'text-success'} strokeWidth={3} />}
-                            {!allAssigned && assignedCount > 0 && (
-                              <span className={`badge rounded-pill fw-bold ${isExpanded ? 'bg-white' : 'bg-warning text-dark'}`} style={{ fontSize: '10px', color: isExpanded ? '#B8860B' : undefined }}>
-                                {assignedCount}/{group.holes.length}
-                              </span>
-                            )}
-                          </div>
-                        </div>
 
-                        {isExpanded && (
-                          <div className="ps-2 pt-1">
-                            {group.holes.length > 1 && firstItem && (
-                              <button
-                                className="btn btn-sm w-100 mb-2 rounded-3 fw-bold bg-white"
-                                style={{ fontSize: '12px', border: '1px solid #B8860B', color: '#B8860B' }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedHardware(prev => {
-                                    const next = { ...prev };
-                                    group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h }; });
-                                    return next;
-                                  });
-                                }}
-                              >
-                                Apply to all {group.holes.length} &rarr; {firstItem.name}
-                              </button>
-                            )}
-                            {group.holes.map(hole => {
-                              const assigned = selectedHardware[hole.id];
-                              const isActive = activeHwHole?.id === hole.id;
-                              const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
-                              return (
-                                <motion.div
-                                  key={hole.id} layout
-                                  className={`p-3 rounded-4 mb-1 cursor-pointer border-2 d-flex align-items-center justify-content-between ${isActive ? 'border-2 text-white shadow-sm' : 'border-transparent bg-light hover-bg-white shadow-xs'}`}
-                                  style={isActive ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
-                                  onClick={() => setActiveHwHole(hole)}
-                                  whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}
+                          {isExpanded && (
+                            <div className="ps-2 pt-1">
+                              {group.holes.length > 1 && firstItem && (
+                                <button
+                                  className="btn btn-sm w-100 mb-2 rounded-3 fw-bold bg-white"
+                                  style={{ fontSize: '12px', border: '1px solid #B8860B', color: '#B8860B' }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setSelectedHardware(prev => {
+                                      const next = { ...prev };
+                                      group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType }; });
+                                      return next;
+                                    });
+                                  }}
                                 >
-                                  <div className="d-flex align-items-center gap-2">
-                                    <div
-                                      className={`rounded-circle d-flex align-items-center justify-content-center fw-black ${isActive ? 'bg-white' : assigned ? 'bg-success text-white' : 'bg-white text-muted border'}`}
-                                      style={{ width: '26px', height: '26px', fontSize: '12px', color: isActive ? '#B8860B' : undefined }}
-                                    >
-                                      {globalIdx + 1}
+                                  Apply to all {group.holes.length} &rarr; {firstItem.name}
+                                </button>
+                              )}
+                              {group.holes.map(hole => {
+                                const assigned = selectedHardware[hole.id];
+                                const isActive = activeHwHole?.id === hole.id;
+                                const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
+                                return (
+                                  <motion.div
+                                    key={hole.id} layout
+                                    className={`p-3 rounded-4 mb-1 cursor-pointer border-2 d-flex align-items-center justify-content-between ${isActive ? 'border-2 text-white shadow-sm' : 'border-transparent bg-light hover-bg-white shadow-xs'}`}
+                                    style={isActive ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
+                                    onClick={() => setActiveHwHole(hole)}
+                                    whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}
+                                  >
+                                    <div className="d-flex align-items-center gap-2">
+                                      <div
+                                        className={`rounded-circle d-flex align-items-center justify-content-center fw-black ${isActive ? 'bg-white' : assigned ? 'bg-success text-white' : 'bg-white text-muted border'}`}
+                                        style={{ width: '26px', height: '26px', fontSize: '12px', color: isActive ? '#B8860B' : undefined }}
+                                      >
+                                        {globalIdx + 1}
+                                      </div>
+                                      <div>
+                                        <span className={`fw-bold d-block ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px' }}>
+                                          {assigned ? assigned.item.name : 'Not Assigned'}
+                                        </span>
+                                        {assigned && (
+                                          <span className="fw-bold" style={{ fontSize: '10px', color: isActive ? 'rgba(255,255,255,0.7)' : HW_TYPES.find(t => t.id === assigned.typeId)?.color || '#64748b' }}>
+                                            {HW_TYPES.find(t => t.id === assigned.typeId)?.label}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <span className={`fw-bold ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px' }}>
-                                      {assigned ? assigned.item.name : 'Not Assigned'}
-                                    </span>
+                                    {assigned && !isActive && <Check size={13} className="text-success" strokeWidth={3} />}
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right panel — hardware items */}
+                  <div className="flex-grow-1 overflow-auto bg-white hide-scrollbar d-flex flex-column">
+                    {hwItemsByType[activeHwType] === undefined ? (
+                      <div className="flex-grow-1 d-flex align-items-center justify-content-center">
+                        <div className="d-flex align-items-center gap-2 text-muted">
+                          <Loader2 size={20} className="animate-spin" />
+                          <span className="fw-bold">Loading {activeType.label} items...</span>
+                        </div>
+                      </div>
+                    ) : activeItems.length === 0 ? (
+                      <div className="flex-grow-1 d-flex flex-column align-items-center justify-content-center text-center py-5 px-4">
+                        <AlertCircle size={48} className="text-muted opacity-20 mb-3" />
+                        <h3 className="fw-bold text-muted">No {activeType.label} Items Configured</h3>
+                        <p className="text-muted small">Add {activeType.label} items in the Hardware service settings in your admin dashboard.</p>
+                      </div>
+                    ) : (
+                      <div className="p-5 animate-fade-in">
+                        <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}>
+                          <Check size={14} style={{ color: activeType.color }} /> SELECT {activeType.label.toUpperCase()}
+                        </h4>
+                        <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+                          {activeItems.map(item => {
+                            const assigned = selectedHardware[activeHwHole.id];
+                            const isChosen = assigned?.item?.id === item.id && assigned?.typeId === activeHwType;
+                            const typeSpecs = activeType.specs(item).filter(Boolean);
+                            return (
+                              <motion.button
+                                key={item.id}
+                                className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'text-white shadow-sm' : 'bg-white border-light-subtle shadow-xs'}`}
+                                style={isChosen ? { background: activeType.color, borderColor: activeType.color } : {}}
+                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType } }))}
+                                whileTap={{ scale: 0.98 }}
+                              >
+                                <div className={`p-3 rounded-4 flex-shrink-0 ${isChosen ? 'bg-white' : 'bg-light text-muted'}`} style={{ color: isChosen ? activeType.color : undefined }}>
+                                  <Settings size={20} />
+                                </div>
+                                <div className="flex-grow-1 min-w-0">
+                                  <div className="d-flex justify-content-between align-items-start mb-1">
+                                    <strong className={`d-block fw-black ${isChosen ? 'text-white' : 'text-dark'}`} style={{ fontSize: '15px' }}>{item.name}</strong>
+                                    {isChosen && <div className="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '22px', height: '22px', color: activeType.color }}><Check size={12} strokeWidth={4} /></div>}
                                   </div>
-                                  {assigned && !isActive && <Check size={13} className="text-success" strokeWidth={3} />}
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        )}
+                                  {item.size_spec && (
+                                    <span className={`fw-bold font-monospace d-block mb-1 ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{item.size_spec}</span>
+                                  )}
+                                  <div className="d-flex flex-wrap gap-2 mb-2">
+                                    {item.tooling_diameter && (
+                                      <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>Tool Ø {item.tooling_diameter}&quot;</span>
+                                    )}
+                                    {typeSpecs.map(s => (
+                                      <span key={s} className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>{s}</span>
+                                    ))}
+                                    {item.min_edge_distance && (
+                                      <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>Edge {item.min_edge_distance}&quot;</span>
+                                    )}
+                                  </div>
+                                  <span className="fw-black" style={{ fontSize: '13px', color: isChosen ? '#fff' : activeType.color }}>
+                                    +${parseFloat(item.price || 0).toFixed(2)}/HOLE
+                                  </span>
+                                </div>
+                              </motion.button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
 
-                {/* Right panel — Nut item cards */}
-                <div className="flex-grow-1 p-5 overflow-auto bg-white hide-scrollbar">
-                  {hwItems.length === 0 ? (
-                    <div className="h-100 d-flex flex-column align-items-center justify-content-center text-center py-5">
-                      <AlertCircle size={48} className="text-muted opacity-20 mb-3" />
-                      <h3 className="fw-bold text-muted">No Nuts Configured</h3>
-                      <p className="text-muted small">Add Nut items in the Hardware service settings in your admin dashboard.</p>
-                    </div>
-                  ) : (
-                    <div className="animate-fade-in">
-                      <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}>
-                        <Check size={14} style={{ color: '#B8860B' }} /> SELECT NUT
-                      </h4>
-                      <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-                        {hwItems.filter(it => it.is_active !== false).map(item => {
-                          const isChosen = selectedHardware[activeHwHole.id]?.item?.id === item.id;
-                          return (
-                            <motion.button
-                              key={item.id}
-                              className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'text-white shadow-sm' : 'bg-white border-light-subtle shadow-xs'}`}
-                              style={isChosen ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
-                              onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole } }))}
-                              whileTap={{ scale: 0.98 }}
-                            >
-                              <div className={`p-3 rounded-4 flex-shrink-0 ${isChosen ? 'bg-white' : 'bg-light text-muted'}`} style={{ color: isChosen ? '#B8860B' : undefined }}>
-                                <Settings size={20} />
-                              </div>
-                              <div className="flex-grow-1 min-w-0">
-                                <div className="d-flex justify-content-between align-items-start mb-1">
-                                  <strong className={`d-block fw-black ${isChosen ? 'text-white' : 'text-dark'}`} style={{ fontSize: '15px' }}>{item.name}</strong>
-                                  {isChosen && <div className="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '22px', height: '22px', color: '#B8860B' }}><Check size={12} strokeWidth={4} /></div>}
-                                </div>
-                                {item.size_spec && (
-                                  <span className={`fw-bold font-monospace d-block mb-1 ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{item.size_spec}</span>
-                                )}
-                                <div className="d-flex flex-wrap gap-2 mb-2">
-                                  {item.tooling_diameter && (
-                                    <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>
-                                      Tool Ø {item.tooling_diameter}&quot;
-                                    </span>
-                                  )}
-                                  {item.length && (
-                                    <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>
-                                      T {item.length}&quot;
-                                    </span>
-                                  )}
-                                  {item.base_width && (
-                                    <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>
-                                      E {item.base_width}&quot;
-                                    </span>
-                                  )}
-                                  {item.min_edge_distance && (
-                                    <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>
-                                      Edge {item.min_edge_distance}&quot;
-                                    </span>
-                                  )}
-                                </div>
-                                <span className={`fw-black ${isChosen ? 'text-white' : ''}`} style={{ fontSize: '13px', color: isChosen ? undefined : '#B8860B' }}>
-                                  +${parseFloat(item.price || 0).toFixed(2)}/HOLE
-                                </span>
-                              </div>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
+                  <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}>CLEAR SELECTION</button>
+                  <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveHwHole(null)}>DISMISS CONFIGURATOR</button>
                 </div>
-              </div>
-
-              <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
-                <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}>CLEAR SELECTION</button>
-                <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveHwHole(null)}>DISMISS CONFIGURATOR</button>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          );
+        })()}
 
         {isAnodizingModalOpen && (
           <motion.div key="anodizing-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
