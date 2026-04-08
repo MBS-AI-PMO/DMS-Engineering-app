@@ -950,66 +950,120 @@ const InstantPricing = () => {
         holeMarkersRef.current.forEach(m => { m.parent?.remove(m); m.geometry?.dispose(); m.material?.dispose(); });
         holeMarkersRef.current = [];
 
-        if (!isTappingActive || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
+        const hasHwAssigned = Object.keys(selectedHardware).length > 0;
+        if ((!isTappingActive && !hasHwAssigned) || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
 
-        const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
-        const tapOptions = tapSvc?.service_options || [];
+        const partT = dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0;
 
-        detectedHoles.forEach(hole => {
-          if (!hole.position) return;
-          const dia = hole.diameter_mm ? hole.diameter_mm / 25.4 : (hole.diameterInches || 0.1);
-          const mmDia = dia * 25.4;
+        // ── Tapping markers ──────────────────────────────────────────────
+        if (isTappingActive) {
+          const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
+          const tapOptions = tapSvc?.service_options || [];
 
-          // Safety Cap: Filter out accidental large features
-          if (mmDia > 100.0) return;
-          const isConfigured = tapOptions.some(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
-          const isTapped = !!selectedTaps[hole.id];
-          const isActive = activeTapHole?.id === hole.id;
+          detectedHoles.forEach(hole => {
+            if (!hole.position) return;
+            const dia = hole.diameter_mm ? hole.diameter_mm / 25.4 : (hole.diameterInches || 0.1);
+            const mmDia = dia * 25.4;
+            if (mmDia > 100.0) return;
 
-          let color = isConfigured ? 0x10b981 : 0xef4444;
-          if (isTapped) color = 0x4169e1;
-          if (isActive) color = 0xe31b23;
+            const isConfigured = tapOptions.some(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
+            const isTapped = !!selectedTaps[hole.id];
+            const isActive = activeTapHole?.id === hole.id;
 
-          const radius = mmDia / 2;
+            let color = isConfigured ? 0x10b981 : 0xef4444;
+            if (isTapped) color = 0x4169e1;
+            if (isActive) color = 0xe31b23;
 
-          // Unified "Hollow Tube" Geometry - Capped at EXACT part thickness
-          const partT = dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0;
-          let height = partT;
+            const safeRadius = Math.max(mmDia / 2, 0.5);
+            const geo = new THREE.CylinderGeometry(safeRadius, safeRadius, partT, 32, 1, true);
+            const mat = isTapped
+              ? new THREE.MeshBasicMaterial({ color, transparent: false, side: THREE.DoubleSide })
+              : new THREE.MeshPhongMaterial({ color, emissive: isActive ? color : 0x000000, emissiveIntensity: isActive ? 4.0 : 0, shininess: 80, side: THREE.DoubleSide, transparent: false });
 
-          // Use Open-Ended cylinder with DoubleSide material for "Hollow" look
-          const safeRadius = Math.max(radius, 0.5);
-          const geo = new THREE.CylinderGeometry(safeRadius, safeRadius, height, 32, 1, true);
+            const sleeve = new THREE.Mesh(geo, mat);
+            sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
+            if (hole.axis) {
+              const pos = new THREE.Vector3(...hole.position);
+              sleeve.lookAt(pos.clone().add(new THREE.Vector3(...hole.axis)));
+              sleeve.rotateX(Math.PI / 2);
+            } else {
+              sleeve.rotateX(Math.PI / 2);
+            }
+            sleeve.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
+            modelParent.add(sleeve);
+            holeMarkersRef.current.push(sleeve);
+          });
+        }
 
-          let mat;
-          if (isTapped) {
-            mat = new THREE.MeshBasicMaterial({ color, transparent: false, side: THREE.DoubleSide });
-          } else {
-            mat = new THREE.MeshPhongMaterial({
-              color,
-              emissive: isActive ? color : 0x000000,
-              emissiveIntensity: isActive ? 4.0 : 0,
-              shininess: 80,
-              side: THREE.DoubleSide,
-              transparent: false
+        // ── Hardware markers ─────────────────────────────────────────────
+        if (hasHwAssigned) {
+          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
+
+          detectedHoles.forEach(hole => {
+            if (!hole.position) return;
+            const hw = selectedHardware[hole.id];
+            if (!hw) return;
+
+            const { item, typeId, face } = hw;
+            const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
+            const toolMmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
+            const r = Math.max(Math.min(holeMmDia / 2, toolMmDia / 2), 0.5);
+            const color = HW_COLORS[typeId] || 0xB8860B;
+
+            const axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
+            const faceSign = face === 'down' ? -1 : 1;
+            const faceOffset = axisVec.clone().normalize().multiplyScalar(faceSign * partT * 0.5);
+            const basePos = new THREE.Vector3(hole.position[0] + faceOffset.x, hole.position[1] + faceOffset.y, hole.position[2] + faceOffset.z);
+
+            const type = typeId || 3;
+            const meshesToAdd = [];
+
+            if (type === 3) {
+              // Nut — flat hex disk + inner black void
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.CylinderGeometry(r * 1.4, r * 1.4, partT * 0.15, 6),
+                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
+              ));
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.CylinderGeometry(r * 0.55, r * 0.55, partT * 0.2, 16),
+                new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 })
+              ));
+            } else if (type === 2) {
+              // Flush Standoff — tall cylinder post
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.CylinderGeometry(r * 0.9, r * 0.9, partT * 1.6, 24),
+                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
+              ));
+            } else if (type === 4) {
+              // Flush Nut — torus ring (washer shape)
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.TorusGeometry(r * 1.1, r * 0.35, 8, 24),
+                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
+              ));
+            } else if (type === 1) {
+              // Flush Stud — thin elongated pin
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.CylinderGeometry(r * 0.45, r * 0.45, partT * 2.2, 16),
+                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
+              ));
+            } else {
+              meshesToAdd.push(new THREE.Mesh(
+                new THREE.CylinderGeometry(r, r, partT, 32, 1, true),
+                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
+              ));
+            }
+
+            meshesToAdd.forEach(mesh => {
+              mesh.isHardwareMarker = true;
+              mesh.position.copy(basePos);
+              mesh.lookAt(basePos.clone().add(axisVec));
+              mesh.rotateX(Math.PI / 2);
+              modelParent.add(mesh);
+              holeMarkersRef.current.push(mesh);
             });
-          }
+          });
+        }
 
-          const sleeve = new THREE.Mesh(geo, mat);
-          sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
-
-          if (hole.axis) {
-            const pos = new THREE.Vector3(...hole.position);
-            const axis = new THREE.Vector3(...hole.axis);
-            sleeve.lookAt(pos.clone().add(axis));
-            sleeve.rotateX(Math.PI / 2);
-          } else {
-            sleeve.rotateX(Math.PI / 2);
-          }
-
-          sleeve.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
-          modelParent.add(sleeve);
-          holeMarkersRef.current.push(sleeve);
-        });
         v.Render();
       } catch (err) { console.warn('Hole marker error:', err); }
     };
@@ -1017,7 +1071,7 @@ const InstantPricing = () => {
     updateMarkers();
     const tid = setTimeout(updateMarkers, 500);
     return () => clearTimeout(tid);
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedFile?.file?.name, modelLoadCount, allServices, dimensions]);
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions]);
 
   useEffect(() => {
     const viewerEl = stepViewerRef.current;
@@ -2687,7 +2741,7 @@ const InstantPricing = () => {
                                     e.stopPropagation();
                                     setSelectedHardware(prev => {
                                       const next = { ...prev };
-                                      group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType }; });
+                                      group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType, face: 'up' }; });
                                       return next;
                                     });
                                   }}
@@ -2766,7 +2820,7 @@ const InstantPricing = () => {
                                 key={item.id}
                                 className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'text-white shadow-sm' : 'bg-white border-light-subtle shadow-xs'}`}
                                 style={isChosen ? { background: activeType.color, borderColor: activeType.color } : {}}
-                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType } }))}
+                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType, face: prev[activeHwHole.id]?.face || 'up' } }))}
                                 whileTap={{ scale: 0.98 }}
                               >
                                 <div className={`p-3 rounded-4 flex-shrink-0 ${isChosen ? 'bg-white' : 'bg-light text-muted'}`} style={{ color: isChosen ? activeType.color : undefined }}>
@@ -2799,6 +2853,27 @@ const InstantPricing = () => {
                             );
                           })}
                         </div>
+                        {selectedHardware[activeHwHole.id] && (
+                          <div className="mt-5 pt-4 border-top">
+                            <h4 className="fw-black text-muted mb-3 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}>
+                              INSTALLATION FACE
+                            </h4>
+                            <div className="d-flex gap-2">
+                              <button
+                                className={`btn rounded-pill px-4 py-2 fw-black border-2 transition-all ${selectedHardware[activeHwHole.id]?.face !== 'down' ? 'btn-dark text-white border-dark' : 'bg-white border-secondary text-muted'}`}
+                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'up' } }))}
+                              >
+                                ↑ UP
+                              </button>
+                              <button
+                                className={`btn rounded-pill px-4 py-2 fw-black border-2 transition-all ${selectedHardware[activeHwHole.id]?.face === 'down' ? 'btn-dark text-white border-dark' : 'bg-white border-secondary text-muted'}`}
+                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'down' } }))}
+                              >
+                                ↓ DOWN
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

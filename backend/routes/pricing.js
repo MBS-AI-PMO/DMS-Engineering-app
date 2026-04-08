@@ -247,6 +247,15 @@ router.post('/calculate', async (req, res) => {
                         main_service_cost += (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
                     }
                 }
+                // Fall back to service's pricing_config (e.g., Laser Cutting with base_setup + per-dimension rates)
+                if (main_service_cost === 0 && mainService.pricing_config && Object.keys(mainService.pricing_config).length > 0) {
+                    const cfg = mainService.pricing_config;
+                    const base = parseFloat(cfg.base_setup) || 0;
+                    const w_cost = (parseFloat(height_in) || 0) * (parseFloat(cfg.price_per_width) || 0);
+                    const l_cost = (parseFloat(length_in) || 0) * (parseFloat(cfg.price_per_length) || 0);
+                    const sq_cost = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0) * (parseFloat(cfg.price_per_sq_inch) || 0);
+                    main_service_cost = base + w_cost + l_cost + sq_cost;
+                }
                 // Fall back to the service's flat base_price if no rule found
                 if (main_service_cost === 0) {
                     main_service_cost = parseFloat(mainService.base_price) || 0;
@@ -319,6 +328,7 @@ router.post('/calculate', async (req, res) => {
                 material_formula: { price_per_length, price_per_width },
                 production_cost: main_service_cost,
                 additional_services_cost: additional_cost,
+                service_breakdown,
                 unit_total,
                 final_unit_price,
                 discount_percent,

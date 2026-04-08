@@ -134,7 +134,7 @@ const ProjectViewer = ({
 
         // Clean Markers
         const existing = [];
-        threeViewer.scene.traverse(obj => { if (obj.isTapMarker) existing.push(obj); });
+        threeViewer.scene.traverse(obj => { if (obj.isTapMarker || obj.isHardwareMarker) existing.push(obj); });
         existing.forEach(m => { if (m.parent) m.parent.remove(m); });
 
         // Apply Premium Multi-Phase Finishes
@@ -202,7 +202,7 @@ const ProjectViewer = ({
           // typeId→color map  (1=Flush Stud, 2=Flush Standoff, 3=Nut, 4=Flush Nut)
           const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
 
-          Object.values(configuration.selectedHardware).forEach(({ item, hole, typeId }) => {
+          Object.values(configuration.selectedHardware).forEach(({ item, hole, typeId, face }) => {
             if (!hole?.position) return;
             const rawPos = hole.position;
             const pos = {
@@ -210,45 +210,58 @@ const ProjectViewer = ({
               y: Array.isArray(rawPos) ? rawPos[1] : (rawPos.y || 0),
               z: Array.isArray(rawPos) ? rawPos[2] : (rawPos.z || 0),
             };
-            const thickness = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
-            const mmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
-            const r = Math.max(mmDia / 2, 0.5);
+            const partT = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
+            const holeMmDia = (hole.diameterInches || 0.1) * 25.4;
+            const toolMmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
+            const r = Math.max(Math.min(holeMmDia / 2, toolMmDia / 2), 0.5);
             const color = HW_COLORS[typeId] || 0xB8860B;
-            const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
-
-            let geometry;
-            const type = typeId || 3;
-            if (type === 3) {
-              // Nut — solid hexagonal prism (6-sided), slightly wider than hole
-              geometry = new THREE.CylinderGeometry(r * 1.4, r * 1.4, thickness * 0.6, 6);
-            } else if (type === 2) {
-              // Flush Standoff — truncated cone (wider at base, narrower at top)
-              geometry = new THREE.CylinderGeometry(r * 0.8, r * 1.3, thickness, 24);
-            } else if (type === 1) {
-              // Flush Stud — thin solid cylinder (pin) extending through hole
-              geometry = new THREE.CylinderGeometry(r * 0.5, r * 0.5, thickness * 1.4, 16);
-            } else if (type === 4) {
-              // Flush Nut — wide flat disk (low profile)
-              geometry = new THREE.CylinderGeometry(r * 1.6, r * 1.6, thickness * 0.3, 6);
-            } else {
-              geometry = new THREE.CylinderGeometry(r, r, thickness, 32, 1, true);
-            }
-
-            const marker = new THREE.Mesh(geometry, mat);
-            marker.isHardwareMarker = true;
-            marker.position.set(pos.x, pos.y, pos.z);
 
             const rawAxis = hole.axis;
-            if (rawAxis) {
-              const axisVec = new THREE.Vector3(
-                Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
-                Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
-                Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
-              );
-              marker.lookAt(new THREE.Vector3(pos.x, pos.y, pos.z).add(axisVec));
+            const axisVec = rawAxis ? new THREE.Vector3(
+              Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
+              Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
+              Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
+            ) : new THREE.Vector3(0, 1, 0);
+
+            const faceSign = face === 'down' ? -1 : 1;
+            const faceOffset = axisVec.clone().normalize().multiplyScalar(faceSign * partT * 0.5);
+            const markerPos = new THREE.Vector3(pos.x + faceOffset.x, pos.y + faceOffset.y, pos.z + faceOffset.z);
+
+            const type = typeId || 3;
+            const meshesToAdd = [];
+
+            if (type === 3) {
+              // Nut — flat hexagonal disk + inner black void to suggest hole
+              const outerMat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
+              const outerGeo = new THREE.CylinderGeometry(r * 1.4, r * 1.4, partT * 0.15, 6);
+              meshesToAdd.push(new THREE.Mesh(outerGeo, outerMat));
+              const innerMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
+              const innerGeo = new THREE.CylinderGeometry(r * 0.55, r * 0.55, partT * 0.2, 16);
+              meshesToAdd.push(new THREE.Mesh(innerGeo, innerMat));
+            } else if (type === 2) {
+              // Flush Standoff — tall cylinder post
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
+              meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, partT * 1.6, 24), mat));
+            } else if (type === 4) {
+              // Flush Nut — torus ring (washer shape)
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
+              meshesToAdd.push(new THREE.Mesh(new THREE.TorusGeometry(r * 1.1, r * 0.35, 8, 24), mat));
+            } else if (type === 1) {
+              // Flush Stud — thin elongated pin
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
+              meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, partT * 2.2, 16), mat));
+            } else {
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
+              meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r, r, partT, 32, 1, true), mat));
             }
-            marker.rotateX(Math.PI / 2);
-            threeViewer.scene.add(marker);
+
+            meshesToAdd.forEach(mesh => {
+              mesh.isHardwareMarker = true;
+              mesh.position.copy(markerPos);
+              mesh.lookAt(markerPos.clone().add(axisVec));
+              mesh.rotateX(Math.PI / 2);
+              threeViewer.scene.add(mesh);
+            });
           });
         }
 
