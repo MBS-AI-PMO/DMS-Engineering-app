@@ -379,7 +379,12 @@ const InstantPricing = () => {
             const opt = selectedFinishColors[s.id];
             return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
           }),
-          taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price }))
+          taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price })),
+          technical_data: backendData ? {
+            totalPerimeter: backendData.totalPerimeter,
+            pierceCount: backendData.pierceCount,
+            bends: backendData.bends
+          } : null
         };
         const res = await calculatePrice(payload);
         if (res.success) {
@@ -835,7 +840,7 @@ const InstantPricing = () => {
         const v = viewerInstance.current?.GetViewer();
         if (!v?.scene) return;
         v.scene.traverse(obj => {
-          if (!obj.isMesh || obj.userData.isHoleMarker) return;
+          if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
 
           if (!obj.geometry.attributes.uv && obj.geometry.attributes.position) {
             const pos = obj.geometry.attributes.position;

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2 } from 'lucide-react';
+import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2, Hash } from 'lucide-react';
 import { fetchSettings, updateSetting } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function ContactSettings() {
     const [settings, setSettings] = useState({
         footer_contact: { phone: '', email: '', address: '' },
-        social_links: []
+        social_links: [],
+        general_markup: 10
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -15,11 +16,12 @@ export default function ContactSettings() {
     useEffect(() => {
         fetchSettings()
             .then(data => {
-                if (data.footer_contact || data.social_links) {
+                if (data.footer_contact || data.social_links || data.general_markup !== undefined) {
                     setSettings(prev => ({
                         ...prev,
                         footer_contact: data.footer_contact || prev.footer_contact,
-                        social_links: data.social_links || prev.social_links
+                        social_links: data.social_links || prev.social_links,
+                        general_markup: data.general_markup !== undefined ? data.general_markup : prev.general_markup
                     }));
                 }
             })
@@ -32,6 +34,7 @@ export default function ContactSettings() {
         try {
             await updateSetting('footer_contact', settings.footer_contact);
             await updateSetting('social_links', settings.social_links);
+            await updateSetting('general_markup', settings.general_markup);
             toast('Settings saved successfully', 'success');
         } catch (err) {
             toast('Failed to save: ' + err.message, 'error');
@@ -118,6 +121,35 @@ export default function ContactSettings() {
                                     onChange={e => updateContact('address', e.target.value)}
                                     placeholder="1234 Metal St, Precision City"
                                 />
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Pricing Settings Card */}
+                <div className="admin-section-card" style={{ marginTop: 24 }}>
+                    <div className="admin-section-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Hash size={18} color="#6366f1" />
+                            <h3 className="admin-section-title">Pricing Settings</h3>
+                        </div>
+                    </div>
+                    <div className="admin-form-grid">
+                        <div className="admin-form-group">
+                            <label>General Markup (%)</label>
+                            {loading ? <FieldSkeleton /> : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <input
+                                        type="number"
+                                        value={settings.general_markup}
+                                        onChange={e => setSettings(p => ({ ...p, general_markup: parseFloat(e.target.value) || 0 }))}
+                                        placeholder="10"
+                                        style={{ maxWidth: 120 }}
+                                    />
+                                    <span style={{ fontSize: 13, color: '#64748b' }}>
+                                        Applied to the final order subtotal as a profit margin multiplier.
+                                    </span>
+                                </div>
                             )}
                         </div>
                     </div>

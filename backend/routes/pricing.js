@@ -223,42 +223,95 @@ router.post('/calculate', async (req, res) => {
 
         // ── MAIN SERVICE COST ──────────────────────────────────
         let main_service_cost = 0;
+        const techData = req.body.technical_data || {};
 
         if (mainService) {
-            if (isCNC) {
-                const config = mainService.pricing_config || {};
-                const base = parseFloat(config.base_setup) || 25;
-                const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
-                const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
-                const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
-                main_service_cost = base + w_cost + l_cost + t_cost;
-            } else {
-                // Check per-metal/thickness pricing rules first (e.g., Laser Cutting rates vary by material)
-                if (metal_id && thickness_value) {
-                    const ruleRes = await db.query(
-                        'SELECT * FROM pricing_rules WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3',
-                        [metal_id, service_id, thickness_value]
-                    );
-                    if (ruleRes.rows.length > 0) {
-                        const rule = ruleRes.rows[0];
-                        main_service_cost = parseFloat(rule.base_price) || 0;
-                        main_service_cost += (parseFloat(length_in) || 0) * (parseFloat(rule.price_per_inch_length) || 0);
-                        main_service_cost += (parseFloat(height_in) || 0) * (parseFloat(rule.price_per_inch_height) || 0);
-                        main_service_cost += (parseFloat(thickness_value) || 0) * (parseFloat(rule.price_per_inch_thickness) || 0);
+            const config = mainService.pricing_config || {};
+            const isLaser = mainService.title.toLowerCase().includes('laser');
+            const isBending = mainService.title.toLowerCase().includes('bending');
+
+            if (isLaser && techData.totalPerimeter && metal_id && thickness_value) {
+                // 1. Technical Laser Pricing (Time-based)
+                const ruleRes = await db.query(
+                    'SELECT cut_rate, pierce_time FROM pricing_rules WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3',
+                    [metal_id, service_id, thickness_value]
+                );
+
+                const rule = ruleRes.rows[0];
+                if (rule && parseFloat(rule.cut_rate) > 0) {
+                    const cut_rate = parseFloat(rule.cut_rate); // mm/s
+                    const pierce_time = parseFloat(rule.pierce_time) || 0; // s
+                    const hourly_rate = parseFloat(config.hourly_rate) || 100;
+                    const setup_fee = parseFloat(config.setup_fee) || 0;
+
+                    const perimeter = parseFloat(techData.totalPerimeter) || 0; // mm
+                    const pierces = parseInt(techData.pierceCount) || 1;
+
+                    // runtime (seconds) = (distance / speed) + (pierces * time_per_pierce)
+                    const runtime_s = (perimeter / cut_rate) + (pierces * pierce_time);
+                    const runtime_h = runtime_s / 3600;
+
+                    main_service_cost = setup_fee + (runtime_h * hourly_rate);
+                }
+            }
+
+            if (main_service_cost === 0 && isBending && techData.bends && Array.isArray(techData.bends)) {
+                // 2. Technical Bending Pricing (Categorized by length)
+                const setup_fee = parseFloat(config.setup_fee) || 0;
+                const hourly_rate = parseFloat(config.hourly_rate) || 38;
+
+                const med_thresh = parseFloat(config.med_bend_threshold) || 200;
+                const large_thresh = parseFloat(config.large_bend_threshold) || 500;
+
+                const small_rate = parseFloat(config.small_bend_rate) || 15;
+                const med_rate = parseFloat(config.med_bend_rate) || 15;
+                const large_rate = parseFloat(config.large_bend_rate) || 20;
+
+                let bend_cost = 0;
+                techData.bends.forEach(bend => {
+                    const len = parseFloat(bend.length) || 0;
+                    if (len >= large_thresh) bend_cost += large_rate;
+                    else if (len >= med_thresh) bend_cost += med_rate;
+                    else bend_cost += small_rate;
+                });
+
+                main_service_cost = setup_fee + bend_cost;
+            }
+
+            // Fallback to legacy/simple logic if technical data is missing or service is different
+            if (main_service_cost === 0) {
+                if (isCNC) {
+                    const base = parseFloat(config.base_setup) || 25;
+                    const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
+                    const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
+                    const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
+                    main_service_cost = base + w_cost + l_cost + t_cost;
+                } else {
+                    // Check per-metal/thickness pricing rules
+                    if (metal_id && thickness_value) {
+                        const ruleRes = await db.query(
+                            'SELECT * FROM pricing_rules WHERE metal_id = $1 AND service_id = $2 AND thickness_value = $3',
+                            [metal_id, service_id, thickness_value]
+                        );
+                        if (ruleRes.rows.length > 0) {
+                            const rule = ruleRes.rows[0];
+                            main_service_cost = parseFloat(rule.base_price) || 0;
+                            main_service_cost += (parseFloat(length_in) || 0) * (parseFloat(rule.price_per_inch_length) || 0);
+                            main_service_cost += (parseFloat(height_in) || 0) * (parseFloat(rule.price_per_inch_height) || 0);
+                        }
                     }
-                }
-                // Fall back to service's pricing_config (e.g., Laser Cutting with base_setup + per-dimension rates)
-                if (main_service_cost === 0 && mainService.pricing_config && Object.keys(mainService.pricing_config).length > 0) {
-                    const cfg = mainService.pricing_config;
-                    const base = parseFloat(cfg.base_setup) || 0;
-                    const w_cost = (parseFloat(height_in) || 0) * (parseFloat(cfg.price_per_width) || 0);
-                    const l_cost = (parseFloat(length_in) || 0) * (parseFloat(cfg.price_per_length) || 0);
-                    const sq_cost = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0) * (parseFloat(cfg.price_per_sq_inch) || 0);
-                    main_service_cost = base + w_cost + l_cost + sq_cost;
-                }
-                // Fall back to the service's flat base_price if no rule found
-                if (main_service_cost === 0) {
-                    main_service_cost = parseFloat(mainService.base_price) || 0;
+                    // Fall back to service's pricing_config
+                    if (main_service_cost === 0 && config && Object.keys(config).length > 0) {
+                        const base = parseFloat(config.base_setup) || 0;
+                        const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
+                        const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
+                        const sq_cost = (parseFloat(length_in) || 0) * (parseFloat(height_in) || 0) * (parseFloat(config.price_per_sq_inch) || 0);
+                        main_service_cost = base + w_cost + l_cost + sq_cost;
+                    }
+                    // Final fallback
+                    if (main_service_cost === 0) {
+                        main_service_cost = parseFloat(mainService.base_price) || 0;
+                    }
                 }
             }
         }
@@ -278,11 +331,33 @@ router.post('/calculate', async (req, res) => {
                 let sPrice = parseFloat(s.base_price) || 0;
                 let sName = s.title;
 
+                // Technical Powder Coating Logic (Batch-based)
+                const sTitleLower = s.title.toLowerCase();
+                const isPowder = sTitleLower.includes('powder') || sTitleLower.includes('coating');
+
+                if (isPowder && s.pricing_config && (parseFloat(length_in) > 0 || techData.width)) {
+                    const cfg = s.pricing_config;
+                    const ovenW = parseFloat(cfg.oven_width) || 90;
+                    const ovenL = parseFloat(cfg.oven_length) || 160;
+                    const batchCost = parseFloat(cfg.batch_cost) || 150;
+                    const setupCharge = (parseFloat(cfg.setup_time) || 15) * (parseFloat(cfg.shop_rate) || 38) / 60;
+
+                    // Simple nesting check
+                    const pW = (parseFloat(height_in) || 10) + 6; // +6" buffer
+                    const pL = (parseFloat(length_in) || 10) + 24; // +24" buffer for thickness/hanging
+
+                    const perBatch = Math.max(1, Math.floor(ovenW / pW) * Math.floor(ovenL / pL));
+                    const numBatches = Math.ceil(quantity / perBatch);
+
+                    sPrice = setupCharge + (numBatches * batchCost / quantity); // per unit price
+                }
+
                 // If an option (color) is selected, find its specific price
                 if (optId !== null && s.service_options && Array.isArray(s.service_options)) {
                     const opt = s.service_options.find(o => o.id === optId || o.index === optId);
                     if (opt) {
-                        sPrice = parseFloat(opt.base_price || opt.price) || 0;
+                        const optPrice = parseFloat(opt.base_price || opt.price) || 0;
+                        sPrice += optPrice;
                         sName = `${s.title} - ${opt.name || opt.color}`;
                     }
                 }
@@ -292,7 +367,12 @@ router.post('/calculate', async (req, res) => {
             }
         }
 
-        const unit_total = material_cost + main_service_cost + additional_cost;
+        let unit_total = material_cost + main_service_cost + additional_cost;
+
+        // ── GLOBAL MARKUP ─────────────────────────────────────
+        const markupRes = await db.query("SELECT value FROM site_settings WHERE key = 'general_markup'");
+        const markupPercent = markupRes.rows.length > 0 ? parseFloat(markupRes.rows[0].value) : 10;
+        unit_total = unit_total * (1 + markupPercent / 100);
 
         // ── DISCOUNTS ─────────────────────────────────────────
         let discount_percent = 0;

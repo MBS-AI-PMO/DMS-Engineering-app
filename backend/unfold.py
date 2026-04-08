@@ -815,7 +815,63 @@ def unfold_step_file(filepath: str) -> dict:
     front_coords = _get_projection_edges(occ_shape, "xz", edge_to_faces, edge_map, face_info)
     side_coords = _get_projection_edges(occ_shape, "yz", edge_to_faces, edge_map, face_info)
 
-    # 10. Compute bounding box for the flat pattern
+    # 10. Compute technical metrics for pricing
+    total_cut_perimeter = 0
+    # all_cut_edges is flat [x1,y1,z1, x2,y2,z2, ...]
+    for i in range(0, len(all_cut_edges), 6):
+        p1 = np.array(all_cut_edges[i:i+3])
+        p2 = np.array(all_cut_edges[i+3:i+6])
+        total_cut_perimeter += np.linalg.norm(p2 - p1)
+
+    # Simplified Loop Detection for Pierce Count
+    # We find connected components of segments in all_cut_edges
+    def count_loops(edges_list):
+        if not edges_list: return 0
+        adj = {}
+        def to_key(pt): return tuple(np.round(pt, 2))
+        for i in range(0, len(edges_list), 6):
+            p1 = to_key(edges_list[i:i+3])
+            p2 = to_key(edges_list[i+3:i+6])
+            if p1 == p2: continue
+            adj.setdefault(p1, []).append(p2)
+            adj.setdefault(p2, []).append(p1)
+        
+        loops = 0
+        visited = set()
+        for node in adj:
+            if node not in visited:
+                loops += 1
+                q = [node]
+                visited.add(node)
+                while q:
+                    curr = q.pop(0)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            q.append(neighbor)
+        return loops
+
+    pierce_count = count_loops(all_cut_edges)
+
+    # Bend Summary (Length and Radius)
+    bend_summary = []
+    processed_bend_cylinders = set()
+    for pa, pb, ci, ea, eb in bend_connections:
+        if ci in processed_bend_cylinders: continue
+        processed_bend_cylinders.add(ci)
+        
+        # Calculate bend length from the shared edges
+        # Note: bend length is the length of the cylindrical face along its axis
+        edge_shape = TopoDS.Edge_s(edge_map.FindKey(ea[0]))
+        p1, p2 = _edge_endpoints(edge_shape)
+        bend_len = np.linalg.norm(p2 - p1) if p1 is not None else 0
+        
+        bend_summary.append({
+            "length": round(float(bend_len), 4),
+            "radius": round(float(face_info[ci][2]), 4)
+        })
+
+    # 11. Compute bounding box for the flat pattern
     if all_flat_verts:
         varr = np.array(all_flat_verts).reshape(-1, 3)
         mins = varr.min(axis=0)
@@ -835,6 +891,9 @@ def unfold_step_file(filepath: str) -> dict:
         "sideEdges": side_coords,
         "thickness": thickness,
         "bbox": {"width": width, "height": height},
+        "totalPerimeter": round(float(total_cut_perimeter), 4),
+        "pierceCount": int(pierce_count),
+        "bends": bend_summary
     }
 
 def export_unfolded_dxf(input_path, output_path):

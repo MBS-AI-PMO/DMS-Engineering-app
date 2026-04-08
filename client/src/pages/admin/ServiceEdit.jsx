@@ -584,46 +584,104 @@ export default function ServiceEdit() {
 
                                     <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
                                         <div className="option-input-group">
-                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Base Setup Fee ($)</label>
+                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Setup Fee ($)</label>
                                             <input
                                                 type="number"
-                                                value={service.pricing_config?.base_setup || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, base_setup: parseFloat(e.target.value) || 0 } }))}
+                                                value={service.pricing_config?.setup_fee || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_fee: parseFloat(e.target.value) || 0 } }))}
                                             />
                                         </div>
                                         <div className="option-input-group">
-                                            <label><Maximize size={10} style={{ marginRight: '4px' }} /> Price per Sq Inch ($/sq-in)</label>
+                                            <label><Cpu size={10} style={{ marginRight: '4px' }} /> Machine Hourly Rate ($/hr)</label>
                                             <input
                                                 type="number"
-                                                step="0.001"
-                                                value={service.pricing_config?.price_per_sq_inch || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_sq_inch: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label><ArrowRight size={10} style={{ marginRight: '4px' }} /> Price per Inch Width ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.price_per_width || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_width: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label><ArrowUp size={10} style={{ marginRight: '4px' }} /> Price per Inch Length ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.price_per_length || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_length: parseFloat(e.target.value) || 0 } }))}
+                                                step="0.01"
+                                                value={service.pricing_config?.hourly_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, hourly_rate: parseFloat(e.target.value) || 0 } }))}
                                             />
                                         </div>
                                     </div>
-                                    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 12, marginTop: 16 }}>
-                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 6 }}>PRICING FORMULA</div>
-                                        <code style={{ fontSize: 12, color: '#1e293b' }}>
-                                            Price = ${service.pricing_config?.base_setup || 0} (setup)
-                                            {service.pricing_config?.price_per_length ? ` + ${service.pricing_config.price_per_length} × Length (in)` : ''}
-                                            {service.pricing_config?.price_per_width ? ` + ${service.pricing_config.price_per_width} × Width (in)` : ''}
-                                        </code>
+                                    <p className="admin-card-tip" style={{ marginTop: '12px' }}>
+                                        Technical Laser formula: <code>Cost = Setup + (Perimeter / Speed * HourlyRate) + (Pierces * PierceTime * HourlyRate)</code>
+                                    </p>
+                                </div>
+                            );
+
+                            const isBending = service?.title?.toLowerCase()?.includes('bending');
+                            if (isBending) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Wrench size={16} />
+                                            <span>Bending Technical Pricing</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label>Setup Fee ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.setup_fee || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_fee: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Labor Hourly Rate ($/hr)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.hourly_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, hourly_rate: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Thresholds (mm)</h4>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label>Medium Bend Threshold (mm)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.med_bend_threshold || 200}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, med_bend_threshold: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Large Bend Threshold (mm)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.large_bend_threshold || 500}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_threshold: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Rates per Category ($)</h4>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label>Small Rate ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.small_bend_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, small_bend_rate: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Medium Rate ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.med_bend_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, med_bend_rate: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Large Rate ($)</label>
+                                            <input
+                                                type="number"
+                                                value={service.pricing_config?.large_bend_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_rate: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -1080,11 +1138,36 @@ export default function ServiceEdit() {
                                         <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Configure professional-grade colors, textures, and pricing.</p>
                                     </div>
                                 </div>
-                                <button className="admin-btn admin-btn-secondary" onClick={() => {
-                                    setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false }] }))
-                                }} style={{ borderRadius: '14px', padding: '12px 24px', border: '2px solid #e2e8f0', background: 'white', fontWeight: 800, color: '#1e293b' }}>
-                                    <Plus size={18} /> Add Color
-                                </button>
+                                <div style={{ display: 'flex', gap: '16px' }}>
+                                    {service.title.toLowerCase().includes('powder coat') && (
+                                        <div style={{ display: 'flex', gap: '12px', background: 'white', padding: '10px 16px', borderRadius: '14px', border: '1.5px solid #e2e8f0', alignItems: 'center' }}>
+                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Batch Cost ($)</label>
+                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.batch_cost || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, batch_cost: parseFloat(e.target.value) || 0 } }))} />
+                                            </div>
+                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Shop Rate ($/hr)</label>
+                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.shop_rate || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, shop_rate: parseFloat(e.target.value) || 0 } }))} />
+                                            </div>
+                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Setup Time (min)</label>
+                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.setup_time || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time: parseFloat(e.target.value) || 0 } }))} />
+                                            </div>
+                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Oven W/L (in)</label>
+                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                    <input type="number" style={{ height: '32px', width: '50px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.oven_width || 90} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_width: parseFloat(e.target.value) || 0 } }))} />
+                                                    <input type="number" style={{ height: '32px', width: '50px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.oven_length || 160} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <button className="admin-btn admin-btn-secondary" onClick={() => {
+                                        setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false }] }))
+                                    }} style={{ borderRadius: '14px', padding: '12px 24px', border: '2px solid #e2e8f0', background: 'white', fontWeight: 800, color: '#1e293b' }}>
+                                        <Plus size={18} /> Add Color
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="admin-modal-body" style={{ padding: '40px', overflowY: 'auto', background: '#ffffff', flex: 1 }}>

@@ -601,7 +601,9 @@ export default function MetalEdit() {
                                             <th>Thickness</th>
                                             <th>Price per Length ($/in)</th>
                                             <th>Price per Width ($/in)</th>
-                                            <th>Compatible Sub-Services</th>
+                                            <th title="Laser machine speed for this thickness">Cut Speed (mm/s)</th>
+                                            <th title="Time for the laser to pierce this thickness">Pierce Time (s)</th>
+                                            <th>Compatible Services</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -644,6 +646,50 @@ export default function MetalEdit() {
                                                                     [t.value]: {
                                                                         ...(prev.pricing_config?.[t.value] || {}),
                                                                         price_per_width: val
+                                                                    }
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td data-label="Cut Speed">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        className="admin-input-small"
+                                                        placeholder="mm/s"
+                                                        value={metal.pricing_config?.[t.value]?.cut_rate ?? ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setMetal(prev => ({
+                                                                ...prev,
+                                                                pricing_config: {
+                                                                    ...(prev.pricing_config || {}),
+                                                                    [t.value]: {
+                                                                        ...(prev.pricing_config?.[t.value] || {}),
+                                                                        cut_rate: val
+                                                                    }
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td data-label="Pierce Time">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        className="admin-input-small"
+                                                        placeholder="seconds"
+                                                        value={metal.pricing_config?.[t.value]?.pierce_time ?? ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setMetal(prev => ({
+                                                                ...prev,
+                                                                pricing_config: {
+                                                                    ...(prev.pricing_config || {}),
+                                                                    [t.value]: {
+                                                                        ...(prev.pricing_config?.[t.value] || {}),
+                                                                        pierce_time: val
                                                                     }
                                                                 }
                                                             }));
