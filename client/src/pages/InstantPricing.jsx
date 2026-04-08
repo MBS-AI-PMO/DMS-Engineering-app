@@ -999,6 +999,15 @@ const InstantPricing = () => {
         if (hasHwAssigned) {
           const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
 
+          // Shared materials — created once, reused for all holes
+          const matCache = {};
+          const getHwMat = (c) => {
+            const k = `hw_${c}`;
+            if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide });
+            return matCache[k];
+          };
+          const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
+
           detectedHoles.forEach(hole => {
             if (!hole.position) return;
             const hw = selectedHardware[hole.id];
@@ -1006,9 +1015,10 @@ const InstantPricing = () => {
 
             const { item, typeId, face } = hw;
             const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
-            const toolMmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
-            const r = Math.max(Math.min(holeMmDia / 2, toolMmDia / 2), 0.5);
+            const edgeMm = item?.min_edge_distance ? parseFloat(item.min_edge_distance) * 25.4 : null;
+            const r = Math.max(edgeMm ? edgeMm / 2 : holeMmDia / 2, 0.5);
             const color = HW_COLORS[typeId] || 0xB8860B;
+            const mat = getHwMat(color);
 
             const axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
             const faceSign = face === 'down' ? -1 : 1;
@@ -1016,51 +1026,92 @@ const InstantPricing = () => {
             const basePos = new THREE.Vector3(hole.position[0] + faceOffset.x, hole.position[1] + faceOffset.y, hole.position[2] + faceOffset.z);
 
             const type = typeId || 3;
-            const meshesToAdd = [];
+            const axisNorm = axisVec.clone().normalize();
 
-            if (type === 3) {
-              // Nut — flat hex disk + inner black void
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.CylinderGeometry(r * 1.4, r * 1.4, partT * 0.15, 6),
-                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
-              ));
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.CylinderGeometry(r * 0.55, r * 0.55, partT * 0.2, 16),
-                new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 })
-              ));
-            } else if (type === 2) {
-              // Flush Standoff — tall cylinder post
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.CylinderGeometry(r * 0.9, r * 0.9, partT * 1.6, 24),
-                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
-              ));
-            } else if (type === 4) {
-              // Flush Nut — torus ring (washer shape)
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.TorusGeometry(r * 1.1, r * 0.35, 8, 24),
-                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
-              ));
-            } else if (type === 1) {
-              // Flush Stud — thin elongated pin
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.CylinderGeometry(r * 0.45, r * 0.45, partT * 2.2, 16),
-                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
-              ));
-            } else {
-              meshesToAdd.push(new THREE.Mesh(
-                new THREE.CylinderGeometry(r, r, partT, 32, 1, true),
-                new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 })
-              ));
-            }
-
-            meshesToAdd.forEach(mesh => {
+            const addHWMesh = (geo, m, center) => {
+              const mesh = new THREE.Mesh(geo, m);
               mesh.isHardwareMarker = true;
-              mesh.position.copy(basePos);
-              mesh.lookAt(basePos.clone().add(axisVec));
+              mesh.position.copy(center);
+              mesh.lookAt(center.clone().add(axisVec));
               mesh.rotateX(Math.PI / 2);
               modelParent.add(mesh);
               holeMarkersRef.current.push(mesh);
-            });
+            };
+
+            if (type === 3) {
+              // Nut — round body + thin hollow disc on opposite face
+              const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, partT * 0.5);
+              const outerR = r * 1.4;
+              const boreR = r * 0.5;
+              const discH = Math.max(0.3, Math.min(0.5, partT * 0.03));
+              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2));
+              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, nutH, 16), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(boreR, boreR, nutH + 0.1, 12), boreMat, bodyCenter);
+              const discCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
+              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, discCenter);
+              addHWMesh(new THREE.CylinderGeometry(boreR, boreR, discH + 0.1, 12), boreMat, discCenter);
+            } else if (type === 2) {
+              // Flush Standoff — hollow tube + thin hex flange
+              const standoffH = item?.length ? parseFloat(item.length) * 25.4 : partT * 1.6;
+              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2));
+              const flangeH = Math.max(0.6, Math.min(0.8, partT * 0.04));
+              const flangeCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH / 2)));
+              addHWMesh(new THREE.CylinderGeometry(r, r, standoffH, 16, 1, true), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, standoffH, 12), boreMat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 1.4, r * 1.4, flangeH, 6), mat, flangeCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, flangeH + 0.1, 12), boreMat, flangeCenter);
+            } else if (type === 4) {
+              // Flush Nut — thin hollow disc each face
+              const discH = Math.max(0.3, Math.min(0.5, partT * 0.03));
+              const outerR = r * 1.35;
+              const innerR = r * 0.5;
+              const topCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (discH / 2)));
+              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, topCenter);
+              addHWMesh(new THREE.CylinderGeometry(innerR, innerR, discH + 0.1, 12), boreMat, topCenter);
+              const botCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
+              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, botCenter);
+              addHWMesh(new THREE.CylinderGeometry(innerR, innerR, discH + 0.1, 12), boreMat, botCenter);
+            } else if (type === 1) {
+              // Flush Stud — shaft + simplified threads + head
+              const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.2;
+              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
+              const headH = Math.max(0.6, Math.min(0.8, partT * 0.04));
+              const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
+              const shaftR = r * 0.4;
+              const headR = r * 1.1;
+              addHWMesh(new THREE.CylinderGeometry(shaftR, shaftR, studH, 10), mat, bodyCenter);
+              // Simplified thread — fewer coils, lower resolution
+              const numCoils = Math.max(4, Math.round(studH / 3.5));
+              const helixPts = [];
+              for (let i = 0; i <= numCoils * 8; i++) {
+                const t = i / (numCoils * 8);
+                const angle = t * numCoils * Math.PI * 2;
+                helixPts.push(new THREE.Vector3(Math.cos(angle) * shaftR * 1.3, (t - 0.5) * studH, Math.sin(angle) * shaftR * 1.3));
+              }
+              addHWMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helixPts), numCoils * 8, shaftR * 0.15, 3, false), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(headR, headR, headH, 6), mat, headCenter);
+              // Dome
+              const domeCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.4));
+              addHWMesh(new THREE.SphereGeometry(headR * 0.75, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat, domeCenter);
+              // Cross slot
+              const slotLen = headR * 0.65;
+              const slotH2 = headH * 0.3;
+              const slotW = shaftR * 0.15;
+              const slotCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.55));
+              addHWMesh(new THREE.BoxGeometry(slotLen * 2, slotH2, slotW * 2), boreMat, slotCenter);
+              addHWMesh(new THREE.BoxGeometry(slotW * 2, slotH2, slotLen * 2), boreMat, slotCenter);
+            } else {
+              const m = new THREE.Mesh(
+                new THREE.CylinderGeometry(r, r, partT, 16, 1, true),
+                mat
+              );
+              m.isHardwareMarker = true;
+              m.position.copy(basePos);
+              m.lookAt(basePos.clone().add(axisVec));
+              m.rotateX(Math.PI / 2);
+              modelParent.add(m);
+              holeMarkersRef.current.push(m);
+            }
           });
         }
 
@@ -1069,8 +1120,6 @@ const InstantPricing = () => {
     };
 
     updateMarkers();
-    const tid = setTimeout(updateMarkers, 500);
-    return () => clearTimeout(tid);
   }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions]);
 
   useEffect(() => {
@@ -2321,7 +2370,7 @@ const InstantPricing = () => {
                             </div>
 
                             {/* Detailed Service Breakdown */}
-                            {(priceEstimate?.breakdown?.service_breakdown || []).map((svc, idx) => (
+                            {(priceEstimate?.breakdown?.service_breakdown || []).filter(svc => !svc.name?.toLowerCase().includes('tapping') && !svc.name?.toLowerCase().includes('hardware')).map((svc, idx) => (
                               <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                 <div className="d-flex flex-column">
                                   <span className="opacity-70 small">{svc.name}</span>
@@ -2654,47 +2703,56 @@ const InstantPricing = () => {
         {activeHwHole && (() => {
           const activeType = HW_TYPES.find(t => t.id === activeHwType) || HW_TYPES[0];
           const activeItems = (hwItemsByType[activeHwType] || []).filter(it => it.is_active !== false);
+          const assignedHw = selectedHardware[activeHwHole.id];
           return (
-            <motion.div key="hardware-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
-              <motion.div className="bg-white rounded-5 shadow-22xl overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1200px', height: '88vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.95, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
+            <motion.div key="hardware-modal" className="position-fixed inset-0 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(16px)', background: 'rgba(15,23,42,0.6)' }}>
+              <motion.div className="overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1200px', height: '88vh', borderRadius: '24px', background: '#ffffff', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.96, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 20, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 350 }}>
 
-                {/* Header */}
-                <div className="p-5 border-bottom d-flex justify-content-between align-items-center bg-white">
-                  <div>
-                    <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HARDWARE INSERTION</h3>
-                    <div className="d-flex align-items-center gap-3 mt-2">
-                      <span className="fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px', color: activeType.color }}>&Oslash; {Number(activeHwHole.diameterInches || 0).toFixed(4)}&quot;</span>
-                      <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Depth: {Number(activeHwHole.depthMm || activeHwHole.depth_mm || 0).toFixed(2)} mm</span>
-                      <span className="badge rounded-pill fw-bold text-white" style={{ backgroundColor: activeType.color, fontSize: '11px' }}>{activeType.label}</span>
+                {/* ── Header ── */}
+                <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg, ${activeType.color}18, ${activeType.color}08)`, border: `1.5px solid ${activeType.color}25`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Boxes size={20} style={{ color: activeType.color }} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.01em' }}>Hardware Insertion</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', fontFamily: 'monospace' }}>&Oslash; {Number(activeHwHole.diameterInches || 0).toFixed(4)}&quot;</span>
+                        <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>{Number(activeHwHole.depthMm || activeHwHole.depth_mm || 0).toFixed(2)} mm depth</span>
+                      </div>
                     </div>
                   </div>
-                  {/* Hardware type tabs */}
-                  <div className="d-flex align-items-center gap-2 me-4">
-                    {HW_TYPES.map(t => (
-                      <button
-                        key={t.id}
-                        className="btn btn-sm rounded-pill fw-black px-3 py-1 border-0 transition-all"
-                        style={{
-                          fontSize: '11px',
-                          background: activeHwType === t.id ? t.color : '#f1f5f9',
-                          color: activeHwType === t.id ? '#fff' : '#64748b',
-                          letterSpacing: '0.05em',
-                        }}
-                        onClick={() => setActiveHwType(t.id)}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', padding: 3, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
+                      {HW_TYPES.map(t => (
+                        <button
+                          key={t.id}
+                          style={{
+                            border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: '11px', fontWeight: 800,
+                            cursor: 'pointer', transition: 'all 0.2s', letterSpacing: '0.03em',
+                            background: activeHwType === t.id ? t.color : 'transparent',
+                            color: activeHwType === t.id ? '#fff' : '#64748b',
+                            boxShadow: activeHwType === t.id ? `0 2px 8px ${t.color}40` : 'none',
+                          }}
+                          onClick={() => setActiveHwType(t.id)}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => setActiveHwHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}>
+                      <X size={16} />
+                    </button>
                   </div>
-                  <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setActiveHwHole(null)} />
                 </div>
 
-                <div className="flex-grow-1 d-flex overflow-hidden bg-white">
-                  {/* Left panel — hole groups */}
-                  <div className="border-end bg-light-subtle bg-opacity-20 p-4 overflow-auto hide-scrollbar" style={{ width: '320px' }}>
-                    <div className="mb-4 px-2 d-flex justify-content-between align-items-center">
-                      <h4 className="fw-black text-muted text-uppercase letter-spacing-2 m-0" style={{ fontSize: '13px' }}>Detected Holes</h4>
-                      <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '11px' }}>{detectedHoles.length}</span>
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  {/* ── Left: Hole List ── */}
+                  <div style={{ width: 280, minWidth: 280, borderRight: '1px solid #f1f5f9', background: '#fafbfc', padding: '16px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }} className="hw-sidebar-scroll">
+                    <div style={{ padding: '4px 8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>Holes</span>
+                      <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', background: '#f1f5f9', borderRadius: 6, padding: '2px 8px' }}>{detectedHoles.length}</span>
                     </div>
 
                     {holeGroups.map((group) => {
@@ -2704,27 +2762,26 @@ const InstantPricing = () => {
                       const firstItem = activeItems[0];
 
                       return (
-                        <div key={group.dia} className="mb-2">
+                        <div key={group.dia} style={{ marginBottom: 2 }}>
                           <div
-                            className={`p-3 rounded-4 cursor-pointer border-2 d-flex align-items-center justify-content-between transition-all ${isExpanded ? 'text-white border-2' : 'bg-white border-light-subtle shadow-xs'}`}
-                            style={isExpanded ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
-                            onClick={() => setExpandedHwGroups(prev => {
-                              const next = new Set(prev);
-                              next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia);
-                              return next;
-                            })}
+                            onClick={() => setExpandedHwGroups(prev => { const next = new Set(prev); next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia); return next; })}
+                            style={{
+                              padding: '10px 12px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s',
+                              background: isExpanded ? activeType.color : '#fff',
+                              color: isExpanded ? '#fff' : '#1e293b',
+                              border: isExpanded ? `1.5px solid ${activeType.color}` : '1.5px solid #e8eaed',
+                              boxShadow: isExpanded ? `0 4px 12px ${activeType.color}30` : '0 1px 2px rgba(0,0,0,0.04)',
+                            }}
                           >
-                            <div className="d-flex align-items-center gap-2">
-                              <ChevronDown size={13} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} className={isExpanded ? 'text-white' : 'text-muted'} />
-                              <div>
-                                <span className="fw-black" style={{ fontSize: '14px' }}>&Oslash; {group.dia}&quot;</span>
-                                <span className="ms-2 fw-bold" style={{ fontSize: '12px', opacity: 0.7 }}>&times; {group.holes.length}</span>
-                              </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <ChevronDown size={12} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', opacity: 0.6 }} />
+                              <span style={{ fontSize: '13px', fontWeight: 800 }}>&Oslash; {group.dia}&quot;</span>
+                              <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.6 }}>&times;{group.holes.length}</span>
                             </div>
-                            <div className="d-flex align-items-center gap-2">
-                              {allAssigned && <Check size={13} className={isExpanded ? 'text-white' : 'text-success'} strokeWidth={3} />}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {allAssigned && <Check size={12} strokeWidth={3} style={{ color: isExpanded ? '#fff' : '#22c55e' }} />}
                               {!allAssigned && assignedCount > 0 && (
-                                <span className={`badge rounded-pill fw-bold ${isExpanded ? 'bg-white' : 'bg-warning text-dark'}`} style={{ fontSize: '10px', color: isExpanded ? '#B8860B' : undefined }}>
+                                <span style={{ fontSize: '9px', fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: isExpanded ? 'rgba(255,255,255,0.25)' : '#fef3c7', color: isExpanded ? '#fff' : '#92400e' }}>
                                   {assignedCount}/{group.holes.length}
                                 </span>
                               )}
@@ -2732,21 +2789,13 @@ const InstantPricing = () => {
                           </div>
 
                           {isExpanded && (
-                            <div className="ps-2 pt-1">
+                            <div style={{ paddingLeft: 4, paddingTop: 4 }}>
                               {group.holes.length > 1 && firstItem && (
                                 <button
-                                  className="btn btn-sm w-100 mb-2 rounded-3 fw-bold bg-white"
-                                  style={{ fontSize: '12px', border: '1px solid #B8860B', color: '#B8860B' }}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setSelectedHardware(prev => {
-                                      const next = { ...prev };
-                                      group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType, face: 'up' }; });
-                                      return next;
-                                    });
-                                  }}
+                                  style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed ${activeType.color}60`, color: activeType.color, cursor: 'pointer', marginBottom: 4, transition: 'all 0.15s' }}
+                                  onClick={e => { e.stopPropagation(); setSelectedHardware(prev => { const next = { ...prev }; group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType, face: 'up' }; }); return next; }); }}
                                 >
-                                  Apply to all {group.holes.length} &rarr; {firstItem.name}
+                                  Apply all &rarr; {firstItem.name}
                                 </button>
                               )}
                               {group.holes.map(hole => {
@@ -2756,30 +2805,34 @@ const InstantPricing = () => {
                                 return (
                                   <motion.div
                                     key={hole.id} layout
-                                    className={`p-3 rounded-4 mb-1 cursor-pointer border-2 d-flex align-items-center justify-content-between ${isActive ? 'border-2 text-white shadow-sm' : 'border-transparent bg-light hover-bg-white shadow-xs'}`}
-                                    style={isActive ? { background: '#B8860B', borderColor: '#B8860B' } : {}}
                                     onClick={() => setActiveHwHole(hole)}
-                                    whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    style={{
+                                      padding: '8px 10px', borderRadius: 10, marginBottom: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s',
+                                      background: isActive ? `${activeType.color}12` : '#fff',
+                                      border: isActive ? `1.5px solid ${activeType.color}` : '1.5px solid transparent',
+                                    }}
                                   >
-                                    <div className="d-flex align-items-center gap-2">
-                                      <div
-                                        className={`rounded-circle d-flex align-items-center justify-content-center fw-black ${isActive ? 'bg-white' : assigned ? 'bg-success text-white' : 'bg-white text-muted border'}`}
-                                        style={{ width: '26px', height: '26px', fontSize: '12px', color: isActive ? '#B8860B' : undefined }}
-                                      >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <div style={{
+                                        width: 22, height: 22, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800,
+                                        background: isActive ? activeType.color : assigned ? '#22c55e' : '#f1f5f9',
+                                        color: isActive || assigned ? '#fff' : '#94a3b8',
+                                      }}>
                                         {globalIdx + 1}
                                       </div>
                                       <div>
-                                        <span className={`fw-bold d-block ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px' }}>
-                                          {assigned ? assigned.item.name : 'Not Assigned'}
+                                        <span style={{ fontSize: '12px', fontWeight: 700, color: isActive ? activeType.color : '#1e293b', display: 'block', lineHeight: 1.2 }}>
+                                          {assigned ? assigned.item.name : 'Unassigned'}
                                         </span>
                                         {assigned && (
-                                          <span className="fw-bold" style={{ fontSize: '10px', color: isActive ? 'rgba(255,255,255,0.7)' : HW_TYPES.find(t => t.id === assigned.typeId)?.color || '#64748b' }}>
+                                          <span style={{ fontSize: '9px', fontWeight: 700, color: HW_TYPES.find(t => t.id === assigned.typeId)?.color || '#94a3b8' }}>
                                             {HW_TYPES.find(t => t.id === assigned.typeId)?.label}
                                           </span>
                                         )}
                                       </div>
                                     </div>
-                                    {assigned && !isActive && <Check size={13} className="text-success" strokeWidth={3} />}
+                                    {assigned && !isActive && <Check size={11} style={{ color: '#22c55e' }} strokeWidth={3} />}
                                   </motion.div>
                                 );
                               })}
@@ -2790,98 +2843,114 @@ const InstantPricing = () => {
                     })}
                   </div>
 
-                  {/* Right panel — hardware items */}
-                  <div className="flex-grow-1 overflow-auto bg-white hide-scrollbar d-flex flex-column">
+                  {/* ── Right: Hardware Catalog ── */}
+                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }} className="hw-catalog-scroll">
                     {hwItemsByType[activeHwType] === undefined ? (
-                      <div className="flex-grow-1 d-flex align-items-center justify-content-center">
-                        <div className="d-flex align-items-center gap-2 text-muted">
-                          <Loader2 size={20} className="animate-spin" />
-                          <span className="fw-bold">Loading {activeType.label} items...</span>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94a3b8' }}>
+                          <Loader2 size={18} className="animate-spin" />
+                          <span style={{ fontSize: '13px', fontWeight: 700 }}>Loading {activeType.label}...</span>
                         </div>
                       </div>
                     ) : activeItems.length === 0 ? (
-                      <div className="flex-grow-1 d-flex flex-column align-items-center justify-content-center text-center py-5 px-4">
-                        <AlertCircle size={48} className="text-muted opacity-20 mb-3" />
-                        <h3 className="fw-bold text-muted">No {activeType.label} Items Configured</h3>
-                        <p className="text-muted small">Add {activeType.label} items in the Hardware service settings in your admin dashboard.</p>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
+                        <AlertCircle size={40} style={{ color: '#e2e8f0', marginBottom: 12 }} />
+                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#94a3b8', margin: '0 0 4px' }}>No {activeType.label} Items</h3>
+                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: 0 }}>Configure items in admin dashboard.</p>
                       </div>
                     ) : (
-                      <div className="p-5 animate-fade-in">
-                        <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}>
-                          <Check size={14} style={{ color: activeType.color }} /> SELECT {activeType.label.toUpperCase()}
-                        </h4>
-                        <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+                      <div style={{ padding: '24px 28px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>Select {activeType.label}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 700, background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', color: '#64748b' }}>{activeItems.length} items</span>
+                          </div>
+                          {assignedHw && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', color: '#94a3b8' }}>Face</span>
+                              <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                <button
+                                  onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'up' } }))}
+                                  style={{ border: 'none', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedHw?.face !== 'down' ? '#0f172a' : '#fff', color: assignedHw?.face !== 'down' ? '#fff' : '#64748b' }}
+                                >↑ UP</button>
+                                <button
+                                  onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'down' } }))}
+                                  style={{ border: 'none', borderLeft: '1px solid #e2e8f0', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedHw?.face === 'down' ? '#0f172a' : '#fff', color: assignedHw?.face === 'down' ? '#fff' : '#64748b' }}
+                                >↓ DOWN</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
                           {activeItems.map(item => {
-                            const assigned = selectedHardware[activeHwHole.id];
-                            const isChosen = assigned?.item?.id === item.id && assigned?.typeId === activeHwType;
+                            const isChosen = assignedHw?.item?.id === item.id && assignedHw?.typeId === activeHwType;
                             const typeSpecs = activeType.specs(item).filter(Boolean);
                             return (
                               <motion.button
                                 key={item.id}
-                                className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'text-white shadow-sm' : 'bg-white border-light-subtle shadow-xs'}`}
-                                style={isChosen ? { background: activeType.color, borderColor: activeType.color } : {}}
                                 onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType, face: prev[activeHwHole.id]?.face || 'up' } }))}
                                 whileTap={{ scale: 0.98 }}
+                                whileHover={{ y: -2 }}
+                                style={{
+                                  border: 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s',
+                                  background: isChosen ? `linear-gradient(135deg, ${activeType.color}, ${activeType.color}dd)` : '#fff',
+                                  boxShadow: isChosen ? `0 8px 24px ${activeType.color}30, 0 0 0 1.5px ${activeType.color}` : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+                                  color: isChosen ? '#fff' : '#1e293b',
+                                }}
                               >
-                                <div className={`p-3 rounded-4 flex-shrink-0 ${isChosen ? 'bg-white' : 'bg-light text-muted'}`} style={{ color: isChosen ? activeType.color : undefined }}>
-                                  <Settings size={20} />
+                                <div style={{
+                                  width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                  background: isChosen ? 'rgba(255,255,255,0.2)' : `${activeType.color}10`,
+                                  color: isChosen ? '#fff' : activeType.color,
+                                }}>
+                                  <Settings size={18} />
                                 </div>
-                                <div className="flex-grow-1 min-w-0">
-                                  <div className="d-flex justify-content-between align-items-start mb-1">
-                                    <strong className={`d-block fw-black ${isChosen ? 'text-white' : 'text-dark'}`} style={{ fontSize: '15px' }}>{item.name}</strong>
-                                    {isChosen && <div className="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '22px', height: '22px', color: activeType.color }}><Check size={12} strokeWidth={4} /></div>}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                    <strong style={{ fontSize: '13px', fontWeight: 800, display: 'block', lineHeight: 1.3 }}>{item.name}</strong>
+                                    {isChosen && (
+                                      <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <Check size={11} strokeWidth={3} />
+                                      </div>
+                                    )}
                                   </div>
                                   {item.size_spec && (
-                                    <span className={`fw-bold font-monospace d-block mb-1 ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{item.size_spec}</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'monospace', display: 'block', marginBottom: 6, opacity: isChosen ? 0.8 : 0.5 }}>{item.size_spec}</span>
                                   )}
-                                  <div className="d-flex flex-wrap gap-2 mb-2">
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
                                     {item.tooling_diameter && (
-                                      <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>Tool Ø {item.tooling_diameter}&quot;</span>
+                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>Tool Ø{item.tooling_diameter}&quot;</span>
                                     )}
                                     {typeSpecs.map(s => (
-                                      <span key={s} className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>{s}</span>
+                                      <span key={s} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>{s}</span>
                                     ))}
                                     {item.min_edge_distance && (
-                                      <span className={`rounded-pill px-2 py-0 fw-bold ${isChosen ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`} style={{ fontSize: '10px' }}>Edge {item.min_edge_distance}&quot;</span>
+                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>Edge {item.min_edge_distance}&quot;</span>
                                     )}
                                   </div>
-                                  <span className="fw-black" style={{ fontSize: '13px', color: isChosen ? '#fff' : activeType.color }}>
-                                    +${parseFloat(item.price || 0).toFixed(2)}/HOLE
+                                  <span style={{ fontSize: '13px', fontWeight: 900, color: isChosen ? '#fff' : activeType.color }}>
+                                    +${parseFloat(item.price || 0).toFixed(2)}<span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.7, marginLeft: 2 }}>/HOLE</span>
                                   </span>
                                 </div>
                               </motion.button>
                             );
                           })}
                         </div>
-                        {selectedHardware[activeHwHole.id] && (
-                          <div className="mt-5 pt-4 border-top">
-                            <h4 className="fw-black text-muted mb-3 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}>
-                              INSTALLATION FACE
-                            </h4>
-                            <div className="d-flex gap-2">
-                              <button
-                                className={`btn rounded-pill px-4 py-2 fw-black border-2 transition-all ${selectedHardware[activeHwHole.id]?.face !== 'down' ? 'btn-dark text-white border-dark' : 'bg-white border-secondary text-muted'}`}
-                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'up' } }))}
-                              >
-                                ↑ UP
-                              </button>
-                              <button
-                                className={`btn rounded-pill px-4 py-2 fw-black border-2 transition-all ${selectedHardware[activeHwHole.id]?.face === 'down' ? 'btn-dark text-white border-dark' : 'bg-white border-secondary text-muted'}`}
-                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'down' } }))}
-                              >
-                                ↓ DOWN
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
-                  <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}>CLEAR SELECTION</button>
-                  <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveHwHole(null)}>DISMISS CONFIGURATOR</button>
+                {/* ── Footer ── */}
+                <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#fafbfc' }}>
+                  <button
+                    onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}
+                    style={{ border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '8px 0', transition: 'color 0.15s' }}
+                  >Clear Selection</button>
+                  <button
+                    onClick={() => setActiveHwHole(null)}
+                    style={{ border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px', fontWeight: 800, cursor: 'pointer', padding: '10px 28px', borderRadius: 12, transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}
+                  >Done</button>
                 </div>
               </motion.div>
             </motion.div>
@@ -2997,6 +3066,87 @@ const StyleTag = () => {
                 @keyframes shimmer {
                   0% { background-position: -200% 0; }
                   100% { background-position: 200% 0; }
+                }
+                ::-webkit-scrollbar {
+                  width: 5px;
+                  height: 5px;
+                }
+                ::-webkit-scrollbar-button {
+                  display: none;
+                }
+                ::-webkit-scrollbar-track {
+                  background: transparent;
+                }
+                ::-webkit-scrollbar-thumb {
+                  background: rgba(0, 0, 0, 0.1);
+                  border-radius: 20px;
+                }
+                ::-webkit-scrollbar-thumb:hover {
+                  background: rgba(0, 0, 0, 0.2);
+                }
+
+                .ip-breakdown-scroll::-webkit-scrollbar {
+                  width: 4px;
+                  height: 4px;
+                }
+                .ip-breakdown-scroll::-webkit-scrollbar-button {
+                  display: none;
+                }
+                .ip-breakdown-scroll::-webkit-scrollbar-track {
+                  background: transparent;
+                }
+                .ip-breakdown-scroll::-webkit-scrollbar-thumb {
+                  background: rgba(255, 255, 255, 0.12);
+                  border-radius: 20px;
+                }
+                .ip-breakdown-scroll::-webkit-scrollbar-thumb:hover {
+                  background: rgba(255, 255, 255, 0.25);
+                }
+                .ip-breakdown-scroll {
+                  scrollbar-width: thin;
+                  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+                }
+                
+                /* Ensure modals and other dark overlays have matching scrolls */
+                .bg-black-80 ::-webkit-scrollbar-thumb,
+                .bg-dark ::-webkit-scrollbar-thumb {
+                  background: rgba(255, 255, 255, 0.12);
+                  border-radius: 20px;
+                }
+                .bg-black-80 ::-webkit-scrollbar-track,
+                .bg-dark ::-webkit-scrollbar-track {
+                  background: transparent;
+                }
+                .bg-black-80 ::-webkit-scrollbar-button,
+                .bg-dark ::-webkit-scrollbar-button {
+                  display: none;
+                }
+
+                /* Hardware modal scrollbars */
+                .hw-sidebar-scroll::-webkit-scrollbar,
+                .hw-catalog-scroll::-webkit-scrollbar {
+                  width: 4px;
+                }
+                .hw-sidebar-scroll::-webkit-scrollbar-button,
+                .hw-catalog-scroll::-webkit-scrollbar-button {
+                  display: none;
+                }
+                .hw-sidebar-scroll::-webkit-scrollbar-track,
+                .hw-catalog-scroll::-webkit-scrollbar-track {
+                  background: transparent;
+                }
+                .hw-sidebar-scroll::-webkit-scrollbar-thumb,
+                .hw-catalog-scroll::-webkit-scrollbar-thumb {
+                  background: rgba(0, 0, 0, 0.08);
+                  border-radius: 20px;
+                }
+                .hw-sidebar-scroll::-webkit-scrollbar-thumb:hover,
+                .hw-catalog-scroll::-webkit-scrollbar-thumb:hover {
+                  background: rgba(0, 0, 0, 0.15);
+                }
+                .hw-sidebar-scroll, .hw-catalog-scroll {
+                  scrollbar-width: thin;
+                  scrollbar-color: rgba(0, 0, 0, 0.08) transparent;
                 }
                 `;
   return <style dangerouslySetInnerHTML={{ __html: styles }} />;

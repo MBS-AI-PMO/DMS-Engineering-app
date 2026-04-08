@@ -322,17 +322,6 @@ export default function ServiceEdit() {
                                         placeholder="Enter service details..."
                                     />
                                 </div>
-                                <div className="admin-form-group">
-                                    <label>Base Price ($)</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={service.base_price}
-                                        onChange={e => setService(s => ({ ...s, base_price: parseFloat(e.target.value) || 0 }))}
-                                        placeholder="0.00"
-                                    />
-                                    <p className="admin-card-tip" style={{ marginTop: '8px', marginBottom: 0 }}>Global price applied to this service (e.g., per part for Anodizing).</p>
-                                </div>
                             </div>
                         )}
 
@@ -1890,7 +1879,7 @@ export default function ServiceEdit() {
 
                                             <div className="admin-form-group" style={{ marginBottom: 0 }}>
                                                 <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                    <Wrench size={13} /> Tooling Diameter ({hwUnit})
+                                                    <Wrench size={13} /> {selectedHwType?.id === 2 ? `Standoff Outer Diameter (${hwUnit})` : `Tooling Diameter (${hwUnit})`}
                                                 </label>
                                                 <input
                                                     type="number"
@@ -1903,6 +1892,9 @@ export default function ServiceEdit() {
                                                     placeholder={hwUnit === 'mm' ? "0.00" : ".000"}
                                                     style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
                                                 />
+                                                {selectedHwType?.id === 2 && (
+                                                    <p className="admin-card-tip" style={{ marginTop: '6px', marginBottom: 0 }}>Used as the standoff body diameter in the 3D viewer.</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

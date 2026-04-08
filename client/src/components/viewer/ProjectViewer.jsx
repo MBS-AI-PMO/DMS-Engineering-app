@@ -212,8 +212,8 @@ const ProjectViewer = ({
             };
             const partT = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
             const holeMmDia = (hole.diameterInches || 0.1) * 25.4;
-            const toolMmDia = parseFloat(item?.tooling_diameter || 0.1) * 25.4;
-            const r = Math.max(Math.min(holeMmDia / 2, toolMmDia / 2), 0.5);
+            const edgeMm = item?.min_edge_distance ? parseFloat(item.min_edge_distance) * 25.4 : null;
+            const r = Math.max(edgeMm ? edgeMm / 2 : holeMmDia / 2, 0.5);
             const color = HW_COLORS[typeId] || 0xB8860B;
 
             const rawAxis = hole.axis;
@@ -229,6 +229,16 @@ const ProjectViewer = ({
 
             const type = typeId || 3;
             const meshesToAdd = [];
+            const axisNorm = axisVec.clone().normalize();
+
+            const addHWMesh = (geo, mat, center) => {
+              const m = new THREE.Mesh(geo, mat);
+              m.isHardwareMarker = true;
+              m.position.copy(center);
+              m.lookAt(center.clone().add(axisVec));
+              m.rotateX(Math.PI / 2);
+              threeViewer.scene.add(m);
+            };
 
             if (type === 3) {
               // Nut — flat hexagonal disk + inner black void to suggest hole
@@ -239,17 +249,39 @@ const ProjectViewer = ({
               const innerGeo = new THREE.CylinderGeometry(r * 0.55, r * 0.55, partT * 0.2, 16);
               meshesToAdd.push(new THREE.Mesh(innerGeo, innerMat));
             } else if (type === 2) {
-              // Flush Standoff — tall cylinder post
-              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
-              meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, partT * 1.6, 24), mat));
+              // Flush Standoff — open-ended hollow tube + hex flange on opposite face
+              const standoffH = item?.length ? parseFloat(item.length) * 25.4 : partT * 1.6;
+              const bodyCenter = markerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2));
+              const flangeH = Math.max(1.5, partT * 0.15);
+              const flangeCenter = markerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH / 2)));
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide });
+              const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
+              addHWMesh(new THREE.CylinderGeometry(r, r, standoffH, 24, 1, true), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, standoffH, 24), boreMat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 1.4, r * 1.4, flangeH, 6), mat, flangeCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, flangeH + 0.1, 16), boreMat, flangeCenter);
             } else if (type === 4) {
               // Flush Nut — torus ring (washer shape)
               const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
               meshesToAdd.push(new THREE.Mesh(new THREE.TorusGeometry(r * 1.1, r * 0.35, 8, 24), mat));
             } else if (type === 1) {
-              // Flush Stud — thin elongated pin
-              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
-              meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, partT * 2.2, 16), mat));
+              // Flush Stud — helical screw threads + round head on opposite face
+              const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.2;
+              const bodyCenter = markerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
+              const headH = Math.max(2, partT * 0.2);
+              const headCenter = markerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
+              const shaftR = r * 0.4;
+              const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.8, roughness: 0.2 });
+              addHWMesh(new THREE.CylinderGeometry(shaftR, shaftR, studH, 16), mat, bodyCenter);
+              const numCoils = Math.max(10, Math.round(studH / 1.8));
+              const helixPts = [];
+              for (let i = 0; i <= numCoils * 20; i++) {
+                const t = i / (numCoils * 20);
+                const angle = t * numCoils * Math.PI * 2;
+                helixPts.push(new THREE.Vector3(Math.cos(angle) * shaftR * 1.55, (t - 0.5) * studH, Math.sin(angle) * shaftR * 1.55));
+              }
+              addHWMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helixPts), numCoils * 20, shaftR * 0.22, 5, false), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(r * 1.2, r * 1.2, headH, 32), mat, headCenter);
             } else {
               const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.4 });
               meshesToAdd.push(new THREE.Mesh(new THREE.CylinderGeometry(r, r, partT, 32, 1, true), mat));

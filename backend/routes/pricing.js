@@ -282,7 +282,7 @@ router.post('/calculate', async (req, res) => {
                 if (optId !== null && s.service_options && Array.isArray(s.service_options)) {
                     const opt = s.service_options.find(o => o.id === optId || o.index === optId);
                     if (opt) {
-                        sPrice += parseFloat(opt.base_price || opt.price) || 0;
+                        sPrice = parseFloat(opt.base_price || opt.price) || 0;
                         sName = `${s.title} - ${opt.name || opt.color}`;
                     }
                 }
