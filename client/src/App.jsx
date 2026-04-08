@@ -108,7 +108,7 @@ function App() {
                 <Route path="/admin/metals/new" element={
                   <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
                 } />
-                <Route path="/admin/metals/:id" element={
+                <Route path="/admin/metals/:slug" element={
                   <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/categories" element={

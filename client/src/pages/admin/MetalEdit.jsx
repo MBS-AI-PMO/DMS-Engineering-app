@@ -207,9 +207,9 @@ function MetalEditSkeleton() {
 
 // ── Main Component ───────────────────────────────────────
 export default function MetalEdit() {
-    const { id } = useParams();
+    const { slug } = useParams();
     const navigate = useNavigate();
-    const isNew = !id;
+    const isNew = !slug;
     const toast = useToast();
 
     const [metal, setMetal] = useState(emptyMetal);
@@ -228,7 +228,7 @@ export default function MetalEdit() {
         fetchCategories().then(setCategories).catch(err => toast('Failed to load categories: ' + err.message, 'error'));
         fetchServices().then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
         if (!isNew) {
-            fetchMetalBySlug(id)
+            fetchMetalBySlug(slug)
                 .then(data => {
                     // ... (migration logic stays the same)
                     const migratedSpecs = { ...(data.thickness_specs || {}) };
@@ -262,7 +262,7 @@ export default function MetalEdit() {
                 .catch(err => toast('Failed to load metal details: ' + err.message, 'error'))
                 .finally(() => setLoading(false));
         }
-    }, [id, isNew, toast]);
+    }, [slug, isNew, toast]);
 
     const set = useCallback((key, value) => setMetal(prev => ({ ...prev, [key]: value })), []);
 
@@ -273,7 +273,7 @@ export default function MetalEdit() {
             if (isNew) {
                 await createMetal(metal);
             } else {
-                await updateMetal(id, metal);
+                await updateMetal(metal.id, metal);
             }
             toast('Metal saved successfully', 'success');
             navigate('/admin/metals');

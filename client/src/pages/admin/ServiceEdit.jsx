@@ -54,7 +54,7 @@ export default function ServiceEdit() {
     const [hwUnit, setHwUnit] = useState('in');
     const hwTypeImgRef = useRef(null);
 
-    const isHardware = service?.title?.toLowerCase()?.includes('hardware');
+    const isHardware = service?.title?.toLowerCase()?.includes('hardware') || service?.title?.toLowerCase()?.includes('insertion');
 
     const toMM = (val) => val ? (parseFloat(val) * 25.4).toFixed(4) : '';
     const toIN = (val) => val ? (parseFloat(val) / 25.4).toFixed(4) : '';

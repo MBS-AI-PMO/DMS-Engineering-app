@@ -336,6 +336,54 @@ export async function generateOrderReport(order, items) {
             iy = doc.lastAutoTable.finalY + 10;
         }
 
+        // Hardware
+        const hardware = config.selectedHardware || {};
+        const hwEntries = Object.entries(hardware);
+        if (hwEntries.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(...brandRed);
+            doc.text('HARDWARE SPECIFICATIONS', margin, iy);
+            iy += 2;
+            doc.line(margin, iy, margin + 55, iy);
+            iy += 5;
+
+            const hwRows = hwEntries.map(([holeId, hwInfo], i) => {
+                const hole = hwInfo.hole || {};
+                const item = hwInfo.item || {};
+                const pos = hole.position;
+                let posStr = 'N/A';
+                if (Array.isArray(pos)) posStr = '(' + pos.map(v => parseFloat(v).toFixed(2)).join(', ') + ')';
+                else if (pos && typeof pos === 'object') posStr = '(' + parseFloat(pos.x || 0).toFixed(2) + ', ' + parseFloat(pos.y || 0).toFixed(2) + ', ' + parseFloat(pos.z || 0).toFixed(2) + ')';
+
+                return [
+                    String(i + 1),
+                    item.name || 'Hardware ' + holeId,
+                    hwInfo.face === 'up' ? 'Top' : 'Bottom',
+                    posStr,
+                    item.price ? '$' + parseFloat(item.price).toFixed(2) : '$0.00'
+                ];
+            });
+
+            autoTable(doc, {
+                startY: iy,
+                head: [['#', 'Hardware Name', 'Installation Face', 'Position (x, y, z)', 'Price']],
+                body: hwRows,
+                margin: { left: margin, right: margin },
+                headStyles: { fillColor: darkSlate, textColor: white, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+                styles: { fontSize: 8, cellPadding: 3.5, textColor: darkSlate, halign: 'center' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: {
+                    0: { cellWidth: 10 },
+                    1: { cellWidth: 50, halign: 'left' },
+                    2: { cellWidth: 25 },
+                    3: { cellWidth: 45, halign: 'left' },
+                    4: { cellWidth: 25 },
+                }
+            });
+            iy = doc.lastAutoTable.finalY + 10;
+        }
+
         // File paths
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);

@@ -154,7 +154,7 @@ export default function MetalsList() {
                                         </td>
                                         <td>
                                             <div className="table-actions">
-                                                <Link to={`/admin/metals/${metal.id}`} className="admin-icon-btn" title="Edit Metal">
+                                                <Link to={`/admin/metals/${metal.slug}`} className="admin-icon-btn" title="Edit Metal">
                                                     <Edit2 size={16} />
                                                 </Link>
                                                 <button
