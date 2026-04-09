@@ -57,7 +57,7 @@ import PaymentMethods from './pages/admin/PaymentMethods';
 const PublicShell = ({ children }) => (
   <div className="app-container">
     <Navbar />
-    <main className="main-content px-desktop">{children}</main>
+    <main className="main-content">{children}</main>
     <Footer />
   </div>
 );
