@@ -589,20 +589,19 @@ export default function MetalEdit() {
                             <div className="admin-section-header">
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Hash size={18} />
-                                    <h3>Thickness-Based Pricing & Compatibility</h3>
+                                    <h3>Thickness Compatibility</h3>
                                 </div>
                             </div>
-                            <p className="admin-card-tip">Configure the material cost (Price per Length and Price per Width in $/inch) for each thickness.</p>
+                            <p className="admin-card-tip">
+                                Sub-service availability per thickness. Material pricing is managed in{' '}
+                                <strong>Sheet Costs</strong>; laser cut rates in <strong>Laser Rates</strong>.
+                            </p>
 
                             <div className="admin-pricing-table-wrapper" style={{ marginTop: '20px' }}>
                                 <table className="admin-pricing-table">
                                     <thead>
                                         <tr>
                                             <th>Thickness</th>
-                                            <th>Price per Length ($/in)</th>
-                                            <th>Price per Width ($/in)</th>
-                                            <th title="Laser machine speed for this thickness">Cut Speed (mm/s)</th>
-                                            <th title="Time for the laser to pierce this thickness">Pierce Time (s)</th>
                                             <th>Compatible Services</th>
                                         </tr>
                                     </thead>
@@ -610,92 +609,6 @@ export default function MetalEdit() {
                                         {(metal.quick_look?.thicknesses || []).map((t, idx) => (
                                             <tr key={idx}>
                                                 <td data-label="Thickness" style={{ fontWeight: 800 }}>{t.label || t.value}</td>
-                                                <td data-label="Price/L ($)">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="admin-input-small"
-                                                        value={metal.pricing_config?.[t.value]?.price_per_length ?? ''}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            setMetal(prev => ({
-                                                                ...prev,
-                                                                pricing_config: {
-                                                                    ...(prev.pricing_config || {}),
-                                                                    [t.value]: {
-                                                                        ...(prev.pricing_config?.[t.value] || {}),
-                                                                        price_per_length: val
-                                                                    }
-                                                                }
-                                                            }));
-                                                        }}
-                                                    />
-                                                </td>
-                                                <td data-label="Price/W ($)">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="admin-input-small"
-                                                        value={metal.pricing_config?.[t.value]?.price_per_width ?? ''}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            setMetal(prev => ({
-                                                                ...prev,
-                                                                pricing_config: {
-                                                                    ...(prev.pricing_config || {}),
-                                                                    [t.value]: {
-                                                                        ...(prev.pricing_config?.[t.value] || {}),
-                                                                        price_per_width: val
-                                                                    }
-                                                                }
-                                                            }));
-                                                        }}
-                                                    />
-                                                </td>
-                                                <td data-label="Cut Speed">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="admin-input-small"
-                                                        placeholder="mm/s"
-                                                        value={metal.pricing_config?.[t.value]?.cut_rate ?? ''}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            setMetal(prev => ({
-                                                                ...prev,
-                                                                pricing_config: {
-                                                                    ...(prev.pricing_config || {}),
-                                                                    [t.value]: {
-                                                                        ...(prev.pricing_config?.[t.value] || {}),
-                                                                        cut_rate: val
-                                                                    }
-                                                                }
-                                                            }));
-                                                        }}
-                                                    />
-                                                </td>
-                                                <td data-label="Pierce Time">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="admin-input-small"
-                                                        placeholder="seconds"
-                                                        value={metal.pricing_config?.[t.value]?.pierce_time ?? ''}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            setMetal(prev => ({
-                                                                ...prev,
-                                                                pricing_config: {
-                                                                    ...(prev.pricing_config || {}),
-                                                                    [t.value]: {
-                                                                        ...(prev.pricing_config?.[t.value] || {}),
-                                                                        pierce_time: val
-                                                                    }
-                                                                }
-                                                            }));
-                                                        }}
-                                                    />
-                                                </td>
                                                 <td data-label="Services">
                                                     <div className="compatibility-grid">
                                                         {allServices.filter(s => !s.is_production).map(svc => {
@@ -719,7 +632,7 @@ export default function MetalEdit() {
                                         ))}
                                         {(metal.quick_look?.thicknesses || []).length === 0 && (
                                             <tr>
-                                                <td colSpan="3" style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                                                <td colSpan="2" style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                                                     First, add thicknesses in the <strong>Quick Look</strong> tab.
                                                 </td>
                                             </tr>

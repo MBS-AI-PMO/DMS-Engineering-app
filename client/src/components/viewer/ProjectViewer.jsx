@@ -10,6 +10,7 @@ const ProjectViewer = ({
 }) => {
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
+  const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
   const [modelLoadCount, setModelLoadCount] = useState(0);
   const [measuredThickness, setMeasuredThickness] = useState(3);
   const onDimRef = useRef(onDimensionsExtracted);
@@ -52,7 +53,10 @@ const ProjectViewer = ({
             // 1. DIMENSION EXTRACTION
             const box = new THREE.Box3().setFromObject(threeViewer.scene);
             const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
             box.getSize(size);
+            box.getCenter(center);
+            centroidRef.current.copy(center);
 
             const dimensions = [size.x, size.y, size.z].sort((a, b) => a - b);
             const t = dimensions[0];
@@ -179,7 +183,9 @@ const ProjectViewer = ({
             const marker = new THREE.Mesh(geometry, material);
             marker.isTapMarker = true;
 
+            const modelParent = threeViewer.scene.children.find(c => c.isGroup) || threeViewer.scene;
             marker.position.set(pos.x, pos.y, pos.z);
+            modelParent.add(marker);
 
             // Orient along hole axis — identical to InstantPricing sleeve logic
             const rawAxis = tap.hole.axis;
@@ -192,8 +198,6 @@ const ProjectViewer = ({
               marker.lookAt(new THREE.Vector3(pos.x, pos.y, pos.z).add(axisVec));
             }
             marker.rotateX(Math.PI / 2);
-
-            threeViewer.scene.add(marker);
           });
         }
 
@@ -232,13 +236,15 @@ const ProjectViewer = ({
             const faceSign = face === 'down' ? -1 : 1;
             const centerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
 
+            const modelParent = threeViewer.scene.children.find(c => c.isGroup) || threeViewer.scene;
+
             const addMarker = (geo, mat, p) => {
               const m = new THREE.Mesh(geo, mat);
               m.isHardwareMarker = true;
               m.position.copy(p);
               m.lookAt(p.clone().add(axisNorm));
               m.rotateX(Math.PI / 2);
-              threeViewer.scene.add(m);
+              modelParent.add(m);
             };
 
             const type = typeId || 3;

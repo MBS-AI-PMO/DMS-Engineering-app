@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler, Grid } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, Zap, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler, Grid } from 'lucide-react';
 import {
     fetchServices, createService, updateService, uploadServiceImage,
     fetchHardwareTypes, fetchHardwareItemsByType, uploadHardwareTypeImage,
@@ -29,7 +29,9 @@ export default function ServiceEdit() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+    const [isColorModalOpen, setIsColorModalOpen] = useState(false);
+    const [editingColorIndex, setEditingColorIndex] = useState(null); // null = new
+    const [tempColor, setTempColor] = useState({ name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false });
 
     // Tapping Modal State
     const [isTapModalOpen, setIsTapModalOpen] = useState(false);
@@ -488,28 +490,101 @@ export default function ServiceEdit() {
                             const isTapping = service.title.toLowerCase().includes('tap');
 
                             if (isAnodizing || isPowderCoating) return (
-                                <div className="admin-edit-card service-options-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '32px', border: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                                        <div style={{ width: '60px', height: '60px', borderRadius: '18px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #eef2f6' }}>
-                                            <Shield size={28} color="#64748b" />
-                                        </div>
-                                        <div>
-                                            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                {isAnodizing ? 'Anodizing Finishes' : 'Powder Coating Finishes'}
-                                            </h3>
-                                            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600 }}>
-                                                {(service.service_options || []).length} colors currently configured
+                                <>
+                                    {/* Powder Coating Pricing Config (moved out of modal) */}
+                                    {isPowderCoating && (
+                                        <div className="admin-edit-card service-options-card" style={{ marginBottom: '20px' }}>
+                                            <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Cpu size={16} />
+                                                    <span>Powder Coating Pricing Configuration</span>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
+                                                <div className="option-input-group">
+                                                    <label>Batch Cost ($)</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.batch_cost || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, batch_cost: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Shop Rate ($/hr)</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.shop_rate || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, shop_rate: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Setup Time (min)</label>
+                                                    <input type="number" value={service.pricing_config?.setup_time || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Oven Width (in)</label>
+                                                    <input type="number" value={service.pricing_config?.oven_width || 90} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_width: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Oven Length (in)</label>
+                                                    <input type="number" value={service.pricing_config?.oven_length || 160} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                            </div>
+                                            <p className="admin-card-tip" style={{ marginTop: '12px' }}>
+                                                Formula: <code>cost/unit = (setup_time × shop_rate / 60 + batches × batch_cost) / qty</code>.
+                                                Parts per batch uses thickness + 24&Prime; rack clearance across both oven orientations.
                                             </p>
                                         </div>
+                                    )}
+
+                                    {/* Inline color grid */}
+                                    <div className="admin-edit-card service-options-card">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                                <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #eef2f6' }}>
+                                                    <Shield size={22} color="#64748b" />
+                                                </div>
+                                                <div>
+                                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                        {isAnodizing ? 'Anodizing Finishes' : 'Powder Coating Finishes'}
+                                                    </h3>
+                                                    <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>
+                                                        {(service.service_options || []).length} color{(service.service_options || []).length !== 1 ? 's' : ''} configured
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => { setEditingColorIndex(null); setTempColor({ name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false }); setIsColorModalOpen(true); }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: '12px', background: '#1e293b', color: 'white', border: 'none', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                                            >
+                                                <Plus size={15} /> Add Color
+                                            </button>
+                                        </div>
+
+                                        {(service.service_options || []).length === 0 ? (
+                                            <div style={{ textAlign: 'center', padding: '40px', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0', color: '#94a3b8' }}>
+                                                <Shield size={28} color="#cbd5e1" style={{ marginBottom: 10 }} />
+                                                <p style={{ fontWeight: 700, margin: 0 }}>No colors configured yet.</p>
+                                                <p style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>Click <strong>Add Color</strong> to define your first finish.</p>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                                                {(service.service_options || []).map((opt, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#f8fafc', borderRadius: '14px', border: '1.5px solid #f1f5f9' }}>
+                                                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: opt.color || '#000000', flexShrink: 0, border: '3px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.name || <span style={{ color: '#94a3b8' }}>Unnamed</span>}</div>
+                                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                                                                {opt.price > 0 ? `+$${parseFloat(opt.price).toFixed(2)}` : 'No upcharge'}
+                                                                {opt.is_wrinkled && ' · Wrinkle'}
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                                            <button onClick={() => { setEditingColorIndex(idx); setTempColor({ ...opt }); setIsColorModalOpen(true); }} style={{ width: 28, height: 28, borderRadius: 8, background: '#e2e8f0', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <Edit2 size={12} color="#475569" />
+                                                            </button>
+                                                            <button onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }} style={{ width: 28, height: 28, borderRadius: 8, background: '#fff1f2', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <Trash2 size={12} color="#ef4444" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                    <button
-                                        className="admin-btn admin-btn-primary"
-                                        onClick={() => setIsFinishModalOpen(true)}
-                                        style={{ borderRadius: '14px', padding: '14px 28px', background: '#1e293b', color: 'white', fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 16px rgba(30, 41, 59, 0.15)' }}
-                                    >
-                                        <Edit2 size={18} /> Manage Colors & Finish Settings
-                                    </button>
-                                </div>
+                                </>
                             );
 
                             if (isTapping) return (
@@ -582,15 +657,7 @@ export default function ServiceEdit() {
                                     </div>
                                     <p className="admin-card-tip">Configure pricing parameters for Laser Cutting. These are added to the material cost in the quote flow.</p>
 
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
-                                        <div className="option-input-group">
-                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Setup Fee ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.setup_fee || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_fee: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', marginTop: '20px', maxWidth: '320px' }}>
                                         <div className="option-input-group">
                                             <label><Cpu size={10} style={{ marginRight: '4px' }} /> Machine Hourly Rate ($/hr)</label>
                                             <input
@@ -602,7 +669,10 @@ export default function ServiceEdit() {
                                         </div>
                                     </div>
                                     <p className="admin-card-tip" style={{ marginTop: '12px' }}>
-                                        Technical Laser formula: <code>Cost = Setup + (Perimeter / Speed * HourlyRate) + (Pierces * PierceTime * HourlyRate)</code>
+                                        Formula: <code>cost/unit = (HourlyRate × setup_hrs / qty) + (HourlyRate × runtime_h)</code>
+                                        <br />
+                                        Setup time is automatic: <strong>0.3 h</strong> if thickness ≤ 0.25 in, <strong>0.25 h</strong> if thickness &gt; 0.25 in.
+                                        Cut speed and pierce time come from the <strong>Laser Rates</strong> table.
                                     </p>
                                 </div>
                             );
@@ -1105,181 +1175,112 @@ export default function ServiceEdit() {
                 )}
             </AnimatePresence>
 
+            {/* Single-color add/edit popup */}
             <AnimatePresence>
-                {isFinishModalOpen && (
-                    <div className="admin-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+                {isColorModalOpen && (
+                    <div className="admin-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            initial={{ opacity: 0, scale: 0.95, y: 16 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="admin-modal-content"
-                            style={{
-                                width: '100%',
-                                maxWidth: '1000px',
-                                maxHeight: '90vh',
-                                background: '#ffffff',
-                                borderRadius: '32px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                overflow: 'hidden',
-                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                                border: '1px solid rgba(255, 255, 255, 0.2)'
-                            }}
+                            exit={{ opacity: 0, scale: 0.95, y: 16 }}
+                            style={{ width: '100%', maxWidth: '460px', background: '#ffffff', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
                         >
-                            <div className="admin-modal-header" style={{ padding: '32px 40px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                    <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Shield size={24} color="white" />
-                                    </div>
-                                    <div>
-                                        <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                            {service.title.toLowerCase().includes('anodiz') ? 'Anodizing Finishes' : 'Powder Coating Finishes'}
-                                        </h2>
-                                        <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Configure professional-grade colors, textures, and pricing.</p>
-                                    </div>
+                            {/* Header */}
+                            <div style={{ padding: '24px 28px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: tempColor.color || '#000000', border: '3px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} />
+                                    <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                        {editingColorIndex !== null ? 'Edit Color' : 'Add Color'}
+                                    </h2>
                                 </div>
-                                <div style={{ display: 'flex', gap: '16px' }}>
-                                    {service.title.toLowerCase().includes('powder coat') && (
-                                        <div style={{ display: 'flex', gap: '12px', background: 'white', padding: '10px 16px', borderRadius: '14px', border: '1.5px solid #e2e8f0', alignItems: 'center' }}>
-                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
-                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Batch Cost ($)</label>
-                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.batch_cost || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, batch_cost: parseFloat(e.target.value) || 0 } }))} />
-                                            </div>
-                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
-                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Shop Rate ($/hr)</label>
-                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.shop_rate || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, shop_rate: parseFloat(e.target.value) || 0 } }))} />
-                                            </div>
-                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
-                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Setup Time (min)</label>
-                                                <input type="number" style={{ height: '32px', width: '80px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.setup_time || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time: parseFloat(e.target.value) || 0 } }))} />
-                                            </div>
-                                            <div className="option-input-group" style={{ marginBottom: 0 }}>
-                                                <label style={{ fontSize: '10px', color: '#94a3b8' }}>Oven W/L (in)</label>
-                                                <div style={{ display: 'flex', gap: 4 }}>
-                                                    <input type="number" style={{ height: '32px', width: '50px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.oven_width || 90} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_width: parseFloat(e.target.value) || 0 } }))} />
-                                                    <input type="number" style={{ height: '32px', width: '50px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px' }} value={service.pricing_config?.oven_length || 160} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <button className="admin-btn admin-btn-secondary" onClick={() => {
-                                        setService(s => ({ ...s, service_options: [...(s.service_options || []), { name: '', color: '#000000', price: 0, gloss: 50, is_wrinkled: false }] }))
-                                    }} style={{ borderRadius: '14px', padding: '12px 24px', border: '2px solid #e2e8f0', background: 'white', fontWeight: 800, color: '#1e293b' }}>
-                                        <Plus size={18} /> Add Color
-                                    </button>
-                                </div>
+                                <button onClick={() => setIsColorModalOpen(false)} style={{ width: 32, height: 32, borderRadius: 10, background: '#f1f5f9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <X size={16} color="#64748b" />
+                                </button>
                             </div>
 
-                            <div className="admin-modal-body" style={{ padding: '40px', overflowY: 'auto', background: '#ffffff', flex: 1 }}>
-                                <div className="premium-options-grid" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                                    {(service.service_options || []).map((opt, idx) => (
-                                        <div key={idx} className="premium-option-card" style={{ background: '#f8fafc', borderRadius: '24px', padding: '28px', border: '1.5px solid #f1f5f9', position: 'relative', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                                            {/* Row 1 */}
-                                            <div style={{ display: 'flex', gap: '24px' }}>
-                                                <div className="premium-field" style={{ flex: 1.2 }}>
-                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
-                                                        <Hash size={10} style={{ marginRight: '6px' }} /> Color Name
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        value={opt.name}
-                                                        onChange={e => { const n = [...service.service_options]; n[idx].name = e.target.value; setService(s => ({ ...s, service_options: n })); }}
-                                                        placeholder="e.g. Matte Black"
-                                                        style={{ width: '100%', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 600, fontSize: '0.95rem' }}
-                                                    />
-                                                </div>
-
-                                                <div className="premium-field" style={{ flex: 1.5 }}>
-                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
-                                                        <Grid size={10} style={{ marginRight: '6px' }} /> Hex Code
-                                                    </label>
-                                                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-                                                        <div style={{ width: '54px', height: '54px', borderRadius: '16px', background: opt.color || '#000000', border: '4px solid white', boxShadow: '0 8px 16px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
-                                                            <input type="color" value={opt.color || '#000000'} onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
-                                                        </div>
-                                                        <input
-                                                            type="text"
-                                                            value={opt.color || ''}
-                                                            onChange={e => { const n = [...service.service_options]; n[idx].color = e.target.value; setService(s => ({ ...s, service_options: n })); }}
-                                                            placeholder="#000000"
-                                                            style={{ flex: 1, padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 700, fontSize: '0.95rem' }}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                {service.title.toLowerCase().includes('powder coat') && (
-                                                    <div className="premium-field" style={{ width: '100px', flexShrink: 0 }}>
-                                                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.55rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.8px', marginBottom: '12px' }}>
-                                                            <Info size={10} style={{ marginRight: '4px' }} /> Gloss (%)
-                                                        </label>
-                                                        <input
-                                                            type="number"
-                                                            min="0" max="100"
-                                                            value={opt.gloss ?? 50}
-                                                            onChange={e => { const n = [...service.service_options]; n[idx].gloss = parseInt(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }}
-                                                            style={{ width: '100%', height: '54px', textAlign: 'center', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 800, fontSize: '0.95rem' }}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Row 2 */}
-                                            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-end' }}>
-                                                <div className="premium-field" style={{ width: '80px', flexShrink: 0 }}>
-                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
-                                                        <Layers size={10} style={{ marginRight: '6px' }} /> Wrinkle
-                                                    </label>
-                                                    <div
-                                                        onClick={() => {
-                                                            const n = service.service_options.map((o, i) => i === idx ? { ...o, is_wrinkled: !o.is_wrinkled } : o);
-                                                            setService(s => ({ ...s, service_options: n }));
-                                                        }}
-                                                        style={{ width: '54px', height: '54px', borderRadius: '16px', background: '#eef2f6', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', border: opt.is_wrinkled ? '2px solid #3b82f6' : '1.5px solid transparent' }}>
-                                                        <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: opt.is_wrinkled ? '#3b82f6' : '#cbd5e1', boxShadow: opt.is_wrinkled ? '0 0 12px rgba(59, 130, 246, 0.4)' : 'none', transition: 'all 0.2s' }} />
-                                                    </div>
-                                                </div>
-
-                                                <div className="premium-field" style={{ flex: 1 }}>
-                                                    <label style={{ display: 'block', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1.2px', marginBottom: '12px' }}>
-                                                        <Hash size={10} style={{ marginRight: '6px' }} /> Price ($)
-                                                    </label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01" min="0"
-                                                        value={opt.price ?? 0}
-                                                        onChange={e => { const n = [...service.service_options]; n[idx].price = parseFloat(e.target.value) || 0; setService(s => ({ ...s, service_options: n })); }}
-                                                        placeholder="0.00"
-                                                        style={{ width: '100%', height: '54px', padding: '16px 20px', borderRadius: '16px', border: '1.5px solid #eef2f6', background: 'white', color: '#1e293b', fontWeight: 800, fontSize: '0.95rem' }}
-                                                    />
-                                                </div>
-
-                                                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0' }}>
-                                                    <button
-                                                        className="admin-btn"
-                                                        onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }}
-                                                        style={{ width: '54px', height: '54px', borderRadius: '16px', background: '#fff1f2', border: 'none', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
-                                                    >
-                                                        <Trash2 size={22} color="#ef4444" strokeWidth={2.5} />
-                                                    </button>
-                                                </div>
-                                            </div>
+                            {/* Body */}
+                            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                                {/* Color picker + hex */}
+                                <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                    <label>Color</label>
+                                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: tempColor.color || '#000000', border: '3px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
+                                            <input type="color" value={tempColor.color || '#000000'} onChange={e => setTempColor(c => ({ ...c, color: e.target.value }))} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
                                         </div>
-                                    ))}
-                                    {(!service.service_options || service.service_options.length === 0) && (
-                                        <div style={{ textAlign: 'center', padding: '80px 40px', background: '#f8fafc', borderRadius: '32px', border: '2px dashed #e2e8f0', color: '#64748b' }}>
-                                            <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '1.5px solid #eef2f6' }}>
-                                                <Shield size={32} color="#cbd5e1" />
-                                            </div>
-                                            <p style={{ fontWeight: 800, marginBottom: '8px', fontSize: '1rem' }}>No finishes defined</p>
-                                            <p style={{ fontSize: '0.85rem', fontWeight: 600, opacity: 0.7 }}>Click "Add Color" above to start configuring your finishes.</p>
-                                        </div>
-                                    )}
+                                        <input type="text" value={tempColor.color || ''} onChange={e => setTempColor(c => ({ ...c, color: e.target.value }))} placeholder="#000000" style={{ flex: 1, padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }} />
+                                    </div>
                                 </div>
+
+                                {/* Name */}
+                                <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                    <label>Color Name</label>
+                                    <input type="text" value={tempColor.name || ''} onChange={e => setTempColor(c => ({ ...c, name: e.target.value }))} placeholder="e.g. Matte Black" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }} />
+                                </div>
+
+                                {/* Gloss + Wrinkle row */}
+                                {service.title.toLowerCase().includes('powder coat') && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                        <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                            <label>Gloss (%)</label>
+                                            <input type="number" min="0" max="100" value={tempColor.gloss ?? 50} onChange={e => setTempColor(c => ({ ...c, gloss: parseInt(e.target.value) || 0 }))} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontWeight: 700, fontSize: '0.9rem' }} />
+                                        </div>
+                                        <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                            <label>Wrinkle Finish</label>
+                                            <div onClick={() => setTempColor(c => ({ ...c, is_wrinkled: !c.is_wrinkled }))} style={{ height: '44px', borderRadius: '12px', background: tempColor.is_wrinkled ? '#eff6ff' : '#f8fafc', border: tempColor.is_wrinkled ? '2px solid #3b82f6' : '1.5px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', color: tempColor.is_wrinkled ? '#3b82f6' : '#94a3b8', gap: 6 }}>
+                                                <div style={{ width: 16, height: 16, borderRadius: 5, background: tempColor.is_wrinkled ? '#3b82f6' : '#cbd5e1', transition: 'all 0.2s' }} />
+                                                {tempColor.is_wrinkled ? 'On' : 'Off'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Price Upcharge */}
+                                {service.title.toLowerCase().includes('powder coat') ? (
+                                    <div style={{ padding: '16px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{ padding: '8px', background: '#fff', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                            <Zap size={16} color="#6366f1" fill="#6366f1" opacity={0.2} />
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.4 }}>
+                                            <strong style={{ color: '#1e293b', display: 'block', marginBottom: '2px' }}>Automated Engine Active</strong>
+                                            Pricing for this finish is calculated using the batch logic and oven dimensions.
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="option-input-group" style={{ marginBottom: 0 }}>
+                                        <label>Price Upcharge ($)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={tempColor.price ?? 0}
+                                            onChange={e => setTempColor(c => ({ ...c, price: parseFloat(e.target.value) || 0 }))}
+                                            placeholder="0.00"
+                                            style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontWeight: 700, fontSize: '0.9rem' }}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="admin-modal-footer" style={{ padding: '24px 40px', borderTop: '1.5px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', background: '#f8fafc' }}>
-                                <button className="admin-btn admin-btn-primary" onClick={() => setIsFinishModalOpen(false)} style={{ borderRadius: '14px', padding: '14px 40px', background: '#1e293b', color: 'white', fontWeight: 900, boxShadow: '0 8px 16px rgba(30, 41, 59, 0.15)' }}>
-                                    Done
+                            {/* Footer */}
+                            <div style={{ padding: '16px 28px 24px', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                                <button onClick={() => setIsColorModalOpen(false)} style={{ padding: '11px 22px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: 'white', fontWeight: 700, color: '#64748b', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (!tempColor.name) { toast('Color name is required', 'error'); return; }
+                                        const updated = [...(service.service_options || [])];
+                                        if (editingColorIndex !== null) {
+                                            updated[editingColorIndex] = tempColor;
+                                        } else {
+                                            updated.push(tempColor);
+                                        }
+                                        setService(s => ({ ...s, service_options: updated }));
+                                        setIsColorModalOpen(false);
+                                    }}
+                                    style={{ padding: '11px 28px', borderRadius: '12px', background: '#1e293b', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem' }}
+                                >
+                                    {editingColorIndex !== null ? 'Save Changes' : 'Add Color'}
                                 </button>
                             </div>
                         </motion.div>

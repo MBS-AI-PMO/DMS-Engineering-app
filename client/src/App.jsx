@@ -38,6 +38,8 @@ import ServiceMetalsConfig from './pages/admin/ServiceMetalsConfig';
 import Customers from './pages/admin/Customers';
 import PricingManagement from './pages/admin/PricingManagement';
 import PricingCalculator from './pages/admin/PricingCalculator';
+import LaserRatesAdmin from './pages/admin/LaserRatesAdmin';
+import SheetCostRatesAdmin from './pages/admin/SheetCostRatesAdmin';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -55,7 +57,7 @@ import PaymentMethods from './pages/admin/PaymentMethods';
 const PublicShell = ({ children }) => (
   <div className="app-container">
     <Navbar />
-    <main className="main-content">{children}</main>
+    <main className="main-content px-desktop">{children}</main>
     <Footer />
   </div>
 );
@@ -100,70 +102,76 @@ function App() {
                 {/* Admin */}
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin" element={
-                  <ProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><AdminDashboard /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/metals" element={
-                  <ProtectedRoute><AdminLayout><MetalsList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><MetalsList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/metals/new" element={
-                  <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><MetalEdit /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/metals/:slug" element={
-                  <ProtectedRoute><AdminLayout><MetalEdit /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><MetalEdit /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/categories" element={
-                  <ProtectedRoute><AdminLayout><CategoriesList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><CategoriesList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/faqs" element={
-                  <ProtectedRoute><AdminLayout><FaqsList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><FaqsList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/faq-categories" element={
-                  <ProtectedRoute><AdminLayout><FaqCategoriesList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><FaqCategoriesList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/services" element={
-                  <ProtectedRoute><AdminLayout><ServicesList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><ServicesList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/services/new" element={
-                  <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><ServiceEdit /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/services/:id" element={
-                  <ProtectedRoute><AdminLayout><ServiceEdit /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><ServiceEdit /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/services/:id/metals" element={
-                  <ProtectedRoute><AdminLayout><ServiceMetalsConfig /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><ServiceMetalsConfig /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/admins" element={
-                  <ProtectedRoute><AdminLayout><AdminsList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><AdminsList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/email" element={
-                  <ProtectedRoute><AdminLayout><EmailConfig /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><EmailConfig /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/payment" element={
-                  <ProtectedRoute><AdminLayout><PaymentMethods /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><PaymentMethods /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/subscribers" element={
-                  <ProtectedRoute><AdminLayout><SubscribersList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><SubscribersList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/contact" element={
-                  <ProtectedRoute><AdminLayout><ContactSettings /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><ContactSettings /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/guidelines" element={
-                  <ProtectedRoute><AdminLayout><GuidelinesList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><GuidelinesList /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/guidelines/:serviceId" element={
-                  <ProtectedRoute><AdminLayout><GuidelineEdit /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><GuidelineEdit /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/customers" element={
-                  <ProtectedRoute><AdminLayout><Customers /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><Customers /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/pricing" element={
-                  <ProtectedRoute><AdminLayout><PricingManagement /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><PricingManagement /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/pricing-calculator" element={
-                  <ProtectedRoute><AdminLayout><PricingCalculator /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><PricingCalculator /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/laser-rates" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><LaserRatesAdmin /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/sheet-cost-rates" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><SheetCostRatesAdmin /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/orders" element={
-                  <ProtectedRoute><AdminLayout><OrdersList /></AdminLayout></ProtectedRoute>
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><OrdersList /></div></AdminLayout></ProtectedRoute>
                 } />
 
               </Routes>

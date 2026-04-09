@@ -14,7 +14,7 @@ import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder } from '../ut
 import '../styles/PremiumCheckout.css';
 
 const Checkout = () => {
-    const { cartItems, cartTotal, clearCart } = useCart();
+    const { cartItems, cartTotal, cartSubtotal, cartDiscount, clearCart } = useCart();
     const { user } = useAuth();
     const showToast = useToast();
     const navigate = useNavigate();
@@ -379,7 +379,19 @@ const Checkout = () => {
                                                 )}
                                             </div>
                                             <span className="meta" style={{ marginTop: '10px', display: 'block' }}>
-                                                Qty: <strong>{item.quantity || 1}</strong> × ${(item.pricing?.total || 0).toFixed(2)}
+                                                Qty: <strong>{item.quantity || 1}</strong> × 
+                                                <span style={{ marginLeft: '4px' }}>
+                                                    {item.pricing?.baseUnit > item.pricing?.total ? (
+                                                        <>
+                                                            <span style={{ textDecoration: 'line-through', opacity: 0.5, marginRight: '6px' }}>
+                                                                ${item.pricing.baseUnit.toFixed(2)}
+                                                            </span>
+                                                            <strong style={{ color: '#e31b23' }}>${(item.pricing?.total || 0).toFixed(2)}</strong>
+                                                        </>
+                                                    ) : (
+                                                        <strong>${(item.pricing?.total || 0).toFixed(2)}</strong>
+                                                    )}
+                                                </span>
                                                 {item.quantity > 1 && (
                                                     <span style={{ color: '#e31b23', fontSize: '0.7rem', fontWeight: 900, marginLeft: '8px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                                         <Zap size={8} fill="#e31b23" /> Discounted
@@ -394,12 +406,18 @@ const Checkout = () => {
 
                             <div className="summary-calculation" style={{ marginTop: '30px' }}>
                                 <div className="calc-row">
-                                    <span>Subtotal</span>
-                                    <span>${cartTotal.toFixed(2)}</span>
+                                    <span>Gross Subtotal</span>
+                                    <span>${cartSubtotal.toFixed(2)}</span>
                                 </div>
+                                {cartDiscount > 0 && (
+                                    <div className="calc-row" style={{ color: '#e31b23' }}>
+                                        <span>Volume Savings</span>
+                                        <span>-${cartDiscount.toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="calc-row">
                                     <span>Shipping</span>
-                                    <span style={{ color: '#e31b23' }}>FREE</span>
+                                    <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>
                                 </div>
                                 <div className="calc-row total">
                                     <span>Total</span>

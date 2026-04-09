@@ -436,3 +436,33 @@ export async function calculatePrice(payload) {
         body: payload
     });
 }
+
+// ── Admin: Laser Cut Rates ────────────────────────────────
+export async function fetchLaserRates() {
+    const { data } = await request('/pricing/admin/laser-rates');
+    return data;
+}
+export async function createLaserRate(data) {
+    return request('/pricing/admin/laser-rates', { method: 'POST', body: data });
+}
+export async function updateLaserRate(id, data) {
+    return request(`/pricing/admin/laser-rates/${id}`, { method: 'PUT', body: data });
+}
+export async function deleteLaserRate(id) {
+    return request(`/pricing/admin/laser-rates/${id}`, { method: 'DELETE' });
+}
+
+// ── Admin: Sheet Cost Rates ───────────────────────────────
+export async function fetchSheetCostRates() {
+    const { data } = await request('/pricing/admin/sheet-cost-rates');
+    return data;
+}
+export async function createSheetCostRate(data) {
+    return request('/pricing/admin/sheet-cost-rates', { method: 'POST', body: data });
+}
+export async function updateSheetCostRate(id, data) {
+    return request(`/pricing/admin/sheet-cost-rates/${id}`, { method: 'PUT', body: data });
+}
+export async function deleteSheetCostRate(id) {
+    return request(`/pricing/admin/sheet-cost-rates/${id}`, { method: 'DELETE' });
+}

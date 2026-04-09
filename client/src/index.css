@@ -10358,3 +10358,4 @@ body.qf-active footer {
 .ip-breakdown-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.32);
 }
+@media (min-width: 1024px) { .px-desktop { padding-left: 40px !important; padding-right: 40px !important; } }

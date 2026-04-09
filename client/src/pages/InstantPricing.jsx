@@ -43,6 +43,59 @@ const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
 );
 
+// ─── DXF Technical Data Extractor ────────────────────────
+// Walks DXF entities and computes totalPerimeter (mm) + pierceCount
+// needed by the laser pricing engine.
+function calcDxfTechData(entities, isInch) {
+  const toMm = v => isInch ? v * 25.4 : v;
+  let totalPerimeter = 0;
+  let pierceCount = 0;
+
+  for (const e of entities || []) {
+    if (e.type === 'LINE') {
+      const dx = (e.end?.x || 0) - (e.start?.x || 0);
+      const dy = (e.end?.y || 0) - (e.start?.y || 0);
+      totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
+
+    } else if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
+      const verts = e.vertices || [];
+      for (let i = 0; i < verts.length - 1; i++) {
+        const dx = verts[i + 1].x - verts[i].x;
+        const dy = verts[i + 1].y - verts[i].y;
+        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
+      }
+      // Close the loop if flagged closed
+      const isClosed = e.closed || (e.flag & 1);
+      if (isClosed && verts.length > 1) {
+        const dx = verts[0].x - verts[verts.length - 1].x;
+        const dy = verts[0].y - verts[verts.length - 1].y;
+        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
+        pierceCount++;
+      }
+
+    } else if (e.type === 'ARC') {
+      let startDeg = e.startAngle || 0;
+      let endDeg = e.endAngle || 0;
+      if (endDeg <= startDeg) endDeg += 360;
+      totalPerimeter += toMm((e.r || 0) * (endDeg - startDeg) * Math.PI / 180);
+
+    } else if (e.type === 'CIRCLE') {
+      totalPerimeter += toMm(2 * Math.PI * (e.r || 0));
+      pierceCount++;
+
+    } else if (e.type === 'SPLINE') {
+      const pts = e.controlPoints || e.fitPoints || [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const dx = pts[i + 1].x - pts[i].x;
+        const dy = pts[i + 1].y - pts[i].y;
+        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
+      }
+    }
+  }
+
+  return { totalPerimeter, pierceCount: Math.max(1, pierceCount) };
+}
+
 // ─── Component ──────────────────────────────────────────
 const InstantPricing = () => {
   const [files, setFiles] = useState([]);
@@ -55,6 +108,7 @@ const InstantPricing = () => {
   const [dxfSvg, setDxfSvg] = useState(null);
   const [dxfError, setDxfError] = useState(null);
   const [backendData, setBackendData] = useState(null);
+  const [dxfTechData, setDxfTechData] = useState(null);
   const [backendError, setBackendError] = useState(null);
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -111,6 +165,8 @@ const InstantPricing = () => {
   const modelRef = useRef(null);
   const pendingAxisRef = useRef(null);
   const modelOriginalDataRef = useRef(null);
+  const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
+  const qty1PriceRef = useRef(null);
   const wrinkleTexture = useRef(null);
 
   // ── Procedural textures for 'Wrinkled' finish & cellular grain ─────────
@@ -189,7 +245,8 @@ const InstantPricing = () => {
     const hardwareCost = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
     const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost;
 
-    const unitPrice = totalBatch / quantity;
+    // Use anchored Qty 1 price if available, otherwise fallback to current unit price
+    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity);
 
     const config = {
       productionService: selectedProductionService,
@@ -210,11 +267,12 @@ const InstantPricing = () => {
       tempPath: selectedFile.tempPath,
       configuration: config,
       pricing: {
-        base: parseFloat(priceEstimate?.total_price || 0) / quantity,
+        baseUnit: baseUnitPrice, // Robust anchor for long-term checkout transparency établissements
         taps: tapCost / quantity,
         hardware: hardwareCost / quantity,
         finish: 0,
-        total: unitPrice
+        // Using the requested linear model: BasePrice * (1 - DiscountTablePercent)
+        total: baseUnitPrice * (1 - (parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100))
       },
       quantity: quantity
     });
@@ -307,10 +365,12 @@ const InstantPricing = () => {
     setDetectedHoles([]);
     setIsDetectingHoles(false);
     setSelectedThickness(null);
+    setDxfTechData(null);
     setHighlightBends(false);
     parsedDxfRef.current = null;
     stepHolesDetectedRef.current = false;
     modelOriginalDataRef.current = null;
+    qty1PriceRef.current = null;
   }, [selectedFile]);
 
   // ── STEP Hole Detection for Tapping & Hardware ───────
@@ -384,11 +444,19 @@ const InstantPricing = () => {
             totalPerimeter: backendData.totalPerimeter,
             pierceCount: backendData.pierceCount,
             bends: backendData.bends
+          } : dxfTechData ? {
+            totalPerimeter: dxfTechData.totalPerimeter,
+            pierceCount: dxfTechData.pierceCount,
+            bends: []
           } : null
         };
         const res = await calculatePrice(payload);
         if (res.success) {
           setPriceEstimate(res);
+          // Anchor the Qty 1 price for cart subtotal transparency établissements
+          if (quantity === 1) {
+            qty1PriceRef.current = res.breakdown?.final_unit_price || 0;
+          }
         } else {
           // If backend says not configured
           if (res.error?.includes('not configured')) {
@@ -406,7 +474,7 @@ const InstantPricing = () => {
 
     const timeoutId = setTimeout(getEstimate, 500); // Debounce
     return () => clearTimeout(timeoutId);
-  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedFinishColors, dimensions, quantity, toast, isCNC]);
+  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedFinishColors, dimensions, quantity, toast, isCNC, backendData, dxfTechData]);
 
 
   // ── Dimension Validation Helper ────────────────────────
@@ -504,6 +572,8 @@ const InstantPricing = () => {
           position: [c.x, c.y, c.z || 0]
         })));
         parsedDxfRef.current = parsed;
+        // Extract perimeter + pierce count for laser pricing engine
+        setDxfTechData(calcDxfTechData(parsed.entities, isInch));
 
         // Always extract viewBox from SVG string if possible to ensure overlay alignment
         const match = svgStr.match(/viewBox="([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)"/);
@@ -712,6 +782,7 @@ const InstantPricing = () => {
             const v = viewer.GetViewer();
             const bb = OV.GetBoundingBox(m);
             const center = new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2);
+            centroidRef.current.copy(center);
 
             v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
             const dl1 = new THREE.DirectionalLight(0xffffff, 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
@@ -987,6 +1058,7 @@ const InstantPricing = () => {
 
             const sleeve = new THREE.Mesh(geo, mat);
             sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
+            modelParent.add(sleeve);
             if (hole.axis) {
               const pos = new THREE.Vector3(...hole.position);
               sleeve.lookAt(pos.clone().add(new THREE.Vector3(...hole.axis)));
@@ -1026,12 +1098,13 @@ const InstantPricing = () => {
             const mat = getHwMat(color);
 
             const axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
+            const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
-            const faceOffset = axisVec.clone().normalize().multiplyScalar(faceSign * partT * 0.5);
-            const basePos = new THREE.Vector3(hole.position[0] + faceOffset.x, hole.position[1] + faceOffset.y, hole.position[2] + faceOffset.z);
+            const faceOffset = axisNorm.clone().multiplyScalar(faceSign * partT * 0.5);
+            const basePos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
+              .add(faceOffset);
 
             const type = typeId || 3;
-            const axisNorm = axisVec.clone().normalize();
 
             const addHWMesh = (geo, m, center) => {
               const mesh = new THREE.Mesh(geo, m);
@@ -1169,6 +1242,17 @@ const InstantPricing = () => {
       setBackendError(err.message);
     } finally { setIsLoadingUnfold(false); }
   }, [selectedFile, backendData]);
+
+  // ── Auto-unfold STEP files when Laser Cutting is the production service ───
+  // The laser engine needs totalPerimeter + pierceCount which only come from the
+  // Python unfold. Trigger it automatically instead of waiting for manual click.
+  useEffect(() => {
+    if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
+    if (!selectedProductionService) return;
+    if (!selectedProductionService.title?.toLowerCase().includes('laser')) return;
+    if (backendData || isLoadingUnfold) return;
+    handleUnfold();
+  }, [selectedProductionService, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setAxisCamera = (axis) => {
     const v = viewerInstance.current?.GetViewer();
@@ -2353,10 +2437,7 @@ const InstantPricing = () => {
                               <div className="d-flex flex-column">
                                 <span className="opacity-70 small">Material Cost</span>
                                 <span className="text-white-50" style={{ fontSize: '10px' }}>
-                                  Based on length &amp; width dimensions
-                                  {priceEstimate?.breakdown?.material_formula && (
-                                    <> &middot; {dimensions?.inches?.l}&Prime; &times; ${priceEstimate.breakdown.material_formula.price_per_length}/in + {dimensions?.inches?.w}&Prime; &times; ${priceEstimate.breakdown.material_formula.price_per_width}/in</>
-                                  )}
+                                  {isLoadingUnfold ? 'Analysing part geometry…' : 'Sheet nesting formula — cost ÷ parts per 4×8 sheet'}
                                 </span>
                               </div>
                               {isCalculatingPrice ? <PriceSkeleton /> : (
@@ -2367,9 +2448,13 @@ const InstantPricing = () => {
                             <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                               <div className="d-flex flex-column">
                                 <span className="opacity-70 small">Fabrication cost</span>
-                                <span className="text-white-50" style={{ fontSize: '10px' }}>{selectedProductionService?.title} setup & process</span>
+                                <span className="text-white-50" style={{ fontSize: '10px' }}>
+                                  {isLoadingUnfold
+                                    ? 'Analysing part geometry…'
+                                    : selectedProductionService?.title + ' setup & process'}
+                                </span>
                               </div>
-                              {isCalculatingPrice ? <PriceSkeleton /> : (
+                              {isCalculatingPrice || isLoadingUnfold ? <PriceSkeleton /> : (
                                 <span className="fw-black fs-5">${(priceEstimate?.breakdown?.production_cost || 0).toFixed(2)}</span>
                               )}
                             </div>
@@ -2423,6 +2508,25 @@ const InstantPricing = () => {
                             })()}
                           </div>
 
+                          {/* ── Discount row ── */}
+                          {priceEstimate?.breakdown?.discount_percent > 0 && (
+                            <div className="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 mb-2" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                              <div className="d-flex flex-column">
+                                <span style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.82rem' }}>
+                                  Quantity Discount ({priceEstimate.breakdown.discount_percent}% off)
+                                </span>
+                                <span style={{ color: 'rgba(74,222,128,0.7)', fontSize: '10px' }}>
+                                  {priceEstimate.breakdown.applied_tier?.name || `${quantity} units`}
+                                </span>
+                              </div>
+                              {isCalculatingPrice ? <PriceSkeleton /> : (
+                                <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '1.05rem' }}>
+                                  −${(priceEstimate.breakdown.discount_amount || 0).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <div className="text-center">
                             <span className="small text-white fw-bold text-uppercase letter-spacing-1 d-block mb-1">Total Project Estimate</span>
                             <div className="d-flex align-items-baseline justify-content-center gap-2">
@@ -2439,6 +2543,18 @@ const InstantPricing = () => {
                                 </>
                               )}
                             </div>
+
+                            {/* ── Warnings ── */}
+                            {(priceEstimate?.breakdown?.warnings?.length > 0) && (
+                              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {priceEstimate.breakdown.warnings.map((w, i) => (
+                                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 12px', borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)' }}>
+                                    <AlertTriangle size={14} color="#fbbf24" style={{ flexShrink: 0, marginTop: 1 }} />
+                                    <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600, lineHeight: 1.4 }}>{w}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="p-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>

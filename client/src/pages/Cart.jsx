@@ -10,7 +10,7 @@ import Skeleton from '../components/Skeleton';
 import '../styles/PremiumCart.css';
 
 const Cart = () => {
-  const { cartItems, removeFromCart, updateQuantity, cartTotal, allDiscounts } = useCart();
+  const { cartItems, removeFromCart, updateQuantity, cartTotal, cartSubtotal, cartDiscount, allDiscounts } = useCart();
   const navigate = useNavigate();
 
   if (cartItems.length === 0) {
@@ -158,9 +158,26 @@ const Cart = () => {
                   </div>
 
                   <div className="item-pricing-summary">
-                    <span className="price-unit">
-                      {item.isUpdating ? <Skeleton style={{ width: '80px', height: '16px' }} /> : `$${(item.pricing?.total || 0).toFixed(2)} / unit`}
-                    </span>
+                    <div className="price-unit-wrap">
+                      {item.isUpdating ? (
+                        <Skeleton style={{ width: '80px', height: '16px' }} />
+                      ) : (
+                        item.pricing?.baseUnit > item.pricing?.total ? (
+                          <>
+                            <span className="price-unit-base" style={{ textDecoration: 'line-through', opacity: 0.5, fontSize: '0.9rem', marginRight: '8px' }}>
+                              ${item.pricing.baseUnit.toFixed(2)}
+                            </span>
+                            <span className="price-unit discounted" style={{ color: '#e31b23', fontWeight: 700 }}>
+                              ${(item.pricing?.total || 0).toFixed(2)} / unit
+                            </span>
+                          </>
+                        ) : (
+                          <span className="price-unit">
+                            ${(item.pricing?.total || 0).toFixed(2)} / unit
+                          </span>
+                        )
+                      )}
+                    </div>
                     <span className="price-total">
                       {item.isUpdating ? <Skeleton style={{ width: '100px', height: '28px' }} /> : `$${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}`}
                     </span>
@@ -197,9 +214,15 @@ const Cart = () => {
                 <h3 className="summary-title">Order Summary</h3>
 
                 <div className="summary-row">
-                  <span>Subtotal ({cartItems.length} Projects)</span>
-                  <span>${cartTotal.toFixed(2)}</span>
+                  <span>Gross Subtotal</span>
+                  <span>${cartSubtotal.toFixed(2)}</span>
                 </div>
+                {cartDiscount > 0 && (
+                  <div className="summary-row discount-row" style={{ color: '#e31b23' }}>
+                    <span>Volume Savings</span>
+                    <span>-${cartDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="summary-row">
                   <span>Production Logistics</span>
                   <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>

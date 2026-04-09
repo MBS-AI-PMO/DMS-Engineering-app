@@ -8,6 +8,8 @@ export const CartProvider = ({ children }) => {
     if (!saved) return [];
     try {
       const items = JSON.parse(saved);
+      if (!Array.isArray(items)) return [];
+
       // Re-hydrate file object if missing using tempPath for persistence établissements
       return items.map(item => {
         if (!item.file && item.tempPath) {
@@ -71,7 +73,7 @@ export const CartProvider = ({ children }) => {
 
   const updateQuantity = async (cartId, quantity) => {
     const newQuantity = Math.max(1, quantity);
-    
+
     // 1. Update quantity and set loading state immediately établissements
     setCartItems(prev => prev.map(item =>
       item.cartId === cartId ? { ...item, quantity: newQuantity, isUpdating: true } : item
@@ -84,7 +86,7 @@ export const CartProvider = ({ children }) => {
 
       const { configuration } = itemToUpdate;
       const isCNC = configuration.productionService?.title?.toLowerCase()?.includes('cnc');
-      
+
       const payload = {
         metal_id: configuration.metal?.id,
         service_id: configuration.productionService?.id,
@@ -92,32 +94,38 @@ export const CartProvider = ({ children }) => {
         length_in: configuration.dimensions?.inches?.l,
         height_in: configuration.dimensions?.inches?.w,
         quantity: newQuantity,
-        additional_services: (configuration.additionalServices || []).map(s => s.id),
+        additional_services: (configuration.additionalServices || []).map(s => ({
+          id: s.id,
+          option_id: configuration.selectedFinishColors?.[s.id]?.id || null
+        })),
         taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price }))
       };
 
       const res = await calculatePrice(payload);
-      
+
       if (res.success) {
         // res.total_price already includes anodizing (sent via additional_services to the API)
+        // Calculate non-engine costs (taps and hardware) to add to the base unit établissements
         const totalTaps = Object.values(configuration.selectedTaps || {}).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
+        const totalHardware = Object.values(configuration.selectedHardware || {}).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
+        const nonEngineUnitCost = (totalTaps + totalHardware) / newQuantity;
 
-        const totalBatch = parseFloat(res.total_price || 0) + totalTaps;
-        const unitPrice = totalBatch / newQuantity;
+        const engineBase = parseFloat(res.breakdown?.unit_total || 0);
 
         setCartItems(prev => prev.map(item =>
           item.cartId === cartId
             ? {
-                ...item,
-                pricing: {
-                  ...item.pricing,
-                  base: parseFloat(res.breakdown?.material_cost || 0) + parseFloat(res.breakdown?.production_cost || 0),
-                  taps: totalTaps / newQuantity,
-                  finish: 0,
-                  total: unitPrice
-                },
-                isUpdating: false
-              }
+              ...item,
+              pricing: {
+                ...item.pricing,
+                // Keep original Qty 1 baseUnit, or establish a new anchored base if missing
+                baseUnit: item.pricing.baseUnit || (engineBase + nonEngineUnitCost),
+                discount_percent: parseFloat(res.breakdown?.discount_percent || 0),
+                // Apply Linear Pricing: AnchoredBase * (1 - VolumeDiscount)
+                total: (item.pricing.baseUnit || (engineBase + nonEngineUnitCost)) * (1 - (parseFloat(res.breakdown?.discount_percent || 0) / 100))
+              },
+              isUpdating: false
+            }
             : item
         ));
       } else {
@@ -138,10 +146,18 @@ export const CartProvider = ({ children }) => {
     localStorage.removeItem('dms_cart');
   };
 
-  const cartTotal = cartItems.reduce((sum, item) => {
-    const unitPrice = item.pricing?.total || item.unitPrice || 0; // High-fidelity price guard établissement
-    return sum + (unitPrice * (item.quantity || 1));
+  const cartSubtotal = cartItems.reduce((sum, item) => {
+    // Gross Subtotal is anchored to the Qty 1 unit price établissements
+    const basePrice = item.pricing?.baseUnit || item.pricing?.total || 0;
+    return sum + (basePrice * (item.quantity || 1));
   }, 0);
+
+  const cartTotal = cartItems.reduce((sum, item) => {
+    const finalPrice = item.pricing?.total || 0;
+    return sum + (finalPrice * (item.quantity || 1));
+  }, 0);
+
+  const cartDiscount = cartSubtotal - cartTotal;
 
   return (
     <CartContext.Provider value={{
@@ -151,7 +167,9 @@ export const CartProvider = ({ children }) => {
       removeFromCart,
       updateQuantity,
       clearCart,
-      cartTotal
+      cartTotal,
+      cartSubtotal,
+      cartDiscount
     }}>
       {children}
     </CartContext.Provider>

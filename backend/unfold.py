@@ -13,35 +13,29 @@ Pipeline:
 import os
 os.environ["OCP_NO_DISPLAY"] = "1"
 import math
+import json
 import numpy as np
 import cadquery as cq
+
+# OpenCASCADE imports (OCP)
 from OCP.BRep import BRep_Tool
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_FORWARD
-from OCP.TopExp import TopExp
-from OCP.TopTools import TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS
-from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder
-from OCP.TopLoc import TopLoc_Location
-from OCP.BRepGProp import BRepGProp
-from OCP.GProp import GProp_GProps
-from OCP.Bnd import Bnd_Box
-from OCP.BRepBndLib import BRepBndLib
-
-import numpy as np # already imported above, but keeping consistency
-from OCP.TopExp import TopExp_Explorer, TopExp
+from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopTools import TopTools_IndexedMapOfShape, TopTools_IndexedDataMapOfShapeListOfShape
 from OCP.TopoDS import TopoDS
-from OCP.gp import gp_Trsf, gp_Ax1, gp_Pnt, gp_Dir, gp_Vec
+from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
+from OCP.GeomAbs import (
+    GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Line, 
+    GeomAbs_Circle, GeomAbs_Ellipse
+)
 from OCP.Geom import Geom_Plane, Geom_CylindricalSurface
 from OCP.TopLoc import TopLoc_Location
-from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
-from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Circle, GeomAbs_Ellipse
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
 from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
+from OCP.gp import gp_Trsf, gp_Ax1, gp_Pnt, gp_Dir, gp_Vec
 
 
 def _get_faces(shape):
