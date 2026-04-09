@@ -14,7 +14,7 @@ const Skeleton = ({ className = '', style = {}, variant = 'rectangle' }) => {
 
   return (
     <div
-      className={`skeleton ${className}`}
+      className={`premium-skeleton ${className}`}
       style={{
         ...getVariantStyles(),
         ...style
