@@ -47,7 +47,8 @@ export default function ServiceEdit() {
     const [hwItemForm, setHwItemForm] = useState({
         name: '', size_spec: '', price: '', notes: '', is_active: true,
         length: '', min_edge_distance: '', tooling_diameter: '',
-        base_width: '', shank: ''
+        base_width: '', shank: '',
+        major_dia: '', minor_dia: '', angle: '', max_hole_diameter: ''
     });
     const [savingHwItem, setSavingHwItem] = useState(false);
     const [hwTypeImgUploading, setHwTypeImgUploading] = useState(false);
@@ -156,6 +157,10 @@ export default function ServiceEdit() {
                 tooling_diameter: parseFloat(hwItemForm.tooling_diameter) || null,
                 base_width: parseFloat(hwItemForm.base_width) || null,
                 shank: parseFloat(hwItemForm.shank) || null,
+                major_dia: parseFloat(hwItemForm.major_dia) || null,
+                minor_dia: parseFloat(hwItemForm.minor_dia) || null,
+                angle: parseFloat(hwItemForm.angle) || null,
+                max_hole_diameter: parseFloat(hwItemForm.max_hole_diameter) || null,
                 is_wrinkled: hwItemForm.is_wrinkled ?? false
             };
 
@@ -170,7 +175,8 @@ export default function ServiceEdit() {
             setHwItemForm({
                 name: '', size_spec: '', price: '', notes: '', is_active: true,
                 length: '', min_edge_distance: '', tooling_diameter: '',
-                base_width: '', shank: ''
+                base_width: '', shank: '',
+                major_dia: '', minor_dia: '', angle: '', max_hole_diameter: ''
             });
             loadHwItems(selectedHwType.id);
             loadHwTypes(); // Refresh counts
@@ -980,6 +986,10 @@ export default function ServiceEdit() {
                                                                             )}
                                                                             {item.min_edge_distance && <div>Edge: {hwUnit === 'mm' ? toMM(item.min_edge_distance) : item.min_edge_distance}</div>}
                                                                             {item.tooling_diameter && <div>Tool: {hwUnit === 'mm' ? toMM(item.tooling_diameter) : item.tooling_diameter}</div>}
+                                                                            {selectedHwType?.slug === 'countersink' && item.major_dia && <div>Maj Ø: {hwUnit === 'mm' ? toMM(item.major_dia) : item.major_dia}</div>}
+                                                                            {selectedHwType?.slug === 'countersink' && item.minor_dia && <div>Min Ø: {hwUnit === 'mm' ? toMM(item.minor_dia) : item.minor_dia}</div>}
+                                                                            {selectedHwType?.slug === 'countersink' && item.angle && <div>Angle: {item.angle}°</div>}
+                                                                            {item.max_hole_diameter && <div style={{ color: '#DC2626' }}>Max Hole: {hwUnit === 'mm' ? toMM(item.max_hole_diameter) : item.max_hole_diameter}</div>}
                                                                         </div>
                                                                     </td>
                                                                     <td data-label="Price" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
@@ -1003,6 +1013,10 @@ export default function ServiceEdit() {
                                                                                     tooling_diameter: item.tooling_diameter || '',
                                                                                     base_width: item.base_width || '',
                                                                                     shank: item.shank || '',
+                                                                                    major_dia: item.major_dia || '',
+                                                                                    minor_dia: item.minor_dia || '',
+                                                                                    angle: item.angle || '',
+                                                                                    max_hole_diameter: item.max_hole_diameter || '',
                                                                                     is_active: item.is_active !== false
                                                                                 });
                                                                                 setEditingHwItem(item);
@@ -1979,6 +1993,61 @@ export default function ServiceEdit() {
                                                 {selectedHwType?.id === 2 && (
                                                     <p className="admin-card-tip" style={{ marginTop: '6px', marginBottom: 0 }}>Used as the standoff body diameter in the 3D viewer.</p>
                                                 )}
+                                            </div>
+
+                                            {/* Countersink-specific fields */}
+                                            {selectedHwType?.slug === 'countersink' && (<>
+                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <Ruler size={13} /> Major Dia ({hwUnit})
+                                                    </label>
+                                                    <input
+                                                        type="number" step="0.001" min="0"
+                                                        value={hwUnit === 'mm' ? toMM(hwItemForm.major_dia) : (hwItemForm.major_dia || '')}
+                                                        onChange={e => { const val = e.target.value; setHwItemForm(p => ({ ...p, major_dia: hwUnit === 'mm' ? toIN(val) : val })); }}
+                                                        placeholder={hwUnit === 'mm' ? "e.g. 8.13" : "e.g. .320"}
+                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                    />
+                                                </div>
+                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <Ruler size={13} /> Minor Dia ({hwUnit})
+                                                    </label>
+                                                    <input
+                                                        type="number" step="0.001" min="0"
+                                                        value={hwUnit === 'mm' ? toMM(hwItemForm.minor_dia) : (hwItemForm.minor_dia || '')}
+                                                        onChange={e => { const val = e.target.value; setHwItemForm(p => ({ ...p, minor_dia: hwUnit === 'mm' ? toIN(val) : val })); }}
+                                                        placeholder={hwUnit === 'mm' ? "e.g. 4.17" : "e.g. .164"}
+                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                    />
+                                                </div>
+                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <Hash size={13} /> Angle (°)
+                                                    </label>
+                                                    <input
+                                                        type="number" step="1" min="1" max="179"
+                                                        value={hwItemForm.angle || ''}
+                                                        onChange={e => setHwItemForm(p => ({ ...p, angle: e.target.value }))}
+                                                        placeholder="e.g. 82 or 90"
+                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
+                                                    />
+                                                </div>
+                                            </>)}
+
+                                            {/* Max Hole Diameter — all types */}
+                                            <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#DC2626', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <Maximize size={13} /> Max Hole Dia ({hwUnit})
+                                                </label>
+                                                <input
+                                                    type="number" step="0.001" min="0"
+                                                    value={hwUnit === 'mm' ? toMM(hwItemForm.max_hole_diameter) : (hwItemForm.max_hole_diameter || '')}
+                                                    onChange={e => { const val = e.target.value; setHwItemForm(p => ({ ...p, max_hole_diameter: hwUnit === 'mm' ? toIN(val) : val })); }}
+                                                    placeholder="No limit"
+                                                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #fecaca', fontSize: '0.9rem', background: 'white' }}
+                                                />
+                                                <p className="admin-card-tip" style={{ marginTop: '6px', marginBottom: 0 }}>Holes larger than this diameter cannot use this item.</p>
                                             </div>
                                         </div>
                                     </div>

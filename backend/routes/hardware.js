@@ -94,19 +94,20 @@ router.post('/admin/types/:id/image', authenticate, requireAdmin, upload.single(
 // POST /api/hardware/admin/items — create item
 router.post('/admin/items', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank } = req.body;
+        const { hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank, major_dia, minor_dia, angle, max_hole_diameter } = req.body;
         if (!hardware_type_id || !name) {
             return res.status(400).json({ success: false, error: 'hardware_type_id and name are required' });
         }
 
         const result = await db.query(
-            `INSERT INTO hardware_items (hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `INSERT INTO hardware_items (hardware_type_id, name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank, major_dia, minor_dia, angle, max_hole_diameter)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              RETURNING *`,
             [
                 hardware_type_id, name, size_spec || null, price || 0, notes || null, is_active !== false,
                 parseFloat(length) || null, parseFloat(min_edge_distance) || null, parseFloat(tooling_diameter) || null,
-                parseFloat(base_width) || null, parseFloat(shank) || null
+                parseFloat(base_width) || null, parseFloat(shank) || null,
+                parseFloat(major_dia) || null, parseFloat(minor_dia) || null, parseFloat(angle) || null, parseFloat(max_hole_diameter) || null
             ]
         );
         res.json({ success: true, data: result.rows[0] });
@@ -122,19 +123,21 @@ router.put('/admin/items/:id', authenticate, requireAdmin, async (req, res) => {
         const itemId = parseInt(req.params.id);
         if (isNaN(itemId)) return res.status(400).json({ success: false, error: 'Invalid item ID' });
 
-        const { name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank } = req.body;
+        const { name, size_spec, price, notes, is_active, length, min_edge_distance, tooling_diameter, base_width, shank, major_dia, minor_dia, angle, max_hole_diameter } = req.body;
 
         const result = await db.query(
             `UPDATE hardware_items
              SET name = $1, size_spec = $2, price = $3, notes = $4, is_active = $5,
                  length = $6, min_edge_distance = $7, tooling_diameter = $8,
-                 base_width = $9, shank = $10
-             WHERE id = $11
+                 base_width = $9, shank = $10,
+                 major_dia = $11, minor_dia = $12, angle = $13, max_hole_diameter = $14
+             WHERE id = $15
              RETURNING *`,
             [
                 name, size_spec || null, price || 0, notes || null, is_active !== false,
                 parseFloat(length) || null, parseFloat(min_edge_distance) || null, parseFloat(tooling_diameter) || null,
                 parseFloat(base_width) || null, parseFloat(shank) || null,
+                parseFloat(major_dia) || null, parseFloat(minor_dia) || null, parseFloat(angle) || null, parseFloat(max_hole_diameter) || null,
                 itemId
             ]
         );

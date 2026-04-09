@@ -210,7 +210,17 @@ const ProjectViewer = ({
           const greenMat = new THREE.MeshStandardMaterial({ color: 0x059669, metalness: 0.7, roughness: 0.3 });
           const redMat = new THREE.MeshStandardMaterial({ color: 0xDC2626, metalness: 0.7, roughness: 0.3 });
 
-          const HW_MATS = { 1: greenMat, 2: blueMat, 3: goldMat, 4: redMat };
+          const purpleMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, metalness: 0.7, roughness: 0.3 });
+          const HW_MATS = { 1: greenMat, 2: blueMat, 3: goldMat, 4: redMat, 5: purpleMat };
+
+          // Sample panel surface color once for hole fill rings (Issue 2)
+          let panelHex = 0x9ca3af;
+          threeViewer.scene.traverse(o => {
+            if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
+              panelHex = o.material.color.getHex();
+            }
+          });
+          const panelFillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.75, roughness: 0.35, side: THREE.DoubleSide });
 
           Object.values(configuration.selectedHardware).forEach(({ item, hole, typeId, face }) => {
             if (!hole?.position) return;
@@ -247,40 +257,75 @@ const ProjectViewer = ({
               modelParent.add(m);
             };
 
+            // Surface-anchored base position (matches InstantPricing pattern)
+            const holeR = r;
+            const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
+            const minorDiaMm   = item?.minor_dia        ? parseFloat(item.minor_dia) * 25.4         : null;
+            const effectiveBarrelDia = minorDiaMm ?? toolingDiaMm;
+            const barrelR = effectiveBarrelDia ? Math.min(effectiveBarrelDia / 2, holeR) : holeR * 0.9;
+            const basePos = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * partT * 0.5));
+
+            // Hole fill rings: visually resize hole to tooling/minor diameter when hardware is smaller
+            if (effectiveBarrelDia && effectiveBarrelDia < holeMmDia) {
+              const backPos = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * partT));
+              addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, basePos.clone());
+              addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, backPos);
+            }
+
             const type = typeId || 3;
 
             if (type === 3) {
-              // Nut: Realistic Body + Thin disc on opposite side
+              // Nut: body above front surface + thin disc on back face
               const hexH = Math.max(3.5, partT * 0.8);
-              const hexCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (partT * 0.5 + hexH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(r * 1.5, r * 1.5, hexH, 32, 1, true), mainMat, hexCenter);
-              addMarker(new THREE.CylinderGeometry(r * 0.45, r * 0.45, hexH, 16), blackMat, hexCenter);
               const discH = 0.3;
-              const discCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT * 0.5 - discH * 0.5)));
-              addMarker(new THREE.RingGeometry(r * 0.8, r * 1.5, 32), mainMat, discCenter);
+              const hexCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * hexH * 0.5));
+              const discCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH * 0.5)));
+              addMarker(new THREE.CylinderGeometry(holeR * 1.5, holeR * 1.5, hexH, 32, 1, true), mainMat, hexCenter);
+              addMarker(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, hexH, 16), blackMat, hexCenter);
+              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, discCenter);
             } else if (type === 4) {
-              // Flush Nut: Thin hollow discs on both faces
+              // Flush Nut: thin hollow disc on each face
               const discH = 0.4;
-              const center1 = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (partT * 0.5 - discH * 0.5)));
-              const center2 = centerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT * 0.5 - discH * 0.5)));
-              addMarker(new THREE.RingGeometry(r * 0.8, r * 1.5, 32), mainMat, center1);
-              addMarker(new THREE.RingGeometry(r * 0.8, r * 1.5, 32), mainMat, center2);
+              const center1 = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * discH * 0.5));
+              const center2 = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH * 0.5)));
+              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, center1);
+              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, center2);
             } else if (type === 2) {
+              // Flush Standoff: hollow barrel from front surface + flange on back face
               const standH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.5;
-              const standCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (partT * 0.5 + standH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(r * 1.2, r * 1.2, standH, 24, 1, true), mainMat, standCenter);
-              addMarker(new THREE.CylinderGeometry(r * 0.4, r * 0.4, standH, 16), blackMat, standCenter);
-              const headH = 1.0;
-              const headCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT * 0.5 - headH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(r * 1.5, r * 1.5, headH, 32), mainMat, headCenter);
+              const flangeH = Math.max(0.6, partT * 0.04);
+              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standH * 0.5));
+              const flangeCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH * 0.5)));
+              addMarker(new THREE.CylinderGeometry(barrelR, barrelR, standH, 24, 1, true), mainMat, bodyCenter);
+              addMarker(new THREE.CylinderGeometry(barrelR * 0.4, barrelR * 0.4, standH, 16), blackMat, bodyCenter);
+              addMarker(new THREE.CylinderGeometry(holeR * 1.5, holeR * 1.5, flangeH, 32), mainMat, flangeCenter);
+              addMarker(new THREE.CylinderGeometry(barrelR * 0.4, barrelR * 0.4, flangeH + 0.1, 16), blackMat, flangeCenter);
             } else if (type === 1) {
+              // Flush Stud: shaft from front surface + head on back face
               const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 3;
-              const studCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (partT * 0.5 + studH * 0.5)));
-              const shaftR = r * 0.8;
-              addMarker(new THREE.CylinderGeometry(shaftR, shaftR, studH, 16), mainMat, studCenter);
-              const headH = 1.2;
-              const headCenter = centerPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT * 0.5 - headH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(r * 1.6, r * 1.6, headH, 32), mainMat, headCenter);
+              const headH = Math.max(0.6, partT * 0.04);
+              const studCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH * 0.5));
+              const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH * 0.5)));
+              addMarker(new THREE.CylinderGeometry(barrelR * 0.8, barrelR * 0.8, studH, 16), mainMat, studCenter);
+              addMarker(new THREE.CylinderGeometry(holeR * 1.6, holeR * 1.6, headH, 32), mainMat, headCenter);
+            } else if (type === 5) {
+              // Countersink: flat ring on front face + cone frustum + through-hole cylinder
+              const csMinorR = item?.minor_dia ? parseFloat(item.minor_dia) * 25.4 / 2 : holeR;
+              const csMajorR = item?.major_dia ? parseFloat(item.major_dia) * 25.4 / 2 : holeR * 1.5;
+              const csAngle  = item?.angle ? parseFloat(item.angle) : 90;
+              const coneDepth = (csMajorR - csMinorR) / Math.tan((csAngle / 2) * Math.PI / 180);
+              const effectiveD = Math.min(Math.abs(coneDepth), partT);
+              // 1. Front face annular ring
+              addMarker(new THREE.RingGeometry(csMinorR, csMajorR, 32), mainMat, basePos.clone());
+              // 2. Cone frustum going into panel
+              const coneCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * effectiveD * 0.5));
+              addMarker(new THREE.CylinderGeometry(csMajorR, csMinorR, effectiveD, 32, 1, true), mainMat, coneCenter);
+              // 3. Through-hole cylinder for remaining thickness
+              if (effectiveD < partT - 0.1) {
+                const remainT = partT - effectiveD;
+                const throughCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (effectiveD + remainT * 0.5)));
+                addMarker(new THREE.CylinderGeometry(csMinorR, csMinorR, remainT, 32, 1, true), blackMat, throughCenter);
+              }
             }
           });
         }

@@ -26,6 +26,7 @@ const HW_TYPES = [
   { id: 2, label: 'Flush Standoff', color: '#6366f1', specs: (item) => [item.length && `L ${item.length}"`] },
   { id: 1, label: 'Flush Stud', color: '#059669', specs: (item) => [item.length && `L ${item.length}"`] },
   { id: 4, label: 'Flush Nut', color: '#DC2626', specs: (item) => [item.length && `A ${item.length}"`, item.base_width && `H ${item.base_width}"`, item.shank && `Shank ${item.shank}"`] },
+  { id: 5, label: 'Countersink', color: '#7c3aed', specs: (item) => [item.major_dia && `Maj Ø${item.major_dia}"`, item.minor_dia && `Min Ø${item.minor_dia}"`, item.angle && `${item.angle}°`] },
 ];
 
 const is2DFile = (filename) => {
@@ -1074,7 +1075,7 @@ const InstantPricing = () => {
 
         // ── Hardware markers ─────────────────────────────────────────────
         if (hasHwAssigned) {
-          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
+          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626, 5: 0x7c3aed };
 
           // Shared materials — created once, reused for all holes
           const matCache = {};
@@ -1085,6 +1086,15 @@ const InstantPricing = () => {
           };
           const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
 
+          // Sample panel surface color once for hole fill rings
+          let panelHex = 0x9ca3af;
+          v.scene.traverse(o => {
+            if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
+              panelHex = o.material.color.getHex();
+            }
+          });
+          const panelFillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.75, roughness: 0.35, side: THREE.DoubleSide });
+
           detectedHoles.forEach(hole => {
             if (!hole.position) return;
             const hw = selectedHardware[hole.id];
@@ -1094,6 +1104,11 @@ const InstantPricing = () => {
             const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
             const edgeMm = item?.min_edge_distance ? parseFloat(item.min_edge_distance) * 25.4 : null;
             const r = Math.max(edgeMm ? edgeMm / 2 : holeMmDia / 2, 0.5);
+            const holeR = holeMmDia / 2;
+            const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
+            const minorDiaMm   = item?.minor_dia        ? parseFloat(item.minor_dia) * 25.4         : null;
+            const effectiveBarrelDia = minorDiaMm ?? toolingDiaMm;
+            const barrelR = effectiveBarrelDia ? Math.min(effectiveBarrelDia / 2, holeR) : r;
             const color = HW_COLORS[typeId] || 0xB8860B;
             const mat = getHwMat(color);
 
@@ -1116,6 +1131,13 @@ const InstantPricing = () => {
               holeMarkersRef.current.push(mesh);
             };
 
+            // Hole fill rings: visually resize hole to tooling diameter when hardware is smaller
+            if (toolingDiaMm && toolingDiaMm < holeMmDia) {
+              const backPos = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * partT));
+              addHWMesh(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, basePos.clone());
+              addHWMesh(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, backPos);
+            }
+
             if (type === 3) {
               // Nut — round body + thin hollow disc on opposite face
               const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, partT * 0.5);
@@ -1134,10 +1156,10 @@ const InstantPricing = () => {
               const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2));
               const flangeH = Math.max(0.6, Math.min(0.8, partT * 0.04));
               const flangeCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(r, r, standoffH, 16, 1, true), mat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, standoffH, 12), boreMat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(r * 1.4, r * 1.4, flangeH, 6), mat, flangeCenter);
-              addHWMesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, flangeH + 0.1, 12), boreMat, flangeCenter);
+              addHWMesh(new THREE.CylinderGeometry(barrelR, barrelR, standoffH, 16, 1, true), mat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, standoffH, 12), boreMat, bodyCenter);
+              addHWMesh(new THREE.CylinderGeometry(holeR * 1.4, holeR * 1.4, flangeH, 6), mat, flangeCenter);
+              addHWMesh(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, flangeH + 0.1, 12), boreMat, flangeCenter);
             } else if (type === 4) {
               // Flush Nut — thin hollow disc each face
               const discH = Math.max(0.3, Math.min(0.5, partT * 0.03));
@@ -1155,8 +1177,8 @@ const InstantPricing = () => {
               const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
               const headH = Math.max(0.6, Math.min(0.8, partT * 0.04));
               const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
-              const shaftR = r * 0.4;
-              const headR = r * 1.1;
+              const shaftR = barrelR * 0.4;
+              const headR = holeR * 1.1;
               addHWMesh(new THREE.CylinderGeometry(shaftR, shaftR, studH, 10), mat, bodyCenter);
               // Simplified thread — fewer coils, lower resolution
               const numCoils = Math.max(4, Math.round(studH / 3.5));
@@ -1178,6 +1200,24 @@ const InstantPricing = () => {
               const slotCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.55));
               addHWMesh(new THREE.BoxGeometry(slotLen * 2, slotH2, slotW * 2), boreMat, slotCenter);
               addHWMesh(new THREE.BoxGeometry(slotW * 2, slotH2, slotLen * 2), boreMat, slotCenter);
+            } else if (type === 5) {
+              // Countersink — flat ring on front face + cone frustum + through cylinder
+              const csMinorR = item?.minor_dia ? parseFloat(item.minor_dia) * 25.4 / 2 : holeR;
+              const csMajorR = item?.major_dia ? parseFloat(item.major_dia) * 25.4 / 2 : holeR * 1.5;
+              const csAngle  = item?.angle ? parseFloat(item.angle) : 90;
+              const coneDepth = (csMajorR - csMinorR) / Math.tan((csAngle / 2) * Math.PI / 180);
+              const effectiveD = Math.min(Math.abs(coneDepth), partT);
+              // 1. Front face annular ring
+              addHWMesh(new THREE.RingGeometry(csMinorR, csMajorR, 32), mat, basePos.clone());
+              // 2. Cone frustum going into panel
+              const coneCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * effectiveD * 0.5));
+              addHWMesh(new THREE.CylinderGeometry(csMajorR, csMinorR, effectiveD, 32, 1, true), mat, coneCenter);
+              // 3. Through-hole cylinder for remaining thickness
+              if (effectiveD < partT - 0.1) {
+                const remainT = partT - effectiveD;
+                const throughCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (effectiveD + remainT * 0.5)));
+                addHWMesh(new THREE.CylinderGeometry(csMinorR, csMinorR, remainT, 32, 1, true), boreMat, throughCenter);
+              }
             } else {
               const m = new THREE.Mesh(
                 new THREE.CylinderGeometry(r, r, partT, 16, 1, true),
@@ -3006,16 +3046,20 @@ const InstantPricing = () => {
                           {activeItems.map(item => {
                             const isChosen = assignedHw?.item?.id === item.id && assignedHw?.typeId === activeHwType;
                             const typeSpecs = activeType.specs(item).filter(Boolean);
+                            const holeDiaIn = activeHwHole?.diameterInches || 0;
+                            const maxAllowed = item.max_hole_diameter ? parseFloat(item.max_hole_diameter) : Infinity;
+                            const isLocked = holeDiaIn > maxAllowed;
                             return (
                               <motion.button
                                 key={item.id}
-                                onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType, face: prev[activeHwHole.id]?.face || 'up' } }))}
-                                whileTap={{ scale: 0.98 }}
-                                whileHover={{ y: -2 }}
+                                onClick={isLocked ? undefined : () => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType, face: prev[activeHwHole.id]?.face || 'up' } }))}
+                                whileTap={isLocked ? {} : { scale: 0.98 }}
+                                whileHover={isLocked ? {} : { y: -2 }}
                                 style={{
-                                  border: 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s',
-                                  background: isChosen ? `linear-gradient(135deg, ${activeType.color}, ${activeType.color}dd)` : '#fff',
-                                  boxShadow: isChosen ? `0 8px 24px ${activeType.color}30, 0 0 0 1.5px ${activeType.color}` : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+                                  border: isLocked ? '1.5px solid #fecaca' : 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s',
+                                  background: isLocked ? '#fff5f5' : isChosen ? `linear-gradient(135deg, ${activeType.color}, ${activeType.color}dd)` : '#fff',
+                                  boxShadow: isLocked ? 'none' : isChosen ? `0 8px 24px ${activeType.color}30, 0 0 0 1.5px ${activeType.color}` : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+                                  opacity: isLocked ? 0.55 : 1,
                                   color: isChosen ? '#fff' : '#1e293b',
                                 }}
                               >
@@ -3029,7 +3073,11 @@ const InstantPricing = () => {
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                                     <strong style={{ fontSize: '13px', fontWeight: 800, display: 'block', lineHeight: 1.3 }}>{item.name}</strong>
-                                    {isChosen && (
+                                    {isLocked ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#fecaca', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>
+                                        <span style={{ fontSize: '9px', fontWeight: 800, color: '#DC2626' }}>🔒 Hole too large</span>
+                                      </div>
+                                    ) : isChosen && (
                                       <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                         <Check size={11} strokeWidth={3} />
                                       </div>
@@ -3047,6 +3095,9 @@ const InstantPricing = () => {
                                     ))}
                                     {item.min_edge_distance && (
                                       <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>Edge {item.min_edge_distance}&quot;</span>
+                                    )}
+                                    {item.max_hole_diameter && (
+                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#fecaca', color: isChosen ? '#fff' : '#DC2626' }}>Max Ø{item.max_hole_diameter}&quot;</span>
                                     )}
                                   </div>
                                   <span style={{ fontSize: '13px', fontWeight: 900, color: isChosen ? '#fff' : activeType.color }}>

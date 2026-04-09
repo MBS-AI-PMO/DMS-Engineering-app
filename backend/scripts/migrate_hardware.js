@@ -29,16 +29,17 @@ async function migrate() {
         `);
         console.log('  ✓ hardware_items table created');
 
-        // 3. Seed the 4 fixed hardware types
+        // 3. Seed hardware types
         await db.query(`
             INSERT INTO hardware_types (name, slug) VALUES
                 ('Flush Stud',     'flush-stud'),
                 ('Flush Standoff', 'flush-standoff'),
                 ('Nut',            'nut'),
-                ('Flush Nut',      'flush-nut')
+                ('Flush Nut',      'flush-nut'),
+                ('Countersink',    'countersink')
             ON CONFLICT (slug) DO NOTHING;
         `);
-        console.log('  ✓ Seeded 4 hardware types');
+        console.log('  ✓ Seeded 5 hardware types');
 
         console.log('\n✅ Hardware migration completed successfully!');
     } catch (err) {
