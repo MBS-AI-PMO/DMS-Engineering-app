@@ -73,7 +73,8 @@ const FAQPage = () => {
             } catch (err) {
                 console.warn('API unavailable, using static FAQ data:', err.message);
             } finally {
-                setLoading(false);
+                // Keep loading for at least 600ms for smooth feel
+                setTimeout(() => setLoading(false), 600);
             }
         }
         loadFaqs();
@@ -188,8 +189,8 @@ const FAQPage = () => {
                         <aside className="faq-sidebar">
                             <h3 className="sidebar-title">Categories</h3>
                             {loading ? (
-                                [...Array(5)].map((_, i) => (
-                                    <div key={i} className="skeleton skeleton-category-btn"></div>
+                                [...Array(6)].map((_, i) => (
+                                    <div key={i} className="skeleton-item" style={{ height: '44px', width: '100%', marginBottom: '10px', borderRadius: '8px' }}></div>
                                 ))
                             ) : faqCategories.map(cat => (
                                 <button
@@ -204,7 +205,18 @@ const FAQPage = () => {
 
                         {/* Main: Questions */}
                         <main className="faq-main-content">
-                            {filteredFaqs.length > 0 ? (
+                            {loading ? (
+                                <div className="faq-grid">
+                                    {[...Array(6)].map((_, i) => (
+                                        <div key={i} className="faq-item-custom" style={{ opacity: 0.7 }}>
+                                            <div className="faq-question-row">
+                                                <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }}></div>
+                                                <div className="skeleton-item" style={{ width: i % 2 === 0 ? '60%' : '40%', height: '24px', borderRadius: '6px' }}></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : filteredFaqs.length > 0 ? (
                                 <div className="faq-results">
                                     <h2 className="category-results-title">
                                         {searchQuery ? `Search Results for "${searchQuery}"` : faqCategories.find(c => c.id === activeCategory)?.title}

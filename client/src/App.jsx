@@ -27,6 +27,7 @@ import FaqsList from './pages/admin/FaqsList';
 import FaqCategoriesList from './pages/admin/FaqCategoriesList';
 import ServicesList from './pages/admin/ServicesList';
 import ServiceEdit from './pages/admin/ServiceEdit';
+import ServiceDetail from './pages/ServiceDetail.jsx';
 import AdminsList from './pages/admin/AdminsList';
 import EmailConfig from './pages/admin/EmailConfig';
 import SubscribersList from './pages/admin/SubscribersList';
@@ -55,7 +56,7 @@ import OrdersList from './pages/admin/OrdersList';
 import PaymentMethods from './pages/admin/PaymentMethods';
 
 const PublicShell = ({ children }) => (
-  <div className="app-container">
+  <div className="app-container" style={{ backgroundColor: '#ffffff' }}>
     <Navbar />
     <main className="main-content">{children}</main>
     <Footer />
@@ -88,6 +89,7 @@ function App() {
                 <Route path="/faq" element={<PublicShell><FAQPage /></PublicShell>} />
                 <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
                 <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
+                <Route path="/service/:slug" element={<PublicShell><ServiceDetail /></PublicShell>} />
                 <Route path="/privacy-policy" element={<PublicShell><PrivacyPolicy /></PublicShell>} />
                 <Route path="/terms-of-service" element={<PublicShell><TermsOfService /></PublicShell>} />
 

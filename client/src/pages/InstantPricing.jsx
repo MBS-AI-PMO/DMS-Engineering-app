@@ -26,7 +26,6 @@ const HW_TYPES = [
   { id: 2, label: 'Flush Standoff', color: '#6366f1', specs: (item) => [item.length && `L ${item.length}"`] },
   { id: 1, label: 'Flush Stud', color: '#059669', specs: (item) => [item.length && `L ${item.length}"`] },
   { id: 4, label: 'Flush Nut', color: '#DC2626', specs: (item) => [item.length && `A ${item.length}"`, item.base_width && `H ${item.base_width}"`, item.shank && `Shank ${item.shank}"`] },
-  { id: 5, label: 'Countersink', color: '#7c3aed', specs: (item) => [item.major_dia && `Maj Ø${item.major_dia}"`, item.minor_dia && `Min Ø${item.minor_dia}"`, item.angle && `${item.angle}°`] },
 ];
 
 const is2DFile = (filename) => {
@@ -145,6 +144,9 @@ const InstantPricing = () => {
   const [hwItemsByType, setHwItemsByType] = useState({});
   const [activeHwType, setActiveHwType] = useState(3);
   const [expandedHwGroups, setExpandedHwGroups] = useState(new Set());
+  const [selectedCountersinks, setSelectedCountersinks] = useState({});
+  const [activeCSHole, setActiveCSHole] = useState(null);
+  const [expandedCSGroups, setExpandedCSGroups] = useState(new Set());
   const [isDetectingHoles, setIsDetectingHoles] = useState(false);
   const [highlightBends, setHighlightBends] = useState(false);
   const [holeDetectionError, setHoleDetectionError] = useState(null);
@@ -244,10 +246,11 @@ const InstantPricing = () => {
     // so only taps and hardware need to be added separately (they are not included in the backend total)
     const tapCost = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
     const hardwareCost = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
-    const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost;
+    const csCost = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
+    const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost + csCost;
 
     // Use anchored Qty 1 price if available, otherwise fallback to current unit price
-    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity);
+    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity) + (csCost / quantity);
 
     const config = {
       productionService: selectedProductionService,
@@ -257,6 +260,7 @@ const InstantPricing = () => {
       anodizingColor: activeFinishColor,
       selectedTaps,
       selectedHardware,
+      selectedCountersinks,
       additionalServices: selectedAdditionalServices,
       dimensions: dimensions,
       dxfSvg: dxfSvg
@@ -378,7 +382,8 @@ const InstantPricing = () => {
   useEffect(() => {
     const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
     const hasHardware = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware'));
-    if ((!hasTapping && !hasHardware) || !selectedFile || !isStepFile(selectedFile.file.name)) return;
+    const hasCountersinkingSvc = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink'));
+    if ((!hasTapping && !hasHardware && !hasCountersinkingSvc) || !selectedFile || !isStepFile(selectedFile.file.name)) return;
     if (stepHolesDetectedRef.current || isDetectingHoles) return;
 
     const detect = async () => {
@@ -414,9 +419,11 @@ const InstantPricing = () => {
     if (detectedHoles.length === 0) return;
     const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
     const hasHardware = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware'));
+    const hasCountersinking = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink'));
     if (hasTapping && !activeTapHole && !activeHwHole) setActiveTapHole(detectedHoles[0]);
     else if (hasHardware && !activeHwHole && !activeTapHole) setActiveHwHole(detectedHoles[0]);
-  }, [detectedHoles]); // eslint-disable-line react-hooks/exhaustive-deps
+    else if (hasCountersinking && !activeCSHole && !activeTapHole && !activeHwHole) setActiveCSHole(detectedHoles[0]);
+  }, [detectedHoles, selectedAdditionalServices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
@@ -903,6 +910,7 @@ const InstantPricing = () => {
   }, [selectedThickness, selectedFile, modelLoadCount]);
 
   const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
+  const isCountersinkingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink'));
 
   useEffect(() => {
     if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
@@ -1028,7 +1036,8 @@ const InstantPricing = () => {
         holeMarkersRef.current = [];
 
         const hasHwAssigned = Object.keys(selectedHardware).length > 0;
-        if ((!isTappingActive && !hasHwAssigned) || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
+        const hasCSAssigned = Object.keys(selectedCountersinks).length > 0;
+        if ((!isTappingActive && !hasHwAssigned && !isCountersinkingActive && !hasCSAssigned) || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
 
         const partT = dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0;
 
@@ -1075,7 +1084,7 @@ const InstantPricing = () => {
 
         // ── Hardware markers ─────────────────────────────────────────────
         if (hasHwAssigned) {
-          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626, 5: 0x7c3aed };
+          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
 
           // Shared materials — created once, reused for all holes
           const matCache = {};
@@ -1106,9 +1115,7 @@ const InstantPricing = () => {
             const r = Math.max(edgeMm ? edgeMm / 2 : holeMmDia / 2, 0.5);
             const holeR = holeMmDia / 2;
             const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
-            const minorDiaMm   = item?.minor_dia        ? parseFloat(item.minor_dia) * 25.4         : null;
-            const effectiveBarrelDia = minorDiaMm ?? toolingDiaMm;
-            const barrelR = effectiveBarrelDia ? Math.min(effectiveBarrelDia / 2, holeR) : r;
+            const barrelR = toolingDiaMm ? Math.min(toolingDiaMm / 2, holeR) : r;
             const color = HW_COLORS[typeId] || 0xB8860B;
             const mat = getHwMat(color);
 
@@ -1200,24 +1207,6 @@ const InstantPricing = () => {
               const slotCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.55));
               addHWMesh(new THREE.BoxGeometry(slotLen * 2, slotH2, slotW * 2), boreMat, slotCenter);
               addHWMesh(new THREE.BoxGeometry(slotW * 2, slotH2, slotLen * 2), boreMat, slotCenter);
-            } else if (type === 5) {
-              // Countersink — flat ring on front face + cone frustum + through cylinder
-              const csMinorR = item?.minor_dia ? parseFloat(item.minor_dia) * 25.4 / 2 : holeR;
-              const csMajorR = item?.major_dia ? parseFloat(item.major_dia) * 25.4 / 2 : holeR * 1.5;
-              const csAngle  = item?.angle ? parseFloat(item.angle) : 90;
-              const coneDepth = (csMajorR - csMinorR) / Math.tan((csAngle / 2) * Math.PI / 180);
-              const effectiveD = Math.min(Math.abs(coneDepth), partT);
-              // 1. Front face annular ring
-              addHWMesh(new THREE.RingGeometry(csMinorR, csMajorR, 32), mat, basePos.clone());
-              // 2. Cone frustum going into panel
-              const coneCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * effectiveD * 0.5));
-              addHWMesh(new THREE.CylinderGeometry(csMajorR, csMinorR, effectiveD, 32, 1, true), mat, coneCenter);
-              // 3. Through-hole cylinder for remaining thickness
-              if (effectiveD < partT - 0.1) {
-                const remainT = partT - effectiveD;
-                const throughCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (effectiveD + remainT * 0.5)));
-                addHWMesh(new THREE.CylinderGeometry(csMinorR, csMinorR, remainT, 32, 1, true), boreMat, throughCenter);
-              }
             } else {
               const m = new THREE.Mesh(
                 new THREE.CylinderGeometry(r, r, partT, 16, 1, true),
@@ -1233,12 +1222,67 @@ const InstantPricing = () => {
           });
         }
 
+        // ── Countersink markers ──────────────────────────────────────────────
+        if (isCountersinkingActive || hasCSAssigned) {
+          // DoubleSide so inner funnel surface is visible from above (countersink appearance)
+          const csConeMat = new THREE.MeshStandardMaterial({
+            color: 0x7c3aed, metalness: 0.4, roughness: 0.3, side: THREE.DoubleSide,
+            emissive: 0x4c1d95, emissiveIntensity: 0.35,
+          });
+          const csBackDiscMat = new THREE.MeshStandardMaterial({
+            color: 0x9d4edd, side: THREE.BackSide,
+            emissive: 0x4c1d95, emissiveIntensity: 0.2,
+          });
+
+          detectedHoles.forEach(hole => {
+            if (!hole.position) return;
+            const cs = selectedCountersinks[hole.id];
+            if (!cs) return;
+
+            const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
+            const holeR2 = holeMmDia / 2;
+            const csMajorR = cs.major_dia ? parseFloat(cs.major_dia) * 25.4 / 2 : holeR2 * 1.5;
+            const csMinorR = cs.minor_dia ? parseFloat(cs.minor_dia) * 25.4 / 2 : holeR2;
+
+            const axisVec2 = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
+            const axisNorm2 = axisVec2.clone().normalize();
+            // Front surface center
+            const basePos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
+              .add(axisNorm2.clone().multiplyScalar(partT * 0.5));
+
+            const addCSMesh = (geo, m, center) => {
+              const mesh = new THREE.Mesh(geo, m);
+              mesh.isHardwareMarker = true;
+              mesh.position.copy(center);
+              mesh.lookAt(center.clone().add(axisVec2));
+              mesh.rotateX(Math.PI / 2);
+              modelParent.add(mesh);
+              holeMarkersRef.current.push(mesh);
+            };
+
+            const coneH = Math.max(csMajorR * 0.6, 2.0);
+            const coneCenter = basePos2.clone().add(axisNorm2.clone().multiplyScalar(0.5 - coneH / 2));
+            addCSMesh(
+              new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH, 32, 1, true),
+              csConeMat, coneCenter
+            );
+
+            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-partT - 0.4));
+            const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
+            backRing.isHardwareMarker = true;
+            backRing.position.copy(backPos2);
+            backRing.lookAt(backPos2.clone().add(axisNorm2)); // RingGeometry face=+Z, lookAt already makes it flat — no rotateX
+            modelParent.add(backRing);
+            holeMarkersRef.current.push(backRing);
+          });
+        }
+
         v.Render();
       } catch (err) { console.warn('Hole marker error:', err); }
     };
 
     updateMarkers();
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions]);
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions, isCountersinkingActive, selectedCountersinks, activeCSHole]);
 
   useEffect(() => {
     const viewerEl = stepViewerRef.current;
@@ -1276,7 +1320,7 @@ const InstantPricing = () => {
     try {
       const r = await fetch(`${BACKEND_URL}/unfold`, { method: 'POST', body: fd });
       if (!r.ok) throw new Error('Unfold failed');
-      const d = await r.json(); if (d.flatVertices?.length) { setBackendData(d); setViewMode('2d'); }
+      const d = await r.json(); if (d.flatVertices?.length) { setBackendData(d); }
     } catch (err) {
       console.warn('Error during unfold stage:', err);
       setBackendError(err.message);
@@ -1454,15 +1498,47 @@ const InstantPricing = () => {
         }
       `}</style>
       {!isQuoteFlowActive && (
-        <header className="pricing-header text-center pt-4 pb-0 mb-0">
+        <header className="pricing-header text-center pt-5 pb-0 mb-0">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff0f0', border: '1px solid #fecaca', borderRadius: 999, padding: '4px 14px', marginBottom: 14 }}>
+            <Zap size={13} color="#ef4444" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', letterSpacing: 1 }}>INSTANT ONLINE QUOTING</span>
+          </div>
           <h1 className="fw-bold h2 text-uppercase letter-spacing-1">Get Instant Pricing</h1>
-          {files.length === 0 && <p className="text-muted">Upload your CAD files to get an immediate quote for your project.</p>}
+          {files.length === 0 && <p className="text-muted" style={{ maxWidth: 500, margin: '0 auto' }}>Upload your CAD files to get an immediate quote for your project. No account needed.</p>}
         </header>
       )}
 
       {files.length === 0 ? (
-        <div className="upload-section pt-0 pb-5 mt-0">
-          <div {...getRootProps()} className={`dropzone mx-auto rounded-5 border-2 border-dashed p-5 text-center ${isDragActive ? 'bg-light border-primary' : 'bg-white border-secondary'}`} style={{ maxWidth: '800px', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '0 20px 48px' }}>
+
+          {/* ── How it works ─────────────────────────── */}
+          <div style={{ width: '100%', maxWidth: 760, marginBottom: 28, display: 'flex', alignItems: 'stretch' }}>
+            {[
+              { num: '01', icon: <Upload size={18} />, label: 'Upload Your File', sub: 'DXF, DWG, STEP or STP' },
+              { num: '02', icon: <Settings size={18} />, label: 'Configure Options', sub: 'Material, thickness & services' },
+              { num: '03', icon: <Calculator size={18} />, label: 'Get Instant Quote', sub: 'Real-time price breakdown' },
+              { num: '04', icon: <Shield size={18} />, label: 'Place Your Order', sub: 'Secure checkout & fast delivery' },
+            ].map((step, i, arr) => (
+              <React.Fragment key={i}>
+                <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+                    <div style={{ background: '#fff0f0', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>{step.icon}</div>
+                  </div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', letterSpacing: 1, marginBottom: 2 }}>STEP {step.num}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{step.label}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{step.sub}</div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ChevronRight size={15} color="#cbd5e1" />
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* ── Dropzone ──────────────────────────────── */}
+          <div {...getRootProps()} className={`dropzone rounded-5 border-2 border-dashed p-5 text-center ${isDragActive ? 'bg-light border-primary' : 'bg-white border-secondary'}`} style={{ width: '100%', maxWidth: 760, cursor: 'pointer' }}>
             <input {...getInputProps()} />
             {isImporting ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
@@ -1486,6 +1562,24 @@ const InstantPricing = () => {
                 <button className="btn btn-danger btn-lg px-5 rounded-pill shadow-sm">BROWSE FILES</button>
               </>
             )}
+          </div>
+
+          {/* ── Trust / Capabilities strip ────────────── */}
+          <div style={{ width: '100%', maxWidth: 760, marginTop: 20, display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {[
+              { icon: <Shield size={13} />, text: 'Secure & Confidential' },
+              { icon: <Zap size={13} />, text: 'Instant Price — No Wait' },
+              { icon: <Layers size={13} />, text: 'Laser Cutting' },
+              { icon: <Box size={13} />, text: 'Metal Bending' },
+              { icon: <Settings size={13} />, text: 'Tapping & Hardware' },
+              { icon: <Grid size={13} />, text: 'Powder Coating' },
+              { icon: <TrendingDown size={13} />, text: 'Volume Discounts' },
+            ].map((item, i) => (
+              <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                <span style={{ color: '#ef4444' }}>{item.icon}</span>
+                {item.text}
+              </div>
+            ))}
           </div>
         </div>
       ) : (
@@ -1719,6 +1813,11 @@ const InstantPricing = () => {
                       <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); }}>2D FLAT</button>
                     </div>
                     <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
+                    {isCountersinkingActive && !isModelFadedManually && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '3px 8px', fontSize: '10px', fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 11 }}>⚠</span> Toggle FADE to view countersinks
+                      </div>
+                    )}
                   </div>
                   <button className="ip-back-btn" onClick={() => setIsQuoteFlowActive(false)}>
                     <ChevronLeft size={13} /> BACK
@@ -2314,6 +2413,7 @@ const InstantPricing = () => {
                             const isTap = title.includes('tap');
                             const isFinish = title.includes('anodiz') || title.includes('powder coat');
                             const isHardware = title.includes('hardware');
+                            const isCS = title.includes('countersink');
 
                             return (
                               <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none'}`} style={{ cursor: 'pointer' }} onClick={() => {
@@ -2326,6 +2426,9 @@ const InstantPricing = () => {
                                 } else if (isHardware) {
                                   if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]); }
                                   else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedHardware({}); setActiveHwHole(null); setHwItemsByType({}); }
+                                } else if (isCS) {
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); setActiveHwHole(null); if (detectedHoles.length > 0) setActiveCSHole(detectedHoles[0]); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedCountersinks({}); setActiveCSHole(null); }
                                 } else {
                                   setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
                                 }
@@ -2399,6 +2502,22 @@ const InstantPricing = () => {
                                       )}
                                     </div>
                                     <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ background: 'white', color: '#B8860B', border: 'none', fontSize: '12px' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>MANAGE</button>
+                                  </div>
+                                )}
+
+                                {isSelected && isCS && detectedHoles.length > 0 && (
+                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
+                                    <div className="d-flex gap-5">
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
+                                        <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
+                                      </div>
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>COUNTERSUNK</span>
+                                        <span className="fw-black text-white fs-4">{Object.keys(selectedCountersinks).length}</span>
+                                      </div>
+                                    </div>
+                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ color: '#7c3aed' }} onClick={(e) => { e.stopPropagation(); setActiveCSHole(detectedHoles[0]); }}>MANAGE</button>
                                   </div>
                                 )}
 
@@ -2500,7 +2619,7 @@ const InstantPricing = () => {
                             </div>
 
                             {/* Detailed Service Breakdown */}
-                            {(priceEstimate?.breakdown?.service_breakdown || []).filter(svc => !svc.name?.toLowerCase().includes('tapping') && !svc.name?.toLowerCase().includes('hardware')).map((svc, idx) => (
+                            {(priceEstimate?.breakdown?.service_breakdown || []).filter(svc => !svc.name?.toLowerCase().includes('tapping') && !svc.name?.toLowerCase().includes('hardware') && !svc.name?.toLowerCase().includes('countersink')).map((svc, idx) => (
                               <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                 <div className="d-flex flex-column">
                                   <span className="opacity-70 small">{svc.name}</span>
@@ -2546,6 +2665,23 @@ const InstantPricing = () => {
                                 </div>
                               );
                             })()}
+
+                            {(() => {
+                              const csTotal = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
+                              if (csTotal <= 0) return null;
+                              const csCount = Object.values(selectedCountersinks).length;
+                              return (
+                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
+                                  <div className="d-flex flex-column">
+                                    <span className="opacity-70 small">Countersinking Cost</span>
+                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{csCount} hole{csCount !== 1 ? 's' : ''} countersunk</span>
+                                  </div>
+                                  {isCalculatingPrice ? <PriceSkeleton /> : (
+                                    <span className="fw-black fs-5">${csTotal.toFixed(2)}</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* ── Discount row ── */}
@@ -2577,7 +2713,8 @@ const InstantPricing = () => {
                                     {(
                                       (priceEstimate?.total_price || 0) +
                                       Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
-                                      Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0)
+                                      Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0) +
+                                      Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0)
                                     ).toFixed(2)}
                                   </strong>
                                 </>
@@ -3123,6 +3260,136 @@ const InstantPricing = () => {
                     onClick={() => setActiveHwHole(null)}
                     style={{ border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px', fontWeight: 800, cursor: 'pointer', padding: '10px 28px', borderRadius: 12, transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}
                   >Done</button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+
+        {activeCSHole && (() => {
+          const csSvc = allServices.find(s => s.title.toLowerCase().includes('countersink'));
+          const csOptions = csSvc?.service_options || [];
+          const assignedCS = selectedCountersinks[activeCSHole.id];
+          const csHoleGroups = detectedHoles.reduce((acc, h) => {
+            const dia = Number(h.diameterInches || 0).toFixed(4);
+            if (!acc[dia]) acc[dia] = { dia, holes: [] };
+            acc[dia].holes.push(h);
+            return acc;
+          }, {});
+          return (
+            <motion.div key="cs-modal" className="position-fixed inset-0 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(16px)', background: 'rgba(15,23,42,0.6)' }}>
+              <motion.div className="overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1100px', height: '85vh', borderRadius: '24px', background: '#ffffff', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.2)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.96, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 20, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 350 }}>
+
+                {/* Header */}
+                <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                  <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#0f172a' }}>Countersink Configuration</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace' }}>&Oslash; {Number(activeCSHole.diameterInches || 0).toFixed(4)}&quot;</span>
+                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Select a countersink profile for this hole</span>
+                    </div>
+                  </div>
+                  <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8' }}>
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  {/* Left: Hole list */}
+                  <div style={{ width: 280, borderRight: '1px solid #f1f5f9', overflowY: 'auto', padding: '16px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>Detected Holes</div>
+                    {Object.values(csHoleGroups).map(group => {
+                      const isExpanded = expandedCSGroups.has(group.dia);
+                      const csCount = group.holes.filter(h => !!selectedCountersinks[h.id]).length;
+                      return (
+                        <div key={group.dia} style={{ marginBottom: 8 }}>
+                          <div
+                            style={{ padding: '10px 12px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isExpanded ? '#7c3aed' : '#f8fafc', color: isExpanded ? '#fff' : '#1e293b', border: isExpanded ? '1.5px solid #7c3aed' : '1.5px solid #f1f5f9', transition: 'all 0.15s' }}
+                            onClick={() => setExpandedCSGroups(prev => { const next = new Set(prev); next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia); return next; })}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <ChevronDown size={12} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                              <span style={{ fontWeight: 800, fontSize: '13px' }}>&Oslash; {group.dia}&quot; &times; {group.holes.length}</span>
+                            </div>
+                            {csCount > 0 && <span style={{ fontSize: '10px', fontWeight: 800, background: isExpanded ? 'rgba(255,255,255,0.25)' : '#7c3aed', color: isExpanded ? '#fff' : '#fff', borderRadius: 6, padding: '2px 6px' }}>{csCount}/{group.holes.length}</span>}
+                          </div>
+                          {isExpanded && (
+                            <div style={{ paddingLeft: 8, paddingTop: 4 }}>
+                              {group.holes.map(hole => {
+                                const isCS = !!selectedCountersinks[hole.id];
+                                const isActive = activeCSHole?.id === hole.id;
+                                const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
+                                return (
+                                  <div key={hole.id}
+                                    style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? '#7c3aed' : '#f8fafc', color: isActive ? '#fff' : '#1e293b', border: isActive ? '1.5px solid #7c3aed' : '1.5px solid transparent', transition: 'all 0.15s' }}
+                                    onClick={() => setActiveCSHole(hole)}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: isActive ? '#fff' : isCS ? '#7c3aed' : '#e2e8f0', color: isActive ? '#7c3aed' : isCS ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>{globalIdx + 1}</div>
+                                      <span style={{ fontSize: '12px', fontWeight: 700 }}>{isCS ? selectedCountersinks[hole.id].name : 'Not set'}</span>
+                                    </div>
+                                    {isCS && !isActive && <Check size={12} style={{ color: '#7c3aed' }} strokeWidth={3} />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right: Countersink profiles */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+                    {csOptions.length === 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: '#94a3b8' }}>
+                        <AlertCircle size={40} style={{ marginBottom: 12, color: '#e2e8f0' }} />
+                        <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 4px' }}>No Profiles Configured</h3>
+                        <p style={{ fontSize: '12px', margin: 0 }}>Configure countersink profiles in the admin dashboard.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 16 }}>Select Profile</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                          {csOptions.map((opt, idx) => {
+                            const isChosen = assignedCS?.name === opt.name;
+                            return (
+                              <motion.button key={idx}
+                                onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...opt, hole: activeCSHole } }))}
+                                whileTap={{ scale: 0.98 }} whileHover={{ y: -2 }}
+                                style={{ border: 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s', background: isChosen ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#fff', boxShadow: isChosen ? '0 8px 24px rgba(124,58,237,0.3), 0 0 0 1.5px #7c3aed' : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)', color: isChosen ? '#fff' : '#1e293b' }}
+                              >
+                                <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isChosen ? 'rgba(255,255,255,0.2)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>
+                                  <Settings size={18} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                    <strong style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.3 }}>{opt.name}</strong>
+                                    {isChosen && <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3} /></div>}
+                                  </div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                                    {opt.major_dia && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>Maj Ø{opt.major_dia}&quot;</span>}
+                                    {opt.minor_dia && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>Min Ø{opt.minor_dia}&quot;</span>}
+                                    {opt.angle && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>{opt.angle}°</span>}
+                                  </div>
+                                  <span style={{ fontSize: '13px', fontWeight: 900, color: isChosen ? '#fff' : '#7c3aed' }}>
+                                    +${parseFloat(opt.price || 0).toFixed(2)}<span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.7, marginLeft: 2 }}>/HOLE</span>
+                                  </span>
+                                </div>
+                              </motion.button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#fafbfc' }}>
+                  <button onClick={() => setSelectedCountersinks(p => { const n = { ...p }; delete n[activeCSHole.id]; return n; })} style={{ border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '8px 0' }}>Clear Selection</button>
+                  <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px', fontWeight: 800, cursor: 'pointer', padding: '10px 28px', borderRadius: 12, boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}>Done</button>
                 </div>
               </motion.div>
             </motion.div>

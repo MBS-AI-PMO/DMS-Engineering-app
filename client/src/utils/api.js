@@ -175,6 +175,16 @@ export async function fetchServicesWithUsage() {
     return data;
 }
 
+export async function fetchServiceBySlug(slug) {
+    const { data } = await request(`/services/slug/${slug}`);
+    return data;
+}
+
+export async function fetchMetalsByServiceId(serviceId) {
+    const { data } = await request(`/services/${serviceId}/metals`);
+    return data;
+}
+
 export async function fetchMetalServices(slug) {
     const { data } = await request(`/metals/${slug}/services`);
     return data;

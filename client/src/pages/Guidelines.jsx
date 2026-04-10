@@ -35,7 +35,8 @@ const Guidelines = () => {
         setActiveTab(mappedStatic[0].service_id || mappedStatic[0].id);
         setError('Using offline guidelines data.');
       } finally {
-        setLoading(false);
+        // Keep loading for at least 600ms for smooth feel
+        setTimeout(() => setLoading(false), 600);
       }
     };
 
@@ -47,8 +48,33 @@ const Guidelines = () => {
   if (loading) {
     return (
       <div className="guidelines-page">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="animate-spin text-red-600" size={48} />
+        <section className="guidelines-hero">
+          <div className="container">
+            <div className="skeleton-item" style={{ width: '50%', height: '56px', marginBottom: '20px', borderRadius: '12px' }}></div>
+            <div className="skeleton-item" style={{ width: '70%', height: '24px', borderRadius: '8px' }}></div>
+          </div>
+        </section>
+        
+        <div className="container guidelines-layout">
+          <aside className="guidelines-sidebar">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="skeleton-item" style={{ height: '48px', width: '100%', marginBottom: '12px', borderRadius: '10px' }}></div>
+            ))}
+          </aside>
+          
+          <main className="guidelines-content">
+            <div className="guidelines-detail">
+              <div className="detail-header" style={{ marginBottom: '40px' }}>
+                <div className="skeleton-item" style={{ width: '40%', height: '40px', marginBottom: '20px', borderRadius: '8px' }}></div>
+                <div className="skeleton-item" style={{ width: '100%', height: '44px', borderRadius: '12px' }}></div>
+              </div>
+              
+              <div className="detail-body">
+                <div className="skeleton-item" style={{ width: '100%', height: '80px', marginBottom: '30px', borderRadius: '12px' }}></div>
+                <div className="skeleton-item" style={{ width: '100%', height: '350px', borderRadius: '16px' }}></div>
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     );

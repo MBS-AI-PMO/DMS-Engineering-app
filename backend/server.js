@@ -581,8 +581,6 @@ app.listen(port, async () => {
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS minor_dia NUMERIC(12,4);`);
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS angle NUMERIC(8,2);`);
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS max_hole_diameter NUMERIC(12,4);`);
-        // Seed countersink hardware type
-        await db.query(`INSERT INTO hardware_types (name, slug) VALUES ('Countersink', 'countersink') ON CONFLICT (slug) DO NOTHING;`);
     } catch (err) {
         console.log(`\x1b[41m\x1b[37m Database Connection Failed: ${err.message} \x1b[0m`);
     }

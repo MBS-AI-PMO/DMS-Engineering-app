@@ -1,6 +1,7 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react';
-// eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { servicesData } from '../data/servicesData';
 import { fetchServices } from '../utils/api';
 
@@ -74,23 +75,24 @@ const Services = () => {
                     {services.map((service) => (
                         <motion.div
                             key={service.id}
-                            className="service-card"
                             variants={itemVariants}
                             whileHover={{ y: -10, transition: { duration: 0.3 } }}
                         >
-                            <div className="service-image-container">
-                                <img src={service.image} alt={service.title} className="service-image" loading="lazy" decoding="async" />
-                            </div>
-                            <div className="service-info">
-                                <h3 className="service-title">{service.title}</h3>
-                                <p className="service-description">{service.description}</p>
-                                <div className="service-arrow">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                        <polyline points="12 5 19 12 12 19"></polyline>
-                                    </svg>
+                            <Link to={`/service/${service.slug}`} className="service-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                                <div className="service-image-container">
+                                    <img src={service.image} alt={service.title} className="service-image" loading="lazy" decoding="async" />
                                 </div>
-                            </div>
+                                <div className="service-info">
+                                    <h3 className="service-title">{service.title}</h3>
+                                    <p className="service-description">{service.description}</p>
+                                    <div className="service-arrow">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            <polyline points="12 5 19 12 12 19"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </Link>
                         </motion.div>
                     ))}
                 </motion.div>

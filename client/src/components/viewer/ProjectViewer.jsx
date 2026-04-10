@@ -210,8 +210,7 @@ const ProjectViewer = ({
           const greenMat = new THREE.MeshStandardMaterial({ color: 0x059669, metalness: 0.7, roughness: 0.3 });
           const redMat = new THREE.MeshStandardMaterial({ color: 0xDC2626, metalness: 0.7, roughness: 0.3 });
 
-          const purpleMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, metalness: 0.7, roughness: 0.3 });
-          const HW_MATS = { 1: greenMat, 2: blueMat, 3: goldMat, 4: redMat, 5: purpleMat };
+          const HW_MATS = { 1: greenMat, 2: blueMat, 3: goldMat, 4: redMat };
 
           // Sample panel surface color once for hole fill rings (Issue 2)
           let panelHex = 0x9ca3af;
@@ -260,13 +259,11 @@ const ProjectViewer = ({
             // Surface-anchored base position (matches InstantPricing pattern)
             const holeR = r;
             const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
-            const minorDiaMm   = item?.minor_dia        ? parseFloat(item.minor_dia) * 25.4         : null;
-            const effectiveBarrelDia = minorDiaMm ?? toolingDiaMm;
-            const barrelR = effectiveBarrelDia ? Math.min(effectiveBarrelDia / 2, holeR) : holeR * 0.9;
+            const barrelR = toolingDiaMm ? Math.min(toolingDiaMm / 2, holeR) : holeR * 0.9;
             const basePos = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * partT * 0.5));
 
-            // Hole fill rings: visually resize hole to tooling/minor diameter when hardware is smaller
-            if (effectiveBarrelDia && effectiveBarrelDia < holeMmDia) {
+            // Hole fill rings: visually resize hole to tooling diameter when hardware is smaller
+            if (toolingDiaMm && toolingDiaMm < holeMmDia) {
               const backPos = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * partT));
               addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, basePos.clone());
               addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, backPos);
@@ -308,25 +305,71 @@ const ProjectViewer = ({
               const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH * 0.5)));
               addMarker(new THREE.CylinderGeometry(barrelR * 0.8, barrelR * 0.8, studH, 16), mainMat, studCenter);
               addMarker(new THREE.CylinderGeometry(holeR * 1.6, holeR * 1.6, headH, 32), mainMat, headCenter);
-            } else if (type === 5) {
-              // Countersink: flat ring on front face + cone frustum + through-hole cylinder
-              const csMinorR = item?.minor_dia ? parseFloat(item.minor_dia) * 25.4 / 2 : holeR;
-              const csMajorR = item?.major_dia ? parseFloat(item.major_dia) * 25.4 / 2 : holeR * 1.5;
-              const csAngle  = item?.angle ? parseFloat(item.angle) : 90;
-              const coneDepth = (csMajorR - csMinorR) / Math.tan((csAngle / 2) * Math.PI / 180);
-              const effectiveD = Math.min(Math.abs(coneDepth), partT);
-              // 1. Front face annular ring
-              addMarker(new THREE.RingGeometry(csMinorR, csMajorR, 32), mainMat, basePos.clone());
-              // 2. Cone frustum going into panel
-              const coneCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * effectiveD * 0.5));
-              addMarker(new THREE.CylinderGeometry(csMajorR, csMinorR, effectiveD, 32, 1, true), mainMat, coneCenter);
-              // 3. Through-hole cylinder for remaining thickness
-              if (effectiveD < partT - 0.1) {
-                const remainT = partT - effectiveD;
-                const throughCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (effectiveD + remainT * 0.5)));
-                addMarker(new THREE.CylinderGeometry(csMinorR, csMinorR, remainT, 32, 1, true), blackMat, throughCenter);
-              }
             }
+          });
+        }
+
+        // Countersink markers from service selections
+        if (configuration.selectedCountersinks) {
+          const csConeMat = new THREE.MeshStandardMaterial({
+            color: 0x7c3aed, metalness: 0.4, roughness: 0.3, side: THREE.DoubleSide,
+            emissive: 0x4c1d95, emissiveIntensity: 0.35,
+          });
+          const csBackDiscMat = new THREE.MeshStandardMaterial({
+            color: 0x9d4edd, side: THREE.BackSide,
+            emissive: 0x4c1d95, emissiveIntensity: 0.2,
+          });
+          const modelParent2 = threeViewer.scene.children.find(c => c.isGroup) || threeViewer.scene;
+
+          Object.values(configuration.selectedCountersinks).forEach(cs => {
+            const hole = cs.hole;
+            if (!hole?.position) return;
+
+            const rawPos = hole.position;
+            const pos = {
+              x: Array.isArray(rawPos) ? rawPos[0] : (rawPos.x || 0),
+              y: Array.isArray(rawPos) ? rawPos[1] : (rawPos.y || 0),
+              z: Array.isArray(rawPos) ? rawPos[2] : (rawPos.z || 0),
+            };
+            const partT2 = configuration.thickness ? parseFloat(configuration.thickness) : measuredThickness;
+            const holeMmDia2 = (hole.diameterInches || 0.1) * 25.4;
+            const holeR2 = holeMmDia2 / 2;
+
+            const rawAxis = hole.axis;
+            const axisVec2 = rawAxis ? new THREE.Vector3(
+              Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
+              Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
+              Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
+            ) : new THREE.Vector3(0, 1, 0);
+            const axisNorm2 = axisVec2.clone().normalize();
+            const centerPos2 = new THREE.Vector3(pos.x, pos.y, pos.z);
+            const basePos2 = centerPos2.clone().add(axisNorm2.clone().multiplyScalar(partT2 * 0.5));
+
+            const csMajorR = cs.major_dia ? parseFloat(cs.major_dia) * 25.4 / 2 : holeR2 * 1.5;
+            const csMinorR = cs.minor_dia ? parseFloat(cs.minor_dia) * 25.4 / 2 : holeR2;
+
+            const addCSMarker = (geo, mat, p) => {
+              const m = new THREE.Mesh(geo, mat);
+              m.isHardwareMarker = true;
+              m.position.copy(p);
+              m.lookAt(p.clone().add(axisNorm2));
+              m.rotateX(Math.PI / 2);
+              modelParent2.add(m);
+            };
+
+            const coneH2 = Math.max(csMajorR * 0.6, 2.0);
+            const coneCenter2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(0.5 - coneH2 / 2));
+            addCSMarker(
+              new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH2, 32, 1, true),
+              csConeMat, coneCenter2
+            );
+
+            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-partT2 - 0.4));
+            const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
+            backRing.isHardwareMarker = true;
+            backRing.position.copy(backPos2);
+            backRing.lookAt(backPos2.clone().add(axisNorm2)); // RingGeometry face=+Z, lookAt already makes it flat — no rotateX
+            modelParent2.add(backRing);
           });
         }
 

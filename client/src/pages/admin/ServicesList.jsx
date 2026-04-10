@@ -13,30 +13,30 @@ const TableSkeleton = () => (
             <tr key={i}>
                 <td style={{ paddingLeft: `${20 + (i % 3 === 0 ? 0 : 24)}px` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {i % 3 !== 0 && <div className="skeleton" style={{ width: '8px', height: '8px', borderRadius: '2px', opacity: 0.3 }} />}
-                        <div className="skeleton-inline skeleton" style={{ width: i % 2 === 0 ? '160px' : '120px', height: '18px', borderRadius: '4px' }} />
+                        {i % 3 !== 0 && <div className="skeleton-item" style={{ width: '8px', height: '8px', borderRadius: '2px', opacity: 0.3 }} />}
+                        <div className="skeleton-item" style={{ width: i % 2 === 0 ? '160px' : '120px', height: '18px', borderRadius: '4px' }} />
                     </div>
                 </td>
                 <td>
-                    <div className="skeleton" style={{ width: '45px', height: '22px', borderRadius: '6px' }} />
+                    <div className="skeleton-item" style={{ width: '45px', height: '22px', borderRadius: '6px' }} />
                 </td>
                 <td>
-                    <div className="skeleton-text skeleton" style={{ width: i % 2 === 0 ? '240px' : '180px', height: '12px' }} />
+                    <div className="skeleton-item" style={{ width: i % 2 === 0 ? '240px' : '180px', height: '12px', borderRadius: '4px' }} />
                 </td>
                 <td>
-                    <div className="skeleton skeleton-thumb" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+                    <div className="skeleton-item" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
                 </td>
                 <td>
-                    <div className="skeleton" style={{ width: '28px', height: '20px', borderRadius: '12px' }} />
+                    <div className="skeleton-item" style={{ width: '28px', height: '20px', borderRadius: '12px' }} />
                 </td>
                 <td>
-                    <div className="skeleton" style={{ width: '20px', height: '16px', borderRadius: '4px' }} />
+                    <div className="skeleton-item" style={{ width: '20px', height: '16px', borderRadius: '4px' }} />
                 </td>
                 <td>
                     <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
-                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
-                        <div className="skeleton" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
+                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
                     </div>
                 </td>
             </tr>
@@ -60,7 +60,10 @@ export default function ServicesList() {
             .catch(() => {
                 fetchServices().then(setServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                // Keep loading for at least 600ms for smooth feel
+                setTimeout(() => setLoading(false), 600);
+            });
     }, [toast]);
 
     useEffect(() => {

@@ -35,11 +35,10 @@ async function migrate() {
                 ('Flush Stud',     'flush-stud'),
                 ('Flush Standoff', 'flush-standoff'),
                 ('Nut',            'nut'),
-                ('Flush Nut',      'flush-nut'),
-                ('Countersink',    'countersink')
+                ('Flush Nut',      'flush-nut')
             ON CONFLICT (slug) DO NOTHING;
         `);
-        console.log('  ✓ Seeded 5 hardware types');
+        console.log('  ✓ Seeded 4 hardware types');
 
         console.log('\n✅ Hardware migration completed successfully!');
     } catch (err) {

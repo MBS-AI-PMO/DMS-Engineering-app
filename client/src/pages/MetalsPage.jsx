@@ -61,7 +61,8 @@ const MetalsPage = () => {
                 // We keep staticMetalsData and default categories as state
                 setMetals(staticMetalsData);
             } finally {
-                setLoading(false);
+                // Keep loading for at least 600ms for smooth feel
+                setTimeout(() => setLoading(false), 600);
             }
         }
         loadInitialData();
@@ -145,12 +146,12 @@ const MetalsPage = () => {
                                     {selectedCategory}
                                 </div>
                                 <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
-                                
+
                                 {isDropdownOpen && (
                                     <div className="category-dropdown-menu">
                                         {categories.map(cat => (
-                                            <div 
-                                                key={cat} 
+                                            <div
+                                                key={cat}
                                                 className={`dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -183,9 +184,53 @@ const MetalsPage = () => {
 
                     {/* Material List Layout */}
                     <div className="material-catalog-list">
-                        {loading && filteredMetals.length === 0 && (
-                            [...Array(4)].map((_, i) => (
-                                <div key={i} className="skeleton skeleton-material-card" />
+                        {loading && (
+                            [...Array(6)].map((_, i) => (
+                                <div key={i} className="material-detail-card">
+                                    {/* Image panel */}
+                                    <div className="card-image">
+                                        <div className="skeleton" style={{ width: '100%', height: '100%', borderRadius: 0 }} />
+                                    </div>
+
+                                    {/* Body */}
+                                    <div className="card-body">
+                                        {/* card-main: header + desc + specs */}
+                                        <div className="card-main">
+                                            {/* Header: title + tag placeholder */}
+                                            <div className="card-header">
+                                                <div className="title-group">
+                                                    <div className="skeleton" style={{ width: '180px', height: '26px', borderRadius: '6px', marginBottom: '8px' }} />
+                                                    <div className="skeleton" style={{ width: '110px', height: '14px', borderRadius: '4px' }} />
+                                                </div>
+                                            </div>
+
+                                            {/* Description lines */}
+                                            <div className="skeleton" style={{ width: '100%', height: '14px', borderRadius: '4px', marginBottom: '8px' }} />
+                                            <div className="skeleton" style={{ width: '82%', height: '14px', borderRadius: '4px', marginBottom: '28px' }} />
+
+                                            {/* Spec items */}
+                                            <div className="card-specs">
+                                                <div className="spec-item">
+                                                    <div className="skeleton" style={{ width: '48px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
+                                                    <div className="skeleton" style={{ width: '90px', height: '18px', borderRadius: '4px' }} />
+                                                </div>
+                                                <div className="spec-item">
+                                                    <div className="skeleton" style={{ width: '48px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
+                                                    <div className="skeleton" style={{ width: '70px', height: '18px', borderRadius: '4px' }} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* card-actions: price info + button */}
+                                        <div className="card-actions">
+                                            <div className="card-price-info">
+                                                <div className="skeleton" style={{ width: '100px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
+                                                <div className="skeleton" style={{ width: '130px', height: '20px', borderRadius: '4px' }} />
+                                            </div>
+                                            <div className="skeleton" style={{ width: '150px', height: '48px', borderRadius: '12px' }} />
+                                        </div>
+                                    </div>
+                                </div>
                             ))
                         )}
                         <AnimatePresence mode='popLayout'>

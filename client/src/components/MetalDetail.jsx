@@ -97,7 +97,8 @@ const MetalDetail = () => {
                 setMetal(found || null);
                 setResolvedServices({ metalLevel: [], thicknessLevel: [] });
             } finally {
-                setLoading(false);
+                // Keep loading for at least 600ms for smooth feel
+                setTimeout(() => setLoading(false), 600);
             }
         }
         loadMetal();
@@ -143,12 +144,67 @@ const MetalDetail = () => {
         return (
             <div className="metal-detail-page">
                 <div className="detail-container">
-                    <div className="skeleton skeleton-breadcrumb"></div>
-                    <div className="skeleton skeleton-title"></div>
-                    <div className="skeleton skeleton-tabs"></div>
+
+                    {/* Breadcrumb */}
+                    <div className="skeleton" style={{ width: '220px', height: '14px', marginBottom: '30px', borderRadius: '6px' }} />
+
+                    {/* Main title */}
+                    <div className="skeleton" style={{ width: '48%', height: '52px', marginBottom: '40px', borderRadius: '10px', margin: '0 auto 40px' }} />
+
+                    {/* Tabs strip */}
+                    <div className="detail-tabs-wrapper" style={{ marginBottom: '50px' }}>
+                        <div className="detail-tabs" style={{ display: 'flex', gap: '10px', paddingBottom: '2px' }}>
+                            <div className="skeleton" style={{ width: '120px', height: '42px', borderRadius: '8px' }} />
+                            <div className="skeleton" style={{ width: '145px', height: '42px', borderRadius: '8px' }} />
+                            <div className="skeleton" style={{ width: '100px', height: '42px', borderRadius: '8px' }} />
+                            <div className="skeleton" style={{ width: '110px', height: '42px', borderRadius: '8px' }} />
+                        </div>
+                    </div>
+
+                    {/* Quick Look grid — two cards */}
                     <div className="quick-look-grid">
-                        <div className="skeleton skeleton-card"></div>
-                        <div className="skeleton skeleton-card"></div>
+
+                        {/* Cut Sizes card */}
+                        <div className="detail-card" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                            {/* Card label */}
+                            <div className="skeleton" style={{ width: '90px', height: '12px', marginBottom: '25px', borderRadius: '4px' }} />
+
+                            {/* Visual area (CutSizesVisual placeholder) */}
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', height: '150px', justifyContent: 'center', marginBottom: '32px' }}>
+                                {[60, 90, 120, 100, 75].map((h, i) => (
+                                    <div key={i} className="skeleton" style={{ width: '48px', height: `${h}px`, borderRadius: '8px', flexShrink: 0 }} />
+                                ))}
+                            </div>
+
+                            {/* Size rows */}
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', marginBottom: '16px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <div className="skeleton" style={{ width: `${120 + i * 15}px`, height: '14px', borderRadius: '4px' }} />
+                                    <div className="skeleton" style={{ width: '90px', height: '32px', borderRadius: '8px' }} />
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Thicknesses card */}
+                        <div className="detail-card" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                            {/* Card label */}
+                            <div className="skeleton" style={{ width: '110px', height: '12px', marginBottom: '14px', borderRadius: '4px' }} />
+                            {/* Subtitle */}
+                            <div className="skeleton" style={{ width: '200px', height: '13px', marginBottom: '28px', borderRadius: '4px' }} />
+
+                            {/* Thickness rows */}
+                            {[1, 2, 3, 4, 5, 6].map(i => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <div className="skeleton" style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 }} />
+                                    <div className="skeleton" style={{ width: '70px', height: '14px', borderRadius: '4px' }} />
+                                    <div className="skeleton" style={{ width: '55px', height: '12px', borderRadius: '4px' }} />
+                                </div>
+                            ))}
+
+                            {/* View specs link */}
+                            <div className="skeleton" style={{ width: '220px', height: '14px', marginTop: '8px', borderRadius: '4px' }} />
+                        </div>
+
                     </div>
                 </div>
             </div>

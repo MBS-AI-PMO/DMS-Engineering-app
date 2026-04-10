@@ -8,6 +8,14 @@ const { optimizeImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
+// Helper to generate slug
+const generateSlug = (title) => {
+    return title.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+};
+
 // Configure multer for service images
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -92,13 +100,15 @@ router.get('/:id/metals', async (req, res) => {
         }
 
         const result = await db.query(`
-            SELECT m.name, m.slug, m.image_path,
+            SELECT m.id, m.name, m.slug, m.image_path,
+                c.name as category_name,
                 m.services::jsonb @> to_jsonb($1::int) as metal_level,
                 EXISTS (
                     SELECT 1 FROM jsonb_array_elements(m.quick_look->'thicknesses') t
                     WHERE t->'services' @> to_jsonb($1::int)
                 ) as thickness_level
             FROM metals m
+            LEFT JOIN categories c ON m.category_id = c.id
             WHERE m.services::jsonb @> to_jsonb($1::int)
                OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements(m.quick_look->'thicknesses') t
@@ -111,6 +121,31 @@ router.get('/:id/metals', async (req, res) => {
     } catch (err) {
         console.error('Error fetching metals for service:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch metals for service' });
+    }
+});
+
+// GET /api/services/slug/:slug — Fetch a single service by its slug
+router.get('/slug/:slug', async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT s.*, 
+                   COALESCE((
+                       SELECT jsonb_agg(parent_id) 
+                       FROM service_relationships 
+                       WHERE service_id = s.id
+                   ), '[]'::jsonb) as parent_ids
+            FROM services s 
+            WHERE s.slug = $1
+        `, [req.params.slug]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: true, data: null, message: 'Service not found' });
+        }
+
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        console.error('Error fetching service by slug:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch service' });
     }
 });
 
@@ -140,17 +175,19 @@ router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     try {
         await db.query('BEGIN');
 
+        const serviceSlug = generateSlug(title);
+
         const serviceResult = await db.query(
             `INSERT INTO services (
                 title, description, image_path, display_order, is_production,
                 min_length, max_length, min_width, max_width, min_height, max_height,
-                dimensions_unit, service_options, base_price, pricing_config
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+                dimensions_unit, service_options, base_price, pricing_config, slug
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
             [
                 title, description, image_path, display_order || 0, is_production || false,
                 min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
                 dimensions_unit || 'in', JSON.stringify(service_options || []),
-                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {})
+                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {}), serviceSlug
             ]
         );
 
@@ -207,8 +244,9 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
                 dimensions_unit = COALESCE($12, dimensions_unit),
                 service_options = COALESCE($13, service_options),
                 base_price = COALESCE($14, base_price),
-                pricing_config = COALESCE($15, pricing_config)
-            WHERE id = $16
+                pricing_config = COALESCE($15, pricing_config),
+                slug = COALESCE($16, slug)
+            WHERE id = $17
             RETURNING *
         `, [
             title, description, image_path, display_order, is_production,
@@ -217,6 +255,7 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
             JSON.stringify(service_options),
             parseFloat(base_price) || 0,
             JSON.stringify(pricing_config || {}),
+            title ? generateSlug(title) : null,
             req.params.id
         ]);
 

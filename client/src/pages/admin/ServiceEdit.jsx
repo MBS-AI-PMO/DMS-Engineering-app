@@ -38,6 +38,11 @@ export default function ServiceEdit() {
     const [editingTapIndex, setEditingTapIndex] = useState(null);
     const [tempTap, setTempTap] = useState({ name: '', min_diameter: '', max_diameter: '', min_depth: null, max_depth: '', price: '', notes: '' });
 
+    // Countersink Modal State
+    const [isCsModalOpen, setIsCsModalOpen] = useState(false);
+    const [editingCsIndex, setEditingCsIndex] = useState(null);
+    const [tempCs, setTempCs] = useState({ name: '', major_dia: '', minor_dia: '', angle: '', price: '', notes: '' });
+
     // ── Hardware Management State ──────────────────────────
     const [hwTypes, setHwTypes] = useState([]);
     const [selectedHwType, setSelectedHwType] = useState(null);
@@ -47,8 +52,7 @@ export default function ServiceEdit() {
     const [hwItemForm, setHwItemForm] = useState({
         name: '', size_spec: '', price: '', notes: '', is_active: true,
         length: '', min_edge_distance: '', tooling_diameter: '',
-        base_width: '', shank: '',
-        major_dia: '', minor_dia: '', angle: '', max_hole_diameter: ''
+        base_width: '', shank: '', max_hole_diameter: ''
     });
     const [savingHwItem, setSavingHwItem] = useState(false);
     const [hwTypeImgUploading, setHwTypeImgUploading] = useState(false);
@@ -157,9 +161,6 @@ export default function ServiceEdit() {
                 tooling_diameter: parseFloat(hwItemForm.tooling_diameter) || null,
                 base_width: parseFloat(hwItemForm.base_width) || null,
                 shank: parseFloat(hwItemForm.shank) || null,
-                major_dia: parseFloat(hwItemForm.major_dia) || null,
-                minor_dia: parseFloat(hwItemForm.minor_dia) || null,
-                angle: parseFloat(hwItemForm.angle) || null,
                 max_hole_diameter: parseFloat(hwItemForm.max_hole_diameter) || null,
                 is_wrinkled: hwItemForm.is_wrinkled ?? false
             };
@@ -175,8 +176,7 @@ export default function ServiceEdit() {
             setHwItemForm({
                 name: '', size_spec: '', price: '', notes: '', is_active: true,
                 length: '', min_edge_distance: '', tooling_diameter: '',
-                base_width: '', shank: '',
-                major_dia: '', minor_dia: '', angle: '', max_hole_diameter: ''
+                base_width: '', shank: '', max_hole_diameter: ''
             });
             loadHwItems(selectedHwType.id);
             loadHwTypes(); // Refresh counts
@@ -279,6 +279,32 @@ export default function ServiceEdit() {
         }
         setService(s => ({ ...s, service_options: updatedOptions }));
         setIsTapModalOpen(false);
+    };
+
+    const openCsModal = (index = null) => {
+        if (index !== null) {
+            setEditingCsIndex(index);
+            setTempCs({ ...service.service_options[index] });
+        } else {
+            setEditingCsIndex(null);
+            setTempCs({ name: '', major_dia: '', minor_dia: '', angle: '', price: '', notes: '' });
+        }
+        setIsCsModalOpen(true);
+    };
+
+    const saveCs = () => {
+        if (!tempCs.name) {
+            toast('Profile name is required', 'error');
+            return;
+        }
+        const updatedOptions = [...(service.service_options || [])];
+        if (editingCsIndex !== null) {
+            updatedOptions[editingCsIndex] = tempCs;
+        } else {
+            updatedOptions.push(tempCs);
+        }
+        setService(s => ({ ...s, service_options: updatedOptions }));
+        setIsCsModalOpen(false);
     };
 
     const CardSkeleton = ({ height = 200, title = '' }) => (
@@ -494,6 +520,7 @@ export default function ServiceEdit() {
                             const isAnodizing = service.title.toLowerCase().includes('anodiz');
                             const isPowderCoating = service.title.toLowerCase().includes('powder coat');
                             const isTapping = service.title.toLowerCase().includes('tap');
+                            const isCountersinking = service.title.toLowerCase().includes('countersink');
 
                             if (isAnodizing || isPowderCoating) return (
                                 <>
@@ -610,43 +637,111 @@ export default function ServiceEdit() {
                                     </div>
                                     <p className="admin-card-tip">Configure taps with hole diameter and depth ranges. These appear in the quote flow when a DXF file is uploaded.</p>
 
-                                    <div className="tap-bar-list">
-                                        <div className="tap-bar-header">
-                                            <div className="col-name">Tap Name</div>
-                                            <div className="col-diam">Diameter (in)</div>
-                                            <div className="col-depth">Depth (in)</div>
-                                            <div className="col-price">Price</div>
-                                            <div className="col-actions"></div>
+                                    <div className="service-config-list">
+                                        <div className="service-config-header grid-tapping hide-on-mobile">
+                                            <div className="config-header-label">Tap Name</div>
+                                            <div className="config-header-label">Diameter (in)</div>
+                                            <div className="config-header-label">Depth (in)</div>
+                                            <div className="config-header-label text-right" style={{ paddingRight: '20px' }}>Price</div>
+                                            <div className="config-header-label"></div>
                                         </div>
                                         {(service.service_options || []).map((opt, idx) => (
-                                            <div key={idx} className="tap-option-bar">
-                                                <div className="col-name">
-                                                    <span className="tap-name-label">{opt.name}</span>
-                                                    {opt.notes && <span className="tap-notes-indicator" title={opt.notes}>Notes+</span>}
+                                            <div key={idx} className="service-config-row grid-tapping">
+                                                <div className="config-col">
+                                                    <span className="config-val-name">{opt.name}</span>
+                                                    {opt.notes && <span className="config-notes-badge" title={opt.notes}>Notes+</span>}
                                                 </div>
-                                                <div className="col-diam">
-                                                    <span className="diam-range">{opt.min_diameter} - {opt.max_diameter}</span>
+                                                <div className="config-col">
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Diameter</span>
+                                                    <span className="config-val">{opt.min_diameter} - {opt.max_diameter}</span>
                                                 </div>
-                                                <div className="col-depth">
-                                                    <span className="depth-info">
+                                                <div className="config-col">
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Depth</span>
+                                                    <span className="config-val">
                                                         {opt.min_depth === null ? '∞' : opt.min_depth} to {opt.max_depth || '0'}
                                                     </span>
                                                 </div>
-                                                <div className="col-price">
-                                                    <span className="price-tag">${opt.price || '0'}</span>
+                                                <div className="config-col text-right" style={{ paddingRight: '20px' }}>
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Price</span>
+                                                    <span className="config-val-price">${opt.price || '0'}</span>
                                                 </div>
-                                                <div className="col-actions">
-                                                    <button className="tap-action-btn edit" onClick={() => openTapModal(idx)} title="Edit Tap">
+                                                <div className="config-actions">
+                                                    <button className="config-action-btn edit" onClick={() => openTapModal(idx)} title="Edit Tap">
                                                         <Wrench size={14} />
                                                     </button>
-                                                    <button className="tap-action-btn delete" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }} title="Remove">
+                                                    <button className="config-action-btn delete" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }} title="Remove">
                                                         <X size={14} />
                                                     </button>
                                                 </div>
                                             </div>
                                         ))}
                                         {(!service.service_options || service.service_options.length === 0) && (
-                                            <div className="empty-options-state">No taps configured. Add a tap to define threading options.</div>
+                                            <div className="empty-options-state" style={{ textAlign: 'center', padding: '30px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>No taps configured. Add a tap to define threading options.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+
+                            if (isCountersinking) return (
+                                <div className="admin-edit-card service-options-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Grid size={16} />
+                                            <span>Countersinking Configuration</span>
+                                        </div>
+                                        <button
+                                            className="admin-btn admin-btn-outline"
+                                            style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                                            onClick={() => openCsModal()}
+                                        >
+                                            <Plus size={14} /> Add Profile
+                                        </button>
+                                    </div>
+                                    <p className="admin-card-tip">Configure countersink profiles with major/minor diameters and angle. These appear in the quote flow when a STEP file is uploaded.</p>
+
+                                    <div className="service-config-list">
+                                        <div className="service-config-header grid-countersinking hide-on-mobile">
+                                            <div className="config-header-label">Profile Name</div>
+                                            <div className="config-header-label">Major Ø (in)</div>
+                                            <div className="config-header-label">Minor Ø (in)</div>
+                                            <div className="config-header-label">Angle (°)</div>
+                                            <div className="config-header-label text-right" style={{ paddingRight: '20px' }}>Price/Hole</div>
+                                            <div className="config-header-label"></div>
+                                        </div>
+                                        {(service.service_options || []).map((opt, idx) => (
+                                            <div key={idx} className="service-config-row grid-countersinking">
+                                                <div className="config-col">
+                                                    <span className="config-val-name">{opt.name}</span>
+                                                    {opt.notes && <span className="config-notes-badge" title={opt.notes}>Notes+</span>}
+                                                </div>
+                                                <div className="config-col">
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Major Ø</span>
+                                                    <span className="config-val">{opt.major_dia || '—'}</span>
+                                                </div>
+                                                <div className="config-col">
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Minor Ø</span>
+                                                    <span className="config-val">{opt.minor_dia || '—'}</span>
+                                                </div>
+                                                <div className="config-col">
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Angle</span>
+                                                    <span className="config-val">{opt.angle ? `${opt.angle}°` : '—'}</span>
+                                                </div>
+                                                <div className="config-col text-right" style={{ paddingRight: '20px' }}>
+                                                    <span className="config-header-label show-on-mobile hide-on-desktop">Price</span>
+                                                    <span className="config-val-price">${opt.price || '0'}</span>
+                                                </div>
+                                                <div className="config-actions">
+                                                    <button className="config-action-btn edit" onClick={() => openCsModal(idx)} title="Edit Profile">
+                                                        <Wrench size={14} />
+                                                    </button>
+                                                    <button className="config-action-btn delete" onClick={() => { const n = service.service_options.filter((_, i) => i !== idx); setService(s => ({ ...s, service_options: n })); }} title="Remove">
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!service.service_options || service.service_options.length === 0) && (
+                                            <div className="empty-options-state" style={{ textAlign: 'center', padding: '30px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>No profiles configured. Add a profile to define countersinking options.</div>
                                         )}
                                     </div>
                                 </div>
@@ -986,9 +1081,6 @@ export default function ServiceEdit() {
                                                                             )}
                                                                             {item.min_edge_distance && <div>Edge: {hwUnit === 'mm' ? toMM(item.min_edge_distance) : item.min_edge_distance}</div>}
                                                                             {item.tooling_diameter && <div>Tool: {hwUnit === 'mm' ? toMM(item.tooling_diameter) : item.tooling_diameter}</div>}
-                                                                            {selectedHwType?.slug === 'countersink' && item.major_dia && <div>Maj Ø: {hwUnit === 'mm' ? toMM(item.major_dia) : item.major_dia}</div>}
-                                                                            {selectedHwType?.slug === 'countersink' && item.minor_dia && <div>Min Ø: {hwUnit === 'mm' ? toMM(item.minor_dia) : item.minor_dia}</div>}
-                                                                            {selectedHwType?.slug === 'countersink' && item.angle && <div>Angle: {item.angle}°</div>}
                                                                             {item.max_hole_diameter && <div style={{ color: '#DC2626' }}>Max Hole: {hwUnit === 'mm' ? toMM(item.max_hole_diameter) : item.max_hole_diameter}</div>}
                                                                         </div>
                                                                     </td>
@@ -1013,9 +1105,6 @@ export default function ServiceEdit() {
                                                                                     tooling_diameter: item.tooling_diameter || '',
                                                                                     base_width: item.base_width || '',
                                                                                     shank: item.shank || '',
-                                                                                    major_dia: item.major_dia || '',
-                                                                                    minor_dia: item.minor_dia || '',
-                                                                                    angle: item.angle || '',
                                                                                     max_hole_diameter: item.max_hole_diameter || '',
                                                                                     is_active: item.is_active !== false
                                                                                 });
@@ -1182,6 +1271,73 @@ export default function ServiceEdit() {
                                 <button className="admin-btn admin-btn-outline" onClick={() => setIsTapModalOpen(false)}>Cancel</button>
                                 <button className="admin-btn admin-btn-primary" onClick={saveTap}>
                                     <Check size={18} /> {editingTapIndex !== null ? 'Update Tap' : 'Add Tap'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Countersink Profile Modal ─────────────────────────── */}
+            <AnimatePresence>
+                {isCsModalOpen && (
+                    <div className="admin-modal-overlay">
+                        <motion.div
+                            className="admin-modal-container"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        >
+                            <div className="admin-modal-header">
+                                <h3>{editingCsIndex !== null ? 'Edit Countersink Profile' : 'Add Countersink Profile'}</h3>
+                                <button className="modal-close-btn" onClick={() => setIsCsModalOpen(false)}><X size={20} /></button>
+                            </div>
+
+                            <div className="admin-modal-body admin-modal-scroll-area" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                                <div className="admin-form-group">
+                                    <label>Profile Name *</label>
+                                    <input
+                                        type="text"
+                                        value={tempCs.name}
+                                        onChange={e => setTempCs(t => ({ ...t, name: e.target.value }))}
+                                        placeholder="e.g. 82° #8 Flat Head"
+                                    />
+                                </div>
+
+                                <div className="tap-fields-grid" style={{ marginBottom: '20px' }}>
+                                    <div className="option-input-group">
+                                        <label>Major Dia (in)</label>
+                                        <input type="number" step="0.001" min="0" value={tempCs.major_dia || ''} onChange={e => setTempCs(t => ({ ...t, major_dia: e.target.value }))} placeholder="e.g. 0.320" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label>Minor Dia (in)</label>
+                                        <input type="number" step="0.001" min="0" value={tempCs.minor_dia || ''} onChange={e => setTempCs(t => ({ ...t, minor_dia: e.target.value }))} placeholder="e.g. 0.164" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label>Angle (°)</label>
+                                        <input type="number" step="1" min="1" max="179" value={tempCs.angle || ''} onChange={e => setTempCs(t => ({ ...t, angle: e.target.value }))} placeholder="e.g. 82" />
+                                    </div>
+                                    <div className="option-input-group">
+                                        <label>Price / Hole ($)</label>
+                                        <input type="number" step="0.01" value={tempCs.price || ''} onChange={e => setTempCs(t => ({ ...t, price: e.target.value }))} placeholder="0.00" />
+                                    </div>
+                                </div>
+
+                                <div className="admin-form-group">
+                                    <label>Notes</label>
+                                    <textarea
+                                        rows={2}
+                                        value={tempCs.notes || ''}
+                                        onChange={e => setTempCs(t => ({ ...t, notes: e.target.value }))}
+                                        placeholder="Optional engineering notes..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="admin-modal-footer">
+                                <button className="admin-btn admin-btn-outline" onClick={() => setIsCsModalOpen(false)}>Cancel</button>
+                                <button className="admin-btn admin-btn-primary" onClick={saveCs}>
+                                    <Check size={18} /> {editingCsIndex !== null ? 'Update Profile' : 'Add Profile'}
                                 </button>
                             </div>
                         </motion.div>
@@ -1994,46 +2150,6 @@ export default function ServiceEdit() {
                                                     <p className="admin-card-tip" style={{ marginTop: '6px', marginBottom: 0 }}>Used as the standoff body diameter in the 3D viewer.</p>
                                                 )}
                                             </div>
-
-                                            {/* Countersink-specific fields */}
-                                            {selectedHwType?.slug === 'countersink' && (<>
-                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                        <Ruler size={13} /> Major Dia ({hwUnit})
-                                                    </label>
-                                                    <input
-                                                        type="number" step="0.001" min="0"
-                                                        value={hwUnit === 'mm' ? toMM(hwItemForm.major_dia) : (hwItemForm.major_dia || '')}
-                                                        onChange={e => { const val = e.target.value; setHwItemForm(p => ({ ...p, major_dia: hwUnit === 'mm' ? toIN(val) : val })); }}
-                                                        placeholder={hwUnit === 'mm' ? "e.g. 8.13" : "e.g. .320"}
-                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
-                                                    />
-                                                </div>
-                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                        <Ruler size={13} /> Minor Dia ({hwUnit})
-                                                    </label>
-                                                    <input
-                                                        type="number" step="0.001" min="0"
-                                                        value={hwUnit === 'mm' ? toMM(hwItemForm.minor_dia) : (hwItemForm.minor_dia || '')}
-                                                        onChange={e => { const val = e.target.value; setHwItemForm(p => ({ ...p, minor_dia: hwUnit === 'mm' ? toIN(val) : val })); }}
-                                                        placeholder={hwUnit === 'mm' ? "e.g. 4.17" : "e.g. .164"}
-                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
-                                                    />
-                                                </div>
-                                                <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: 800, marginBottom: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                        <Hash size={13} /> Angle (°)
-                                                    </label>
-                                                    <input
-                                                        type="number" step="1" min="1" max="179"
-                                                        value={hwItemForm.angle || ''}
-                                                        onChange={e => setHwItemForm(p => ({ ...p, angle: e.target.value }))}
-                                                        placeholder="e.g. 82 or 90"
-                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
-                                                    />
-                                                </div>
-                                            </>)}
 
                                             {/* Max Hole Diameter — all types */}
                                             <div className="admin-form-group" style={{ marginBottom: 0 }}>
