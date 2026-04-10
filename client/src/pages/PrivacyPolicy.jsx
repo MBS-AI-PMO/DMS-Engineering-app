@@ -1,56 +1,65 @@
-import React from 'react';
+/* eslint-disable no-unused-vars */
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Lock, Eye, CheckCircle, FileText, ChevronRight, Mail } from 'lucide-react';
+import {
+    ChevronRight, FileText, Mail
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Skeleton from '../components/Skeleton';
+import LegalIcon from '../components/LegalIcon';
 
-const sections = [
-    {
-        id: '01',
-        title: 'Information We Collect',
-        icon: <Eye size={22} />,
-        color: '#6366f1',
-        content: [
-            'We collect information you provide directly when you create an account, upload a CAD model, or request a quote. This includes your name, email address, company name, and billing information.',
-            'Technical data such as CAD file metadata, part dimensions, and material specifications are collected to generate instant pricing and production estimates.',
-            'Usage data including IP address, browser type, and interaction patterns are collected to improve our platform performance and user experience.'
-        ]
-    },
-    {
-        id: '02',
-        title: 'How We Use Your Data',
-        icon: <Lock size={22} />,
-        color: '#e31b23',
-        content: [
-            'Your data powers our instant pricing engine — we analyze uploaded STEP files to compute accurate material, cutting, bending, and finishing costs in real time.',
-            'Order and account data is used to fulfill manufacturing orders, send production updates, and maintain your order history.',
-            'We do not sell, rent, or trade your personal information or intellectual property to any third party under any circumstances.'
-        ]
-    },
-    {
-        id: '03',
-        title: 'IP & Design Protection',
-        icon: <Shield size={22} />,
-        color: '#10b981',
-        content: [
-            'All uploaded CAD files (STEP, DXF, etc.) are stored on AES-256 encrypted servers. Access is strictly limited to automated analysis systems and authorized production personnel directly involved in your order.',
-            'You retain 100% ownership of your designs at all times. DMS Metals claims no intellectual property rights over any customer-uploaded files.',
-            'Files associated with cancelled or expired quotes are permanently deleted from our servers within 90 days.'
-        ]
-    },
-    {
-        id: '04',
-        title: 'Cookies & Tracking',
-        icon: <CheckCircle size={22} />,
-        color: '#f59e0b',
-        content: [
-            'Essential cookies maintain your session state, shopping cart contents, and authentication tokens. These cannot be disabled as they are required for the platform to function.',
-            'Analytical cookies (opt-in) help us understand which features are most used, allowing our engineering team to prioritize improvements to the pricing and 3D viewer tools.',
-            'You can manage cookie preferences at any time through your account settings or browser controls.'
-        ]
-    }
-];
+const DynamicIcon = ({ name, size = 22 }) => {
+    return <LegalIcon name={name} size={size} />;
+};
 
 const PrivacyPolicy = () => {
+    const [sections, setSections] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchPrivacy = async () => {
+            try {
+                const res = await fetch('/api/legal/privacy');
+                const data = await res.json();
+                if (data.success) {
+                    // Force natural numeric sorting on client-side
+                    const sortedData = [...data.data].sort((a, b) => {
+                        const snA = a.serial_number || '';
+                        const snB = b.serial_number || '';
+                        const snResult = snA.localeCompare(snB, undefined, { numeric: true });
+                        if (snResult !== 0) return snResult;
+                        return (a.display_order || 0) - (b.display_order || 0);
+                    });
+                    setSections(sortedData);
+                }
+            } catch (err) {
+                console.error('Failed to load privacy policy');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPrivacy();
+    }, []);
+
+    const SkeletonBlock = () => (
+        <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
+            <div style={{ flexShrink: 0 }}>
+                <Skeleton variant="rectangle" style={{ width: 52, height: 52, borderRadius: 16 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <Skeleton variant="text" style={{ width: 30, height: 12 }} />
+                    <Skeleton variant="text" style={{ width: 200, height: 20 }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <Skeleton variant="text" style={{ width: '90%' }} />
+                    <Skeleton variant="text" style={{ width: '85%' }} />
+                    <Skeleton variant="text" style={{ width: '40%' }} />
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <div style={{ background: '#fff', minHeight: '100vh' }}>
             {/* Hero */}
@@ -78,33 +87,42 @@ const PrivacyPolicy = () => {
             {/* Content */}
             <main style={{ maxWidth: 800, margin: '0 auto', padding: '72px 24px 96px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
-                    {sections.map((section, idx) => (
-                        <motion.div
-                            key={section.id}
-                            initial={{ opacity: 0, y: 24 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5, delay: idx * 0.08 }}
-                            style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}
-                        >
-                            <div style={{ flexShrink: 0 }}>
-                                <div style={{ width: 52, height: 52, borderRadius: 16, background: `${section.color}14`, border: `1.5px solid ${section.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: section.color }}>
-                                    {section.icon}
+                    {loading ? (
+                        <>
+                            <SkeletonBlock />
+                            <SkeletonBlock />
+                            <SkeletonBlock />
+                            <SkeletonBlock />
+                        </>
+                    ) : (
+                        sections.map((section, idx) => (
+                            <motion.div
+                                key={section.id}
+                                initial={{ opacity: 0, y: 24 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.5, delay: idx * 0.08 }}
+                                style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}
+                            >
+                                <div style={{ flexShrink: 0 }}>
+                                    <div style={{ width: 52, height: 52, borderRadius: 16, background: `${section.color}14`, border: `1.5px solid ${section.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: section.color }}>
+                                        <DynamicIcon name={section.icon} />
+                                    </div>
                                 </div>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                                    <span style={{ fontSize: '0.7rem', fontWeight: 900, color: section.color, letterSpacing: '2px', textTransform: 'uppercase', fontFamily: 'monospace' }}>{section.id}</span>
-                                    <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>{section.title}</h2>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 900, color: section.color, letterSpacing: '2px', textTransform: 'uppercase', fontFamily: 'monospace' }}>{section.serial_number}</span>
+                                        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>{section.heading}</h2>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        {(section.content || []).map((para, i) => (
+                                            <p key={i} style={{ fontSize: '1rem', color: '#475569', lineHeight: 1.75, margin: 0 }}>{para}</p>
+                                        ))}
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {section.content.map((para, i) => (
-                                        <p key={i} style={{ fontSize: '1rem', color: '#475569', lineHeight: 1.75, margin: 0 }}>{para}</p>
-                                    ))}
-                                </div>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        ))
+                    )}
                 </div>
 
                 {/* Contact CTA */}

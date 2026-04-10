@@ -11,6 +11,7 @@ const ProjectViewer = ({
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
   const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
+  const thicknessAxisRef = useRef(new THREE.Vector3(0, 1, 0));
   const [modelLoadCount, setModelLoadCount] = useState(0);
   const [measuredThickness, setMeasuredThickness] = useState(3);
   const onDimRef = useRef(onDimensionsExtracted);
@@ -61,6 +62,15 @@ const ProjectViewer = ({
             const dimensions = [size.x, size.y, size.z].sort((a, b) => a - b);
             const t = dimensions[0];
             setMeasuredThickness(t);
+
+            // Determine which world axis corresponds to the sheet thickness
+            const axisOptions = [
+              { vec: new THREE.Vector3(1, 0, 0), size: size.x },
+              { vec: new THREE.Vector3(0, 1, 0), size: size.y },
+              { vec: new THREE.Vector3(0, 0, 1), size: size.z },
+            ];
+            axisOptions.sort((a, b) => a.size - b.size);
+            thicknessAxisRef.current = axisOptions[0].vec.clone();
 
             if (onDimRef.current) {
               onDimRef.current({ l: dimensions[2], w: dimensions[1], t: t });
@@ -219,7 +229,42 @@ const ProjectViewer = ({
               panelHex = o.material.color.getHex();
             }
           });
-          const panelFillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.75, roughness: 0.35, side: THREE.DoubleSide });
+
+          // Compute thickness axis from hole position variance.
+          // All holes in a flat sheet share ~the same coordinate on the thickness axis
+          // (near-zero spread), while spreading widely on the other two axes.
+          // This works entirely in hole-position space — no scene transform dependency.
+          const _hwPositions = Object.values(configuration.selectedHardware)
+            .filter(h => h.hole?.position)
+            .map(h => {
+              const p = h.hole.position;
+              return Array.isArray(p) ? [p[0], p[1], p[2]] : [p.x || 0, p.y || 0, p.z || 0];
+            });
+          const _csPositions = Object.values(configuration.selectedCountersinks || {})
+            .filter(cs => cs.hole?.position)
+            .map(cs => {
+              const p = cs.hole.position;
+              return Array.isArray(p) ? [p[0], p[1], p[2]] : [p.x || 0, p.y || 0, p.z || 0];
+            });
+          const _allPos = [..._hwPositions, ..._csPositions];
+
+          let sharedAxisVec;
+          if (_allPos.length >= 2) {
+            const _variance = (vals) => {
+              const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+              return vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+            };
+            const _axes = [
+              { vec: new THREE.Vector3(1, 0, 0), v: _variance(_allPos.map(p => p[0])) },
+              { vec: new THREE.Vector3(0, 1, 0), v: _variance(_allPos.map(p => p[1])) },
+              { vec: new THREE.Vector3(0, 0, 1), v: _variance(_allPos.map(p => p[2])) },
+            ];
+            _axes.sort((a, b) => a.v - b.v);
+            sharedAxisVec = _axes[0].vec.clone();
+          } else {
+            // Single hole — fall back to bounding-box thickness axis
+            sharedAxisVec = thicknessAxisRef.current.clone();
+          }
 
           Object.values(configuration.selectedHardware).forEach(({ item, hole, typeId, face }) => {
             if (!hole?.position) return;
@@ -234,13 +279,7 @@ const ProjectViewer = ({
             const r = Math.max(holeMmDia / 2, 0.5);
             const mainMat = HW_MATS[typeId] || goldMat;
 
-            const rawAxis = hole.axis;
-            const axisVec = rawAxis ? new THREE.Vector3(
-              Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
-              Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
-              Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
-            ) : new THREE.Vector3(0, 1, 0);
-
+            const axisVec = sharedAxisVec.clone();
             const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
             const centerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
@@ -256,37 +295,46 @@ const ProjectViewer = ({
               modelParent.add(m);
             };
 
-            // Surface-anchored base position (matches InstantPricing pattern)
             const holeR = r;
             const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
             const barrelR = toolingDiaMm ? Math.min(toolingDiaMm / 2, holeR) : holeR * 0.9;
             const basePos = centerPos.clone().add(axisNorm.clone().multiplyScalar(faceSign * partT * 0.5));
 
-            // Hole fill rings: visually resize hole to tooling diameter when hardware is smaller
-            if (toolingDiaMm && toolingDiaMm < holeMmDia) {
-              const backPos = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * partT));
-              addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, basePos.clone());
-              addMarker(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, backPos);
-            }
-
             const type = typeId || 3;
+
+            // ── Hole filler: panel-colored solid cylinder spanning full thickness.
+            // Visually closes the hole down to the hardware's footprint so the hole
+            // appears the same size as the hardware — hardware itself stays real size.
+            {
+              const hwOuterR = (type === 2) ? barrelR
+                             : (type === 1) ? holeR * 0.5
+                             : holeR * 0.9;
+              if (hwOuterR < holeR) {
+                const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
+                addMarker(new THREE.CylinderGeometry(holeR, holeR, partT, 32), fillMat, centerPos.clone());
+              }
+            }
 
             if (type === 3) {
               // Nut: body above front surface + thin disc on back face
               const hexH = Math.max(3.5, partT * 0.8);
               const discH = 0.3;
+              const outerR = holeR * 0.9;
+              const boreR = holeR * 0.35;
               const hexCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * hexH * 0.5));
               const discCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(holeR * 1.5, holeR * 1.5, hexH, 32, 1, true), mainMat, hexCenter);
-              addMarker(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, hexH, 16), blackMat, hexCenter);
-              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, discCenter);
+              addMarker(new THREE.CylinderGeometry(outerR, outerR, hexH, 32, 1, true), mainMat, hexCenter);
+              addMarker(new THREE.CylinderGeometry(boreR, boreR, hexH, 16), blackMat, hexCenter);
+              addMarker(new THREE.RingGeometry(boreR, outerR, 32), mainMat, discCenter);
             } else if (type === 4) {
               // Flush Nut: thin hollow disc on each face
               const discH = 0.4;
+              const outerR = holeR * 0.9;
+              const boreR = holeR * 0.35;
               const center1 = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * discH * 0.5));
               const center2 = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH * 0.5)));
-              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, center1);
-              addMarker(new THREE.RingGeometry(holeR * 0.8, holeR * 1.5, 32), mainMat, center2);
+              addMarker(new THREE.RingGeometry(boreR, outerR, 32), mainMat, center1);
+              addMarker(new THREE.RingGeometry(boreR, outerR, 32), mainMat, center2);
             } else if (type === 2) {
               // Flush Standoff: hollow barrel from front surface + flange on back face
               const standH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.5;
@@ -294,16 +342,16 @@ const ProjectViewer = ({
               const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standH * 0.5));
               const flangeCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH * 0.5)));
               addMarker(new THREE.CylinderGeometry(barrelR, barrelR, standH, 24, 1, true), mainMat, bodyCenter);
-              addMarker(new THREE.CylinderGeometry(barrelR * 0.4, barrelR * 0.4, standH, 16), blackMat, bodyCenter);
+              addMarker(new THREE.CylinderGeometry(holeR * 0.35, holeR * 0.35, standH, 16), blackMat, bodyCenter);
               addMarker(new THREE.CylinderGeometry(holeR * 1.5, holeR * 1.5, flangeH, 32), mainMat, flangeCenter);
-              addMarker(new THREE.CylinderGeometry(barrelR * 0.4, barrelR * 0.4, flangeH + 0.1, 16), blackMat, flangeCenter);
+              addMarker(new THREE.CylinderGeometry(holeR * 0.35, holeR * 0.35, flangeH + 0.1, 16), blackMat, flangeCenter);
             } else if (type === 1) {
               // Flush Stud: shaft from front surface + head on back face
               const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 3;
               const headH = Math.max(0.6, partT * 0.04);
               const studCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH * 0.5));
               const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH * 0.5)));
-              addMarker(new THREE.CylinderGeometry(barrelR * 0.8, barrelR * 0.8, studH, 16), mainMat, studCenter);
+              addMarker(new THREE.CylinderGeometry(holeR * 0.5, holeR * 0.5, studH, 16), mainMat, studCenter);
               addMarker(new THREE.CylinderGeometry(holeR * 1.6, holeR * 1.6, headH, 32), mainMat, headCenter);
             }
           });
@@ -321,6 +369,34 @@ const ProjectViewer = ({
           });
           const modelParent2 = threeViewer.scene.children.find(c => c.isGroup) || threeViewer.scene;
 
+          // Recompute shared axis if we have no hardware (only countersinks selected)
+          const _csOnlyPos = Object.values(configuration.selectedCountersinks)
+            .filter(cs => cs.hole?.position)
+            .map(cs => {
+              const p = cs.hole.position;
+              return Array.isArray(p) ? [p[0], p[1], p[2]] : [p.x || 0, p.y || 0, p.z || 0];
+            });
+          let csAxisVec;
+          const _hwCount = Object.keys(configuration.selectedHardware || {}).length;
+          if (_hwCount > 0) {
+            // already computed above as sharedAxisVec
+            csAxisVec = sharedAxisVec.clone();
+          } else if (_csOnlyPos.length >= 2) {
+            const _variance2 = (vals) => {
+              const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+              return vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+            };
+            const _axes2 = [
+              { vec: new THREE.Vector3(1, 0, 0), v: _variance2(_csOnlyPos.map(p => p[0])) },
+              { vec: new THREE.Vector3(0, 1, 0), v: _variance2(_csOnlyPos.map(p => p[1])) },
+              { vec: new THREE.Vector3(0, 0, 1), v: _variance2(_csOnlyPos.map(p => p[2])) },
+            ];
+            _axes2.sort((a, b) => a.v - b.v);
+            csAxisVec = _axes2[0].vec.clone();
+          } else {
+            csAxisVec = thicknessAxisRef.current.clone();
+          }
+
           Object.values(configuration.selectedCountersinks).forEach(cs => {
             const hole = cs.hole;
             if (!hole?.position) return;
@@ -335,12 +411,7 @@ const ProjectViewer = ({
             const holeMmDia2 = (hole.diameterInches || 0.1) * 25.4;
             const holeR2 = holeMmDia2 / 2;
 
-            const rawAxis = hole.axis;
-            const axisVec2 = rawAxis ? new THREE.Vector3(
-              Array.isArray(rawAxis) ? rawAxis[0] : (rawAxis.x || 0),
-              Array.isArray(rawAxis) ? rawAxis[1] : (rawAxis.y || 0),
-              Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
-            ) : new THREE.Vector3(0, 1, 0);
+            const axisVec2 = csAxisVec.clone();
             const axisNorm2 = axisVec2.clone().normalize();
             const faceSign2 = cs.face === 'down' ? -1 : 1;
             const centerPos2 = new THREE.Vector3(pos.x, pos.y, pos.z);

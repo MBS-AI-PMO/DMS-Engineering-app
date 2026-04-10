@@ -1039,7 +1039,10 @@ const InstantPricing = () => {
         const hasCSAssigned = Object.keys(selectedCountersinks).length > 0;
         if ((!isTappingActive && !hasHwAssigned && !isCountersinkingActive && !hasCSAssigned) || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
 
-        const partT = dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0;
+        // Use the actually-displayed thickness (user-selected wins over original model dims)
+        const partT = selectedThickness
+          ? parseFloat(selectedThickness) * 25.4
+          : (dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0);
 
         // ── Tapping markers ──────────────────────────────────────────────
         if (isTappingActive) {
@@ -1082,6 +1085,34 @@ const InstantPricing = () => {
           });
         }
 
+        // ── Shared thickness axis (hardware + countersink) ─────────────────
+        // Compute from hole position variance: all holes in a flat sheet share ~the
+        // same coordinate on the thickness axis (near-zero spread across that axis).
+        // This is independent of scene transforms and always matches hole.position space.
+        {
+          const _holePositions = detectedHoles.filter(h => h.position);
+          const _computeVar = (vals) => {
+            if (vals.length < 2) return 0;
+            const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+            return vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+          };
+          if (_holePositions.length >= 2) {
+            const _candidates = [
+              { vec: new THREE.Vector3(1, 0, 0), v: _computeVar(_holePositions.map(h => h.position[0])) },
+              { vec: new THREE.Vector3(0, 1, 0), v: _computeVar(_holePositions.map(h => h.position[1])) },
+              { vec: new THREE.Vector3(0, 0, 1), v: _computeVar(_holePositions.map(h => h.position[2])) },
+            ];
+            _candidates.sort((a, b) => a.v - b.v);
+            var hwThicknessVec = _candidates[0].vec.clone();
+          } else {
+            // Single hole: fall back to bounding-box thickness axis
+            const _ta = modelOriginalDataRef.current?.thicknessAxis || 'y';
+            var hwThicknessVec = _ta === 'x' ? new THREE.Vector3(1, 0, 0)
+                               : _ta === 'z' ? new THREE.Vector3(0, 0, 1)
+                               : new THREE.Vector3(0, 1, 0);
+          }
+        }
+
         // ── Hardware markers ─────────────────────────────────────────────
         if (hasHwAssigned) {
           const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
@@ -1095,14 +1126,13 @@ const InstantPricing = () => {
           };
           const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
 
-          // Sample panel surface color once for hole fill rings
+          // Sample panel surface color for hole fill cylinders
           let panelHex = 0x9ca3af;
           v.scene.traverse(o => {
             if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
               panelHex = o.material.color.getHex();
             }
           });
-          const panelFillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.75, roughness: 0.35, side: THREE.DoubleSide });
 
           detectedHoles.forEach(hole => {
             if (!hole.position) return;
@@ -1119,7 +1149,8 @@ const InstantPricing = () => {
             const color = HW_COLORS[typeId] || 0xB8860B;
             const mat = getHwMat(color);
 
-            const axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
+            // Use the thickness axis computed from hole position variance (see below).
+            const axisVec = hwThicknessVec.clone();
             const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
             const faceOffset = axisNorm.clone().multiplyScalar(faceSign * partT * 0.5);
@@ -1138,11 +1169,20 @@ const InstantPricing = () => {
               holeMarkersRef.current.push(mesh);
             };
 
-            // Hole fill rings: visually resize hole to tooling diameter when hardware is smaller
-            if (toolingDiaMm && toolingDiaMm < holeMmDia) {
-              const backPos = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * partT));
-              addHWMesh(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, basePos.clone());
-              addHWMesh(new THREE.RingGeometry(barrelR, holeR, 32), panelFillMat, backPos);
+
+            // ── Hole filler: solid panel-colored cylinder that visually closes the
+            // hole to match the hardware's outer footprint. Hardware is rendered at
+            // its real size on top — the hole just appears smaller to the viewer.
+            {
+              const hwOuterR = type === 2 ? barrelR
+                             : type === 1 ? holeR * 0.5
+                             : r * 1.35;
+              if (hwOuterR < holeR) {
+                // Fill the gap between hardware edge and hole edge with panel color
+                const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
+                const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
+                addHWMesh(new THREE.CylinderGeometry(holeR, holeR, partT, 32), fillMat, holeCenterPos);
+              }
             }
 
             if (type === 3) {
@@ -1243,7 +1283,8 @@ const InstantPricing = () => {
             const csMajorR = cs.major_dia ? parseFloat(cs.major_dia) * 25.4 / 2 : holeR2 * 1.5;
             const csMinorR = cs.minor_dia ? parseFloat(cs.minor_dia) * 25.4 / 2 : holeR2;
 
-            const axisVec2 = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
+            // Same thickness axis used for hardware markers
+            const axisVec2 = hwThicknessVec.clone();
             const axisNorm2 = axisVec2.clone().normalize();
             const faceSign = cs.face === 'down' ? -1 : 1;
             // Pull wide rim 0.5mm outside the surface so the cone is visibly proud
@@ -1285,7 +1326,7 @@ const InstantPricing = () => {
     };
 
     updateMarkers();
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions, isCountersinkingActive, selectedCountersinks, activeCSHole]);
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions, selectedThickness, isCountersinkingActive, selectedCountersinks, activeCSHole]);
 
   useEffect(() => {
     const viewerEl = stepViewerRef.current;

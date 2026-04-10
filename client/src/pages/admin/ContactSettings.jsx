@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2, Trash2 } from 'lucide-react';
 import { fetchSettings, updateSetting, fetchMetals } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 

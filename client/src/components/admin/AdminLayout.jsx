@@ -18,9 +18,10 @@ const navItems = [
     { to: '/admin/services', label: 'Services', icon: Wrench },
     { to: '/admin/pricing', label: 'Discounts', icon: DollarSign },
     { to: '/admin/pricing-calculator', label: 'Price Calculator', icon: Calculator },
-    { to: '/admin/laser-rates',        label: 'Laser Rates',     icon: Zap },
-    { to: '/admin/sheet-cost-rates',   label: 'Sheet Costs',     icon: Layers },
+    { to: '/admin/laser-rates', label: 'Laser Rates', icon: Zap },
+    { to: '/admin/sheet-cost-rates', label: 'Sheet Costs', icon: Layers },
     { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
+    { to: '/admin/legal', label: 'Terms & Policy', icon: Shield },
 
     { to: '/admin/customers', label: 'Customers', icon: UserCheck },
     { to: '/admin/admins', label: 'Admins', icon: Shield },

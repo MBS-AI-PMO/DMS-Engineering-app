@@ -41,6 +41,7 @@ import PricingManagement from './pages/admin/PricingManagement';
 import PricingCalculator from './pages/admin/PricingCalculator';
 import LaserRatesAdmin from './pages/admin/LaserRatesAdmin';
 import SheetCostRatesAdmin from './pages/admin/SheetCostRatesAdmin';
+import TermsAndPolicy from './pages/admin/TermsAndPolicy';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -171,6 +172,9 @@ function App() {
                 } />
                 <Route path="/admin/sheet-cost-rates" element={
                   <ProtectedRoute><AdminLayout><div className="px-desktop"><SheetCostRatesAdmin /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/legal" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><TermsAndPolicy /></div></AdminLayout></ProtectedRoute>
                 } />
                 <Route path="/admin/orders" element={
                   <ProtectedRoute><AdminLayout><div className="px-desktop"><OrdersList /></div></AdminLayout></ProtectedRoute>
