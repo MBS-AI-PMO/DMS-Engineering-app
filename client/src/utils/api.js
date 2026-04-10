@@ -351,6 +351,17 @@ export async function updateSetting(key, value) {
     return request(`/settings/${key}`, { method: 'PUT', body: { value } });
 }
 
+export async function uploadSettingLogo(key, file) {
+    const formData = new FormData();
+    formData.append('logo', file);
+    formData.append('key', key);
+    const { data } = await request('/settings/upload-logo', {
+        method: 'POST',
+        body: formData
+    });
+    return data;
+}
+
 // ── Guidelines ─────────────────────────────────────────
 
 export async function fetchGuidelines() {

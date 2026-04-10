@@ -1,8 +1,39 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+// Setup multer for logo uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '../uploads/logos');
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const key = req.body.key || 'logo';
+        cb(null, `${key}_${Date.now()}${ext}`);
+    }
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|svg|webp|gif/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        if (extname && mimetype) return cb(null, true);
+        cb(new Error('Only images (jpg, png, svg, webp, gif) are allowed'));
+    }
+});
 
 // GET /api/settings - Public
 router.get('/', async (req, res) => {
@@ -49,7 +80,6 @@ router.put('/:key', authenticate, requireAdmin, async (req, res) => {
         `, [JSON.stringify(value), req.params.key]);
 
         if (result.rows.length === 0) {
-            // Option: allow creating new keys if they don't exist
             const insertResult = await db.query(`
                 INSERT INTO site_settings (key, value)
                 VALUES ($1, $2)
@@ -62,6 +92,35 @@ router.put('/:key', authenticate, requireAdmin, async (req, res) => {
     } catch (err) {
         console.error('Error updating setting:', err);
         res.status(500).json({ success: false, error: 'Failed to update setting' });
+    }
+});
+
+// POST /api/settings/upload-logo - Admin only
+router.post('/upload-logo', authenticate, requireAdmin, upload.single('logo'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+
+        const { key } = req.body;
+        if (!key) {
+            return res.status(400).json({ success: false, error: 'Setting key is required' });
+        }
+
+        const logoPath = `/uploads/logos/${req.file.filename}`;
+
+        // Update database
+        await db.query(`
+            INSERT INTO site_settings (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE 
+            SET value = $2, updated_at = CURRENT_TIMESTAMP
+        `, [key, JSON.stringify(logoPath)]);
+
+        res.json({ success: true, data: logoPath });
+    } catch (err) {
+        console.error('Error uploading logo:', err);
+        res.status(500).json({ success: false, error: 'Failed to upload logo' });
     }
 });
 

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line 
 import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext.js';
+import { fetchSettings } from '../utils/api';
 import SearchOverlay from './SearchOverlay';
 
 const Navbar = () => {
@@ -11,6 +12,7 @@ const Navbar = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.png');
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
@@ -21,6 +23,17 @@ const Navbar = () => {
         const handleScroll = () => setIsScrolled(window.scrollY > 50);
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    useEffect(() => {
+        fetchSettings()
+            .then(data => {
+                if (data.navbar_logo) {
+                    setLogo(data.navbar_logo);
+                    localStorage.setItem('navbar_logo', data.navbar_logo);
+                }
+            })
+            .catch(err => console.error('Failed to load navbar logo:', err));
     }, []);
 
     // Close dropdown when clicking outside
@@ -74,7 +87,7 @@ const Navbar = () => {
             <div className="container navbar-container">
                 <div className="navbar-left">
                     <Link to="/" className="logo">
-                        <img src="/logo.png" alt="DMS Logo" className="logo-img" decoding="async" />
+                        <img src={logo} alt="DMS Logo" className="logo-img" decoding="async" />
                     </Link>
                 </div>
 
@@ -205,7 +218,7 @@ const Navbar = () => {
                     >
                         <div className="mobile-menu-header">
                             <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
-                                <img src="/logo.png" alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" />
+                                <img src={logo} alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" />
                             </Link>
                             <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
                                 <X size={24} />

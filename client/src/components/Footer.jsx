@@ -16,7 +16,8 @@ const Footer = () => {
             { platform: 'facebook', url: '#', enabled: true },
             { platform: 'instagram', url: '#', enabled: true }
         ],
-        top_metals: []
+        top_metals: [],
+        footer_logo: localStorage.getItem('footer_logo') || ''
     });
     const [nlEmail, setNlEmail] = useState('');
     const [nlLoading, setNlLoading] = useState(false);
@@ -30,8 +31,12 @@ const Footer = () => {
                         ...prev,
                         footer_contact: data.footer_contact || prev.footer_contact,
                         social_links: data.social_links || prev.social_links,
-                        top_metals: data.top_metals || prev.top_metals
+                        top_metals: data.top_metals || prev.top_metals,
+                        footer_logo: data.footer_logo || prev.footer_logo
                     }));
+                    if (data.footer_logo) {
+                        localStorage.setItem('footer_logo', data.footer_logo);
+                    }
                 }
             })
             .catch(err => console.error('Failed to load footer settings:', err));
@@ -78,7 +83,10 @@ const Footer = () => {
                         className="footer-brand"
                     >
                         <Link to="/" className="footer-logo">
-                            <img src="/logo.png" alt="DMS Logo" className="footer-logo-img" loading="lazy" decoding="async" />
+                            <img
+                                src={settings.footer_logo || "/logo.png"}
+                                alt="DMS Logo" className="footer-logo-img" loading="lazy" decoding="async"
+                            />
                             <span className="footer-tagline">Precision. Quality. DMS.</span>
                         </Link>
                         <p className="footer-desc">
