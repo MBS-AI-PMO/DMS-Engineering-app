@@ -15,7 +15,8 @@ const Footer = () => {
             { platform: 'linkedin', url: '#', enabled: true },
             { platform: 'facebook', url: '#', enabled: true },
             { platform: 'instagram', url: '#', enabled: true }
-        ]
+        ],
+        top_metals: []
     });
     const [nlEmail, setNlEmail] = useState('');
     const [nlLoading, setNlLoading] = useState(false);
@@ -24,11 +25,12 @@ const Footer = () => {
     useEffect(() => {
         fetchSettings()
             .then(data => {
-                if (data.footer_contact || data.social_links) {
+                if (data.footer_contact || data.social_links || data.top_metals) {
                     setSettings(prev => ({
                         ...prev,
                         footer_contact: data.footer_contact || prev.footer_contact,
-                        social_links: data.social_links || prev.social_links
+                        social_links: data.social_links || prev.social_links,
+                        top_metals: data.top_metals || prev.top_metals
                     }));
                 }
             })
@@ -110,7 +112,11 @@ const Footer = () => {
                         <ul>
                             <li><Link to="/">Home</Link></li>
                             <li><Link to="/metals">Metals</Link></li>
-                            <li><Link to="/contact">Contact</Link></li>
+                            <li><Link to="/#services">Services</Link></li>
+                            <li><Link to="/get-instant-pricing">Instant Pricing</Link></li>
+                            <li><Link to="/guidelines">Guidelines</Link></li>
+                            <li><Link to="/faq">FAQ</Link></li>
+                            <li><Link to="/contact">Contact Us</Link></li>
                         </ul>
                     </motion.div>
 
@@ -123,10 +129,17 @@ const Footer = () => {
                     >
                         <h4 className="footer-title">Top Metals</h4>
                         <ul>
-                            <li><Link to="/metal/2024-t3-aluminum">2024 T3 Aluminum</Link></li>
-                            <li><Link to="/metal/5052-h32-aluminum">5052 H32 Aluminum</Link></li>
-                            <li><Link to="/metal/brass">Brass</Link></li>
-                            <li><Link to="/metal/copper">Copper</Link></li>
+                            {settings.top_metals && settings.top_metals.length > 0
+                                ? settings.top_metals.map((metal, i) => (
+                                    <li key={i}><Link to={`/metal/${metal.slug}`}>{metal.name}</Link></li>
+                                ))
+                                : <>
+                                    <li><Link to="/metal/5052-h32-aluminum">5052 H32 Aluminum</Link></li>
+                                    <li><Link to="/metal/cold-rolled-1008">Cold Rolled Steel</Link></li>
+                                    <li><Link to="/metal/hot-rolled-a36">Hot Rolled A36</Link></li>
+                                    <li><Link to="/metal/g90-steel">G90 Steel</Link></li>
+                                </>
+                            }
                         </ul>
                     </motion.div>
 
