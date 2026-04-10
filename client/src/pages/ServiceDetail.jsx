@@ -12,9 +12,11 @@ import {
     Loader2,
     Ruler,
     Settings,
-    FileText
+    FileText,
+    Zap,
+    Play
 } from 'lucide-react';
-import { fetchServiceBySlug, fetchMetalsByServiceId } from '../utils/api';
+import { fetchServiceBySlug, fetchMetalsByServiceId, fetchAllHardwareWithItems, fetchMetals, fetchHardwareTypes, fetchHardwareItemsByType } from '../utils/api';
 import './ServiceDetail.css';
 
 const ServiceDetail = () => {
@@ -22,6 +24,7 @@ const ServiceDetail = () => {
     const { slug } = useParams();
     const [service, setService] = useState(null);
     const [compatibleMetals, setCompatibleMetals] = useState([]);
+    const [hardwareData, setHardwareData] = useState([]); // [{type, items}]
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Overview');
 
@@ -33,8 +36,48 @@ const ServiceDetail = () => {
                 const svcData = await fetchServiceBySlug(slug);
                 setService(svcData);
 
-                const metals = await fetchMetalsByServiceId(svcData.id);
-                setCompatibleMetals(metals || []);
+                const isHw = svcData.title?.toLowerCase().includes('hardware');
+
+                // Compatible Metals: for hardware show all metals (hardware works with any metal),
+                // for other services filter by service assignment
+                try {
+                    if (isHw) {
+                        const allMetals = await fetchMetals();
+                        setCompatibleMetals(allMetals || []);
+                    } else {
+                        const metals = await fetchMetalsByServiceId(svcData.id);
+                        setCompatibleMetals(metals || []);
+                    }
+                } catch (e) {
+                    console.warn('Could not load compatible metals:', e);
+                }
+
+                // Hardware items — try new single endpoint, fall back to per-type calls
+                if (isHw) {
+                    try {
+                        const allHw = await fetchAllHardwareWithItems();
+                        if (allHw && allHw.length > 0) {
+                            setHardwareData(allHw);
+                        } else {
+                            throw new Error('empty');
+                        }
+                    } catch {
+                        // Fallback: fetch types then items individually
+                        try {
+                            const typesRes = await fetchHardwareTypes();
+                            const types = (typesRes?.data || []).filter(t => !t.name?.toLowerCase().includes('countersink'));
+                            const enriched = await Promise.all(types.map(async (t) => {
+                                try {
+                                    const items = await fetchHardwareItemsByType(t.id);
+                                    return { ...t, items: Array.isArray(items) ? items : [] };
+                                } catch { return { ...t, items: [] }; }
+                            }));
+                            setHardwareData(enriched.filter(g => g.items.length > 0));
+                        } catch (e2) {
+                            console.warn('Could not load hardware items:', e2);
+                        }
+                    }
+                }
             } catch (err) {
                 console.error('Failed to load service detail:', err);
             } finally {
@@ -126,8 +169,9 @@ const ServiceDetail = () => {
         return [];
     })();
 
+    const isHardwareService = service.title?.toLowerCase().includes('hardware');
     const tabs = ['Overview', 'Compatible Metals'];
-    if (serviceOptions.length > 0) tabs.push('Technical Specs');
+    if (serviceOptions.length > 0 || isHardwareService) tabs.push('Technical Specs');
 
     // Determine hero image
     const getHeroImage = (title) => {
@@ -171,8 +215,8 @@ const ServiceDetail = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, delay: 0.2 }}
                     >
-                        <Link to="/get-instant-pricing" className="btn-services-solid">GET INSTANT QUOTE</Link>
-                        <a href="#details" className="btn-services-outline">VIEW CAPABILITIES</a>
+                        <Link to="/get-instant-pricing" className="btn-services-solid"><Zap size={16} />GET INSTANT QUOTE</Link>
+                        <a href="#details" className="btn-services-outline"><Play size={14} />VIEW CAPABILITIES</a>
                     </motion.div>
                 </div>
             </section>
@@ -284,95 +328,145 @@ const ServiceDetail = () => {
                                     <p>Explore the available options and technical limits for our {service.title.toLowerCase()} service.</p>
                                 </div>
 
-                                {service.title.toLowerCase().includes('tap') ? (
-                                    <div className="specs-table-wrapper">
-                                        <table className="premium-specs-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Tap Profile</th>
-                                                    <th>Min Hole Ø</th>
-                                                    <th>Max Hole Ø</th>
-                                                    <th>Price</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {service.service_options.map((opt, idx) => (
-                                                    <tr key={idx}>
-                                                        <td className="font-bold">{opt.name}</td>
-                                                        <td>{opt.min_diameter}\"</td>
-                                                        <td>{opt.max_diameter}\"</td>
-                                                        <td className="price-td">${opt.price}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : service.title.toLowerCase().includes('countersink') ? (
-                                    <div className="specs-table-wrapper">
-                                        <table className="premium-specs-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Profile Name</th>
-                                                    <th>Major Ø</th>
-                                                    <th>Minor Ø</th>
-                                                    <th>Angle</th>
-                                                    <th>Price</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {service.service_options.map((opt, idx) => (
-                                                    <tr key={idx}>
-                                                        <td className="font-bold">{opt.name}</td>
-                                                        <td>{opt.major_dia}\"</td>
-                                                        <td>{opt.minor_dia}\"</td>
-                                                        <td>{opt.angle}°</td>
-                                                        <td className="price-td">${opt.price}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="tech-options-grid">
-                                        {Array.isArray(service.service_options) && service.service_options.map((opt, idx) => {
-                                            const name = typeof opt === 'string' ? opt : opt.name;
-                                            const isColor = ['red', 'blue', 'black', 'gold', 'clear', 'green', 'yellow', 'bronze', 'grey', 'white', 'purple'].some(c => name.toLowerCase().includes(c));
+                                {(() => {
+                                    const t = service.title.toLowerCase();
+                                    const getColorCode = (val) => {
+                                        const v = val.toLowerCase();
+                                        if (v.includes('dark grey') || v.includes('dark gray')) return '#4b5563';
+                                        if (v.includes('grey') || v.includes('gray')) return '#9ca3af';
+                                        if (v.includes('black')) return '#111827';
+                                        if (v.includes('red')) return '#ef4444';
+                                        if (v.includes('blue')) return '#3b82f6';
+                                        if (v.includes('gold')) return '#fbbf24';
+                                        if (v.includes('clear') || v.includes('natural')) return '#e2e8f0';
+                                        if (v.includes('green')) return '#10b981';
+                                        if (v.includes('white')) return '#f9fafb';
+                                        if (v.includes('bronze')) return '#92400e';
+                                        if (v.includes('purple')) return '#7c3aed';
+                                        if (v.includes('yellow')) return '#fde047';
+                                        if (v.includes('orange')) return '#f97316';
+                                        if (v.includes('silver')) return '#cbd5e1';
+                                        return null;
+                                    };
+                                    const colorKeywords = ['red','blue','black','gold','clear','green','yellow','bronze','grey','gray','white','purple','natural','silver','orange','anodize'];
 
-                                            const getColorCode = (val) => {
-                                                const v = val.toLowerCase();
-                                                if (v.includes('black')) return '#000000';
-                                                if (v.includes('red')) return '#ef4444';
-                                                if (v.includes('blue')) return '#3b82f6';
-                                                if (v.includes('gold')) return '#fbbf24';
-                                                if (v.includes('clear')) return '#e2e8f0';
-                                                if (v.includes('green')) return '#10b981';
-                                                if (v.includes('dark grey')) return '#4b5563';
-                                                if (v.includes('white')) return '#ffffff';
-                                                return '#6366f1';
-                                            };
+                                    if (t.includes('tap')) return (
+                                        <div className="specs-table-wrapper">
+                                            <table className="premium-specs-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Tap Profile</th>
+                                                        <th>Min Hole Ø</th>
+                                                        <th>Max Hole Ø</th>
+                                                        <th>Price</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {serviceOptions.map((opt, idx) => (
+                                                        <tr key={idx}>
+                                                            <td className="font-bold">{opt.name}</td>
+                                                            <td>{opt.min_diameter}"</td>
+                                                            <td>{opt.max_diameter}"</td>
+                                                            <td className="price-td">${opt.price}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    );
 
-                                            return (
-                                                <div key={idx} className="tech-card-premium">
-                                                    {isColor && (
-                                                        <div className="color-swatch-box">
-                                                            <div
-                                                                className="swatch-circle"
-                                                                style={{ backgroundColor: getColorCode(name) }}
-                                                            ></div>
-                                                        </div>
-                                                    )}
-                                                    <div className="tech-card-info">
-                                                        <span className="tech-card-label">Available Option</span>
-                                                        <h4 className="tech-card-title">{name}</h4>
-                                                    </div>
-                                                    <div className="tech-card-corner">
-                                                        <Settings size={14} />
+                                    if (t.includes('countersink')) return (
+                                        <div className="specs-table-wrapper">
+                                            <table className="premium-specs-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Profile Name</th>
+                                                        <th>Major Ø</th>
+                                                        <th>Minor Ø</th>
+                                                        <th>Angle</th>
+                                                        <th>Price</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {serviceOptions.map((opt, idx) => (
+                                                        <tr key={idx}>
+                                                            <td className="font-bold">{opt.name}</td>
+                                                            <td>{opt.major_dia}"</td>
+                                                            <td>{opt.minor_dia}"</td>
+                                                            <td>{opt.angle}°</td>
+                                                            <td className="price-td">${opt.price}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    );
+
+                                    if (t.includes('hardware')) return (
+                                        <div>
+                                            {hardwareData.length === 0 ? (
+                                                <div className="empty-state"><Info size={32} /><p>No hardware items found.</p></div>
+                                            ) : hardwareData.map((hwType) => (
+                                                <div key={hwType.id} style={{ marginBottom: 32 }}>
+                                                    <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        {hwType.image_path && <img src={hwType.image_path} alt={hwType.name} style={{ width: 28, height: 28, objectFit: 'contain' }} />}
+                                                        {hwType.name}
+                                                        <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>({hwType.items.length} options)</span>
+                                                    </h3>
+                                                    <div className="specs-table-wrapper">
+                                                        <table className="premium-specs-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Name / Size</th>
+                                                                    <th>Spec</th>
+                                                                    <th>Price</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {hwType.items.map((item, idx) => (
+                                                                    <tr key={idx}>
+                                                                        <td className="font-bold">{item.name || '—'}</td>
+                                                                        <td>{item.size_spec || [item.length && `L: ${item.length}"`, item.base_width && `W: ${item.base_width}"`, item.shank && `Shank: ${item.shank}"`].filter(Boolean).join(' · ') || '—'}</td>
+                                                                        <td className="price-td">{item.price != null ? `$${item.price}` : '—'}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                                            ))}
+                                        </div>
+                                    );
+
+                                    // Anodizing, Powder Coating, and other option-based services
+                                    return (
+                                        <div className="tech-options-grid">
+                                            {serviceOptions.map((opt, idx) => {
+                                                const name = typeof opt === 'string' ? opt : (opt.name || '');
+                                                const colorCode = getColorCode(name);
+                                                const isColor = colorCode !== null || colorKeywords.some(c => name.toLowerCase().includes(c));
+                                                const price = opt.price != null ? `$${opt.price}` : null;
+                                                return (
+                                                    <div key={idx} className="tech-card-premium">
+                                                        {isColor && (
+                                                            <div className="color-swatch-box">
+                                                                <div className="swatch-circle" style={{ backgroundColor: colorCode || '#6366f1', border: name.toLowerCase().includes('white') || name.toLowerCase().includes('clear') || name.toLowerCase().includes('natural') ? '1px solid #d1d5db' : 'none' }}></div>
+                                                            </div>
+                                                        )}
+                                                        <div className="tech-card-info">
+                                                            <span className="tech-card-label">{isColor ? 'Color' : 'Available Option'}</span>
+                                                            <h4 className="tech-card-title">{name}</h4>
+                                                            {price && <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>{price}</span>}
+                                                        </div>
+                                                        <div className="tech-card-corner">
+                                                            <Settings size={14} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
                     </motion.div>
@@ -387,8 +481,7 @@ const ServiceDetail = () => {
                         <p>Upload your CAD files and get instant pricing for {service.title.toLowerCase()} and more.</p>
                     </div>
                     <div className="cta-btns">
-                        <Link to="/get-instant-pricing" className="btn-services-solid large">GET INSTANT PRICING</Link>
-                        <Link to="/contact" className="btn-services-outline large">CONTACT AN ENGINEER</Link>
+                        <Link to="/get-instant-pricing" className="btn-services-solid large"><Zap size={18} />GET INSTANT PRICING</Link>
                     </div>
                 </div>
             </section>

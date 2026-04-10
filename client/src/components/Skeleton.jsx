@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Skeleton = ({ className = '', style = {}, variant = 'rectangle' }) => {
+const Skeleton = ({ className = '', style = {}, variant = 'rectangle', dark = false }) => {
   const getVariantStyles = () => {
     switch (variant) {
       case 'circle':
@@ -12,39 +12,39 @@ const Skeleton = ({ className = '', style = {}, variant = 'rectangle' }) => {
     }
   };
 
+  const themeClass = dark ? 'premium-skeleton-dark' : 'premium-skeleton';
+
   return (
     <>
       <style>{`
         .premium-skeleton {
           position: relative !important;
           overflow: hidden !important;
-          background-color: rgba(255, 255, 255, 0.06) !important;
+          background: linear-gradient(90deg, #f1f5f9 25%, #e8edf2 50%, #f1f5f9 75%) !important;
+          background-size: 200% 100% !important;
           display: inline-block !important;
           vertical-align: middle !important;
           min-height: 12px;
+          animation: ps-shimmer 1.4s infinite !important;
         }
-        .premium-skeleton::after {
-          content: '' !important;
-          position: absolute !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: 100% !important;
-          height: 100% !important;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.08),
-            transparent
-          ) !important;
-          animation: premium-shimmer 1.5s infinite !important;
+        .premium-skeleton-dark {
+          position: relative !important;
+          overflow: hidden !important;
+          background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%) !important;
+          background-size: 200% 100% !important;
+          display: inline-block !important;
+          vertical-align: middle !important;
+          min-height: 12px;
+          border-radius: 6px;
+          animation: ps-shimmer 1.4s infinite !important;
         }
-        @keyframes premium-shimmer {
-          100% { transform: translateX(100%); }
+        @keyframes ps-shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
         }
       `}</style>
       <div
-        className={`premium-skeleton ${className}`}
+        className={`${themeClass} ${className}`}
         style={{
           ...getVariantStyles(),
           ...style
@@ -55,4 +55,3 @@ const Skeleton = ({ className = '', style = {}, variant = 'rectangle' }) => {
 };
 
 export default Skeleton;
-

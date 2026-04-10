@@ -204,9 +204,22 @@ router.post('/admin/upload-image', authenticate, requireAdmin, metalUpload.singl
 // PUT /api/admin/metals/:slug — Update metal
 router.put('/admin/:slug', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { name, category_id, thickness, description, image_path,
+        let { name, category_id, thickness, description, image_path,
             quick_look, services, specifications, thickness_specs,
             about_section, faqs, custom_fields, display_order, pricing_config } = req.body;
+
+        // Mirror quick_look.thicknesses[n].services → thickness_specs[value].available_services
+        // so both admin views always read/write the same data
+        if (quick_look && Array.isArray(quick_look.thicknesses)) {
+            thickness_specs = thickness_specs || {};
+            quick_look.thicknesses.forEach(t => {
+                if (!t.value) return;
+                thickness_specs[t.value] = {
+                    ...(thickness_specs[t.value] || {}),
+                    available_services: (t.services || []).map(id => Number(id))
+                };
+            });
+        }
 
         const identifier = req.params.slug;
         const isId = /^\d+$/.test(identifier);

@@ -6,41 +6,34 @@ import { Plus, Trash2, Edit2, Search, FileText, Layers, X } from 'lucide-react';
 import { fetchServices, deleteService, fetchServicesWithUsage } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
+import Skeleton from '../../components/Skeleton';
 
+const widths = [170, 130, 150, 120, 140, 110, 160, 125, 145, 135];
 const TableSkeleton = () => (
     <>
-        {[...Array(8)].map((_, i) => (
-            <tr key={i}>
-                <td style={{ paddingLeft: `${20 + (i % 3 === 0 ? 0 : 24)}px` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {i % 3 !== 0 && <div className="skeleton-item" style={{ width: '8px', height: '8px', borderRadius: '2px', opacity: 0.3 }} />}
-                        <div className="skeleton-item" style={{ width: i % 2 === 0 ? '160px' : '120px', height: '18px', borderRadius: '4px' }} />
-                    </div>
-                </td>
-                <td>
-                    <div className="skeleton-item" style={{ width: '45px', height: '22px', borderRadius: '6px' }} />
-                </td>
-                <td>
-                    <div className="skeleton-item" style={{ width: i % 2 === 0 ? '240px' : '180px', height: '12px', borderRadius: '4px' }} />
-                </td>
-                <td>
-                    <div className="skeleton-item" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
-                </td>
-                <td>
-                    <div className="skeleton-item" style={{ width: '28px', height: '20px', borderRadius: '12px' }} />
-                </td>
-                <td>
-                    <div className="skeleton-item" style={{ width: '20px', height: '16px', borderRadius: '4px' }} />
-                </td>
-                <td>
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
-                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
-                        <div className="skeleton-item" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
-                    </div>
-                </td>
-            </tr>
-        ))}
+        {[...Array(10)].map((_, i) => {
+            const isParent = i % 4 === 0;
+            return (
+                <tr key={i}>
+                    <td style={{ paddingLeft: `${12 + (isParent ? 0 : 20)}px` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {!isParent && <Skeleton style={{ width: 8, height: 8, borderRadius: 2 }} />}
+                            <Skeleton style={{ width: widths[i], height: 15 }} />
+                        </div>
+                    </td>
+                    <td><Skeleton style={{ width: isParent ? 48 : 40, height: 22, borderRadius: 6 }} /></td>
+                    <td className="hide-on-mobile"><Skeleton style={{ width: i % 2 === 0 ? 220 : 160, height: 12 }} /></td>
+                    <td className="hide-on-mobile"><Skeleton style={{ width: 36, height: 36, borderRadius: 8 }} /></td>
+                    <td className="hide-on-mobile"><Skeleton style={{ width: 28, height: 20, borderRadius: 12 }} /></td>
+                    <td className="hide-on-mobile"><Skeleton style={{ width: 20, height: 15 }} /></td>
+                    <td>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            {[28, 28, 28, 28].map((w, j) => <Skeleton key={j} style={{ width: w, height: w, borderRadius: 8 }} />)}
+                        </div>
+                    </td>
+                </tr>
+            );
+        })}
     </>
 );
 

@@ -101,17 +101,25 @@ router.get('/:id/metals', async (req, res) => {
 
         const result = await db.query(`
             SELECT m.id, m.name, m.slug, m.image_path,
-                c.name as category_name,
+                mc.name as category_name,
                 m.services::jsonb @> to_jsonb($1::int) as metal_level,
                 EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(m.quick_look->'thicknesses') t
+                    SELECT 1 FROM jsonb_array_elements(
+                        CASE WHEN m.quick_look IS NOT NULL AND m.quick_look ? 'thicknesses'
+                             THEN m.quick_look->'thicknesses'
+                             ELSE '[]'::jsonb END
+                    ) t
                     WHERE t->'services' @> to_jsonb($1::int)
                 ) as thickness_level
             FROM metals m
-            LEFT JOIN categories c ON m.category_id = c.id
-            WHERE m.services::jsonb @> to_jsonb($1::int)
+            LEFT JOIN metal_categories mc ON m.category_id = mc.id
+            WHERE (m.services IS NOT NULL AND jsonb_typeof(m.services::jsonb) = 'array' AND m.services::jsonb @> to_jsonb($1::int))
                OR EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(m.quick_look->'thicknesses') t
+                    SELECT 1 FROM jsonb_array_elements(
+                        CASE WHEN m.quick_look IS NOT NULL AND m.quick_look ? 'thicknesses'
+                             THEN m.quick_look->'thicknesses'
+                             ELSE '[]'::jsonb END
+                    ) t
                     WHERE t->'services' @> to_jsonb($1::int)
                 )
             ORDER BY m.name
@@ -322,7 +330,7 @@ router.put('/admin/:id/metals', authenticate, requireAdmin, async (req, res) => 
                 services = services.filter(id => Number(id) !== numServiceId);
             }
 
-            // 3. Update thickness-level services
+            // 3. Update thickness-level services in quick_look.thicknesses[n].services (canonical)
             if (quick_look && Array.isArray(quick_look.thicknesses)) {
                 quick_look.thicknesses = quick_look.thicknesses.map(t => {
                     let tServices = t.services || [];
@@ -339,10 +347,23 @@ router.put('/admin/:id/metals', authenticate, requireAdmin, async (req, res) => 
                 });
             }
 
-            // 4. Save back
+            // 4. Save back — both quick_look (canonical) and thickness_specs (legacy mirror)
+            // Rebuild thickness_specs to mirror quick_look.thicknesses[n].services
+            const metalFullRes = await db.query('SELECT thickness_specs FROM metals WHERE id = $1', [ass.id]);
+            let thickness_specs = metalFullRes.rows[0]?.thickness_specs || {};
+            if (quick_look && Array.isArray(quick_look.thicknesses)) {
+                quick_look.thicknesses.forEach(t => {
+                    if (!t.value) return;
+                    thickness_specs[t.value] = {
+                        ...(thickness_specs[t.value] || {}),
+                        available_services: (t.services || []).map(id => Number(id))
+                    };
+                });
+            }
+
             await db.query(
-                'UPDATE metals SET services = $1, quick_look = $2 WHERE id = $3',
-                [JSON.stringify(services), JSON.stringify(quick_look), ass.id]
+                'UPDATE metals SET services = $1, quick_look = $2, thickness_specs = $3 WHERE id = $4',
+                [JSON.stringify(services), JSON.stringify(quick_look), JSON.stringify(thickness_specs), ass.id]
             );
         }
         await db.query('COMMIT');

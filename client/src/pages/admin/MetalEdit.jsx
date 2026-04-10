@@ -230,19 +230,6 @@ export default function MetalEdit() {
         if (!isNew) {
             fetchMetalBySlug(slug)
                 .then(data => {
-                    // ... (migration logic stays the same)
-                    const migratedSpecs = { ...(data.thickness_specs || {}) };
-                    const thicknesses = data.quick_look?.thicknesses || [];
-                    thicknesses.forEach(t => {
-                        if (t.value && t.services?.length > 0) {
-                            if (!migratedSpecs[t.value]) {
-                                migratedSpecs[t.value] = { available_services: t.services.map(id => Number(id)) };
-                            } else if (!migratedSpecs[t.value].available_services) {
-                                migratedSpecs[t.value].available_services = t.services.map(id => Number(id));
-                            }
-                        }
-                    });
-
                     setMetal({
                         name: data.name || '',
                         category_id: data.category_id || '',
@@ -251,7 +238,7 @@ export default function MetalEdit() {
                         image_path: data.image_path || '',
                         quick_look: data.quick_look || emptyMetal.quick_look,
                         specifications: data.specifications || {},
-                        thickness_specs: migratedSpecs,
+                        thickness_specs: data.thickness_specs || {},
                         about_section: data.about_section || null,
                         services: data.services || [],
                         faqs: data.faqs || [],
@@ -1038,33 +1025,31 @@ export default function MetalEdit() {
                                     ))}
                                 </div>
                                 {(() => {
-                                    const t = thicknesses[selectedServicesThicknessIdx];
+                                    const tIdx = selectedServicesThicknessIdx;
+                                    const t = thicknesses[tIdx];
                                     if (!t) return null;
-                                    const currentSpecs = metal.thickness_specs?.[t.value] || {};
-                                    const thicknessServices = currentSpecs.available_services || [];
+                                    // Canonical source: quick_look.thicknesses[n].services
+                                    const thicknessServices = (t.services || []).map(id => Number(id));
 
                                     return (
                                         <div className="admin-services-grid" style={{ marginTop: '20px' }}>
                                             {allServices.filter(svc => !svc.is_production).map(svc => {
-                                                const checked = (thicknessServices || []).map(id => Number(id)).includes(Number(svc.id));
+                                                const checked = thicknessServices.includes(Number(svc.id));
                                                 return (
                                                     <label key={svc.id} className={`admin-service-checkbox ${checked ? 'checked' : ''}`}>
                                                         <input
                                                             type="checkbox"
                                                             checked={checked}
                                                             onChange={() => {
-                                                                const numericServices = (thicknessServices || []).map(id => Number(id));
                                                                 const nextServices = checked
-                                                                    ? numericServices.filter(id => id !== Number(svc.id))
-                                                                    : [...numericServices, Number(svc.id)];
+                                                                    ? thicknessServices.filter(id => id !== Number(svc.id))
+                                                                    : [...thicknessServices, Number(svc.id)];
 
-                                                                set('thickness_specs', {
-                                                                    ...metal.thickness_specs,
-                                                                    [t.value]: {
-                                                                        ...currentSpecs,
-                                                                        available_services: nextServices
-                                                                    }
-                                                                });
+                                                                // Write back to quick_look.thicknesses[n].services
+                                                                const newThicknesses = ql.thicknesses.map((th, i) =>
+                                                                    i === tIdx ? { ...th, services: nextServices } : th
+                                                                );
+                                                                setQL({ ...ql, thicknesses: newThicknesses });
                                                             }}
                                                         />
                                                         <span>{svc.title}</span>

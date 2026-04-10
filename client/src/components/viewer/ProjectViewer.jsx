@@ -342,8 +342,10 @@ const ProjectViewer = ({
               Array.isArray(rawAxis) ? rawAxis[2] : (rawAxis.z || 0)
             ) : new THREE.Vector3(0, 1, 0);
             const axisNorm2 = axisVec2.clone().normalize();
+            const faceSign2 = cs.face === 'down' ? -1 : 1;
             const centerPos2 = new THREE.Vector3(pos.x, pos.y, pos.z);
-            const basePos2 = centerPos2.clone().add(axisNorm2.clone().multiplyScalar(partT2 * 0.5));
+            // Pull wide rim 0.5mm outside the surface so the cone is visibly proud
+            const basePos2 = centerPos2.clone().add(axisNorm2.clone().multiplyScalar(faceSign2 * (partT2 * 0.5 + 0.5)));
 
             const csMajorR = cs.major_dia ? parseFloat(cs.major_dia) * 25.4 / 2 : holeR2 * 1.5;
             const csMinorR = cs.minor_dia ? parseFloat(cs.minor_dia) * 25.4 / 2 : holeR2;
@@ -357,18 +359,21 @@ const ProjectViewer = ({
               modelParent2.add(m);
             };
 
-            const coneH2 = Math.max(csMajorR * 0.6, 2.0);
-            const coneCenter2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(0.5 - coneH2 / 2));
+            // Cap cone height to fit within material — wide rim at surface, narrow tip into material
+            const coneH2 = Math.min(Math.max(csMajorR * 0.6, 2.0), partT2 * 0.95);
+            const coneCenter2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign2 * coneH2 / 2));
             addCSMarker(
               new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH2, 32, 1, true),
               csConeMat, coneCenter2
             );
 
-            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-partT2 - 0.4));
+            // Back nut-ring — sits just outside the opposite face
+            // lookAt must be flipped by faceSign2 so BackSide material is visible from outside
+            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign2 * (partT2 + 1.5)));
             const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
             backRing.isHardwareMarker = true;
             backRing.position.copy(backPos2);
-            backRing.lookAt(backPos2.clone().add(axisNorm2)); // RingGeometry face=+Z, lookAt already makes it flat — no rotateX
+            backRing.lookAt(backPos2.clone().add(axisNorm2.clone().multiplyScalar(faceSign2)));
             modelParent2.add(backRing);
           });
         }

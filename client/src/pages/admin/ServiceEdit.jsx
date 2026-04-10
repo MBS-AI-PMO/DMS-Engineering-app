@@ -111,7 +111,7 @@ export default function ServiceEdit() {
         setLoadingHw(true);
         try {
             const res = await fetchHardwareItemsByType(typeId);
-            setHwItems(res.data || []);
+            setHwItems(Array.isArray(res) ? res : (res?.data || []));
         } catch (err) {
             toast('Failed to load hardware items: ' + err.message, 'error');
         } finally {
@@ -951,7 +951,7 @@ export default function ServiceEdit() {
                                                 [1, 2, 3, 4].map(i => <div key={i} className="skeleton-box" style={{ height: '100px', borderRadius: '12px' }} />)
                                             ) : hwTypes.length === 0 ? (
                                                 <div className="empty-options-state" style={{ gridColumn: '1 / -1' }}>No hardware types found.</div>
-                                            ) : hwTypes.map(type => (
+                                            ) : hwTypes.filter(type => !type.name?.toLowerCase().includes('countersink')).map(type => (
                                                 <div key={type.id} className="hardware-type-card" style={{ cursor: 'pointer', border: '1.5px solid #f1f5f9' }} onClick={() => setSelectedHwType(type)}>
                                                     <div className="hardware-type-card-header" style={{ padding: '16px' }}>
                                                         {type.image_path ? (

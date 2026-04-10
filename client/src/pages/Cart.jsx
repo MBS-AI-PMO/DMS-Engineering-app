@@ -85,11 +85,11 @@ const Cart = () => {
                     <div className="item-metadata-labels">
                       <span className="meta-tag">
                         <Box size={14} />
-                        {item.isUpdating ? <Skeleton style={{ width: '80px', height: '14px', marginLeft: '6px' }} /> : (item.configuration?.metal?.name || 'Standard Metal')}
+                        {item.isUpdating ? <Skeleton dark style={{ width: '80px', height: '14px', marginLeft: '6px' }} /> : (item.configuration?.metal?.name || 'Standard Metal')}
                       </span>
                       <span className="meta-tag secondary">
                         <TrendingDown size={14} />
-                        {item.isUpdating ? <Skeleton style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness`}
+                        {item.isUpdating ? <Skeleton dark style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness`}
                       </span>
 
                       {/* Detailed Sub-Services */}
@@ -137,7 +137,7 @@ const Cart = () => {
                           <Info size={16} />
                         </button>
                         <span className="qty-value">
-                          {item.isUpdating ? <Skeleton style={{ width: '20px', height: '24px' }} /> : item.quantity}
+                          {item.isUpdating ? <Skeleton dark style={{ width: '20px', height: '24px' }} /> : item.quantity}
                         </span>
                         <button
                           className="qty-btn"
@@ -160,7 +160,7 @@ const Cart = () => {
                   <div className="item-pricing-summary">
                     <div className="price-unit-wrap">
                       {item.isUpdating ? (
-                        <Skeleton style={{ width: '80px', height: '16px' }} />
+                        <Skeleton dark style={{ width: '80px', height: '16px' }} />
                       ) : (
                         item.pricing?.baseUnit > item.pricing?.total ? (
                           <>
@@ -179,7 +179,7 @@ const Cart = () => {
                       )}
                     </div>
                     <span className="price-total">
-                      {item.isUpdating ? <Skeleton style={{ width: '100px', height: '28px' }} /> : `$${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}`}
+                      {item.isUpdating ? <Skeleton dark style={{ width: '100px', height: '28px' }} /> : `$${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}`}
                     </span>
 
                     {/* Discount Badge */}
@@ -231,7 +231,7 @@ const Cart = () => {
                 <div className="summary-row total">
                   <span>Estimate Total</span>
                   <span>
-                    {cartItems.some(i => i.isUpdating) ? <Skeleton style={{ width: '100px', height: '24px' }} /> : `$${cartTotal.toFixed(2)}`}
+                    {cartItems.some(i => i.isUpdating) ? <Skeleton dark style={{ width: '100px', height: '24px' }} /> : `$${cartTotal.toFixed(2)}`}
                   </span>
                 </div>
 

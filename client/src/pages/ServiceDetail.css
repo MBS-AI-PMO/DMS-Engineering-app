@@ -626,8 +626,8 @@
 }
 
 .large {
-    padding: 18px 32px;
-    font-size: 1.1rem;
+    padding: 18px 40px;
+    font-size: 1rem;
 }
 
 @media (max-width: 1024px) {

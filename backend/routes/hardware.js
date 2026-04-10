@@ -38,6 +38,31 @@ const upload = multer({
 
 // ── Public ───────────────────────────────────────────────
 
+// GET /api/hardware/all — all types with their items embedded (for service detail page)
+router.get('/all', async (req, res) => {
+    try {
+        const typesRes = await db.query(`
+            SELECT ht.* FROM hardware_types ht
+            WHERE LOWER(ht.name) NOT LIKE '%countersink%'
+            ORDER BY ht.id
+        `);
+        const types = typesRes.rows;
+
+        const enriched = await Promise.all(types.map(async (t) => {
+            const itemsRes = await db.query(
+                `SELECT * FROM hardware_items WHERE hardware_type_id = $1 ORDER BY id`,
+                [t.id]
+            );
+            return { ...t, items: itemsRes.rows };
+        }));
+
+        res.json({ success: true, data: enriched.filter(t => t.items.length > 0) });
+    } catch (err) {
+        console.error('Error fetching all hardware:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch hardware' });
+    }
+});
+
 // GET /api/hardware/types — list all 4 types with item count
 router.get('/types', async (req, res) => {
     try {

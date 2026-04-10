@@ -1224,7 +1224,6 @@ const InstantPricing = () => {
 
         // ── Countersink markers ──────────────────────────────────────────────
         if (isCountersinkingActive || hasCSAssigned) {
-          // DoubleSide so inner funnel surface is visible from above (countersink appearance)
           const csConeMat = new THREE.MeshStandardMaterial({
             color: 0x7c3aed, metalness: 0.4, roughness: 0.3, side: THREE.DoubleSide,
             emissive: 0x4c1d95, emissiveIntensity: 0.35,
@@ -1246,9 +1245,10 @@ const InstantPricing = () => {
 
             const axisVec2 = hole.axis ? new THREE.Vector3(...hole.axis) : new THREE.Vector3(0, 1, 0);
             const axisNorm2 = axisVec2.clone().normalize();
-            // Front surface center
+            const faceSign = cs.face === 'down' ? -1 : 1;
+            // Pull wide rim 0.5mm outside the surface so the cone is visibly proud
             const basePos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(axisNorm2.clone().multiplyScalar(partT * 0.5));
+              .add(axisNorm2.clone().multiplyScalar(faceSign * (partT * 0.5 + 0.5)));
 
             const addCSMesh = (geo, m, center) => {
               const mesh = new THREE.Mesh(geo, m);
@@ -1260,18 +1260,21 @@ const InstantPricing = () => {
               holeMarkersRef.current.push(mesh);
             };
 
-            const coneH = Math.max(csMajorR * 0.6, 2.0);
-            const coneCenter = basePos2.clone().add(axisNorm2.clone().multiplyScalar(0.5 - coneH / 2));
+            // Cap cone height to fit within material — wide rim at surface, narrow tip into material
+            const coneH = Math.min(Math.max(csMajorR * 0.6, 2.0), partT * 0.95);
+            const coneCenter = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign * coneH / 2));
             addCSMesh(
               new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH, 32, 1, true),
               csConeMat, coneCenter
             );
 
-            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-partT - 0.4));
+            // Back nut-ring — sits just outside the opposite face
+            // lookAt must point away from viewer (faceSign) so BackSide material is visible from outside
+            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign * (partT + 1.5)));
             const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
             backRing.isHardwareMarker = true;
             backRing.position.copy(backPos2);
-            backRing.lookAt(backPos2.clone().add(axisNorm2)); // RingGeometry face=+Z, lookAt already makes it flat — no rotateX
+            backRing.lookAt(backPos2.clone().add(axisNorm2.clone().multiplyScalar(faceSign)));
             modelParent.add(backRing);
             holeMarkersRef.current.push(backRing);
           });
@@ -2405,8 +2408,27 @@ const InstantPricing = () => {
                         <p className="text-muted small mb-4">Enhance your part with extra processes</p>
                         <div className="d-flex flex-column gap-3">
                           {allServices.filter(svc => {
+                            // Must be a sub-service of the selected production service
                             const parentIds = (svc.parent_ids || []).map(id => Number(id));
-                            return parentIds.includes(Number(selectedProductionService?.id));
+                            if (!parentIds.includes(Number(selectedProductionService?.id))) return false;
+
+                            // Filter by what this metal+thickness actually supports
+                            if (selectedMetal) {
+                              // Collect allowed service IDs: from selected thickness if chosen, else union of all thicknesses
+                              const allowedIds = new Set();
+                              (selectedMetal.services || []).forEach(id => allowedIds.add(Number(id)));
+                              if (selectedThickness) {
+                                const t = (selectedMetal.quick_look?.thicknesses || []).find(t => String(t.value) === String(selectedThickness));
+                                (t?.services || []).forEach(id => allowedIds.add(Number(id)));
+                              } else {
+                                (selectedMetal.quick_look?.thicknesses || []).forEach(t => {
+                                  (t.services || []).forEach(id => allowedIds.add(Number(id)));
+                                });
+                              }
+                              if (allowedIds.size > 0 && !allowedIds.has(Number(svc.id))) return false;
+                            }
+
+                            return true;
                           }).map(svc => {
                             const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
                             const title = svc.title.toLowerCase();
@@ -2685,23 +2707,32 @@ const InstantPricing = () => {
                           </div>
 
                           {/* ── Discount row ── */}
-                          {priceEstimate?.breakdown?.discount_percent > 0 && (
-                            <div className="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 mb-2" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                              <div className="d-flex flex-column">
-                                <span style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.82rem' }}>
-                                  Quantity Discount ({priceEstimate.breakdown.discount_percent}% off)
-                                </span>
-                                <span style={{ color: 'rgba(74,222,128,0.7)', fontSize: '10px' }}>
-                                  {priceEstimate.breakdown.applied_tier?.name || `${quantity} units`}
-                                </span>
+                          {priceEstimate?.breakdown?.discount_percent > 0 && (() => {
+                            const discountPct = parseFloat(priceEstimate.breakdown.discount_percent) / 100;
+                            const extraPerPiece =
+                              Object.values(selectedTaps).reduce((a, t) => a + (parseFloat(t.price) || 0), 0) +
+                              Object.values(selectedHardware).reduce((a, { item }) => a + (parseFloat(item?.price) || 0), 0) +
+                              Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0);
+                            const fullUnitPrice = (priceEstimate.breakdown.unit_total || 0) + extraPerPiece;
+                            const totalDiscount = fullUnitPrice * discountPct * quantity;
+                            return (
+                              <div className="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 mb-2" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                                <div className="d-flex flex-column">
+                                  <span style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.82rem' }}>
+                                    Quantity Discount ({priceEstimate.breakdown.discount_percent}% off)
+                                  </span>
+                                  <span style={{ color: 'rgba(74,222,128,0.7)', fontSize: '10px' }}>
+                                    {priceEstimate.breakdown.applied_tier?.name || `${quantity} units`}
+                                  </span>
+                                </div>
+                                {isCalculatingPrice ? <PriceSkeleton /> : (
+                                  <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '1.05rem' }}>
+                                    −${totalDiscount.toFixed(2)}
+                                  </span>
+                                )}
                               </div>
-                              {isCalculatingPrice ? <PriceSkeleton /> : (
-                                <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '1.05rem' }}>
-                                  −${(priceEstimate.breakdown.discount_amount || 0).toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           <div className="text-center">
                             <span className="small text-white fw-bold text-uppercase letter-spacing-1 d-block mb-1">Total Project Estimate</span>
@@ -2710,12 +2741,15 @@ const InstantPricing = () => {
                                 <>
                                   <span className="fs-4 text-danger fw-black">$</span>
                                   <strong className="fs-huge fw-black text-danger">
-                                    {(
-                                      (priceEstimate?.total_price || 0) +
-                                      Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0) +
-                                      Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0) +
-                                      Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0)
-                                    ).toFixed(2)}
+                                    {(() => {
+                                      const discountPct = parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100;
+                                      const extraPerPiece =
+                                        Object.values(selectedTaps).reduce((a, t) => a + (parseFloat(t.price) || 0), 0) +
+                                        Object.values(selectedHardware).reduce((a, { item }) => a + (parseFloat(item?.price) || 0), 0) +
+                                        Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0);
+                                      const fullUnitPrice = (priceEstimate?.breakdown?.unit_total || 0) + extraPerPiece;
+                                      return (fullUnitPrice * (1 - discountPct) * quantity).toFixed(2);
+                                    })()}
                                   </strong>
                                 </>
                               )}
@@ -3290,9 +3324,26 @@ const InstantPricing = () => {
                       <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Select a countersink profile for this hole</span>
                     </div>
                   </div>
-                  <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8' }}>
-                    <X size={16} />
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {assignedCS && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', color: '#94a3b8' }}>Insert Side</span>
+                        <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                          <button
+                            onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...prev[activeCSHole.id], face: 'up' } }))}
+                            style={{ border: 'none', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedCS?.face !== 'down' ? '#7c3aed' : '#fff', color: assignedCS?.face !== 'down' ? '#fff' : '#64748b' }}
+                          >↑ TOP</button>
+                          <button
+                            onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...prev[activeCSHole.id], face: 'down' } }))}
+                            style={{ border: 'none', borderLeft: '1px solid #e2e8f0', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedCS?.face === 'down' ? '#7c3aed' : '#fff', color: assignedCS?.face === 'down' ? '#fff' : '#64748b' }}
+                          >↓ BOTTOM</button>
+                        </div>
+                      </div>
+                    )}
+                    <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8' }}>
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -3356,7 +3407,7 @@ const InstantPricing = () => {
                             const isChosen = assignedCS?.name === opt.name;
                             return (
                               <motion.button key={idx}
-                                onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...opt, hole: activeCSHole } }))}
+                                onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...opt, hole: activeCSHole, face: prev[activeCSHole.id]?.face || 'up' } }))}
                                 whileTap={{ scale: 0.98 }} whileHover={{ y: -2 }}
                                 style={{ border: 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s', background: isChosen ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#fff', boxShadow: isChosen ? '0 8px 24px rgba(124,58,237,0.3), 0 0 0 1.5px #7c3aed' : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)', color: isChosen ? '#fff' : '#1e293b' }}
                               >

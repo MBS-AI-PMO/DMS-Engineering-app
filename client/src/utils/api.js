@@ -225,6 +225,11 @@ export async function fetchHardwareTypes() {
     return request('/hardware/types');
 }
 
+export async function fetchAllHardwareWithItems() {
+    const { data } = await request('/hardware/all');
+    return data;
+}
+
 export async function fetchHardwareItemsByType(typeId) {
     const { data } = await request(`/hardware/types/${typeId}/items`);
     return data;
