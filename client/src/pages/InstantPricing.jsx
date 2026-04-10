@@ -1108,8 +1108,8 @@ const InstantPricing = () => {
             // Single hole: fall back to bounding-box thickness axis
             const _ta = modelOriginalDataRef.current?.thicknessAxis || 'y';
             var hwThicknessVec = _ta === 'x' ? new THREE.Vector3(1, 0, 0)
-                               : _ta === 'z' ? new THREE.Vector3(0, 0, 1)
-                               : new THREE.Vector3(0, 1, 0);
+              : _ta === 'z' ? new THREE.Vector3(0, 0, 1)
+                : new THREE.Vector3(0, 1, 0);
           }
         }
 
@@ -1175,8 +1175,8 @@ const InstantPricing = () => {
             // its real size on top — the hole just appears smaller to the viewer.
             {
               const hwOuterR = type === 2 ? barrelR
-                             : type === 1 ? holeR * 0.5
-                             : r * 1.35;
+                : type === 1 ? holeR * 0.5
+                  : r * 1.35;
               if (hwOuterR < holeR) {
                 // Fill the gap between hardware edge and hole edge with panel color
                 const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
@@ -2938,22 +2938,28 @@ const InstantPricing = () => {
                         {isExpanded && (
                           <div className="ps-2 pt-1">
                             {/* Tap All button */}
-                            {group.holes.length > 1 && bestTap && (
-                              <button
-                                className="btn btn-sm w-100 mb-2 rounded-3 fw-bold border-danger text-danger bg-white"
-                                style={{ fontSize: '12px' }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedTaps(prev => {
-                                    const next = { ...prev };
-                                    group.holes.forEach(h => { next[h.id] = { ...bestTap, hole: h }; });
-                                    return next;
-                                  });
-                                }}
-                              >
-                                Tap all {group.holes.length} &rarr; {bestTap.name}
-                              </button>
-                            )}
+                            {group.holes.length > 1 && (() => {
+                              const sourceTap = selectedTaps[activeTapHole?.id];
+                              const theTap = sourceTap || bestTap;
+                              if (!theTap) return null;
+
+                              return (
+                                <button
+                                  className="btn btn-sm w-100 mb-2 rounded-3 fw-bold border-danger text-danger bg-white"
+                                  style={{ fontSize: '12px' }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setSelectedTaps(prev => {
+                                      const next = { ...prev };
+                                      group.holes.forEach(h => { next[h.id] = { ...theTap, hole: h }; });
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  Tap all {group.holes.length} &rarr; {theTap.name}
+                                </button>
+                              );
+                            })()}
                             {/* Individual holes */}
                             {group.holes.map(hole => {
                               const isTapped = !!selectedTaps[hole.id];
@@ -3163,14 +3169,35 @@ const InstantPricing = () => {
 
                           {isExpanded && (
                             <div style={{ paddingLeft: 4, paddingTop: 4 }}>
-                              {group.holes.length > 1 && firstItem && (
-                                <button
-                                  style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed ${activeType.color}60`, color: activeType.color, cursor: 'pointer', marginBottom: 4, transition: 'all 0.15s' }}
-                                  onClick={e => { e.stopPropagation(); setSelectedHardware(prev => { const next = { ...prev }; group.holes.forEach(h => { next[h.id] = { item: firstItem, hole: h, typeId: activeHwType, face: 'up' }; }); return next; }); }}
-                                >
-                                  Apply all &rarr; {firstItem.name}
-                                </button>
-                              )}
+                              {group.holes.length > 1 && (() => {
+                                const selectedInGroup = group.holes.find(h => h.id === activeHwHole?.id);
+                                const sourceHw = selectedHardware[activeHwHole?.id];
+                                const theItem = sourceHw?.item || activeItems[0];
+                                if (!theItem) return null;
+
+                                return (
+                                  <button
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed ${activeType.color}60`, color: activeType.color, cursor: 'pointer', marginBottom: 4, transition: 'all 0.15s' }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setSelectedHardware(prev => {
+                                        const next = { ...prev };
+                                        group.holes.forEach(h => {
+                                          next[h.id] = {
+                                            item: theItem,
+                                            hole: h,
+                                            typeId: sourceHw?.typeId || activeHwType,
+                                            face: sourceHw?.face || 'up'
+                                          };
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    Apply all &rarr; {theItem.name}
+                                  </button>
+                                );
+                              })()}
                               {group.holes.map(hole => {
                                 const assigned = selectedHardware[hole.id];
                                 const isActive = activeHwHole?.id === hole.id;
@@ -3408,6 +3435,33 @@ const InstantPricing = () => {
                           </div>
                           {isExpanded && (
                             <div style={{ paddingLeft: 8, paddingTop: 4 }}>
+                              {group.holes.length > 1 && (() => {
+                                const sourceCS = selectedCountersinks[activeCSHole?.id];
+                                const theCS = sourceCS || csOptions[0];
+                                if (!theCS) return null;
+
+                                return (
+                                  <button
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed #7c3aed60`, color: '#7c3aed', cursor: 'pointer', marginBottom: 6, transition: 'all 0.15s' }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setSelectedCountersinks(prev => {
+                                        const next = { ...prev };
+                                        group.holes.forEach(h => {
+                                          next[h.id] = {
+                                            ...theCS,
+                                            hole: h,
+                                            face: sourceCS?.face || 'up'
+                                          };
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    Apply all &rarr; {theCS.name}
+                                  </button>
+                                );
+                              })()}
                               {group.holes.map(hole => {
                                 const isCS = !!selectedCountersinks[hole.id];
                                 const isActive = activeCSHole?.id === hole.id;
