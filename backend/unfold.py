@@ -37,6 +37,9 @@ from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 from OCP.gp import gp_Trsf, gp_Ax1, gp_Pnt, gp_Dir, gp_Vec
 
+# Default K-factor for neutral fiber calculation (0.44 = industry standard mild steel)
+K_FACTOR = 0.44
+
 
 def _get_faces(shape):
     """Extract all faces from the shape."""
@@ -225,6 +228,108 @@ def _edge_direction(edge_shape):
     if length < 1e-9:
         return None
     return delta / length
+
+
+def _estimate_thickness(faces, face_info, face_areas):
+    """
+    Estimate sheet metal thickness as the distance between the two largest
+    anti-parallel (top/bottom skin) planar faces.  Returns 0.0 if unknown.
+    """
+    planar = [
+        (i, info, face_areas[i])
+        for i, info in enumerate(face_info)
+        if info[0] == "plane"
+    ]
+    planar.sort(key=lambda x: -x[2])
+
+    for idx_i, (fi, info_i, _) in enumerate(planar[:12]):
+        n_i = _normalize(info_i[1])
+        p_i = info_i[2]
+        for fi2, info_j, _ in planar[idx_i + 1:12]:
+            n_j = _normalize(info_j[1])
+            if np.dot(n_i, n_j) < -0.99:            # anti-parallel normals → opposite skins
+                d = abs(float(np.dot(n_i, info_j[2] - p_i)))
+                if d > 0.05:
+                    return d
+    return 0.0
+
+
+def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map):
+    """
+    Construct the hierarchical bend tree that HierarchicalProjectViewer expects.
+
+    Node schema:
+      {
+        id, parentId, children,
+        initialNormal,
+        isCoplanar,
+        bendAxis: {p0, p1, length},   # only on bent children
+        initialAngle,                  # degrees, only on bent children
+      }
+    """
+    nodes = {}
+    root = {
+        "id": seed,
+        "parentId": None,
+        "children": [],
+        "initialNormal": _normalize(face_info[seed][1]).tolist(),
+        "isCoplanar": False,
+    }
+    nodes[seed] = root
+
+    visited = {seed}
+    queue = [seed]
+
+    while queue:
+        cur = queue.pop(0)
+        cur_node = nodes[cur]
+
+        for conn in planar_adj.get(cur, []):
+            nb = conn["neighbor"]
+            if nb in visited:
+                continue
+            visited.add(nb)
+            queue.append(nb)
+
+            _, nb_normal, _ = face_info[nb]
+            child = {
+                "id": nb,
+                "parentId": cur,
+                "children": [],
+                "initialNormal": _normalize(nb_normal).tolist(),
+                "isCoplanar": conn["type"] == "coplanar",
+            }
+
+            if conn["type"] == "bend":
+                shared_edges = conn.get("edges_a", conn.get("edges", []))
+                p0_coords = p1_coords = None
+                if shared_edges:
+                    edge_shape = TopoDS.Edge_s(edge_map.FindKey(shared_edges[0]))
+                    ep1, ep2 = _edge_endpoints(edge_shape)
+                    if ep1 is not None:
+                        p0_coords = [round(float(v), 4) for v in ep1]
+                        p1_coords = [round(float(v), 4) for v in ep2]
+
+                if p0_coords is None:
+                    # Fallback: construct axis stub from cylinder axis + face centroids
+                    axis_dir = _normalize(conn["axis"])
+                    mid = (_face_centroid(faces[cur]) + _face_centroid(faces[nb])) / 2.0
+                    half = axis_dir * 50.0
+                    p0_coords = (mid - half).tolist()
+                    p1_coords = (mid + half).tolist()
+
+                length = float(np.linalg.norm(np.array(p1_coords) - np.array(p0_coords)))
+                child["bendAxis"] = {
+                    "p0": p0_coords,
+                    "p1": p1_coords,
+                    "length": round(length, 4),
+                }
+                child["initialAngle"] = round(math.degrees(conn["angle"]), 2)
+
+            nodes[nb] = child
+            cur_node["children"].append(child)
+
+    return root
 
 
 def _compute_bend_angle(face_a_info, face_b_info, cyl_info):
@@ -645,6 +750,9 @@ def unfold_step_file(filepath: str) -> dict:
 
     seed = max(planar_faces, key=lambda i: face_areas[i])
 
+    # Estimate sheet thickness once (used by K-factor correction)
+    thickness_est = _estimate_thickness(faces, face_info, face_areas)
+
     # Tessellate all planar faces
     face_meshes = {}
     for fi in planar_faces:
@@ -709,6 +817,18 @@ def unfold_step_file(filepath: str) -> dict:
                             _, seed_normal, _ = face_info[seed]
                             seed_n_unfolded = face_transforms[seed][0] @ seed_normal
                             if abs(np.dot(n_nb_unfolded, seed_n_unfolded)) > 0.9:
+                                # K-factor correction: shift flange by (BA - inner_arc)
+                                if thickness_est > 0:
+                                    inner_r = conn.get("radius", 0.0)
+                                    ba = angle * (inner_r + K_FACTOR * thickness_est)
+                                    correction = ba - angle * inner_r  # = angle * K_FACTOR * t
+                                    centroid_nb = _face_centroid(faces[nb])
+                                    c_unfolded = new_R @ centroid_nb + new_t
+                                    kdir = c_unfolded - pivot
+                                    kdir[2] = 0.0
+                                    klen = np.linalg.norm(kdir)
+                                    if klen > 1e-6:
+                                        new_t = new_t + (correction / klen) * kdir
                                 face_transforms[nb] = (new_R, new_t)
                                 break
                         else:
@@ -876,6 +996,23 @@ def unfold_step_file(filepath: str) -> dict:
     else:
         width = height = thickness = 0.0
 
+    # Use thickness_est if the flat Z range is trivially zero (all faces projected flat)
+    if thickness < 0.01 and thickness_est > 0:
+        thickness = thickness_est
+
+    # 12. Build hierarchical bend tree + 3D face meshes for HierarchicalProjectViewer
+    bend_tree = _build_bend_tree(seed, planar_adj, face_info, faces, edge_map)
+
+    # 3D tessellations keyed by string face-id (matches JS side)
+    face_meshes_3d = {}
+    for fi, (verts, tris) in face_meshes.items():
+        if verts.shape[0] == 0:
+            continue
+        face_meshes_3d[str(fi)] = {
+            "vertices": verts.flatten().tolist(),
+            "indices": tris.flatten().tolist(),
+        }
+
     return {
         "flatVertices": all_flat_verts,
         "cutEdges": all_cut_edges,
@@ -887,7 +1024,11 @@ def unfold_step_file(filepath: str) -> dict:
         "bbox": {"width": width, "height": height},
         "totalPerimeter": round(float(total_cut_perimeter), 4),
         "pierceCount": int(pierce_count),
-        "bends": bend_summary
+        "bends": bend_summary,
+        # 3D viewer data
+        "bendTree": bend_tree,
+        "faceMeshes": face_meshes_3d,
+        "baseFaceId": seed,
     }
 
 def export_unfolded_dxf(input_path, output_path):

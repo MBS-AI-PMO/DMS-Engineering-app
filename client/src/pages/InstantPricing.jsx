@@ -18,8 +18,11 @@ import { fetchServices, fetchMetals, calculatePrice, fetchPublicDiscounts, fetch
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import BendingModal from '../components/modals/BendingModal';
+import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
+import BendPanel from '../components/viewer/BendPanel';
 
-const BACKEND_URL = import.meta.env.VITE_PYTHON_API_URL;
+const BACKEND_URL = import.meta.env.VITE_API_URL;
 
 const HW_TYPES = [
   { id: 3, label: 'Nut', color: '#B8860B', specs: (item) => [item.length && `T ${item.length}"`, item.base_width && `E ${item.base_width}"`] },
@@ -111,6 +114,7 @@ const InstantPricing = () => {
   const [dxfTechData, setDxfTechData] = useState(null);
   const [backendError, setBackendError] = useState(null);
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
+  const unfoldAbortControllerRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
@@ -133,6 +137,8 @@ const InstantPricing = () => {
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
   const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
   const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
+  const [isBendingModalOpen, setIsBendingModalOpen] = useState(false);
+  const [showBendPanel, setShowBendPanel] = useState(false);
   const activeFinishKey = Object.keys(selectedFinishColors || {})[0];
   const activeFinishColor = selectedFinishColors?.[activeFinishKey] || null;
   const isFinishPowderCoating = selectedAdditionalServices.find(s => s.id?.toString() === activeFinishKey?.toString())?.title?.toLowerCase().includes('powder coat');
@@ -156,6 +162,19 @@ const InstantPricing = () => {
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [isModelFadedManually, setIsModelFadedManually] = useState(false);
+  const [bendTree, setBendTree] = useState(null);
+  const [selectedBends, setSelectedBends] = useState({});
+
+  const bendList = useMemo(() => {
+    const list = [];
+    if (!bendTree) return list;
+    const flatten = (node) => {
+      if (node.bendAxis) list.push(node);
+      if (node.children) node.children.forEach(flatten);
+    };
+    flatten(bendTree);
+    return list;
+  }, [bendTree]);
   const [metalSearch, setMetalSearch] = useState('');
 
   const parsedDxfRef = useRef(null);
@@ -247,10 +266,11 @@ const InstantPricing = () => {
     const tapCost = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
     const hardwareCost = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
     const csCost = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
-    const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost + csCost;
+    const bendSvc = allServices.find(s => s.title.toLowerCase().includes('bend'));
+    const bendCost = (selectedAdditionalServices.some(s => s.id === bendSvc?.id)) ? (parseFloat(bendSvc?.base_price || 0) * (bendList?.length || 0)) : 0;
+    const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost + csCost + bendCost;
 
-    // Use anchored Qty 1 price if available, otherwise fallback to current unit price
-    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity) + (csCost / quantity);
+    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity) + (csCost / quantity) + (bendCost / quantity);
 
     const config = {
       productionService: selectedProductionService,
@@ -453,7 +473,7 @@ const InstantPricing = () => {
           technical_data: backendData ? {
             totalPerimeter: backendData.totalPerimeter,
             pierceCount: backendData.pierceCount,
-            bends: backendData.bends
+            bends: backendData.bends || []
           } : dxfTechData ? {
             totalPerimeter: dxfTechData.totalPerimeter,
             pierceCount: dxfTechData.pierceCount,
@@ -1463,29 +1483,60 @@ const InstantPricing = () => {
   }, [detectedHoles, activeTapHole, modelLoadCount, isTappingActive]);
 
   const handleUnfold = useCallback(async () => {
-    if (!selectedFile || is2DFile(selectedFile.file.name) || !isStepFile(selectedFile.file.name) || backendData) { if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); } return; }
+    // Only return early if we have BOTH backendData AND the bendTree analysis (if it's a STEP file)
+    const needsBending = isStepFile(selectedFile?.file?.name);
+    if (!selectedFile || is2DFile(selectedFile.file.name) || (backendData && (!needsBending || bendTree))) {
+      if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); }
+      return;
+    }
+
+    // Abort existing call if any
+    if (unfoldAbortControllerRef.current) unfoldAbortControllerRef.current.abort();
+    unfoldAbortControllerRef.current = new AbortController();
+
     setIsLoadingUnfold(true); setBackendError(null);
     const fd = new FormData(); fd.append('file', selectedFile.file);
     try {
-      const r = await fetch(`${BACKEND_URL}/unfold`, { method: 'POST', body: fd });
+      const r = await fetch(`${BACKEND_URL}/api/unfold`, {
+        method: 'POST',
+        body: fd,
+        signal: unfoldAbortControllerRef.current.signal
+      });
       if (!r.ok) throw new Error('Unfold failed');
-      const d = await r.json(); if (d.flatVertices?.length) { setBackendData(d); }
+      const d = await r.json();
+      if (d.success) {
+        setBendTree(d.bendTree);
+        setBackendData(d); // Keep backendData for other compatibility
+
+        // Initialize selectedBends with default values (90 degrees)
+        const initial = {};
+        const flatten = (node) => {
+          if (node.bendAxis) {
+            initial[node.id] = { angle: 90, direction: 'up' };
+          }
+          if (node.children) node.children.forEach(flatten);
+        };
+        flatten(d.bendTree);
+        setSelectedBends(initial);
+      }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.warn('Error during unfold stage:', err);
       setBackendError(err.message);
-    } finally { setIsLoadingUnfold(false); }
-  }, [selectedFile, backendData]);
+    } finally {
+      setIsLoadingUnfold(false);
+      unfoldAbortControllerRef.current = null;
+    }
+  }, [selectedFile, backendData, bendTree]);
 
-  // ── Auto-unfold STEP files when Laser Cutting is the production service ───
-  // The laser engine needs totalPerimeter + pierceCount which only come from the
-  // Python unfold. Trigger it automatically instead of waiting for manual click.
+  // ── Auto-unfold every STEP file on upload ────────────────────────────────
+  // Triggers bend analysis + flat-pattern generation for all STEP files so the
+  // 2D view, live bending panel, and laser pricing all work without manual action.
   useEffect(() => {
     if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
-    if (!selectedProductionService) return;
-    if (!selectedProductionService.title?.toLowerCase().includes('laser')) return;
     if (backendData || isLoadingUnfold) return;
     handleUnfold();
-  }, [selectedProductionService, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setAxisCamera = (axis) => {
     const v = viewerInstance.current?.GetViewer();
@@ -1514,8 +1565,12 @@ const InstantPricing = () => {
         45
       ));
       v.SetProjectionMode(OV.ProjectionMode.Orthographic);
-      setTimeout(() => v.FitToWindow(), 10);
-      setTimeout(() => { v.FitToWindow(); v.Render(); }, 150);
+      if (v && typeof v.FitToWindow === 'function') {
+        setTimeout(() => v.FitToWindow(), 10);
+        setTimeout(() => { v.FitToWindow(); v.Render(); }, 150);
+      } else if (v && typeof v.Render === 'function') {
+        v.Render();
+      }
     }
   };
 
@@ -1793,6 +1848,24 @@ const InstantPricing = () => {
                           <button key={ax} className={`ip-axis-btn ${activeAxis === ax ? 'active' : ''}`} onClick={() => { setActiveAxis(ax); setAxisCamera(ax); }}>{ax}</button>
                         ))}
                     </div>
+                    {bendTree && viewMode === '3d' && (
+                      <button
+                        className={`ip-pill-btn${showBendPanel ? ' active' : ''}`}
+                        onClick={() => setShowBendPanel(v => !v)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Layers size={11} />
+                        Bends
+                        <span style={{
+                          background: showBendPanel ? '#fff' : '#ef4444',
+                          color: showBendPanel ? '#ef4444' : '#fff',
+                          borderRadius: 8, padding: '1px 5px',
+                          fontSize: 9, fontWeight: 800, minWidth: 14, textAlign: 'center'
+                        }}>
+                          {(() => { let n = 0; const ct = (node) => { if (node.bendAxis) n++; (node.children || []).forEach(ct); }; ct(bendTree); return n; })()}
+                        </span>
+                      </button>
+                    )}
                   </div>
                   <div className="ip-pill-toggle">
                     <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
@@ -1819,7 +1892,30 @@ const InstantPricing = () => {
                       <AlertTriangle size={12} />{dxfError || backendError || holeDetectionError}
                     </div>
                   )}
-                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
+                  {viewMode === '3d' && currentIsStep && (
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      {/* When bend data is ready, show live-bending viewer; fall back to OV viewer */}
+                      {backendData?.faceMeshes && bendTree ? (
+                        <HierarchicalProjectViewer
+                          bendTree={bendTree}
+                          faceMeshes={backendData.faceMeshes}
+                          selectedBends={selectedBends}
+                          activeBendId={null}
+                        />
+                      ) : (
+                        <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />
+                      )}
+                      {/* Inline bend configuration panel */}
+                      {showBendPanel && bendTree && (
+                        <BendPanel
+                          bendTree={bendTree}
+                          selectedBends={selectedBends}
+                          onUpdateBend={(id, val) => setSelectedBends(prev => ({ ...prev, [id]: val }))}
+                          onClose={() => setShowBendPanel(false)}
+                        />
+                      )}
+                    </div>
+                  )}
                   {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{ highlightBends }} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Preparing Pattern...</div>)}
                   {currentIsDxf && <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>{dxfSvg ? <div dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
                 </div>
@@ -2599,6 +2695,9 @@ const InstantPricing = () => {
                                 } else if (isCS) {
                                   if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); setActiveHwHole(null); if (detectedHoles.length > 0) setActiveCSHole(detectedHoles[0]); }
                                   else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedCountersinks({}); setActiveCSHole(null); }
+                                } else if (title.includes('bend')) {
+                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); handleUnfold(); setIsBendingModalOpen(true); }
+                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setBendTree(null); setBackendData(null); }
                                 } else {
                                   setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
                                 }
@@ -2703,6 +2802,28 @@ const InstantPricing = () => {
                                     <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }}>CHANGE</button>
                                   </div>
                                 )}
+
+                                {isSelected && (title.includes('bend') || title.includes('fold')) && (
+                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
+                                    <div className="d-flex gap-5">
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>BENDS</span>
+                                        <span className="fw-black text-white fs-4">{isLoadingUnfold ? '...' : (bendList?.length || 0)}</span>
+                                      </div>
+                                      <div className="d-flex flex-column">
+                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>CONFIGURED</span>
+                                        <span className="fw-black text-white fs-4">{isLoadingUnfold ? '...' : Object.keys(selectedBends).length}</span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2"
+                                      disabled={isLoadingUnfold}
+                                      onClick={(e) => { e.stopPropagation(); setIsBendingModalOpen(true); }}
+                                    >
+                                      {isLoadingUnfold ? 'ANALYZING...' : 'MANAGE BENDS'}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -2796,7 +2917,10 @@ const InstantPricing = () => {
                               <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
                                 <div className="d-flex flex-column">
                                   <span className="opacity-70 small">{svc.name}</span>
-                                  <span className="text-white-50" style={{ fontSize: '10px' }}>Configured Finish</span>
+                                  <span className="text-white-50" style={{ fontSize: '10px' }}>
+                                    {svc.name?.toLowerCase().includes('anodiz') || svc.name?.toLowerCase().includes('powder') ? 'Configured Finish' :
+                                      svc.name?.toLowerCase().includes('bend') ? 'Bending Service' : 'Premium Process'}
+                                  </span>
                                 </div>
                                 {isCalculatingPrice ? <PriceSkeleton /> : (
                                   <span className="fw-black fs-5">${parseFloat(svc.price || 0).toFixed(2)}</span>
@@ -2894,10 +3018,13 @@ const InstantPricing = () => {
                                   <strong className="fs-huge fw-black text-danger">
                                     {(() => {
                                       const discountPct = parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100;
+                                      const bendSvc = allServices.find(s => s.title.toLowerCase().includes('bend'));
+                                      const bendCostPer = (selectedAdditionalServices.some(s => s.id === bendSvc?.id)) ? (parseFloat(bendSvc?.base_price || 0) * (bendList?.length || 0)) : 0;
                                       const extraPerPiece =
                                         Object.values(selectedTaps).reduce((a, t) => a + (parseFloat(t.price) || 0), 0) +
                                         Object.values(selectedHardware).reduce((a, { item }) => a + (parseFloat(item?.price) || 0), 0) +
-                                        Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0);
+                                        Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0) +
+                                        bendCostPer;
                                       const fullUnitPrice = (priceEstimate?.breakdown?.unit_total || 0) + extraPerPiece;
                                       return (fullUnitPrice * (1 - discountPct) * quantity).toFixed(2);
                                     })()}
@@ -3707,6 +3834,21 @@ const InstantPricing = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <BendingModal
+        isOpen={isBendingModalOpen}
+        onClose={() => {
+          setIsBendingModalOpen(false);
+          setIsLoadingUnfold(false);
+          if (unfoldAbortControllerRef.current) {
+            unfoldAbortControllerRef.current.abort();
+          }
+        }}
+        bendTree={bendTree}
+        faceMeshes={backendData?.faceMeshes}
+        selectedBends={selectedBends}
+        onUpdateBend={(id, config) => setSelectedBends(prev => ({ ...prev, [id]: config }))}
+      />
     </div>
   );
 };
