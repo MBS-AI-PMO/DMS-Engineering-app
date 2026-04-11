@@ -6,7 +6,7 @@ import {
   Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
   Monitor, Maximize2, Boxes, ChevronLeft,
   ChevronRight, ChevronDown, AlertCircle, AlertTriangle, Loader2, Check, Shield, Calculator,
-  Minus, Plus, Zap, TrendingDown, FileText, Settings, Grid
+  Minus, Plus, Zap, TrendingDown, FileText, Settings, Grid, Lock
 } from 'lucide-react';
 import * as OV from 'online-3d-viewer';
 import { parseString, toSVG } from 'dxf';
@@ -399,9 +399,11 @@ const InstantPricing = () => {
         setDetectedHoles((d.holes || []).map((h, idx) => ({
           id: idx,
           diameterInches: h.diameter_in,
+          diameter_mm: h.diameter_mm,
           depthMm: h.depth_mm || 0,
           depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
           position: h.position,
+          axis: h.axis,
         })));
         stepHolesDetectedRef.current = true;
       } catch (err) {
@@ -1089,6 +1091,7 @@ const InstantPricing = () => {
         // Compute from hole position variance: all holes in a flat sheet share ~the
         // same coordinate on the thickness axis (near-zero spread across that axis).
         // This is independent of scene transforms and always matches hole.position space.
+        let hwThicknessVec;
         {
           const _holePositions = detectedHoles.filter(h => h.position);
           const _computeVar = (vals) => {
@@ -1103,15 +1106,23 @@ const InstantPricing = () => {
               { vec: new THREE.Vector3(0, 0, 1), v: _computeVar(_holePositions.map(h => h.position[2])) },
             ];
             _candidates.sort((a, b) => a.v - b.v);
-            var hwThicknessVec = _candidates[0].vec.clone();
+            hwThicknessVec = _candidates[0].vec.clone();
           } else {
             // Single hole: fall back to bounding-box thickness axis
             const _ta = modelOriginalDataRef.current?.thicknessAxis || 'y';
-            var hwThicknessVec = _ta === 'x' ? new THREE.Vector3(1, 0, 0)
+            hwThicknessVec = _ta === 'x' ? new THREE.Vector3(1, 0, 0)
               : _ta === 'z' ? new THREE.Vector3(0, 0, 1)
                 : new THREE.Vector3(0, 1, 0);
           }
         }
+
+        // Sample panel surface color for hole fill cylinders
+        let panelHex = 0x9ca3af;
+        v.scene.traverse(o => {
+          if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
+            panelHex = o.material.color.getHex();
+          }
+        });
 
         // ── Hardware markers ─────────────────────────────────────────────
         if (hasHwAssigned) {
@@ -1124,15 +1135,13 @@ const InstantPricing = () => {
             if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide });
             return matCache[k];
           };
+          // Smooth metallic material for standoffs and flush studs (FrontSide — avoids inner-face artifacts)
+          const getPolishedMat = (c) => {
+            const k = `po_${c}`;
+            if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.75, roughness: 0.25, side: THREE.FrontSide });
+            return matCache[k];
+          };
           const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
-
-          // Sample panel surface color for hole fill cylinders
-          let panelHex = 0x9ca3af;
-          v.scene.traverse(o => {
-            if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
-              panelHex = o.material.color.getHex();
-            }
-          });
 
           detectedHoles.forEach(hole => {
             if (!hole.position) return;
@@ -1141,23 +1150,66 @@ const InstantPricing = () => {
 
             const { item, typeId, face } = hw;
             const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
-            const edgeMm = item?.min_edge_distance ? parseFloat(item.min_edge_distance) * 25.4 : null;
-            const r = Math.max(edgeMm ? edgeMm / 2 : holeMmDia / 2, 0.5);
             const holeR = holeMmDia / 2;
             const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
-            const barrelR = toolingDiaMm ? Math.min(toolingDiaMm / 2, holeR) : r;
+            const baseWidthMm = item?.base_width ? parseFloat(item.base_width) * 25.4 : null;
+
+            const type = typeId || 3;
+
+            // Per-type outer radius and bore radius using exact admin-configured dimensions.
+            // tooling_diameter = required hole size (= bore through hardware body, inches)
+            // base_width = outer body width/diameter (inches)
+            // Fallbacks used only when admin hasn't configured the field.
+            let hwOuterR, hwBoreR;
+            if (type === 3) {
+              // Nut: base_width = outer hex width, tooling_diameter = bolt/bore hole diameter
+              hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.6);
+              hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
+            } else if (type === 2) {
+              // Standoff: ONLY tooling_diameter is configured in Admin (used as body diameter)
+              // The hex head is conventionally ~1.3x wider than the barrel.
+              // Bore must be strictly smaller than the barrel to prevent Z-fighting (~0.6x).
+              const barrelR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
+              hwOuterR = barrelR * 1.33; // Used as the hex head radius
+              hwBoreR = barrelR * 0.6;   // Properly sized hollow bore
+            } else if (type === 4) {
+              // Flush Nut: base_width = outer disc diameter, tooling_diameter = bore hole diameter
+              hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.5);
+              hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
+            } else {
+              // Flush Stud (Type 1): ONLY tooling_diameter is configured in Admin (used as thread major diameter)
+              hwOuterR = toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.8;
+              hwBoreR = 0;
+            }
+            // Bore must not be larger than the physical hole (would create a visible ledge/gap)
+            // and must stay visibly smaller than outer for ring to be clear.
+            if (type !== 2) {
+              hwBoreR = Math.min(hwBoreR, holeR * 0.99, hwOuterR * 0.85);
+            }
+
+            // hwFaceR: radius used to decide if a fill disc is needed.
+            // Set to hwOuterR for all types so a disc is added whenever hole > hardware body.
+            const hwFaceR = hwOuterR;
+
             const color = HW_COLORS[typeId] || 0xB8860B;
             const mat = getHwMat(color);
 
-            // Use the thickness axis computed from hole position variance (see below).
-            const axisVec = hwThicknessVec.clone();
+            // Use the per-hole axis from the backend when available (most accurate).
+            // Fall back to the globally-computed thickness axis only when axis is missing.
+            // Canonicalize sign: ensure hole.axis points in the SAME half-space as hwThicknessVec
+            // so that faceSign=1 ('up') consistently means the same face regardless of which
+            // direction the backend happened to store the cylinder axis.
+            const rawAxis = hole.axis && hole.axis.length === 3 ? hole.axis : null;
+            let axisVec = rawAxis
+              ? new THREE.Vector3(rawAxis[0], rawAxis[1], rawAxis[2])
+              : hwThicknessVec.clone();
+            if (axisVec.dot(hwThicknessVec) < 0) axisVec.negate();
             const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
-            const faceOffset = axisNorm.clone().multiplyScalar(faceSign * partT * 0.5);
+            // hole.position is the geometric center of the hole cylinder (midpoint of depth).
+            // Add faceSign * partT/2 to move from center to the correct face surface.
             const basePos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(faceOffset);
-
-            const type = typeId || 3;
+              .add(axisNorm.clone().multiplyScalar(faceSign * partT * 0.5));
 
             const addHWMesh = (geo, m, center) => {
               const mesh = new THREE.Mesh(geo, m);
@@ -1169,89 +1221,107 @@ const InstantPricing = () => {
               holeMarkersRef.current.push(mesh);
             };
 
+            // Helper: build a LatheGeometry hollow-ring (washer) profile at a given height h.
+            // Points sweep inner wall → bottom face → outer wall → top face → close, all in (r, y) space.
+            const makeRingGeo = (innerR, outerR, h, segs = 32) => {
+              const pts = [
+                new THREE.Vector2(innerR, h / 2),
+                new THREE.Vector2(innerR, -h / 2),
+                new THREE.Vector2(outerR, -h / 2),
+                new THREE.Vector2(outerR, h / 2),
+                new THREE.Vector2(innerR, h / 2),
+              ];
+              return new THREE.LatheGeometry(pts, segs);
+            };
 
-            // ── Hole filler: solid panel-colored cylinder that visually closes the
-            // hole to match the hardware's outer footprint. Hardware is rendered at
-            // its real size on top — the hole just appears smaller to the viewer.
-            {
-              const hwOuterR = type === 2 ? barrelR
-                : type === 1 ? holeR * 0.5
-                  : r * 1.35;
-              if (hwOuterR < holeR) {
-                // Fill the gap between hardware edge and hole edge with panel color
-                const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
-                const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
-                addHWMesh(new THREE.CylinderGeometry(holeR, holeR, partT, 32), fillMat, holeCenterPos);
-              }
+            // ── Hole filler: panel-colored disc ring that visually closes the gap when hole > hardware outer
+            if (hwFaceR < holeR) {
+              const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
+              const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
+              addHWMesh(makeRingGeo(hwOuterR * 0.99, holeR * 1.02, partT), fillMat, holeCenterPos);
             }
 
             if (type === 3) {
-              // Nut — round body + thin hollow disc on opposite face
-              const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, partT * 0.5);
-              const outerR = r * 1.4;
-              const boreR = r * 0.5;
-              const discH = Math.max(0.3, Math.min(0.5, partT * 0.03));
+              // Nut — hollow hex-cylinder body above surface + thin washer disc on back face
+              const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, partT * 0.6);
+              const discH = Math.max(partT * 0.12, 0.8);
               const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2));
-              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, nutH, 16), mat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(boreR, boreR, nutH + 0.1, 12), boreMat, bodyCenter);
+              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, nutH, 32), mat, bodyCenter);
               const discCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, discCenter);
-              addHWMesh(new THREE.CylinderGeometry(boreR, boreR, discH + 0.1, 12), boreMat, discCenter);
+              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, discCenter);
             } else if (type === 2) {
-              // Flush Standoff — hollow tube + thin hex flange
-              const standoffH = item?.length ? parseFloat(item.length) * 25.4 : partT * 1.6;
+              // Flush Standoff — Hexagonal base flange with a round barrel
+              const standoffH = item?.length ? parseFloat(item.length) * 25.4 : partT * 1.8;
+              const headH = Math.max(partT * 0.15, 1.0);
+
+              // Barrel extending from front face (basePos)
+              const barrelR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
+              const safeBarrelR = Math.min(barrelR, hwOuterR * 0.95);
               const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2));
-              const flangeH = Math.max(0.6, Math.min(0.8, partT * 0.04));
-              const flangeCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + flangeH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(barrelR, barrelR, standoffH, 16, 1, true), mat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, standoffH, 12), boreMat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(holeR * 1.4, holeR * 1.4, flangeH, 6), mat, flangeCenter);
-              addHWMesh(new THREE.CylinderGeometry(barrelR * 0.45, barrelR * 0.45, flangeH + 0.1, 12), boreMat, flangeCenter);
-            } else if (type === 4) {
-              // Flush Nut — thin hollow disc each face
-              const discH = Math.max(0.3, Math.min(0.5, partT * 0.03));
-              const outerR = r * 1.35;
-              const innerR = r * 0.5;
-              const topCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * (discH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, topCenter);
-              addHWMesh(new THREE.CylinderGeometry(innerR, innerR, discH + 0.1, 12), boreMat, topCenter);
-              const botCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(outerR, outerR, discH, 16), mat, botCenter);
-              addHWMesh(new THREE.CylinderGeometry(innerR, innerR, discH + 0.1, 12), boreMat, botCenter);
-            } else if (type === 1) {
-              // Flush Stud — shaft + simplified threads + head
-              const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.2;
-              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
-              const headH = Math.max(0.6, Math.min(0.8, partT * 0.04));
+              const soMat = getPolishedMat(color);
+              addHWMesh(new THREE.CylinderGeometry(safeBarrelR, safeBarrelR, standoffH, 64, 1, false), soMat, bodyCenter);
+
+              // Bore going through the barrel
+              addHWMesh(new THREE.CylinderGeometry(hwBoreR, hwBoreR, standoffH + 1.0, 64, 1, false), boreMat, bodyCenter);
+
+              // Hex head on the opposite (back) face
               const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
-              const shaftR = barrelR * 0.4;
-              const headR = holeR * 1.1;
-              addHWMesh(new THREE.CylinderGeometry(shaftR, shaftR, studH, 10), mat, bodyCenter);
-              // Simplified thread — fewer coils, lower resolution
-              const numCoils = Math.max(4, Math.round(studH / 3.5));
-              const helixPts = [];
-              for (let i = 0; i <= numCoils * 8; i++) {
-                const t = i / (numCoils * 8);
-                const angle = t * numCoils * Math.PI * 2;
-                helixPts.push(new THREE.Vector3(Math.cos(angle) * shaftR * 1.3, (t - 0.5) * studH, Math.sin(angle) * shaftR * 1.3));
+              addHWMesh(new THREE.CylinderGeometry(hwOuterR, hwOuterR, headH, 6, 1, false), soMat, headCenter);
+            } else if (type === 4) {
+              // Flush Nut — thin hollow washer ring on each sheet face (LatheGeometry, no Z-fighting)
+              const discH = Math.max(partT * 0.15, 1.0);
+              const topCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * discH / 2));
+              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, topCenter);
+              const botCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
+              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, botCenter);
+            } else if (type === 1) {
+              // Flush Stud — threaded shaft (dense ring ridges) + flat round head on back face
+              // tooling_diameter represents the hole/major thread size.
+              const ridgeR = hwOuterR; // major (crest) radius matches tooling dimension
+              const shaftR = ridgeR * 0.8; // inner root radius
+              const knurlR = ridgeR * 1.05; // knurl is slightly larger to bite into the material
+              // Since baseWidthMm doesn't exist for Type 1, accurately proportion head to 1.8x thread dia
+              const headR = ridgeR * 1.8;
+
+              const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.2;
+              const headH = Math.max(partT * 0.18, 1.2);
+
+              // Knurled Shank (Gear-like section) sits flush with basePos (face where thread starts) and extends slightly BACK into the hole
+              const knurlH = Math.max(partT * 0.4, 1.5);
+              const knurlCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (knurlH / 2)));
+
+              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
+              const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
+
+              const soMat = getPolishedMat(color);
+
+              // Knurled ring (16 segments for gear look)
+              addHWMesh(new THREE.CylinderGeometry(knurlR, knurlR, knurlH, 16, 1, false), soMat, knurlCenter);
+
+              // Threaded Shaft: dense continuous V-groove lathe geometry
+              const pitch = Math.max(ridgeR * 0.25, 0.4); // finer pitch to simulate a realistic screw thread
+              const numThreads = Math.floor(studH / pitch);
+
+              const threadPts = [];
+              threadPts.push(new THREE.Vector2(0, 0)); // cap bottom
+              threadPts.push(new THREE.Vector2(shaftR, 0));
+              for (let i = 0; i < numThreads; i++) {
+                const yMid = pitch * (i + 0.5);
+                const yEnd = pitch * (i + 1);
+                threadPts.push(new THREE.Vector2(ridgeR, yMid)); // thread peak
+                threadPts.push(new THREE.Vector2(shaftR, yEnd)); // thread root
               }
-              addHWMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helixPts), numCoils * 8, shaftR * 0.15, 3, false), mat, bodyCenter);
-              addHWMesh(new THREE.CylinderGeometry(headR, headR, headH, 6), mat, headCenter);
-              // Dome
-              const domeCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.4));
-              addHWMesh(new THREE.SphereGeometry(headR * 0.75, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat, domeCenter);
-              // Cross slot
-              const slotLen = headR * 0.65;
-              const slotH2 = headH * 0.3;
-              const slotW = shaftR * 0.15;
-              const slotCenter = headCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * headH * 0.55));
-              addHWMesh(new THREE.BoxGeometry(slotLen * 2, slotH2, slotW * 2), boreMat, slotCenter);
-              addHWMesh(new THREE.BoxGeometry(slotW * 2, slotH2, slotLen * 2), boreMat, slotCenter);
+              threadPts.push(new THREE.Vector2(shaftR, studH));
+              threadPts.push(new THREE.Vector2(0, studH)); // cap top
+
+              const threadGeo = new THREE.LatheGeometry(threadPts, 32);
+              threadGeo.translate(0, -studH / 2, 0); // center it on Y axis like CylinderGeometry does
+
+              addHWMesh(threadGeo, soMat, bodyCenter);
+              // Head: flat round disc on the back face
+              addHWMesh(new THREE.CylinderGeometry(headR, headR, headH, 64, 1, false), soMat, headCenter);
             } else {
-              const m = new THREE.Mesh(
-                new THREE.CylinderGeometry(r, r, partT, 16, 1, true),
-                mat
-              );
+              const m = new THREE.Mesh(new THREE.CylinderGeometry(hwOuterR, hwOuterR, partT, 16, 1, true), mat);
               m.isHardwareMarker = true;
               m.position.copy(basePos);
               m.lookAt(basePos.clone().add(axisVec));
@@ -1287,9 +1357,9 @@ const InstantPricing = () => {
             const axisVec2 = hwThicknessVec.clone();
             const axisNorm2 = axisVec2.clone().normalize();
             const faceSign = cs.face === 'down' ? -1 : 1;
-            // Pull wide rim 0.5mm outside the surface so the cone is visibly proud
+            // Pull wide rim slightly outside the surface (0.05mm) to prevent z-fighting without generating a visible gap
             const basePos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(axisNorm2.clone().multiplyScalar(faceSign * (partT * 0.5 + 0.5)));
+              .add(axisNorm2.clone().multiplyScalar(faceSign * (partT * 0.5 + 0.05)));
 
             const addCSMesh = (geo, m, center) => {
               const mesh = new THREE.Mesh(geo, m);
@@ -1301,17 +1371,52 @@ const InstantPricing = () => {
               holeMarkersRef.current.push(mesh);
             };
 
-            // Cap cone height to fit within material — wide rim at surface, narrow tip into material
             const coneH = Math.min(Math.max(csMajorR * 0.6, 2.0), partT * 0.95);
+
+            // Hole filler: solid plug covering the full hole depth but hollowed out perfectly to fit the cone
+            if (csMajorR < holeR2) {
+              const innerRadiusAtFace = csMajorR * 0.98;
+              const innerRadiusAway = csMinorR * 0.98;
+              const outerRadius = holeR2 * 1.02;
+
+              const yFace = faceSign * (partT / 2);
+              const yAway = -faceSign * (partT / 2);
+              const yConeBase = yFace - faceSign * coneH;
+
+              const pts = faceSign === 1 ? [
+                new THREE.Vector2(innerRadiusAtFace, yFace),
+                new THREE.Vector2(innerRadiusAway, yConeBase),
+                new THREE.Vector2(innerRadiusAway, yAway),
+                new THREE.Vector2(outerRadius, yAway),
+                new THREE.Vector2(outerRadius, yFace),
+                new THREE.Vector2(innerRadiusAtFace, yFace)
+              ] : [
+                new THREE.Vector2(innerRadiusAway, yAway),
+                new THREE.Vector2(innerRadiusAway, yConeBase),
+                new THREE.Vector2(innerRadiusAtFace, yFace),
+                new THREE.Vector2(outerRadius, yFace),
+                new THREE.Vector2(outerRadius, yAway),
+                new THREE.Vector2(innerRadiusAway, yAway)
+              ];
+
+              const fillGeo = new THREE.LatheGeometry(pts, 32);
+              const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
+
+              const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
+              addCSMesh(fillGeo, fillMat, holeCenterPos);
+            }
+
+            // Cap cone height to fit within material — wide rim at surface, narrow tip into material
             const coneCenter = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign * coneH / 2));
             addCSMesh(
               new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH, 32, 1, true),
               csConeMat, coneCenter
             );
 
-            // Back nut-ring — sits just outside the opposite face
+            // Back nut-ring — sits flush with the opposite face (tiny 0.05mm offset to prevent z-fighting)
             // lookAt must point away from viewer (faceSign) so BackSide material is visible from outside
-            const backPos2 = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign * (partT + 1.5)));
+            const backPos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
+              .add(axisNorm2.clone().multiplyScalar(-faceSign * (partT * 0.5 + 0.05)));
             const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
             backRing.isHardwareMarker = true;
             backRing.position.copy(backPos2);
@@ -2451,11 +2556,11 @@ const InstantPricing = () => {
                           {allServices.filter(svc => {
                             // Must be a sub-service of the selected production service
                             const parentIds = (svc.parent_ids || []).map(id => Number(id));
-                            if (!parentIds.includes(Number(selectedProductionService?.id))) return false;
-
-                            // Filter by what this metal+thickness actually supports
+                            return parentIds.includes(Number(selectedProductionService?.id));
+                          }).map(svc => {
+                            let isLocked = false;
+                            // Check what this metal+thickness actually supports
                             if (selectedMetal) {
-                              // Collect allowed service IDs: from selected thickness if chosen, else union of all thicknesses
                               const allowedIds = new Set();
                               (selectedMetal.services || []).forEach(id => allowedIds.add(Number(id)));
                               if (selectedThickness) {
@@ -2466,11 +2571,12 @@ const InstantPricing = () => {
                                   (t.services || []).forEach(id => allowedIds.add(Number(id)));
                                 });
                               }
-                              if (allowedIds.size > 0 && !allowedIds.has(Number(svc.id))) return false;
+                              // If this metal/thickness doesn't explicitly support this subservice, lock it
+                              if (allowedIds.size > 0 && !allowedIds.has(Number(svc.id))) {
+                                isLocked = true;
+                              }
                             }
 
-                            return true;
-                          }).map(svc => {
                             const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
                             const title = svc.title.toLowerCase();
                             const isTap = title.includes('tap');
@@ -2479,7 +2585,8 @@ const InstantPricing = () => {
                             const isCS = title.includes('countersink');
 
                             return (
-                              <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none'}`} style={{ cursor: 'pointer' }} onClick={() => {
+                              <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isLocked ? 'bg-light grayscale border-light opacity-50 cursor-not-allowed' : (isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none')}`} style={{ cursor: isLocked ? 'not-allowed' : 'pointer' }} onClick={() => {
+                                if (isLocked) return;
                                 if (isFinish) {
                                   if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }
                                   else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedFinishColors(p => { const n = { ...p }; delete n[svc.id]; return n; }); }
@@ -2497,12 +2604,15 @@ const InstantPricing = () => {
                                 }
                               }}>
                                 <div className="d-flex align-items-center gap-3">
-                                  <div className={`rounded-circle border d-flex align-items-center justify-content-center ${isSelected ? 'bg-white border-white text-danger' : 'bg-white border-secondary border-opacity-25'}`} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
-                                    {isSelected ? <Check size={16} strokeWidth={4} /> : <div />}
+                                  <div className={`rounded-circle border d-flex align-items-center justify-content-center ${isLocked ? 'bg-transparent border-secondary border-opacity-25' : (isSelected ? 'bg-white border-white text-danger' : 'bg-white border-secondary border-opacity-25')}`} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
+                                    {isLocked ? <Lock size={14} className="text-secondary" /> : (isSelected ? <Check size={16} strokeWidth={4} /> : <div />)}
                                   </div>
                                   <div className="flex-grow-1 overflow-hidden">
-                                    <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
-                                    <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{svc.description || 'Premium process'}</p>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
+                                      {isLocked && <span className="badge bg-secondary bg-opacity-10 text-muted rounded-pill px-2 py-0 fw-bold border border-secondary border-opacity-25" style={{ fontSize: '9px', letterSpacing: '0.5px' }}>NOT SUPPORTED</span>}
+                                    </div>
+                                    <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{isLocked ? 'Not available for this metal and thickness' : (svc.description || 'Premium process')}</p>
 
                                     <div className="mt-2 d-flex flex-wrap gap-2">
                                       {(() => {
@@ -3138,7 +3248,6 @@ const InstantPricing = () => {
                       const isExpanded = expandedHwGroups.has(group.dia);
                       const assignedCount = group.holes.filter(h => !!selectedHardware[h.id]).length;
                       const allAssigned = assignedCount === group.holes.length;
-                      const firstItem = activeItems[0];
 
                       return (
                         <div key={group.dia} style={{ marginBottom: 2 }}>
@@ -3170,7 +3279,6 @@ const InstantPricing = () => {
                           {isExpanded && (
                             <div style={{ paddingLeft: 4, paddingTop: 4 }}>
                               {group.holes.length > 1 && (() => {
-                                const selectedInGroup = group.holes.find(h => h.id === activeHwHole?.id);
                                 const sourceHw = selectedHardware[activeHwHole?.id];
                                 const theItem = sourceHw?.item || activeItems[0];
                                 if (!theItem) return null;
