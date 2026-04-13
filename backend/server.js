@@ -171,18 +171,41 @@ app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
         const cacheDir = path.join(__dirname, 'cache');
         if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
         const cachePath = path.join(cacheDir, `${hash}_holes.json`);
+        // New: Check if the FULL unfold cache already exists (it contains hole data too)
+        const fullCachePath = path.join(cacheDir, `${hash}.json`);
+
+        if (fs.existsSync(fullCachePath)) {
+            console.log(`[CAD-CACHE] Serving holes from full cache for ${hash}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('X-CAD-Cache', 'hit-full');
+            return fs.createReadStream(fullCachePath).pipe(res);
+        }
 
         if (fs.existsSync(cachePath)) {
-            console.log(`[CAD-CACHE] Serving cached holes for ${hash}`);
-            return res.json({ success: true, ...JSON.parse(fs.readFileSync(cachePath, 'utf8')), cached: true });
+            console.log(`[CAD-CACHE] Streaming cached holes for ${hash}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('X-CAD-Cache', 'hit');
+            return fs.createReadStream(cachePath).pipe(res);
         }
 
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
         const form = new FormData();
         form.append('file', blob, req.file.originalname || 'model.step');
 
-        const data = await callPython('/detect-holes', form);
-        fs.writeFileSync(cachePath, JSON.stringify(data));
+        // Always call '/unfold' even for holes to populate the full cache in one go
+        console.log(`[CAD-BIO] Triggering unified processing for ${hash}...`);
+        const data = await callPython('/unfold', form);
+
+        // Save to BOTH caches
+        fs.writeFileSync(fullCachePath, JSON.stringify(data));
+        fs.writeFileSync(cachePath, JSON.stringify({
+            success: true,
+            holes: data.detectedHoles || [],
+            faceMeshes: data.faceMeshes || {},
+            bendTree: data.bendTree || null,
+            thickness: data.thickness || 2.0
+        }));
+
         return res.json({ success: true, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
@@ -211,8 +234,10 @@ app.post('/api/unfold', upload.single('file'), async (req, res) => {
         const cachePath = path.join(cacheDir, `${hash}.json`);
 
         if (fs.existsSync(cachePath)) {
-            console.log(`[CAD-CACHE] Serving cached unfold for ${hash}`);
-            return res.json({ success: true, ...JSON.parse(fs.readFileSync(cachePath, 'utf8')), cached: true });
+            console.log(`[CAD-CACHE] Streaming cached unfold for ${hash}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('X-CAD-Cache', 'hit');
+            return fs.createReadStream(cachePath).pipe(res);
         }
 
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });

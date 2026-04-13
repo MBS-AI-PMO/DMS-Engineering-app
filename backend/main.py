@@ -192,13 +192,6 @@ class CORSHandler(BaseHTTPRequestHandler):
                 proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=90)
                 result = json.loads(proc.stdout)
 
-            # Normalize FreeCAD key names to match frontend expectations
-            # (FlatPatternViewer.buildFromBackend() looks for bendEdges/cutEdges)
-            if "bendPts" in result:
-                result["bendEdges"] = result.pop("bendPts")
-            if "cutPts" in result:
-                result["cutEdges"] = result.pop("cutPts")
-
             # All metadata (silhouettes, holes, faceMeshes) is now integrated 
             # into the primary Pass 1 from unfold_lib.py. 
             # We no longer need to call the legacy OCC-based unfold_step_file.

@@ -74,7 +74,7 @@ def _get_edge_points(edge, n=5):
     if curve_type == "Part::GeomLine":
         sample_n = 2
     elif curve_type in ("Part::GeomCircle", "Part::GeomArcOfCircle", "Part::GeomEllipse", "Part::GeomArcOfEllipse"):
-        sample_n = 48
+        sample_n = 24
     else:
         sample_n = max(n, 24)
     pts = edge.discretize(Number=sample_n)
@@ -305,7 +305,7 @@ def unfold_with_lib(filepath):
     # 1. Load STEP directly using FreeCAD Part
     fc_shape = Part.Shape()
     fc_shape.read(filepath)
-    print(f"[Profiling] Load STEP: {time.time() - t0:.3f}s")
+    sys.stderr.write(f"[Profiling] Load STEP: {time.time() - t0:.3f}s\n")
     
     t_start = time.time()
     # Robust root face selection: Look for the largest pair of parallel faces (top/bottom)
@@ -397,7 +397,7 @@ def unfold_with_lib(filepath):
                         dg.nodes[v]["is_real_bend"] = True
                 else:
                     dg.nodes[v]["unbend_transform"] = Matrix()
-            print(f"[Profiling] Unfold traversal: {time.time() - t_unfold_start:.3f}s")
+            sys.stderr.write(f"[Profiling] Unfold traversal: {time.time() - t_unfold_start:.3f}s\n")
             
             # If we reach here without exception, this root worked!
             chosen_root = root_idx
@@ -525,11 +525,11 @@ def unfold_with_lib(filepath):
     root_node = build_frontend_tree(root_idx)
 
     # Tessellate all faces for HierarchicalProjectViewer.
-    # deflection=2.5 gives ~25x fewer triangles than 0.1 — adequate for 3D bending modal and massive RAM savings.
+    # deflection=5.0 provides a major reduction in triangle count for faster loading.
     face_meshes = {}
     for i, face in enumerate(fc_shape.Faces):
         try:
-            verts, tris = _tessellate_fc_face(face, deflection=2.5)
+            verts, tris = _tessellate_fc_face(face, deflection=5.0)
             if verts.shape[0] > 0 and tris.shape[0] > 0:
                 face_meshes[f"face_{i}"] = {
                     "vertices": verts.flatten().tolist(),
@@ -564,18 +564,19 @@ def unfold_with_lib(filepath):
     # 6. Technical views only — holes are detected separately by /api/detect-holes
     t_views = time.time()
     views = get_projections(fc_shape)
-    print(f"[Profiling] Projections: {time.time() - t_views:.3f}s")
+    sys.stderr.write(f"[Profiling] Projections: {time.time() - t_views:.3f}s\n")
 
     t_holes = time.time()
     holes_data = detect_holes_fc(fc_shape)
-    print(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s")
+    sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
-    print(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s")
+    sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")
 
     return _json_safe({
+        "success": True,
         "flatVertices": flat_vertices,
-        "cutPts": cut_edges_2d,
-        "bendPts": bend_edges_2d,
+        "cutEdges": cut_edges_2d,
+        "bendEdges": bend_edges_2d,
         "thickness": round(float(thickness), 4),
         "bendTree": root_node,
         "faceMeshes": face_meshes,
