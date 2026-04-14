@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { fetchServiceBySlug, fetchMetalsByServiceId, fetchAllHardwareWithItems, fetchMetals, fetchHardwareTypes, fetchHardwareItemsByType } from '../utils/api';
 import './ServiceDetail.css';
+import serviceHeroBg from '../assets/services/service-hero-bg.webp';
 
 const ServiceDetail = () => {
     // ... logic remains same ...
@@ -173,42 +174,26 @@ const ServiceDetail = () => {
     const tabs = ['Overview', 'Compatible Metals'];
     if (serviceOptions.length > 0 || isHardwareService) tabs.push('Technical Specs');
 
-    // Determine hero image
-    const getHeroImage = (title) => {
-        const t = title.toLowerCase();
-        if (t.includes('laser')) return '/laser_cutting_hero_1775776747463.png';
-        if (t.includes('bend')) return '/metal_bending_hero_17757766017.png';
-        if (t.includes('tap')) return '/metal_tapping_hero_1775776797967.png';
-        if (t.includes('powder')) return '/powder_coating_hero_1775776779860.png';
-        return service.image_path || '';
-    };
-
     return (
         <div className="service-detail-page">
             {/* ── Hero Section ──────────────────────────────── */}
             <section className="service-hero">
-                <div className="hero-bg-overlay"></div>
-                {getHeroImage(service.title) && (
-                    <img src={getHeroImage(service.title)} alt={service.title} className="hero-bg-img" />
-                )}
                 <div className="hero-content">
-                    <nav className="breadcrumb">
-                        <Link to="/">Home</Link> <ChevronRight size={14} /> <span>Services</span> <ChevronRight size={14} /> <span className="current">{service.title}</span>
+                    <nav className="detail-breadcrumb">
+                        <Link to="/">Home</Link>
+                        <span className="separator">/</span>
+                        <Link to="/">Services</Link>
+                        <span className="separator">/</span>
+                        <span className="current">{service.title}</span>
                     </nav>
-                    <motion.h1
+                    <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6 }}
                     >
-                        {service.title}
-                    </motion.h1>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, delay: 0.1 }}
-                    >
-                        {service.description}
-                    </motion.p>
+                        <h1>{service.title}</h1>
+                        <p>{service.description}</p>
+                    </motion.div>
                     <motion.div
                         className="hero-actions"
                         initial={{ opacity: 0, y: 20 }}
@@ -303,7 +288,7 @@ const ServiceDetail = () => {
                                     {compatibleMetals.length > 0 ? compatibleMetals.map(metal => (
                                         <Link to={`/metal/${metal.slug}`} key={metal.id} className="metal-thumb-card">
                                             <div className="img-wrapper">
-                                                <img src={metal.image_path} alt={metal.name} />
+                                                <img src={serviceHeroBg} alt={metal.name} />
                                             </div>
                                             <div className="metal-info">
                                                 <h4>{metal.name}</h4>
@@ -348,7 +333,7 @@ const ServiceDetail = () => {
                                         if (v.includes('silver')) return '#cbd5e1';
                                         return null;
                                     };
-                                    const colorKeywords = ['red','blue','black','gold','clear','green','yellow','bronze','grey','gray','white','purple','natural','silver','orange','anodize'];
+                                    const colorKeywords = ['red', 'blue', 'black', 'gold', 'clear', 'green', 'yellow', 'bronze', 'grey', 'gray', 'white', 'purple', 'natural', 'silver', 'orange', 'anodize'];
 
                                     if (t.includes('tap')) return (
                                         <div className="specs-table-wrapper">
@@ -409,7 +394,7 @@ const ServiceDetail = () => {
                                             ) : hardwareData.map((hwType) => (
                                                 <div key={hwType.id} style={{ marginBottom: 32 }}>
                                                     <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        {hwType.image_path && <img src={hwType.image_path} alt={hwType.name} style={{ width: 28, height: 28, objectFit: 'contain' }} />}
+                                                        {serviceHeroBg && <img src={serviceHeroBg} alt={hwType.name} style={{ width: 28, height: 28, objectFit: 'contain' }} />}
                                                         {hwType.name}
                                                         <span style={{ fontSize: 12, fontWeight: 500, color: '#64748b' }}>({hwType.items.length} options)</span>
                                                     </h3>

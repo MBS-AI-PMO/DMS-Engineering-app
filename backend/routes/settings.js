@@ -4,6 +4,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { optimizeImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
@@ -107,7 +108,9 @@ router.post('/upload-logo', authenticate, requireAdmin, upload.single('logo'), a
             return res.status(400).json({ success: false, error: 'Setting key is required' });
         }
 
-        const logoPath = `/uploads/logos/${req.file.filename}`;
+        // Optimize the logo (converts to WebP, resizes, strips metadata)
+        const optimizedFilename = await optimizeImage(req.file.path);
+        const logoPath = `/uploads/logos/${optimizedFilename}`;
 
         // Update database
         await db.query(`

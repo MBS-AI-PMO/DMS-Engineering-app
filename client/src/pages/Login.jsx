@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { Mail, Lock, Eye, EyeOff, LogIn, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { fetchSettings } from '../utils/api';
 
 export default function Login() {
     const { login } = useAuth();
@@ -14,6 +15,18 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
+
+    useEffect(() => {
+        fetchSettings()
+            .then(data => {
+                if (data.navbar_logo) {
+                    setLogo(data.navbar_logo);
+                    localStorage.setItem('navbar_logo', data.navbar_logo);
+                }
+            })
+            .catch(err => console.error('Failed to load logo:', err));
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -44,7 +57,7 @@ export default function Login() {
             >
                 <div className="auth-logo">
                     <Link to="/">
-                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" decoding="async" />
+                        <img src={logo} alt="DMS Logo" className="auth-logo-img" decoding="async" />
                     </Link>
                 </div>
 

@@ -12,7 +12,7 @@ const Navbar = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.png');
+    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();

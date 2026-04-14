@@ -692,7 +692,7 @@ body {
     }
 
     .navbar {
-        padding: 15px 0;
+        padding: 8px 0;
         background: #000;
     }
 
@@ -798,64 +798,95 @@ body {
     }
 
     /* FAQ Mobile Overrides */
-    .faq-question {
-        padding: 20px;
-        font-size: 1.05rem;
+    .faq-section {
+        padding: 60px 0;
     }
 
-    .faq-answer {
-        padding: 0 20px 20px;
-        font-size: 0.95rem;
-    }
-
-    .faq-item {
-        border-radius: 14px;
-    }
-
-    /* Custom FAQ Component Mobile Overrides */
     .faq-item-custom {
-        padding: 20px;
-        border-radius: 12px;
+        margin-bottom: 12px;
     }
 
     .faq-question-row {
-        gap: 15px;
+        padding: 15px 20px;
     }
 
     .faq-question-text {
-        font-size: 1rem;
+        font-size: 0.95rem;
     }
 
     .faq-answer-row {
-        padding-left: 0;
-        margin-top: 15px;
+        padding: 0 20px 20px 52px;
     }
 
-    /* Fixed overrides for the detail page FAQ items */
-    .faq-question-row {
-        padding: 12px 16px;
-        gap: 15px;
-    }
-
-    .faq-answer-row {
-        padding: 0 16px 12px 52px;
-        /* Reduced from 76px */
+    .faq-answer-text {
+        font-size: 0.85rem;
     }
 
     .faq-icon-circle {
-        width: 28px;
-        height: 28px;
-        font-size: 1rem;
-    }
-
-    .contact-hero-title {
-        font-size: 3.5rem;
-    }
-
-    .contact-form-container {
-        padding: 40px 30px;
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
     }
 }
+
+.faq-question {
+    padding: 20px;
+    font-size: 1.05rem;
+}
+
+.faq-answer {
+    padding: 0 20px 20px;
+    font-size: 0.95rem;
+}
+
+.faq-item {
+    border-radius: 14px;
+}
+
+/* Custom FAQ Component Mobile Overrides */
+.faq-item-custom {
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.faq-question-row {
+    gap: 15px;
+}
+
+.faq-question-text {
+    font-size: 1rem;
+}
+
+.faq-answer-row {
+    padding-left: 0;
+    margin-top: 15px;
+}
+
+/* Fixed overrides for the detail page FAQ items */
+.faq-question-row {
+    padding: 12px 16px;
+    gap: 15px;
+}
+
+.faq-answer-row {
+    padding: 0 16px 12px 52px;
+    /* Reduced from 76px */
+}
+
+.faq-icon-circle {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+}
+
+.contact-hero-title {
+    font-size: 3.5rem;
+}
+
+.contact-form-container {
+    padding: 40px 30px;
+}
+
 
 .btn-submit {
     background: #fff;
@@ -1035,7 +1066,7 @@ body {
 
 @media (max-width: 768px) {
     .navbar {
-        padding: 15px 30px;
+        padding: 8px 0px;
     }
 
     .navbar-right .btn-login,
@@ -1289,7 +1320,7 @@ body {
 .service-arrow {
     background-color: #f2f3f5;
     width: 48px;
-    height: 64px;
+    height: 48px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -6168,6 +6199,115 @@ body.light-mode .faq-section {
     }
 }
 
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem !important;
+    }
+
+    .card-desc {
+        margin-bottom: 1.5rem !important;
+        font-size: 0.95rem;
+    }
+
+    .card-specs {
+        gap: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .spec-value {
+        font-size: 1rem !important;
+    }
+
+    .card-actions {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 1.25rem !important;
+        padding-top: 1.5rem !important;
+    }
+
+    .card-btn-link {
+        width: 100% !important;
+        justify-content: center !important;
+        padding: 0.875rem 1.5rem !important;
+    }
+
+    /* Benefits Section Mobile */
+    .benefits-grid {
+        grid-template-columns: 1fr !important;
+        gap: 2rem !important;
+    }
+
+    .benefit-card {
+        padding: 1.5rem !important;
+        gap: 1rem !important;
+    }
+
+    .benefit-icon {
+        width: 48px !important;
+        height: 48px !important;
+    }
+
+    .benefit-card h4 {
+        font-size: 1.35rem !important;
+    }
+
+    /* CTA Section Mobile */
+    .cta-box {
+        padding: 3.5rem 1.5rem !important;
+        border-radius: 24px !important;
+    }
+
+    .cta-box h2 {
+        font-size: 2.25rem !important;
+        line-height: 1.2 !important;
+    }
+
+    .cta-box p {
+        font-size: 1.1rem !important;
+        margin-bottom: 2.5rem !important;
+    }
+
+    .cta-btn.secondary {
+        width: 100% !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
+        padding: 1rem 1.5rem !important;
+        font-size: 1rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+    }
+
+    .card-body {
+        padding: 1.25rem !important;
+    }
+
+    .title-group h3 {
+        font-size: 1.25rem !important;
+    }
+
+    .card-price-info .price-value {
+        font-size: 1.15rem !important;
+    }
+
+    .cta-box h2 {
+        font-size: 1.85rem !important;
+    }
+
+    .metals-benefits,
+    .metals-cta {
+        padding: 4rem 0 !important;
+    }
+
+    .benefit-card {
+        padding: 1.25rem !important;
+    }
+}
+
 /* Premium Dark Theme Sections */
 .metals-benefits {
     padding: 10rem 0;
@@ -6265,6 +6405,7 @@ body.light-mode .faq-section {
     align-items: center;
     gap: 1rem;
     transition: all 0.3s ease;
+    text-decoration: none !important;
 }
 
 .cta-btn.secondary:hover {
@@ -6744,7 +6885,9 @@ body.light-mode .skeleton {
 }
 
 .guidelines-hero .highlight {
-    color: #3b82f6;
+    color: #3b82f6 !important;
+    /* Ensure brand blue color */
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
 }
 
 .guidelines-hero p {
@@ -6759,6 +6902,7 @@ body.light-mode .skeleton {
     grid-template-columns: 280px 1fr;
     gap: 40px;
     padding: 60px 0;
+    align-items: start;
 }
 
 .guidelines-sidebar {
@@ -6920,13 +7064,7 @@ body.light-mode .skeleton {
 }
 
 /* GUIDELINES LAYOUT & STICKY SIDEBAR */
-.guidelines-layout {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 60px;
-    padding: 100px 0;
-    align-items: start;
-}
+/* Removed duplicate declaration, consolidated above */
 
 .guidelines-sidebar {
     position: sticky;
@@ -7002,9 +7140,112 @@ body.dark-mode .sidebar-link.active {
     text-align: center;
 }
 
-.table-responsive {
-    overflow-x: auto;
-    border-radius: 12px;
+@media (max-width: 1024px) {
+    .guidelines-hero {
+        padding: 40px 0;
+    }
+
+    .guidelines-hero h1 {
+        font-size: 2rem;
+    }
+
+    .guidelines-layout {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 20px 0;
+    }
+
+    .guidelines-sidebar {
+        display: none !important;
+    }
+
+    .guidelines-mobile-select {
+        display: flex !important;
+        align-items: center;
+        background: #0f172a !important;
+        /* Solid Dark Navy Base */
+        border: 1px solid rgba(59, 130, 246, 0.5) !important;
+        padding: 16px 20px !important;
+        border-radius: 12px !important;
+        margin-top: -30px !important;
+        margin-bottom: 25px !important;
+        /* Added gap from content */
+        z-index: 100 !important;
+        position: relative !important;
+        box-shadow:
+            0 10px 30px rgba(0, 0, 0, 0.3),
+            0 0 15px rgba(59, 130, 246, 0.1) inset;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .guidelines-mobile-select:active {
+        transform: scale(0.98);
+        border-color: #3b82f6 !important;
+    }
+
+    .guidelines-mobile-select .selected-category-text {
+        color: #fff !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        flex: 1;
+        margin-left: 12px;
+        letter-spacing: 0.5px;
+    }
+
+    .guidelines-mobile-select .filter-icon,
+    .guidelines-mobile-select .dropdown-arrow {
+        color: #3b82f6 !important;
+        transition: transform 0.3s ease;
+    }
+
+    .guidelines-mobile-select .dropdown-arrow.open {
+        transform: rotate(90deg);
+    }
+
+    .guidelines-dropdown-menu {
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 0;
+        right: 0;
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 8px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        overflow: hidden;
+        animation: slideDown 0.3s ease forwards;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .dropdown-item {
+        padding: 14px 16px;
+        color: rgba(255, 255, 255, 0.7);
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .dropdown-item:hover,
+    .dropdown-item.active {
+        background: rgba(59, 130, 246, 0.15);
+        color: #fff;
+    }
 }
 
 .guideline-table {

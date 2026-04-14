@@ -668,7 +668,7 @@ const InstantPricing = () => {
         .qf-preview-container { height: 0 !important; }
         .ip-left-panel { width: 200px; min-width: 200px; background: #ffffff; border-right: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 14px 12px; overflow: hidden; }
         .ip-center-panel { flex: 1; display: flex; flex-direction: column; background: #ffffff; min-width: 0; min-height: 0; overflow: hidden; }
-        .ip-right-panel { width: 290px; min-width: 290px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 18px 16px; overflow-y: auto; }
+        .ip-right-panel { width: 340px; min-width: 340px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 0; overflow: visible; }
         /* Desktop: floating card with padding from edges */
         .ip-panel-layout { display: flex; position: fixed; top: 48px; left: 48px; right: 48px; bottom: 48px; z-index: 50; overflow: hidden; border-radius: 20px; box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1.5px solid #e2e6ea; }
         body.qf-active { overflow: hidden !important; background: #e8eaed !important; }
@@ -718,7 +718,7 @@ const InstantPricing = () => {
         /* Quote Flow Active panels */
         .ip-qf-left { width:50%; min-width:400px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
         .ip-qf-mid { flex:1; background:#ffffff; border-right:1.5px solid #e8eaed; overflow-y:auto; padding:24px 20px; min-width:0; }
-        .ip-qf-right { width:460px; min-width:380px; background:#ffffff; display:flex; flex-direction:column; padding:16px 14px; overflow-y:auto; }
+        .ip-qf-right { width: 340px; min-width: 340px; background: #ffffff; display: flex; flex-direction: column; padding: 0; overflow: visible; }
         .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; }
         .ip-qf-dims { padding:12px 14px; border-top:1.5px solid #e8eaed; background:#ffffff; flex-shrink:0; }
         .ip-back-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; color:#1e293b; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s; }

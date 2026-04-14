@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Info, Loader2 } from 'lucide-react';
+import { CheckCircle2, Info, Loader2, Filter, ChevronRight } from 'lucide-react';
 import { guidelinesData as staticGuidelines } from '../data/guidelinesData';
 import { fetchGuidelines } from '../utils/api';
 import { normalizeGuideline } from '../utils/guidelineUtils';
@@ -11,6 +11,19 @@ const Guidelines = () => {
   const [guidelines, setGuidelines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const loadGuidelines = async () => {
@@ -54,21 +67,21 @@ const Guidelines = () => {
             <div className="skeleton-item" style={{ width: '70%', height: '24px', borderRadius: '8px' }}></div>
           </div>
         </section>
-        
+
         <div className="container guidelines-layout">
           <aside className="guidelines-sidebar">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="skeleton-item" style={{ height: '48px', width: '100%', marginBottom: '12px', borderRadius: '10px' }}></div>
             ))}
           </aside>
-          
+
           <main className="guidelines-content">
             <div className="guidelines-detail">
               <div className="detail-header" style={{ marginBottom: '40px' }}>
                 <div className="skeleton-item" style={{ width: '40%', height: '40px', marginBottom: '20px', borderRadius: '8px' }}></div>
                 <div className="skeleton-item" style={{ width: '100%', height: '44px', borderRadius: '12px' }}></div>
               </div>
-              
+
               <div className="detail-body">
                 <div className="skeleton-item" style={{ width: '100%', height: '80px', marginBottom: '30px', borderRadius: '12px' }}></div>
                 <div className="skeleton-item" style={{ width: '100%', height: '350px', borderRadius: '16px' }}></div>
@@ -97,6 +110,35 @@ const Guidelines = () => {
           </motion.div>
         </div>
       </section>
+
+      {/* Mobile Dropdown Selector */}
+      <div className="container">
+        <div className="guidelines-mobile-select" ref={dropdownRef} onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+          <Filter className="filter-icon" size={18} />
+          <div className="selected-category-text">
+            {activeData.title}
+          </div>
+          <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
+
+          {isDropdownOpen && (
+            <div className="guidelines-dropdown-menu">
+              {guidelines.map((item) => (
+                <div
+                  key={item.service_id || item.id}
+                  className={`dropdown-item ${activeTab === (item.service_id || item.id) ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveTab(item.service_id || item.id);
+                    setIsDropdownOpen(false);
+                  }}
+                >
+                  {item.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="container guidelines-layout">
         {/* Sidebar */}

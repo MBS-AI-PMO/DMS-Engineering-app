@@ -20,17 +20,12 @@ const PricingSidebar = ({
 
   return (
     <aside className="ip-sidebar" style={{
-      width: 320,
       background: '#fff',
-      borderLeft: '1px solid #e5e7eb',
       display: 'flex',
       flexDirection: 'column',
-      height: '100%',
-      overflowY: 'auto',
-      overflowX: 'hidden',
       padding: '24px',
       boxSizing: 'border-box',
-      boxShadow: '-4px 0 20px rgba(0,0,0,0.03)'
+      boxShadow: 'none'
     }}>
       {/* Header (only in initial view) */}
       {!isQuoteFlowActive && (
