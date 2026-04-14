@@ -96,11 +96,6 @@ def detect_holes_fc(fc_shape):
     for i, face in enumerate(fc_shape.Faces):
         if face.Surface.TypeId == "Part::GeomCylinder":
             cyl = face.Surface
-            # In FreeCAD, Orientation strings are 'Forward' or 'Reversed'
-            # concave internal surfaces of holes are typically 'Reversed'
-            if face.Orientation == "Forward":
-                continue
-            
             radius = float(cyl.Radius)
             if radius < 0.5: continue # Skip fillets
             
@@ -149,11 +144,71 @@ def detect_holes_fc(fc_shape):
             cluster.append(c2)
         clusters.append(cluster)
 
+    def _basis_from_axis(axis_vec):
+        a = _normalize(axis_vec)
+        ref = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        u = _normalize(np.cross(a, ref))
+        v = _normalize(np.cross(a, u))
+        return a, u, v
+
+    def _angular_coverage(points, center, axis):
+        if len(points) < 3:
+            return 0.0
+        a, u, v = _basis_from_axis(axis)
+        angles = []
+        for p in points:
+            rel = p - center
+            radial = rel - np.dot(rel, a) * a
+            rlen = np.linalg.norm(radial)
+            if rlen < 1e-6:
+                continue
+            ang = math.atan2(np.dot(radial, v), np.dot(radial, u))
+            if ang < 0:
+                ang += 2.0 * math.pi
+            angles.append(ang)
+        if len(angles) < 3:
+            return 0.0
+        angles.sort()
+        max_gap = 0.0
+        for i in range(len(angles)):
+            nxt = angles[(i + 1) % len(angles)]
+            gap = nxt - angles[i] if i < len(angles) - 1 else (nxt + 2.0 * math.pi - angles[i])
+            if gap > max_gap:
+                max_gap = gap
+        return 2.0 * math.pi - max_gap
+
     for cluster in clusters:
         c1 = cluster[0]
         total_area = sum(c["area"] for c in cluster)
         depth = total_area / (2 * math.pi * c1["radius"])
         if depth < 0.5: continue
+
+        # Keep only near full cylinders so bend arcs / partial rolls are excluded.
+        cluster_points = []
+        for c in cluster:
+            f = fc_shape.Faces[c["fi"]]
+            for e in f.Edges:
+                try:
+                    pts = e.discretize(Number=20)
+                except Exception:
+                    pts = [v.Point for v in e.Vertexes]
+                for p in pts:
+                    cluster_points.append(np.array([p.x, p.y, p.z]))
+        coverage = _angular_coverage(cluster_points, c1["center"], c1["axis"])
+        if coverage < math.radians(270.0):
+            continue
+
+        # Real holes usually connect to at least one non-cylindrical boundary face
+        # (planar or conical); this avoids promoting long standalone cylinders.
+        adj_non_cyl = set()
+        for c in cluster:
+            f = fc_shape.Faces[c["fi"]]
+            for e in f.Edges:
+                for nfi in e2f.get(e.hashCode(), []):
+                    if nfi != c["fi"] and fc_shape.Faces[nfi].Surface.TypeId != "Part::GeomCylinder":
+                        adj_non_cyl.add(nfi)
+        if len(adj_non_cyl) < 1:
+            continue
         
         # Diameter and position
         diam = c1["radius"] * 2.0
@@ -350,8 +405,14 @@ def unfold_with_lib(filepath):
     for root_idx in root_candidates[:5]:
         try:
             # Adjacency and Thickness
+            print(f"[Debug] Testing root {root_idx} (area {fc_shape.Faces[root_idx].Area:.2f})", file=sys.stderr)
+            root_face = fc_shape.Faces[root_idx]
+            root_normal = root_face.Surface.Axis
+            print(f"[Debug] Root Normal: {root_normal}", file=sys.stderr)
             graph = build_graph_of_tangent_faces(fc_shape, root_idx)
+            print(f"[Debug] Graph built with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges", file=sys.stderr)
             thickness = EstimateThickness.using_best_method(fc_shape, root_idx)
+            print(f"[Debug] Detected thickness: {thickness}", file=sys.stderr)
             bac = BendAllowanceCalculator.from_single_value(0.44) # Standard K-factor
             
             # Spanning Tree
@@ -359,7 +420,7 @@ def unfold_with_lib(filepath):
             dg = nx.DiGraph()
             for node in spanning_tree: dg.add_node(node)
             
-            lengths = nx.all_pairs_shortest_path_length(spanning_tree)
+            lengths = nx.all_pairs_shortest_path_length(spanning_tree)  
             dist_map = {k: kv for k, kv in lengths}
             if root_idx not in dist_map:
                 continue

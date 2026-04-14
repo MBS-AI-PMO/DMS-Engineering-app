@@ -366,11 +366,32 @@ const Checkout = () => {
                                             }}>
                                                 <span>Material: <strong>{item.configuration?.metal?.name || 'Standard Metal'}</strong></span>
                                                 <span>Thickness: <strong>{item.configuration?.thickness || '0'}mm</strong></span>
+                                                {(item.configuration?.additionalServices || []).length > 0 && (
+                                                    <span>
+                                                        Services: <strong>{item.configuration.additionalServices.map(s => s.title).join(', ')}</strong>
+                                                    </span>
+                                                )}
                                                 {item.configuration?.anodizingColor && (
                                                     <span>Anodizing: <strong>{item.configuration.anodizingColor.name}</strong></span>
                                                 )}
+                                                {Object.keys(item.configuration?.selectedFinishColors || {}).length > 0 && (
+                                                    <span>
+                                                        Finish Options: <strong>{Object.values(item.configuration.selectedFinishColors).map(c => c?.name || c?.service_name || c?.service || 'Selected').join(', ')}</strong>
+                                                    </span>
+                                                )}
                                                 {item.configuration?.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
-                                                    <span>Taped Holes: <strong>{Object.keys(item.configuration.selectedTaps).length}</strong></span>
+                                                    <span>Tapped Holes: <strong>{Object.keys(item.configuration.selectedTaps).length}</strong></span>
+                                                )}
+                                                {item.configuration?.selectedHardware && Object.keys(item.configuration.selectedHardware).length > 0 && (
+                                                    <span>Hardware Inserts: <strong>{Object.keys(item.configuration.selectedHardware).length}</strong></span>
+                                                )}
+                                                {item.configuration?.selectedCountersinks && Object.keys(item.configuration.selectedCountersinks).length > 0 && (
+                                                    <span>Countersinks: <strong>{Object.keys(item.configuration.selectedCountersinks).length}</strong></span>
+                                                )}
+                                                {(Object.keys(item.configuration?.selectedBends || {}).length > 0 || (item.configuration?.detectedBends || []).length > 0) && (
+                                                    <span>
+                                                        Bends: <strong>{Math.max(Object.keys(item.configuration?.selectedBends || {}).length, (item.configuration?.detectedBends || []).length)}</strong>
+                                                    </span>
                                                 )}
                                                 {item.configuration?.dimensions && (
                                                     <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>

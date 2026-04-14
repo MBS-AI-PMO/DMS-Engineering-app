@@ -15,8 +15,10 @@ import {
   unfoldSheetMetal,
 } from '../../utils/geometryUtils';
 
+const DEFAULT_OPTIONS = Object.freeze({});
+
 const FlatPatternViewer = forwardRef(function FlatPatternViewer(
-  { geometries = [], options = {}, backendData, sourceFlatData, formatKind, holes = [], activeHoleId = null },
+  { geometries = [], options = DEFAULT_OPTIONS, backendData, sourceFlatData, formatKind, holes = [], activeHoleId = null },
   ref
 ) {
   const mountRef = useRef(null);
@@ -263,8 +265,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
   }, []);
 
   // Build and display flat pattern geometry
-  const highlightBends = options.highlightBends;
-  const gridEnabled = options.grid;
+  const highlightBends = !!options?.highlightBends;
+  const gridEnabled = !!options?.grid;
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -428,7 +430,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     fitCamera();
   }, [
     geometries,
-    options,
+    highlightBends,
+    gridEnabled,
     backendData,
     sourceFlatData,
     holes,

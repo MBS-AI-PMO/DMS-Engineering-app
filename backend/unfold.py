@@ -827,6 +827,7 @@ def unfold_step_file(filepath: str) -> dict:
 
     seed = max(planar_faces, key=lambda i: face_areas[i])
     thickness_est = _estimate_thickness(faces, face_info, face_areas)
+    flat_mode = (not bend_connections) or thickness_est <= 1e-4
 
     # Tessellate all planar faces
     face_meshes = {}
@@ -834,76 +835,86 @@ def unfold_step_file(filepath: str) -> dict:
         verts, tris = _tessellate_face(faces[fi])
         face_meshes[fi] = (verts.copy(), tris.copy())
 
-    # BFS: accumulate rotation transforms per face
-    visited = {seed}
-    queue = [seed]
-    face_transforms = {seed: (np.eye(3), np.zeros(3))}  # (R, t) cumulative
+    if flat_mode:
+        seed_normal = _normalize(face_info[seed][1])
+        align_R = _rotation_between_vectors(seed_normal, np.array([0.0, 0.0, 1.0]))
+        seed_point = align_R @ face_info[seed][2]
+        align_t = np.array([0.0, 0.0, -seed_point[2]])
+        face_transforms = {
+            fi: (align_R.copy(), align_t.copy())
+            for fi in planar_faces
+        }
+    else:
+        # BFS: accumulate rotation transforms per face
+        visited = {seed}
+        queue = [seed]
+        face_transforms = {seed: (np.eye(3), np.zeros(3))}  # (R, t) cumulative
 
-    while queue:
-        cur = queue.pop(0)
-        cur_R, cur_t = face_transforms[cur]
+        while queue:
+            cur = queue.pop(0)
+            cur_R, cur_t = face_transforms[cur]
 
-        for conn in planar_adj.get(cur, []):
-            nb = conn["neighbor"]
-            if nb in visited:
-                continue
+            for conn in planar_adj.get(cur, []):
+                nb = conn["neighbor"]
+                if nb in visited:
+                    continue
 
-            # Calculate candidate transform for this neighbor
-            nb_R, nb_t = None, None
-            _, n_nb, _ = face_info[nb]
-            _, seed_normal, _ = face_info[seed]
-            seed_n_unfolded = face_transforms[seed][0] @ seed_normal
+                # Calculate candidate transform for this neighbor
+                nb_R, nb_t = None, None
+                _, n_nb, _ = face_info[nb]
+                _, seed_normal, _ = face_info[seed]
+                seed_n_unfolded = face_transforms[seed][0] @ seed_normal
 
-            if conn["type"] == "coplanar":
-                nb_R, nb_t = cur_R.copy(), cur_t.copy()
-            elif conn["type"] == "bend":
-                angle = conn["angle"]
-                bend_axis = conn["axis"]
-                shared_edges = conn.get("edges_a", [])
-                if shared_edges:
-                    edge_shape = TopoDS.Edge_s(edge_map.FindKey(shared_edges[0]))
-                    ep1, ep2 = _edge_endpoints(edge_shape)
-                    if ep1 is not None:
-                        cyl_center = conn.get("center")
-                        if cyl_center is not None:
-                            pivot = cur_R @ cyl_center + cur_t
-                        else:
-                            pivot = cur_R @ ep1 + cur_t
-                            
-                        axis_dir = bend_axis if bend_axis is not None else _edge_direction(edge_shape)
-                        if axis_dir is not None:
-                            axis_in_unfolded = _normalize(cur_R @ axis_dir)
-                            
-                            for sign in [1, -1]:
-                                R_bend, t_bend = _rotation_matrix(axis_in_unfolded, sign * angle, pivot)
-                                trial_R = R_bend @ cur_R
-                                trial_t = R_bend @ cur_t + t_bend
-                                trial_n = trial_R @ n_nb
-                                if np.dot(trial_n, seed_n_unfolded) > 0.85:
-                                    if thickness_est > 0:
-                                        inner_r = conn.get("radius", 0.0)
-                                        ba = angle * (inner_r + K_FACTOR * thickness_est)
-                                        correction = ba  # Rotate around cylinder center makes gap 0, so shift by exact ba
-                                        
-                                        centroid_nb = _face_centroid(faces[nb])
-                                        c_unfolded = trial_R @ centroid_nb + trial_t
-                                        
-                                        # Direction outward from Face A boundary
-                                        edge_world = cur_R @ ep1 + cur_t
-                                        kdir = c_unfolded - edge_world
-                                        kdir = kdir - np.dot(kdir, axis_in_unfolded) * axis_in_unfolded
-                                        klen = np.linalg.norm(kdir)
-                                        if klen > 1e-6:
-                                            trial_t = trial_t + (correction / klen) * kdir
-                                    nb_R, nb_t = trial_R, trial_t
-                                    break
-            
-            if nb_R is not None:
-                final_n = nb_R @ n_nb
-                if np.dot(final_n, seed_n_unfolded) > 0.85:
-                    visited.add(nb)
-                    queue.append(nb)
-                    face_transforms[nb] = (nb_R, nb_t)
+                if conn["type"] == "coplanar":
+                    nb_R, nb_t = cur_R.copy(), cur_t.copy()
+                elif conn["type"] == "bend":
+                    angle = conn["angle"]
+                    bend_axis = conn["axis"]
+                    shared_edges = conn.get("edges_a", [])
+                    if shared_edges:
+                        edge_shape = TopoDS.Edge_s(edge_map.FindKey(shared_edges[0]))
+                        ep1, ep2 = _edge_endpoints(edge_shape)
+                        if ep1 is not None:
+                            cyl_center = conn.get("center")
+                            if cyl_center is not None:
+                                pivot = cur_R @ cyl_center + cur_t
+                            else:
+                                pivot = cur_R @ ep1 + cur_t
+
+                            axis_dir = bend_axis if bend_axis is not None else _edge_direction(edge_shape)
+                            if axis_dir is not None:
+                                axis_in_unfolded = _normalize(cur_R @ axis_dir)
+
+                                for sign in [1, -1]:
+                                    R_bend, t_bend = _rotation_matrix(axis_in_unfolded, sign * angle, pivot)
+                                    trial_R = R_bend @ cur_R
+                                    trial_t = R_bend @ cur_t + t_bend
+                                    trial_n = trial_R @ n_nb
+                                    if np.dot(trial_n, seed_n_unfolded) > 0.85:
+                                        if thickness_est > 0:
+                                            inner_r = conn.get("radius", 0.0)
+                                            ba = angle * (inner_r + K_FACTOR * thickness_est)
+                                            correction = ba  # Rotate around cylinder center makes gap 0, so shift by exact ba
+
+                                            centroid_nb = _face_centroid(faces[nb])
+                                            c_unfolded = trial_R @ centroid_nb + trial_t
+
+                                            # Direction outward from Face A boundary
+                                            edge_world = cur_R @ ep1 + cur_t
+                                            kdir = c_unfolded - edge_world
+                                            kdir = kdir - np.dot(kdir, axis_in_unfolded) * axis_in_unfolded
+                                            klen = np.linalg.norm(kdir)
+                                            if klen > 1e-6:
+                                                trial_t = trial_t + (correction / klen) * kdir
+                                        nb_R, nb_t = trial_R, trial_t
+                                        break
+
+                if nb_R is not None:
+                    final_n = nb_R @ n_nb
+                    if np.dot(final_n, seed_n_unfolded) > 0.85:
+                        visited.add(nb)
+                        queue.append(nb)
+                        face_transforms[nb] = (nb_R, nb_t)
 
     seed_normal = _normalize(face_transforms[seed][0] @ face_info[seed][1])
     align_R = _rotation_between_vectors(seed_normal, np.array([0.0, 0.0, 1.0]))

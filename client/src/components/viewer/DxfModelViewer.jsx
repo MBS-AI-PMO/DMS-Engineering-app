@@ -64,6 +64,7 @@ const DxfModelViewer = ({
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const controlsRef = useRef(null);
+  const extrudeMatRef = useRef(null);
   const [dxfSvg, setDxfSvg] = useState(null);
   const [viewBoxData, setViewBoxData] = useState(null);
   const wrinkleNormal = useRef(null);
@@ -136,7 +137,7 @@ const DxfModelViewer = ({
     };
     loadDxf();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFile]);
+  }, [selectedFile?.id]);
 
   // --- Procedural Texture Generation ---
   useEffect(() => {
@@ -264,6 +265,7 @@ const DxfModelViewer = ({
         normalMap: isWrinkled ? wrinkleNormal.current : null,
         normalScale: isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0)
       });
+      extrudeMatRef.current = extrudeMat;
 
       metaShapes.forEach(m => {
         if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat));
@@ -285,8 +287,44 @@ const DxfModelViewer = ({
     };
 
     init();
-    return () => { cancelAnimationFrame(reqId); controlsRef.current?.dispose(); rendererRef.current?.dispose(); if (el) el.innerHTML = ''; };
-  }, [selectedFile, viewMode, dxfSvg, activeFinishColor, isFinishPowderCoating, selectedThickness, viewBoxData?.isNativeInches]);
+    return () => {
+      cancelAnimationFrame(reqId);
+      controlsRef.current?.dispose();
+      rendererRef.current?.dispose();
+      extrudeMatRef.current = null;
+      if (el) el.innerHTML = '';
+    };
+  }, [selectedFile?.id, viewMode, dxfSvg, selectedThickness, viewBoxData?.isNativeInches]);
+
+  // Live finish updates without rebuilding the whole DXF 3D scene.
+  useEffect(() => {
+    if (viewMode !== '3d') return;
+    const mat = extrudeMatRef.current;
+    if (!mat) return;
+
+    const finishHex = activeFinishColor?.color || activeFinishColor?.hex || null;
+    const isWrinkled = !!(activeFinishColor?.is_wrinkled || activeFinishColor?.name?.toUpperCase().includes('WRINKLED'));
+
+    if (finishHex) {
+      mat.color.set(new THREE.Color(finishHex));
+      mat.emissive.set(isFinishPowderCoating ? 0x000000 : new THREE.Color(finishHex));
+      mat.emissiveIntensity = isFinishPowderCoating ? 0 : 0.15;
+      mat.roughness = isFinishPowderCoating ? (isWrinkled ? 0.68 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6;
+      mat.metalness = isWrinkled ? 0.15 : 0.05;
+      mat.normalMap = isWrinkled ? wrinkleNormal.current : null;
+      mat.normalScale = isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0);
+    } else {
+      mat.color.set(0xcecece);
+      mat.emissive.set(0x000000);
+      mat.emissiveIntensity = 0;
+      mat.roughness = 0.6;
+      mat.metalness = 0.05;
+      mat.normalMap = null;
+      mat.normalScale = new THREE.Vector2(0, 0);
+    }
+
+    mat.needsUpdate = true;
+  }, [activeFinishColor, isFinishPowderCoating, viewMode]);
 
   if (viewMode === '2d') {
     return (

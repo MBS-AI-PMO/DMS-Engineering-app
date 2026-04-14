@@ -21,6 +21,65 @@ const loadImageAsBase64 = (url) => {
     });
 };
 
+const safeParseConfig = (rawConfig) => {
+    if (!rawConfig) return {};
+    if (typeof rawConfig === 'object') return rawConfig;
+    if (typeof rawConfig === 'string') {
+        try {
+            return JSON.parse(rawConfig);
+        } catch {
+            return {};
+        }
+    }
+    return {};
+};
+
+const toNumber = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+};
+
+const formatPosition = (position) => {
+    if (Array.isArray(position) && position.length >= 3) {
+        return '(' + position.slice(0, 3).map(v => (toNumber(v) ?? 0).toFixed(2)).join(', ') + ')';
+    }
+    if (position && typeof position === 'object') {
+        return '('
+            + (toNumber(position.x) ?? 0).toFixed(2) + ', '
+            + (toNumber(position.y) ?? 0).toFixed(2) + ', '
+            + (toNumber(position.z) ?? 0).toFixed(2) + ')';
+    }
+    return 'N/A';
+};
+
+const formatDiameter = (inches) => {
+    const valueInches = toNumber(inches);
+    if (valueInches === null) return 'N/A';
+    return valueInches.toFixed(4) + ' in (' + (valueInches * 25.4).toFixed(2) + ' mm)';
+};
+
+const getConfigCounts = (config) => {
+    const selectedBends = config?.selectedBends || {};
+    const detectedBends = config?.detectedBends || [];
+    return {
+        services: Array.isArray(config?.additionalServices) ? config.additionalServices.length : 0,
+        taps: Object.keys(config?.selectedTaps || {}).length,
+        hardware: Object.keys(config?.selectedHardware || {}).length,
+        countersinks: Object.keys(config?.selectedCountersinks || {}).length,
+        bends: Math.max(Object.keys(selectedBends).length, Array.isArray(detectedBends) ? detectedBends.length : 0),
+    };
+};
+
+const getAppliedServices = (config) => {
+    const services = Array.isArray(config?.additionalServices) ? config.additionalServices : [];
+    const finishByService = config?.selectedFinishColors || {};
+    return services.map(service => {
+        const selectedFinish = finishByService[service.id];
+        const finishLabel = selectedFinish?.name || selectedFinish?.service_name || selectedFinish?.service || '';
+        return finishLabel ? (service.title + ': ' + finishLabel) : service.title;
+    });
+};
+
 /**
  * Generates a premium PDF report for a manufacturing order.
  */
@@ -92,7 +151,7 @@ export async function generateOrderReport(order, items) {
 
     // Order summary box
     doc.setFillColor(...lightGrey);
-    doc.roundedRect(margin, y, contentW, 30, 3, 3, 'F');
+    doc.roundedRect(margin, y, contentW, 36, 3, 3, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(...darkSlate);
@@ -102,6 +161,9 @@ export async function generateOrderReport(order, items) {
     doc.setTextColor(...medGrey);
     doc.text('Status: ' + (order.status || 'pending').toUpperCase(), margin + 8, y + 19);
     doc.text('Payment: ' + (order.payment_method || 'COD').toUpperCase(), margin + 8, y + 25);
+    if (order.payment_id) {
+        doc.text('Payment Ref: ' + String(order.payment_id), margin + 8, y + 31);
+    }
 
     doc.setFillColor(...brandRed);
     doc.roundedRect(pageW - margin - 50, y + 4, 45, 22, 2, 2, 'F');
@@ -110,7 +172,7 @@ export async function generateOrderReport(order, items) {
     doc.setTextColor(...white);
     doc.text('$' + parseFloat(order.total_price || 0).toFixed(2), pageW - margin - 27.5, y + 18, { align: 'center' });
 
-    y += 40;
+    y += 46;
 
     // Customer Info
     doc.setFont('helvetica', 'bold');
@@ -158,32 +220,42 @@ export async function generateOrderReport(order, items) {
     y += 5;
 
     const itemTableData = items.map((item, idx) => {
-        const config = typeof item.configuration_json === 'string' ? JSON.parse(item.configuration_json) : (item.configuration_json || {});
+        const config = safeParseConfig(item.configuration_json);
+        const counts = getConfigCounts(config);
+        const featureBits = [];
+        if (counts.services > 0) featureBits.push('Services: ' + counts.services);
+        if (counts.taps > 0) featureBits.push('Taps: ' + counts.taps);
+        if (counts.hardware > 0) featureBits.push('Hardware: ' + counts.hardware);
+        if (counts.countersinks > 0) featureBits.push('Countersinks: ' + counts.countersinks);
+        if (counts.bends > 0) featureBits.push('Bends: ' + counts.bends);
+
         return [
             String(idx + 1),
             item.file_name || 'Unknown',
             config.metal?.name || 'N/A',
             config.thickness ? config.thickness + ' mm' : 'N/A',
             String(item.quantity || 1),
-            '$' + parseFloat(item.unit_price || 0).toFixed(2)
+            '$' + parseFloat(item.unit_price || 0).toFixed(2),
+            featureBits.length > 0 ? featureBits.join(' | ') : 'None'
         ];
     });
 
     autoTable(doc, {
         startY: y,
-        head: [['#', 'File Name', 'Material', 'Thickness', 'Qty', 'Unit Price']],
+        head: [['#', 'File Name', 'Material', 'Thickness', 'Qty', 'Unit Price', 'Applied Features']],
         body: itemTableData,
         margin: { left: margin, right: margin },
         headStyles: { fillColor: darkSlate, textColor: white, fontStyle: 'bold', fontSize: 8, halign: 'center' },
         styles: { fontSize: 8, cellPadding: 4, textColor: darkSlate, halign: 'center' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
-            0: { cellWidth: 10 },
-            1: { cellWidth: 55, halign: 'left' },
-            2: { cellWidth: 35 },
-            3: { cellWidth: 25 },
-            4: { cellWidth: 15 },
-            5: { cellWidth: 25 },
+            0: { cellWidth: 8 },
+            1: { cellWidth: 44, halign: 'left' },
+            2: { cellWidth: 27 },
+            3: { cellWidth: 18 },
+            4: { cellWidth: 12 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 45, halign: 'left' },
         }
     });
 
@@ -204,7 +276,14 @@ export async function generateOrderReport(order, items) {
         doc.rect(0, 20, pageW, 2, 'F');
 
         let iy = 32;
-        const config = typeof item.configuration_json === 'string' ? JSON.parse(item.configuration_json) : (item.configuration_json || {});
+        const config = safeParseConfig(item.configuration_json);
+        const counts = getConfigCounts(config);
+        const appliedServices = getAppliedServices(config);
+        const finishNames = [
+            config.anodizingColor?.name || config.anodizingColor?.label || null,
+            ...Object.values(config.selectedFinishColors || {}).map(v => v?.name || v?.service_name || v?.service || null)
+        ].filter(Boolean);
+        const uniqueFinishNames = [...new Set(finishNames)];
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
@@ -227,8 +306,15 @@ export async function generateOrderReport(order, items) {
             ['Production Service', config.productionService?.title || config.productionService?.name || 'N/A'],
             ['Material / Alloy', config.metal?.name || 'N/A'],
             ['Material Thickness', config.thickness ? config.thickness + ' mm' : 'N/A'],
+            ['Selected Stock Thickness', config.selectedThickness ? String(config.selectedThickness) : 'N/A'],
             ['Finish / Anodizing', config.anodizingColor?.name || config.anodizingColor?.label || 'None'],
             ['Anodizing Color Code', config.anodizingColor?.color || 'N/A'],
+            ['Applied Services', appliedServices.length > 0 ? appliedServices.join(', ') : 'None'],
+            ['Finish Options', uniqueFinishNames.length > 0 ? uniqueFinishNames.join(', ') : 'None'],
+            ['Tapped Holes', String(counts.taps)],
+            ['Hardware Inserts', String(counts.hardware)],
+            ['Countersinks', String(counts.countersinks)],
+            ['Detected Bends', String(counts.bends)],
             ['Quantity Ordered', (item.quantity || 1) + ' unit(s)'],
             ['Unit Price', '$' + parseFloat(item.unit_price || 0).toFixed(2)],
             ['Subtotal', '$' + (parseFloat(item.unit_price || 0) * (item.quantity || 1)).toFixed(2)],
@@ -264,12 +350,13 @@ export async function generateOrderReport(order, items) {
                 dimRows.push(['Length (mm)', dims.mm.l + ' mm']);
                 dimRows.push(['Width (mm)', dims.mm.w + ' mm']);
                 dimRows.push(['Thickness (mm)', dims.mm.t + ' mm']);
-                if (dims.mm.volume && dims.mm.volume !== '0.00') dimRows.push(['Volume', dims.mm.volume + ' cm3']);
+                if (dims.mm.volume && dims.mm.volume !== '0.00') dimRows.push(['Volume (mm^3)', dims.mm.volume + ' mm^3']);
             }
             if (dims.inches) {
                 dimRows.push(['Length (in)', dims.inches.l + '"']);
                 dimRows.push(['Width (in)', dims.inches.w + '"']);
                 dimRows.push(['Thickness (in)', dims.inches.t + '"']);
+                if (dims.inches.volume && dims.inches.volume !== '0.000') dimRows.push(['Volume (in^3)', dims.inches.volume + ' in^3']);
             }
 
             if (dimRows.length > 0) {
@@ -303,16 +390,15 @@ export async function generateOrderReport(order, items) {
 
             const tapRows = tapEntries.map(([tapId, tapInfo], i) => {
                 const hole = tapInfo.hole || {};
-                const pos = hole.position;
-                let posStr = 'N/A';
-                if (Array.isArray(pos)) posStr = '(' + pos.map(v => parseFloat(v).toFixed(2)).join(', ') + ')';
-                else if (pos && typeof pos === 'object') posStr = '(' + parseFloat(pos.x || 0).toFixed(2) + ', ' + parseFloat(pos.y || 0).toFixed(2) + ', ' + parseFloat(pos.z || 0).toFixed(2) + ')';
+                const holeDiameterMm = toNumber(hole.diameter_mm)
+                    ?? (toNumber(hole.diameter_in) !== null ? toNumber(hole.diameter_in) * 25.4 : null)
+                    ?? (toNumber(hole.diameterInches) !== null ? toNumber(hole.diameterInches) * 25.4 : null);
 
                 return [
                     String(i + 1),
                     tapInfo.tap_name || tapInfo.name || 'Tap ' + tapId,
-                    hole.diameterInches ? (hole.diameterInches * 25.4).toFixed(2) + ' mm' : 'N/A',
-                    posStr,
+                    holeDiameterMm !== null ? holeDiameterMm.toFixed(2) + ' mm' : 'N/A',
+                    formatPosition(hole.position),
                     tapInfo.price ? '$' + parseFloat(tapInfo.price).toFixed(2) : '$0.00'
                 ];
             });
@@ -351,16 +437,12 @@ export async function generateOrderReport(order, items) {
             const hwRows = hwEntries.map(([holeId, hwInfo], i) => {
                 const hole = hwInfo.hole || {};
                 const item = hwInfo.item || {};
-                const pos = hole.position;
-                let posStr = 'N/A';
-                if (Array.isArray(pos)) posStr = '(' + pos.map(v => parseFloat(v).toFixed(2)).join(', ') + ')';
-                else if (pos && typeof pos === 'object') posStr = '(' + parseFloat(pos.x || 0).toFixed(2) + ', ' + parseFloat(pos.y || 0).toFixed(2) + ', ' + parseFloat(pos.z || 0).toFixed(2) + ')';
 
                 return [
                     String(i + 1),
                     item.name || 'Hardware ' + holeId,
                     hwInfo.face === 'up' ? 'Top' : 'Bottom',
-                    posStr,
+                    formatPosition(hole.position),
                     item.price ? '$' + parseFloat(item.price).toFixed(2) : '$0.00'
                 ];
             });
@@ -384,6 +466,100 @@ export async function generateOrderReport(order, items) {
             iy = doc.lastAutoTable.finalY + 10;
         }
 
+        // Countersinks
+        const countersinks = config.selectedCountersinks || {};
+        const csEntries = Object.entries(countersinks);
+        if (csEntries.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(...brandRed);
+            doc.text('COUNTERSINK SPECIFICATIONS', margin, iy);
+            iy += 2;
+            doc.line(margin, iy, margin + 65, iy);
+            iy += 5;
+
+            const csRows = csEntries.map(([holeId, csInfo], i) => {
+                const hole = csInfo.hole || {};
+                return [
+                    String(i + 1),
+                    csInfo.name || 'Countersink ' + holeId,
+                    csInfo.face === 'up' ? 'Top' : (csInfo.face === 'down' ? 'Bottom' : 'N/A'),
+                    formatDiameter(csInfo.major_dia),
+                    formatDiameter(csInfo.minor_dia),
+                    formatPosition(hole.position),
+                    csInfo.price ? '$' + parseFloat(csInfo.price).toFixed(2) : '$0.00'
+                ];
+            });
+
+            autoTable(doc, {
+                startY: iy,
+                head: [['#', 'Countersink', 'Face', 'Major Diameter', 'Minor Diameter', 'Position (x, y, z)', 'Price']],
+                body: csRows,
+                margin: { left: margin, right: margin },
+                headStyles: { fillColor: darkSlate, textColor: white, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+                styles: { fontSize: 8, cellPadding: 3.5, textColor: darkSlate, halign: 'center' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: {
+                    0: { cellWidth: 8 },
+                    1: { cellWidth: 35, halign: 'left' },
+                    2: { cellWidth: 16 },
+                    3: { cellWidth: 24 },
+                    4: { cellWidth: 24 },
+                    5: { cellWidth: 47, halign: 'left' },
+                    6: { cellWidth: 20 },
+                }
+            });
+            iy = doc.lastAutoTable.finalY + 10;
+        }
+
+        // Bending
+        const selectedBends = config.selectedBends || {};
+        const bendEntries = Object.keys(selectedBends).length > 0
+            ? Object.values(selectedBends)
+            : (Array.isArray(config.detectedBends) ? config.detectedBends : []);
+
+        if (bendEntries.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(...brandRed);
+            doc.text('BENDING SPECIFICATIONS', margin, iy);
+            iy += 2;
+            doc.line(margin, iy, margin + 55, iy);
+            iy += 5;
+
+            const bendRows = bendEntries.map((bend, i) => {
+                const angleValue = toNumber(bend?.angle) ?? toNumber(bend?.included_angle) ?? toNumber(bend?.initialAngle);
+                const radiusValue = toNumber(bend?.radius) ?? toNumber(bend?.r);
+                const lineText = (Array.isArray(bend?.p0) && Array.isArray(bend?.p1))
+                    ? (formatPosition(bend.p0) + ' -> ' + formatPosition(bend.p1))
+                    : (bend?.id ? ('Bend ' + bend.id) : 'Detected bend');
+
+                return [
+                    String(i + 1),
+                    angleValue !== null ? angleValue.toFixed(2) + ' deg' : 'N/A',
+                    radiusValue !== null ? radiusValue.toFixed(2) + ' mm' : 'N/A',
+                    lineText
+                ];
+            });
+
+            autoTable(doc, {
+                startY: iy,
+                head: [['#', 'Angle', 'Radius', 'Bend Line']],
+                body: bendRows,
+                margin: { left: margin, right: margin },
+                headStyles: { fillColor: darkSlate, textColor: white, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+                styles: { fontSize: 8, cellPadding: 3.5, textColor: darkSlate, halign: 'center' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: {
+                    0: { cellWidth: 8 },
+                    1: { cellWidth: 30 },
+                    2: { cellWidth: 25 },
+                    3: { cellWidth: 111, halign: 'left' },
+                }
+            });
+            iy = doc.lastAutoTable.finalY + 10;
+        }
+
         // File paths
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
@@ -398,6 +574,7 @@ export async function generateOrderReport(order, items) {
             body: [
                 ['Original Source', item.original_file_path || 'Not available'],
                 ['Configured STEP', item.configured_file_path || 'Processing...'],
+                ['Flat Pattern DXF', item.flat_file_path || 'Not generated'],
             ],
             theme: 'plain',
             margin: { left: margin, right: margin },

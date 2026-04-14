@@ -89,7 +89,7 @@ const Cart = () => {
                       </span>
                       <span className="meta-tag secondary">
                         <TrendingDown size={14} />
-                        {item.isUpdating ? <Skeleton dark style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness`}
+                        {item.isUpdating ? <Skeleton dark style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness${item.configuration?.selectedThickness ? ` (${item.configuration.selectedThickness})` : ''}`}
                       </span>
 
                       {/* Detailed Sub-Services */}
@@ -108,7 +108,35 @@ const Cart = () => {
                       {item.configuration.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
                         <span className="meta-tag secondary">
                           <Settings size={14} />
-                          {Object.keys(item.configuration.selectedTaps).length} Taped Holes
+                          {Object.keys(item.configuration.selectedTaps).length} Tapped Holes
+                        </span>
+                      )}
+
+                      {item.configuration?.selectedHardware && Object.keys(item.configuration.selectedHardware).length > 0 && (
+                        <span className="meta-tag secondary">
+                          <Settings size={14} />
+                          {Object.keys(item.configuration.selectedHardware).length} Hardware Inserts
+                        </span>
+                      )}
+
+                      {item.configuration?.selectedCountersinks && Object.keys(item.configuration.selectedCountersinks).length > 0 && (
+                        <span className="meta-tag secondary">
+                          <Settings size={14} />
+                          {Object.keys(item.configuration.selectedCountersinks).length} Countersinks
+                        </span>
+                      )}
+
+                      {(Object.keys(item.configuration?.selectedBends || {}).length > 0 || (item.configuration?.detectedBends || []).length > 0) && (
+                        <span className="meta-tag secondary">
+                          <Layers size={14} />
+                          {Math.max(Object.keys(item.configuration?.selectedBends || {}).length, (item.configuration?.detectedBends || []).length)} Bends
+                        </span>
+                      )}
+
+                      {Object.keys(item.configuration?.selectedFinishColors || {}).length > 0 && (
+                        <span className="meta-tag premium">
+                          <Zap size={14} />
+                          Finish: {Object.values(item.configuration.selectedFinishColors).map(c => c?.name || c?.service_name || c?.service || 'Selected').join(', ')}
                         </span>
                       )}
 

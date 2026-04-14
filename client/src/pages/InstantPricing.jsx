@@ -15,7 +15,6 @@ import {
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import BendingModal from '../components/modals/BendingModal';
 import StepModelViewer from '../components/viewer/StepModelViewer';
 import DxfModelViewer from '../components/viewer/DxfModelViewer';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
@@ -60,6 +59,7 @@ const InstantPricing = () => {
   const [dxfTechData, setDxfTechData] = useState(null);
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
   const unfoldAbortControllerRef = useRef(null);
+  const unfoldRequestSeqRef = useRef(0);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
@@ -84,7 +84,6 @@ const InstantPricing = () => {
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
   const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
   const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
-  const [isBendingModalOpen, setIsBendingModalOpen] = useState(false);
   const activeFinishColor = useMemo(() => {
     // Priority order: Find any selected finish that has a color assigned
     const keys = Object.keys(selectedFinishColors);
@@ -140,8 +139,42 @@ const InstantPricing = () => {
     flatten(bendTree);
     return list;
   }, [bendTree]);
+  const bendService = useMemo(
+    () => allServices.find(s => s.title?.toLowerCase().includes('bend')) || null,
+    [allServices]
+  );
+
+  const bendDisplayPrice = useMemo(() => {
+    const rows = priceEstimate?.breakdown?.service_breakdown || [];
+    const bendRow = rows.find(r => (r?.name || '').toLowerCase().includes('bend'));
+    if (bendRow) return parseFloat(bendRow.price || 0) || 0;
+
+    // Fallback if service_breakdown is unavailable.
+    const bendCount = bendList?.length || 0;
+    if (!bendService || bendCount === 0) return 0;
+    return (parseFloat(bendService.base_price || 0) || 0) * bendCount;
+  }, [priceEstimate, bendList, bendService]);
+
+  useEffect(() => {
+    if (!bendService) return;
+    const bendCount = bendList?.length || 0;
+    const hasBendingServiceSelected = selectedAdditionalServices.some(s => s.id === bendService.id);
+
+    if (bendCount > 0 && !hasBendingServiceSelected) {
+      setSelectedAdditionalServices(prev => [...prev, bendService]);
+      return;
+    }
+
+    if (bendCount === 0 && hasBendingServiceSelected) {
+      setSelectedAdditionalServices(prev => prev.filter(s => s.id !== bendService.id));
+      setSelectedBends({});
+    }
+  }, [bendService, bendList, selectedAdditionalServices]);
+
   const stepHolesDetectedRef = useRef(false);
   const qty1PriceRef = useRef(null);
+  const detectHolesAbortRef = useRef(null);
+  const TAP_RANGE_TOLERANCE = 0.00025;
 
   const holeGroups = useMemo(() => {
     const groups = {};
@@ -151,6 +184,67 @@ const InstantPricing = () => {
       groups[key].holes.push(hole);
     });
     return Object.values(groups).sort((a, b) => parseFloat(a.dia) - parseFloat(b.dia));
+  }, [detectedHoles]);
+
+  const holeIndexById = useMemo(() => {
+    const idx = {};
+    detectedHoles.forEach((h, i) => { idx[h.id] = i + 1; });
+    return idx;
+  }, [detectedHoles]);
+
+  const hwTypeById = useMemo(() => {
+    const m = {};
+    HW_TYPES.forEach(t => { m[t.id] = t; });
+    return m;
+  }, []);
+
+  const holeGroupsWithHwState = useMemo(() => {
+    return holeGroups.map(group => {
+      let assignedCount = 0;
+      group.holes.forEach(h => { if (selectedHardware[h.id]) assignedCount += 1; });
+      return {
+        ...group,
+        assignedCount,
+        allAssigned: assignedCount === group.holes.length,
+      };
+    });
+  }, [holeGroups, selectedHardware]);
+
+  const csHoleGroups = useMemo(() => {
+    const groups = {};
+    detectedHoles.forEach(h => {
+      const dia = Number(h.diameterInches || 0).toFixed(4);
+      if (!groups[dia]) groups[dia] = { dia, holes: [] };
+      groups[dia].holes.push(h);
+    });
+    return Object.values(groups).sort((a, b) => parseFloat(a.dia) - parseFloat(b.dia));
+  }, [detectedHoles]);
+
+  // Keep only assignments that still map to currently detected holes.
+  // This prevents stale hidden entries from inflating hardware/tap/countersink counts and pricing.
+  useEffect(() => {
+    if (!detectedHoles.length) return;
+
+    const validIds = new Set(detectedHoles.map(h => String(h.id)));
+    const pruneByHoleIds = (prev) => {
+      const src = prev || {};
+      const next = {};
+      let changed = false;
+      Object.entries(src).forEach(([k, v]) => {
+        if (validIds.has(String(k))) next[k] = v;
+        else changed = true;
+      });
+      if (!changed && Object.keys(src).length === Object.keys(next).length) return prev;
+      return next;
+    };
+
+    setSelectedHardware(prev => pruneByHoleIds(prev));
+    setSelectedCountersinks(prev => pruneByHoleIds(prev));
+    setSelectedTaps(prev => pruneByHoleIds(prev));
+
+    setActiveHwHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
+    setActiveCSHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
+    setActiveTapHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
   }, [detectedHoles]);
 
   const isTappingActive = useMemo(() =>
@@ -169,7 +263,11 @@ const InstantPricing = () => {
 
   const tapOptions = useMemo(() => {
     const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
-    return tapSvc?.service_options || [];
+    let options = tapSvc?.service_options || [];
+    if (typeof options === 'string') {
+      try { options = JSON.parse(options); } catch { options = []; }
+    }
+    return Array.isArray(options) ? options : [];
   }, [allServices]);
 
   const csOptions = useMemo(() => {
@@ -184,27 +282,34 @@ const InstantPricing = () => {
   }, [isTappingActive, isHardwareActive, isCountersinkingActive]);
   const handleProceedToReview = () => {
     if (!selectedFile || !selectedMetal || !dimensions) return;
+    if (!priceEstimate?.breakdown) {
+      toast('Pricing is not ready yet. Please wait a moment and try again.', 'error');
+      return;
+    }
 
-    // priceEstimate.total_price already includes anodizing (sent via additional_services to API)
-    // so only taps and hardware need to be added separately (they are not included in the backend total)
-    const tapCost = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
-    const hardwareCost = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
-    const csCost = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
-    const bendSvc = allServices.find(s => s.title.toLowerCase().includes('bend'));
-    const bendCost = (selectedAdditionalServices.some(s => s.id === bendSvc?.id)) ? (parseFloat(bendSvc?.base_price || 0) * (bendList?.length || 0)) : 0;
-    // Calculate unit costs for sub-services établissements
-    const unitTapCost = tapCost / quantity;
-    const unitHardwareCost = hardwareCost / quantity;
-    const unitCSCost = csCost / quantity;
-    const unitBendCost = bendCost / quantity;
+    const fallbackPerimeterMm = ((parseFloat(dimensions?.inches?.l) || 0) + (parseFloat(dimensions?.inches?.w) || 0)) * 2 * 25.4;
+    const fallbackPierceCount = Math.max(1, detectedHoles.length || 1);
+    const pricingTechnicalData = backendData ? {
+      totalPerimeter: backendData.totalPerimeter || fallbackPerimeterMm,
+      pierceCount: backendData.pierceCount || fallbackPierceCount,
+      bends: backendData.bends || []
+    } : dxfTechData ? {
+      totalPerimeter: dxfTechData.totalPerimeter || fallbackPerimeterMm,
+      pierceCount: dxfTechData.pierceCount || fallbackPierceCount,
+      bends: []
+    } : {
+      totalPerimeter: fallbackPerimeterMm,
+      pierceCount: fallbackPierceCount,
+      bends: []
+    };
 
-    // Base price per unit (at Quantity 1) établissements
-    // If we have an anchored Qty 1 price from the backend, use it. Otherwise derive from current estimate.
-    const engineUnitBase = (qty1PriceRef.current !== null)
-      ? qty1PriceRef.current
-      : (parseFloat(priceEstimate?.total_price || 0) / (1 - (parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100)) / quantity);
-
-    const baseUnitPrice = engineUnitBase + unitTapCost + unitHardwareCost + unitCSCost + unitBendCost;
+    // Backend breakdown is the source of truth for per-unit prices at current quantity.
+    const unitBasePrice = parseFloat(priceEstimate.breakdown?.unit_total || 0);
+    const unitFinalPrice = parseFloat(
+      priceEstimate.breakdown?.final_unit_price ||
+      (quantity > 0 ? (parseFloat(priceEstimate?.total_price || 0) / quantity) : 0)
+    );
+    const discountPercent = parseFloat(priceEstimate.breakdown?.discount_percent || 0);
 
     const config = {
       productionService: selectedProductionService,
@@ -222,7 +327,9 @@ const InstantPricing = () => {
       detectedBends,
       additionalServices: selectedAdditionalServices,
       dimensions: dimensions,
-      dxfSvg: dxfSvg
+      dxfSvg: dxfSvg,
+      selectedFinishColors,
+      pricingTechnicalData,
     };
 
     addToCart({
@@ -231,12 +338,10 @@ const InstantPricing = () => {
       tempPath: selectedFile.tempPath,
       configuration: config,
       pricing: {
-        baseUnit: baseUnitPrice, // Gross unit price at Qty 1 établissements
-        taps: unitTapCost,
-        hardware: unitHardwareCost,
+        baseUnit: unitBasePrice,
+        discount_percent: discountPercent,
         finish: 0,
-        // Calculate the discounted total at current quantity linear to anchored base establishments
-        total: baseUnitPrice * (1 - (parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100))
+        total: unitFinalPrice
       },
       quantity: quantity
     });
@@ -374,9 +479,8 @@ const InstantPricing = () => {
     setSelectedCategory(null);
     setSelectedMetal(null);
     setQuantity(1);
-    setSelectedAdditionalServices([]);
-    setSelectedFinishColors({});
-    setActiveFinishSvcId(null);
+    // PRESERVE selectedAdditionalServices and service-specific selections (hardware, taps, countersinks, finishes)
+    // They will only be cleared when the user explicitly unchecks the service in the UI
     setDetectedHoles([]);
     setIsDetectingHoles(false);
     setSelectedThickness(null);
@@ -394,15 +498,19 @@ const InstantPricing = () => {
     if (stepHolesDetectedRef.current || isDetectingHoles) return;
 
     const detect = async () => {
+      if (detectHolesAbortRef.current) {
+        try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
+      }
+      detectHolesAbortRef.current = new AbortController();
       setIsDetectingHoles(true);
       const fd = new FormData();
       fd.append('file', selectedFile.file);
       try {
-        const r = await fetch(`${BACKEND_URL}/api/detect-holes`, { method: 'POST', body: fd });
+        const r = await fetch(`${BACKEND_URL}/api/detect-holes`, { method: 'POST', body: fd, signal: detectHolesAbortRef.current.signal });
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
         const d = await r.json();
         const depthIn = dimensions?.mm?.t ? parseFloat(dimensions.mm.t) / 25.4 : 2 / 25.4;
-        setDetectedHoles((d.holes || []).map((h, idx) => ({
+        const mappedHoles = (d.holes || []).map((h, idx) => ({
           id: idx,
           diameterInches: h.diameter_in,
           diameter_mm: h.diameter_mm,
@@ -411,24 +519,44 @@ const InstantPricing = () => {
           position: h.position,
           axis: h.axis,
           parent_face_id: h.face_id, // PRESERVE FACE ASSOCIATION
-        })));
+        }));
+
+        setDetectedHoles(prev => {
+          if (prev.length === mappedHoles.length && prev.every((p, i) =>
+            p.diameterInches === mappedHoles[i].diameterInches &&
+            p.depthMm === mappedHoles[i].depthMm &&
+            p.position?.[0] === mappedHoles[i].position?.[0] &&
+            p.position?.[1] === mappedHoles[i].position?.[1] &&
+            p.position?.[2] === mappedHoles[i].position?.[2]
+          )) {
+            return prev;
+          }
+          return mappedHoles;
+        });
+
         stepHolesDetectedRef.current = true;
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('Could not detect holes:', err.message);
         stepHolesDetectedRef.current = true;
       } finally {
         setIsDetectingHoles(false);
+        detectHolesAbortRef.current = null;
       }
     };
     detect();
-  }, [selectedAdditionalServices, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      if (detectHolesAbortRef.current) {
+        try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
+      }
+    };
+  }, [selectedAdditionalServices, selectedFile]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {
     setActiveTapHole(null);
     setActiveHwHole(null);
     setActiveCSHole(null);
-    setIsBendingModalOpen(false);
     setIsAnodizingModalOpen(false);
     if (kind === 'tap') {
       setActiveTapHole(detectedHoles[0]);
@@ -436,8 +564,6 @@ const InstantPricing = () => {
       setActiveHwHole(detectedHoles[0]);
     } else if (kind === 'cs') {
       setActiveCSHole(detectedHoles[0]);
-    } else if (kind === 'bend') {
-      setIsBendingModalOpen(true);
     } else if (kind === 'finish') {
       if (svc) setActiveFinishSvcId(svc.id);
       setIsAnodizingModalOpen(true);
@@ -463,6 +589,9 @@ const InstantPricing = () => {
           return tObj.metric === 'mm' ? (parseFloat(tObj.value) / 25.4).toString() : tObj.value;
         })();
 
+        const fallbackPerimeterMm = ((parseFloat(dimensions?.inches?.l) || 0) + (parseFloat(dimensions?.inches?.w) || 0)) * 2 * 25.4;
+        const fallbackPierceCount = Math.max(1, detectedHoles.length || 1);
+
         const payload = {
           metal_id: selectedMetal?.id || null,
           service_id: selectedProductionService?.id || null,
@@ -487,14 +616,18 @@ const InstantPricing = () => {
             price: cs.price || 0
           })),
           technical_data: backendData ? {
-            totalPerimeter: backendData.totalPerimeter,
-            pierceCount: backendData.pierceCount,
+            totalPerimeter: backendData.totalPerimeter || fallbackPerimeterMm,
+            pierceCount: backendData.pierceCount || fallbackPierceCount,
             bends: backendData.bends || []
           } : dxfTechData ? {
             totalPerimeter: dxfTechData.totalPerimeter,
             pierceCount: dxfTechData.pierceCount,
             bends: []
-          } : null
+          } : {
+            totalPerimeter: fallbackPerimeterMm,
+            pierceCount: fallbackPierceCount,
+            bends: []
+          }
         };
         const res = await calculatePrice(payload);
         if (res.success) {
@@ -588,9 +721,13 @@ const InstantPricing = () => {
       return;
     }
 
+    const requestSeq = unfoldRequestSeqRef.current + 1;
+    unfoldRequestSeqRef.current = requestSeq;
+
     // Abort existing call if any
     if (unfoldAbortControllerRef.current) unfoldAbortControllerRef.current.abort();
-    unfoldAbortControllerRef.current = new AbortController();
+    const controller = new AbortController();
+    unfoldAbortControllerRef.current = controller;
 
     if (!isBackground) setIsLoadingUnfold(true);
     const fd = new FormData(); fd.append('file', selectedFile.file);
@@ -598,7 +735,7 @@ const InstantPricing = () => {
       const r = await fetch(`${BACKEND_URL}/api/unfold`, {
         method: 'POST',
         body: fd,
-        signal: unfoldAbortControllerRef.current.signal
+        signal: controller.signal
       });
       if (!r.ok) throw new Error('Unfold failed');
       const d = await r.json();
@@ -624,41 +761,22 @@ const InstantPricing = () => {
       if (err.name === 'AbortError') return;
       console.warn('Error during unfold stage:', err);
     } finally {
-      setIsLoadingUnfold(false);
-      unfoldAbortControllerRef.current = null;
+      if (requestSeq === unfoldRequestSeqRef.current) {
+        if (!isBackground) setIsLoadingUnfold(false);
+        if (unfoldAbortControllerRef.current === controller) {
+          unfoldAbortControllerRef.current = null;
+        }
+      }
     }
   }, [selectedFile, backendData, bendTree]);
 
   // ── Fast Analysis Stage (Holes/Dimensions) ────────────────────────────────
-  const handleQuickAnalysis = useCallback(async () => {
-    if (!selectedFile || !currentIsStep || dimensions) return;
-
-    const fd = new FormData(); fd.append('file', selectedFile.file);
-    try {
-      const r = await fetch(`${BACKEND_URL}/api/detect-holes`, { method: 'POST', body: fd });
-      if (!r.ok) throw new Error('Quick analysis failed');
-      const d = await r.json();
-      if (d.success) {
-        setDetectedHoles(d.holes || []);
-        if (d.bendTree) setBendTree(d.bendTree);
-        if (d.faceMeshes) setBackendData(d);
-        // Note: Dimensions are extracted by the viewer, but we could also get them from backend here
-      }
-    } catch (err) {
-      console.warn('Quick analysis error:', err);
-    }
-  }, [selectedFile, currentIsStep, dimensions]);
-
   // ── Analysis Orchestrator ────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedFile || !currentIsStep) return;
-
-    // 1) Show holes/dims instantly via fast proxy
-    handleQuickAnalysis();
-
-    // 2) Trigger heavy unfold in background (don't block UI)
+    // Trigger heavy unfold in background once per selected STEP file.
     handleUnfold(true);
-  }, [selectedFile, currentIsStep, handleQuickAnalysis, handleUnfold]);
+  }, [selectedFile, currentIsStep, handleUnfold]);
 
   return (
     <div className={`instant-pricing-container ${isQuoteFlowActive || files.length > 0 ? 'ip-fullpage qf-active' : ''}`}>
@@ -668,7 +786,7 @@ const InstantPricing = () => {
         .qf-preview-container { height: 0 !important; }
         .ip-left-panel { width: 200px; min-width: 200px; background: #ffffff; border-right: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 14px 12px; overflow: hidden; }
         .ip-center-panel { flex: 1; display: flex; flex-direction: column; background: #ffffff; min-width: 0; min-height: 0; overflow: hidden; }
-        .ip-right-panel { width: 340px; min-width: 340px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 0; overflow: visible; }
+        .ip-right-panel { width: 340px; min-width: 340px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 12px; overflow: visible; box-sizing: border-box; }
         /* Desktop: floating card with padding from edges */
         .ip-panel-layout { display: flex; position: fixed; top: 48px; left: 48px; right: 48px; bottom: 48px; z-index: 50; overflow: hidden; border-radius: 20px; box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1.5px solid #e2e6ea; }
         body.qf-active { overflow: hidden !important; background: #e8eaed !important; }
@@ -718,7 +836,7 @@ const InstantPricing = () => {
         /* Quote Flow Active panels */
         .ip-qf-left { width:50%; min-width:400px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
         .ip-qf-mid { flex:1; background:#ffffff; border-right:1.5px solid #e8eaed; overflow-y:auto; padding:24px 20px; min-width:0; }
-        .ip-qf-right { width: 340px; min-width: 340px; background: #ffffff; display: flex; flex-direction: column; padding: 0; overflow: visible; }
+        .ip-qf-right { width: 340px; min-width: 340px; background: #ffffff; display: flex; flex-direction: column; padding: 12px; overflow: visible; box-sizing: border-box; }
         .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; }
         .ip-qf-dims { padding:12px 14px; border-top:1.5px solid #e8eaed; background:#ffffff; flex-shrink:0; }
         .ip-back-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; color:#1e293b; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s; }
@@ -907,7 +1025,7 @@ const InstantPricing = () => {
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
                       <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); } }}>3D View</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!backendData || !bendTree) handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
                     </div>
                     <div className="ip-pill-toggle">
                       {['top', 'front', 'side', 'flat']
@@ -938,6 +1056,7 @@ const InstantPricing = () => {
                       setActiveTapHole={setActiveTapHole}
                       selectedHardware={selectedHardware}
                       selectedCountersinks={selectedCountersinks}
+                      countersinkMarkerStyle="camouflage"
                       isTappingActive={isTappingActive}
                       isCountersinkingActive={isCountersinkingActive}
                       isHardwareActive={isHardwareActive}
@@ -952,10 +1071,16 @@ const InstantPricing = () => {
                     />
                   )}
                   {currentIsStep && viewMode === '2d' && (
-                    <FlatPatternViewer
-                      backendData={backendData}
-                      holes={detectedHoles}
-                    />
+                    backendData ? (
+                      <FlatPatternViewer
+                        backendData={backendData}
+                        holes={detectedHoles}
+                      />
+                    ) : (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontWeight: 700, fontSize: 13 }}>
+                        2D flat pattern will appear here after analysis.
+                      </div>
+                    )
                   )}
                   {currentIsDxf && (
                     <DxfModelViewer
@@ -1019,7 +1144,6 @@ const InstantPricing = () => {
                   isCalculatingPrice={isCalculatingPrice}
                   allDiscounts={allDiscounts}
                   handleUnfold={handleUnfold}
-                  setIsBendingModalOpen={setIsBendingModalOpen}
                   setIsAnodizingModalOpen={setIsAnodizingModalOpen}
                   setActiveFinishSvcId={setActiveFinishSvcId}
                   setActiveTapHole={setActiveTapHole}
@@ -1040,7 +1164,7 @@ const InstantPricing = () => {
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
                       <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D VIEW</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); }}>2D FLAT</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!backendData || !bendTree) handleUnfold(); }}>2D FLAT</button>
                     </div>
                     <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
                     {isCountersinkingActive && !isModelFadedManually && (
@@ -1064,12 +1188,16 @@ const InstantPricing = () => {
                     }}>
                       <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Tap Legend</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#4169e1', boxShadow: '0 0 8px #4169e180' }} />
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563eb', boxShadow: '0 0 8px #2563eb80' }} />
                         <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Tapped</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b98180' }} />
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e80' }} />
                         <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Compatible</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b80' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Active</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef444480' }} />
@@ -1078,7 +1206,7 @@ const InstantPricing = () => {
                     </div>
                   )}
 
-                  {currentIsStep ? (
+                  {currentIsStep && viewMode === '3d' ? (
                     <StepModelViewer
                       selectedFile={selectedFile}
                       viewMode={viewMode}
@@ -1096,45 +1224,24 @@ const InstantPricing = () => {
                       isHardwareActive={isHardwareActive}
                       hwItemsByType={hwItemsByType}
                       selectedCountersinks={selectedCountersinks}
+                      countersinkMarkerStyle="camouflage"
                       csOptions={csOptions}
                       isCountersinkingActive={isCountersinkingActive}
                       dimensions={dimensions}
                       allServices={allServices}
                       backendData={backendData}
                     />
-                  ) : (
-                    currentIsStep && (
-                      <StepModelViewer
-                        selectedFile={selectedFile}
-                        viewMode={viewMode}
-                        activeAxis={activeAxis}
-                        selectedThickness={selectedThickness}
-                        activeFinishColor={activeFinishColor}
-                        isFinishPowderCoating={isFinishPowderCoating}
-                        isModelFadedManually={isModelFadedManually}
-                        detectedHoles={detectedHoles}
-                        onHoleClick={handleHoleClick}
-                        selectedTaps={selectedTaps}
-                        isTappingActive={isTappingActive}
-                        activeTapHole={activeTapHole}
-                        setActiveTapHole={setActiveTapHole}
-                        selectedHardware={selectedHardware}
-                        selectedCountersinks={selectedCountersinks}
-                        isCountersinkingActive={isCountersinkingActive}
-                        isHardwareActive={isHardwareActive}
-                        tapOptions={tapOptions}
-                        csOptions={csOptions}
-                        hwItemsByType={hwItemsByType}
-                        isAnodizingModalOpen={isAnodizingModalOpen}
-                        allServices={allServices}
-                        dimensions={dimensions}
-                        onDimensionsExtracted={setDimensions}
-                        setIsImporting={setIsImporting}
-                        setImportProgress={setImportProgress}
-                        isBendingActive={false}
-                        detectedBends={detectedBends}
+                  ) : null}
+                  {currentIsStep && viewMode === '2d' && (
+                    backendData ? (
+                      <FlatPatternViewer
                         backendData={backendData}
+                        holes={detectedHoles}
                       />
+                    ) : (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontWeight: 700, fontSize: 13 }}>
+                        2D flat pattern will appear here after analysis.
+                      </div>
                     )
                   )}
                   {currentIsDxf && (
@@ -1188,7 +1295,6 @@ const InstantPricing = () => {
 
               <div className="ip-qf-mid" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
                 {/* ── wizard Selection Header ──────────────── */}
-                {(selectedProductionService || selectedCategory || selectedMetal || selectedThickness) && (
                   <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     {selectedProductionService && (
                       <div className="ip-step-summary">
@@ -1227,7 +1333,6 @@ const InstantPricing = () => {
                       </div>
                     )}
                   </div>
-                )}
                 <div style={{ padding: '24px 20px', flex: 1, overflowY: 'auto' }}>
                   {/* ── Wizard Progress Stepper ── */}
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
@@ -1543,7 +1648,18 @@ const InstantPricing = () => {
                             return (metalSvcsNums.includes(Number(s.id)) || anyThickHas);
                           })
                           .map(svc => {
-                            const isActive = selectedAdditionalServices.some(s => s.id === svc.id);
+                            const svcTitle = svc.title.toLowerCase();
+                            const kind = svcTitle.includes('bend') ? 'bend'
+                              : svcTitle.includes('tap') ? 'tap'
+                                : svcTitle.includes('hardware') ? 'hw'
+                                  : svcTitle.includes('countersink') ? 'cs'
+                                    : (svcTitle.includes('anodiz') || svcTitle.includes('powder') || svcTitle.includes('coat')) ? 'finish'
+                                      : null;
+                            const isBendService = kind === 'bend';
+                            const bendCount = bendList?.length || 0;
+                            const isActive = isBendService
+                              ? bendCount > 0
+                              : selectedAdditionalServices.some(s => s.id === svc.id);
 
                             // Check if the service is assigned globally to the metal
                             let metalSvcsRoot = selectedMetal?.services;
@@ -1559,16 +1675,18 @@ const InstantPricing = () => {
                             const isThicknessLocked = !hasMetalGrant && !tServicesNums.includes(Number(svc.id));
 
                             // If it's specifically assigned to this thickness, it's supported even if global bendable flag is false
-                            const isBendUnsupported = svc.title.toLowerCase().includes('bend') && !selectedMetal?.is_bendable && !tServicesNums.includes(Number(svc.id));
+                            const isBendUnsupported = svcTitle.includes('bend') && !selectedMetal?.is_bendable && !tServicesNums.includes(Number(svc.id));
+                            const isNoBends = isBendService && bendCount === 0;
 
-                            const isUnsupported = (isBendUnsupported || isThicknessLocked);
+                            const isUnsupported = (isBendUnsupported || isThicknessLocked || isNoBends);
                             const lockReason = isBendUnsupported
                               ? `${selectedMetal?.name} is typically not bendable`
                               : isThicknessLocked
                                 ? `Not available for ${selectedThickness}mm thickness`
-                                : '';
+                                : isNoBends
+                                  ? 'No bends detected in uploaded model'
+                                  : '';
 
-                            const svcTitle = svc.title.toLowerCase();
                             const svcIcon = svcTitle.includes('bend') ? <Layers size={16} />
                               : svcTitle.includes('tap') ? <Settings size={16} />
                                 : svcTitle.includes('hardware') ? <Boxes size={16} />
@@ -1577,53 +1695,46 @@ const InstantPricing = () => {
                                       : svcTitle.includes('powder') || svcTitle.includes('coat') ? <Grid size={16} />
                                         : <Settings size={16} />;
 
-                            const kind = svcTitle.includes('bend') ? 'bend'
-                              : svcTitle.includes('tap') ? 'tap'
-                                : svcTitle.includes('hardware') ? 'hw'
-                                  : svcTitle.includes('countersink') ? 'cs'
-                                    : (svcTitle.includes('anodiz') || svcTitle.includes('powder') || svcTitle.includes('coat')) ? 'finish'
-                                      : null;
                             const holeCount = detectedHoles.length;
                             const configuredCount = kind === 'tap' ? Object.keys(selectedTaps).length
                               : kind === 'hw' ? Object.keys(selectedHardware).length
                                 : kind === 'cs' ? Object.keys(selectedCountersinks).length
-                                  : kind === 'bend' ? (bendList?.length || 0)
+                                  : kind === 'bend' ? bendCount
                                     : kind === 'finish' ? (selectedFinishColors?.[svc.id] ? 1 : 0)
                                       : 0;
                             const totalForKind = (kind === 'tap' || kind === 'hw' || kind === 'cs') ? holeCount
-                              : kind === 'bend' ? (bendList?.length || 0)
+                              : kind === 'bend' ? bendCount
                                 : kind === 'finish' ? 1
                                   : 0;
+
                             return (
                               <React.Fragment key={svc.id}>
                                 <div
                                   className={`ip-category-bar ${isActive ? 'active' : ''} ${isUnsupported ? 'locked' : ''}`}
                                   style={{ pointerEvents: isUnsupported ? 'none' : 'auto' }}
                                   onClick={() => {
-                                    if (isUnsupported) return;
+                                    if (isUnsupported || isBendService) return;
                                     const t = svc.title.toLowerCase();
-                                    const kind = t.includes('bend') ? 'bend'
+                                    const k = t.includes('bend') ? 'bend'
                                       : t.includes('tap') ? 'tap'
                                         : t.includes('hardware') ? 'hw'
                                           : t.includes('countersink') ? 'cs'
                                             : (t.includes('anodiz') || t.includes('powder') || t.includes('coat')) ? 'finish'
                                               : null;
+
                                     if (isActive) {
-                                      // Uncheck: remove + clear its configured state + close its modal
                                       setSelectedAdditionalServices(prev => prev.filter(s => s.id !== svc.id));
-                                      if (kind === 'bend') { setSelectedBends({}); setIsBendingModalOpen(false); }
-                                      else if (kind === 'tap') { setSelectedTaps({}); setActiveTapHole(null); }
-                                      else if (kind === 'hw') { setSelectedHardware({}); setActiveHwHole(null); }
-                                      else if (kind === 'cs') { setSelectedCountersinks({}); setActiveCSHole(null); }
-                                      else if (kind === 'finish') {
+                                      if (k === 'tap') { setSelectedTaps({}); setActiveTapHole(null); }
+                                      else if (k === 'hw') { setSelectedHardware({}); setActiveHwHole(null); }
+                                      else if (k === 'cs') { setSelectedCountersinks({}); setActiveCSHole(null); }
+                                      else if (k === 'finish') {
                                         setSelectedFinishColors(prev => { const n = { ...prev }; delete n[svc.id]; return n; });
                                         setIsAnodizingModalOpen(false);
                                         setActiveFinishSvcId(null);
                                       }
                                     } else {
-                                      // Check: add + open this modal (closes all others)
                                       setSelectedAdditionalServices(prev => [...prev, svc]);
-                                      if (kind) openSubModal(kind, svc);
+                                      if (k && k !== 'bend') openSubModal(k, svc);
                                     }
                                   }}
                                 >
@@ -1647,7 +1758,7 @@ const InstantPricing = () => {
                                     </div>
                                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{svc.description || 'Professional finish.'}</div>
                                   </div>
-                                  {!isUnsupported && (
+                                  {!isUnsupported && !isBendService && (
                                     <div className={`selection-dot ${isActive ? 'active' : ''}`} style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isActive ? '#ef4444' : '#e2e8f0'}`, background: isActive ? '#ef4444' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
                                       {isActive && <Check size={10} color="#fff" strokeWidth={3} />}
                                     </div>
@@ -1670,10 +1781,17 @@ const InstantPricing = () => {
                                         </>
                                       )}
                                       {kind === 'bend' && (
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Bends</span>
-                                          <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{bendList?.length || 0} detected</span>
-                                        </div>
+                                        <>
+                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Bends</span>
+                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{bendList?.length || 0} detected</span>
+                                          </div>
+                                          <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
+                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Price</span>
+                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#059669' }}>${bendDisplayPrice.toFixed(2)}</span>
+                                          </div>
+                                        </>
                                       )}
                                       {kind === 'finish' && (
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1682,12 +1800,14 @@ const InstantPricing = () => {
                                         </div>
                                       )}
                                     </div>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); openSubModal(kind, svc); }}
-                                      style={{ border: 'none', background: '#1e293b', color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
-                                    >
-                                      Manage
-                                    </button>
+                                    {kind !== 'bend' && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); openSubModal(kind, svc); }}
+                                        style={{ border: 'none', background: '#1e293b', color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                                      >
+                                        {kind === 'finish' ? 'Pick Color' : 'Configure'}
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </React.Fragment>
@@ -1900,15 +2020,13 @@ const InstantPricing = () => {
                     const isExpanded = expandedGroups.has(group.dia);
                     const tappedCount = group.holes.filter(h => !!selectedTaps[h.id]).length;
                     const allTapped = tappedCount === group.holes.length;
-                    const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
-                    const isCompatible = (tapSvc?.service_options || []).some(tap =>
-                      parseFloat(group.dia) >= parseFloat(tap.min_diameter) &&
-                      parseFloat(group.dia) <= parseFloat(tap.max_diameter)
+                    const groupDia = parseFloat(group.dia);
+                    const compatibleForGroup = tapOptions.filter(tap =>
+                      groupDia >= ((parseFloat(tap.min_diameter) || 0) - TAP_RANGE_TOLERANCE) &&
+                      groupDia <= ((parseFloat(tap.max_diameter) || 0) + TAP_RANGE_TOLERANCE)
                     );
-                    const bestTap = (tapSvc?.service_options || []).find(tap =>
-                      parseFloat(group.dia) >= parseFloat(tap.min_diameter) &&
-                      parseFloat(group.dia) <= parseFloat(tap.max_diameter)
-                    );
+                    const isCompatible = compatibleForGroup.length > 0;
+                    const bestTap = compatibleForGroup[0];
 
                     return (
                       <div key={group.dia} className="mb-2">
@@ -1975,27 +2093,26 @@ const InstantPricing = () => {
                             {group.holes.map(hole => {
                               const isTapped = !!selectedTaps[hole.id];
                               const isActive = activeTapHole?.id === hole.id;
-                              const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
+                              const globalIdx = holeIndexById[hole.id] || 0;
                               return (
-                                <motion.div
-                                  key={hole.id} layout
+                                <div
+                                  key={hole.id}
                                   className={`p-3 rounded-4 mb-1 cursor-pointer border-2 d-flex align-items-center justify-content-between ${isActive ? 'border-danger bg-danger text-white shadow-sm' : 'border-transparent bg-light hover-bg-white shadow-xs'}`}
                                   onClick={() => setActiveTapHole(hole)}
-                                  whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}
                                 >
                                   <div className="d-flex align-items-center gap-2">
                                     <div
                                       className={`rounded-circle d-flex align-items-center justify-content-center fw-black ${isActive ? 'bg-white text-danger' : isTapped ? 'bg-success text-white' : 'bg-white text-muted border'}`}
                                       style={{ width: '26px', height: '26px', fontSize: '12px' }}
                                     >
-                                      {globalIdx + 1}
+                                      {globalIdx}
                                     </div>
                                     <span className={`fw-bold ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px' }}>
                                       {isTapped ? selectedTaps[hole.id].name : 'Not Tapped'}
                                     </span>
                                   </div>
                                   {isTapped && !isActive && <Check size={13} className="text-success" strokeWidth={3} />}
-                                </motion.div>
+                                </div>
                               );
                             })}
                           </div>
@@ -2011,10 +2128,11 @@ const InstantPricing = () => {
                     if (!svc) return <div className="text-center py-5 text-danger fw-bold fs-5">Tapping service not added to selection</div>;
                     const assigned = selectedTaps[activeTapHole.id];
                     const dia = activeTapHole.diameterInches || 0;
-                    let options = svc.service_options || [];
-                    if (typeof options === 'string') { try { options = JSON.parse(options); } catch { options = []; } }
-                    if (!Array.isArray(options)) options = [];
-                    const compatible = options.filter(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
+                    const options = tapOptions;
+                    const compatible = options.filter(tap =>
+                      dia >= ((parseFloat(tap.min_diameter) || 0) - TAP_RANGE_TOLERANCE) &&
+                      dia <= ((parseFloat(tap.max_diameter) || 0) + TAP_RANGE_TOLERANCE)
+                    );
                     const incompatible = options.filter(tap => !compatible.includes(tap));
 
                     return (
@@ -2093,7 +2211,7 @@ const InstantPricing = () => {
         )}
 
         {activeHwHole && (() => {
-          const activeType = HW_TYPES.find(t => t.id === activeHwType) || HW_TYPES[0];
+          const activeType = hwTypeById[activeHwType] || HW_TYPES[0];
           const activeItems = (hwItemsByType[activeHwType] || []).filter(it => it.is_active !== false);
           const assignedHw = selectedHardware[activeHwHole.id];
           return (
@@ -2147,10 +2265,10 @@ const InstantPricing = () => {
                       <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', background: '#f1f5f9', borderRadius: 6, padding: '2px 8px' }}>{detectedHoles.length}</span>
                     </div>
 
-                    {holeGroups.map((group) => {
+                    {holeGroupsWithHwState.map((group) => {
                       const isExpanded = expandedHwGroups.has(group.dia);
-                      const assignedCount = group.holes.filter(h => !!selectedHardware[h.id]).length;
-                      const allAssigned = assignedCount === group.holes.length;
+                      const assignedCount = group.assignedCount;
+                      const allAssigned = group.allAssigned;
 
                       return (
                         <div key={group.dia} style={{ marginBottom: 2 }}>
@@ -2191,9 +2309,12 @@ const InstantPricing = () => {
                                     style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed ${activeType.color}60`, color: activeType.color, cursor: 'pointer', marginBottom: 4, transition: 'all 0.15s' }}
                                     onClick={e => {
                                       e.stopPropagation();
+                                      const maxAllowedIn = theItem?.max_hole_diameter ? parseFloat(theItem.max_hole_diameter) : Infinity;
                                       setSelectedHardware(prev => {
                                         const next = { ...prev };
                                         group.holes.forEach(h => {
+                                          const hDiaIn = parseFloat(h.diameterInches || h.diameter_in || 0);
+                                          if (hDiaIn > maxAllowedIn) return;
                                           next[h.id] = {
                                             item: theItem,
                                             hole: h,
@@ -2212,12 +2333,10 @@ const InstantPricing = () => {
                               {group.holes.map(hole => {
                                 const assigned = selectedHardware[hole.id];
                                 const isActive = activeHwHole?.id === hole.id;
-                                const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
                                 return (
-                                  <motion.div
-                                    key={hole.id} layout
+                                  <div
+                                    key={hole.id}
                                     onClick={() => setActiveHwHole(hole)}
-                                    whileTap={{ scale: 0.98 }}
                                     style={{
                                       padding: '8px 10px', borderRadius: 10, marginBottom: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s',
                                       background: isActive ? `${activeType.color}12` : '#fff',
@@ -2230,21 +2349,21 @@ const InstantPricing = () => {
                                         background: isActive ? activeType.color : assigned ? '#22c55e' : '#f1f5f9',
                                         color: isActive || assigned ? '#fff' : '#94a3b8',
                                       }}>
-                                        {globalIdx + 1}
+                                        {holeIndexById[hole.id] || 0}
                                       </div>
                                       <div>
                                         <span style={{ fontSize: '12px', fontWeight: 700, color: isActive ? activeType.color : '#1e293b', display: 'block', lineHeight: 1.2 }}>
                                           {assigned ? assigned.item.name : 'Unassigned'}
                                         </span>
                                         {assigned && (
-                                          <span style={{ fontSize: '9px', fontWeight: 700, color: HW_TYPES.find(t => t.id === assigned.typeId)?.color || '#94a3b8' }}>
-                                            {HW_TYPES.find(t => t.id === assigned.typeId)?.label}
+                                          <span style={{ fontSize: '9px', fontWeight: 700, color: hwTypeById[assigned.typeId]?.color || '#94a3b8' }}>
+                                            {hwTypeById[assigned.typeId]?.label}
                                           </span>
                                         )}
                                       </div>
                                     </div>
                                     {assigned && !isActive && <Check size={11} style={{ color: '#22c55e' }} strokeWidth={3} />}
-                                  </motion.div>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -2383,12 +2502,6 @@ const InstantPricing = () => {
           const csSvc = allServices.find(s => s.title.toLowerCase().includes('countersink'));
           const csOptions = csSvc?.service_options || [];
           const assignedCS = selectedCountersinks[activeCSHole.id];
-          const csHoleGroups = detectedHoles.reduce((acc, h) => {
-            const dia = Number(h.diameterInches || 0).toFixed(4);
-            if (!acc[dia]) acc[dia] = { dia, holes: [] };
-            acc[dia].holes.push(h);
-            return acc;
-          }, {});
           return (
             <motion.div key="cs-modal" className="position-fixed inset-0 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(16px)', background: 'rgba(15,23,42,0.6)' }}>
               <motion.div className="overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1100px', height: '85vh', borderRadius: '24px', background: '#ffffff', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.2)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.96, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 20, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 350 }}>
@@ -2429,7 +2542,7 @@ const InstantPricing = () => {
                   {/* Left: Hole list */}
                   <div style={{ width: 280, borderRight: '1px solid #f1f5f9', overflowY: 'auto', padding: '16px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>Detected Holes</div>
-                    {Object.values(csHoleGroups).map(group => {
+                    {csHoleGroups.map(group => {
                       const isExpanded = expandedCSGroups.has(group.dia);
                       const csCount = group.holes.filter(h => !!selectedCountersinks[h.id]).length;
                       return (
@@ -2476,14 +2589,14 @@ const InstantPricing = () => {
                               {group.holes.map(hole => {
                                 const isCS = !!selectedCountersinks[hole.id];
                                 const isActive = activeCSHole?.id === hole.id;
-                                const globalIdx = detectedHoles.findIndex(h => h.id === hole.id);
+                                const globalIdx = holeIndexById[hole.id] || 0;
                                 return (
                                   <div key={hole.id}
                                     style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? '#7c3aed' : '#f8fafc', color: isActive ? '#fff' : '#1e293b', border: isActive ? '1.5px solid #7c3aed' : '1.5px solid transparent', transition: 'all 0.15s' }}
                                     onClick={() => setActiveCSHole(hole)}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: isActive ? '#fff' : isCS ? '#7c3aed' : '#e2e8f0', color: isActive ? '#7c3aed' : isCS ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>{globalIdx + 1}</div>
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: isActive ? '#fff' : isCS ? '#7c3aed' : '#e2e8f0', color: isActive ? '#7c3aed' : isCS ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>{globalIdx}</div>
                                       <span style={{ fontSize: '12px', fontWeight: 700 }}>{isCS ? selectedCountersinks[hole.id].name : 'Not set'}</span>
                                     </div>
                                     {isCS && !isActive && <Check size={12} style={{ color: '#7c3aed' }} strokeWidth={3} />}
@@ -2611,22 +2724,8 @@ const InstantPricing = () => {
         )}
       </AnimatePresence>
 
-      <BendingModal
-        isOpen={isBendingModalOpen}
-        onClose={() => {
-          setIsBendingModalOpen(false);
-          setIsLoadingUnfold(false);
-          if (unfoldAbortControllerRef.current) {
-            unfoldAbortControllerRef.current.abort();
-          }
-        }}
-        bendTree={bendTree}
-        faceMeshes={backendData?.faceMeshes}
-        stepFile={selectedFile?.file || null}
-        selectedBends={selectedBends}
-        onUpdateBend={(id, config) => setSelectedBends(prev => ({ ...prev, [id]: config }))}
-      />
     </div>
+
   );
 };
 

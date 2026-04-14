@@ -785,6 +785,8 @@ def build_graph_of_tangent_faces(shp: Part.Shape, root: int) -> nx.Graph:
     # may get changed around while building the graph.
     face_hashes = [f.hashCode() for f in shp.Faces]
     index_lookup = {h: i for i, h in enumerate(face_hashes)}
+    # ensure the root face is in the graph as a node
+    graph_of_shape_faces.add_node(root)
     # get pairs of faces that share the same edge
     candidates = [
         (i, shp.ancestorsOfType(e, Part.Face)) for i, e in enumerate(shp.Edges)

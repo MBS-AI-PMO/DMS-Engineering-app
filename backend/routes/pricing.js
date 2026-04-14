@@ -434,18 +434,17 @@ router.post('/calculate', async (req, res) => {
             // runtime_h = (perimeter_mm / cut_rate_mm_s / 3600) + (pierces × pierce_time_s / 3600)
             // setup_hrs = 0.3 default; 0.25 if thickness > 0.25 in  (from CSV conditional)
             // cost/unit = (hourly_rate × setup_hrs / qty) + (hourly_rate × runtime_h)
-            if (isLaser && techData.totalPerimeter && thickness_value) {
+            if (isLaser && thickness_value) {
                 const thickNum = parseFloat(thickness_value);
                 const family = metal?.material_family || 'generic';
                 const hourly_rate = parseFloat(config.hourly_rate) || 100;
 
-                // Range lookup: first row where thickness >= part thickness.
-                // Prefers exact family match; falls back to 'generic'.
+                // Prefer closest available thickness for family/generic rates to avoid false zero-cost results.
                 const laserRes = await db.query(
                     `SELECT cut_rate, pierce_time FROM laser_cut_rates
                      WHERE (material_family = $1 OR material_family = 'generic')
-                       AND thickness >= $2
                      ORDER BY CASE WHEN material_family = $1 THEN 0 ELSE 1 END,
+                              ABS(thickness - $2) ASC,
                               thickness ASC
                      LIMIT 1`,
                     [family, thickNum]
@@ -459,8 +458,14 @@ router.post('/calculate', async (req, res) => {
                     // Setup time: 0.3 h thin material, 0.25 h thick material (CSV formula)
                     const setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
 
-                    const perimeter_mm = parseFloat(techData.totalPerimeter) || 0;
-                    const pierces = parseInt(techData.pierceCount) || 1;
+                    // Use technical-data perimeter when available; otherwise approximate from part envelope.
+                    const envelopePerimeterMm = ((parseFloat(length_in) || 0) + (parseFloat(height_in) || 0)) * 2 * 25.4;
+                    const perimeter_mm = (parseFloat(techData.totalPerimeter) > 0)
+                        ? parseFloat(techData.totalPerimeter)
+                        : envelopePerimeterMm;
+
+                    // Minimum of one pierce. If backend/front-end provides holes count, prefer that.
+                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1));
 
                     // runtime per part (hours)
                     const runtime_h = (perimeter_mm / cut_rate / 3600) + (pierces * pierce_time / 3600);
@@ -469,6 +474,20 @@ router.post('/calculate', async (req, res) => {
                     main_service_cost = (hourly_rate * setup_hrs / qty) + (hourly_rate * runtime_h);
 
                     // Thickness warning (CSV: set_operation_name WARNING if > 0.376)
+                    if (thickNum > 0.376) laser_warning = true;
+                } else {
+                    // Fallback when laser rate table has no matching rows.
+                    const fallbackCutRate = Math.max(1, parseFloat(config.cut_rate_mm_s || config.cut_rate || 120));
+                    const fallbackPierceTime = Math.max(0, parseFloat(config.pierce_time_s || config.pierce_time || 0.35));
+                    const setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
+                    const envelopePerimeterMm = ((parseFloat(length_in) || 0) + (parseFloat(height_in) || 0)) * 2 * 25.4;
+                    const perimeter_mm = (parseFloat(techData.totalPerimeter) > 0)
+                        ? parseFloat(techData.totalPerimeter)
+                        : envelopePerimeterMm;
+                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1));
+                    const runtime_h = (perimeter_mm / fallbackCutRate / 3600) + (pierces * fallbackPierceTime / 3600);
+                    main_service_cost = (hourly_rate * setup_hrs / qty) + (hourly_rate * runtime_h);
+
                     if (thickNum > 0.376) laser_warning = true;
                 }
             }

@@ -5,7 +5,6 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const cookieParser = require('cookie-parser');
-const crypto = require('crypto');
 const db = require('./db');
 require('dotenv').config();
 
@@ -166,45 +165,12 @@ app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
 
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
-        const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
-
-        const cacheDir = path.join(__dirname, 'cache');
-        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-        const cachePath = path.join(cacheDir, `${hash}_holes.json`);
-        // New: Check if the FULL unfold cache already exists (it contains hole data too)
-        const fullCachePath = path.join(cacheDir, `${hash}.json`);
-
-        if (fs.existsSync(fullCachePath)) {
-            console.log(`[CAD-CACHE] Serving holes from full cache for ${hash}`);
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('X-CAD-Cache', 'hit-full');
-            return fs.createReadStream(fullCachePath).pipe(res);
-        }
-
-        if (fs.existsSync(cachePath)) {
-            console.log(`[CAD-CACHE] Streaming cached holes for ${hash}`);
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('X-CAD-Cache', 'hit');
-            return fs.createReadStream(cachePath).pipe(res);
-        }
 
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
         const form = new FormData();
         form.append('file', blob, req.file.originalname || 'model.step');
 
-        // Always call '/unfold' even for holes to populate the full cache in one go
-        console.log(`[CAD-BIO] Triggering unified processing for ${hash}...`);
-        const data = await callPython('/unfold', form);
-
-        // Save to BOTH caches
-        fs.writeFileSync(fullCachePath, JSON.stringify(data));
-        fs.writeFileSync(cachePath, JSON.stringify({
-            success: true,
-            holes: data.detectedHoles || [],
-            faceMeshes: data.faceMeshes || {},
-            bendTree: data.bendTree || null,
-            thickness: data.thickness || 2.0
-        }));
+        const data = await callPython('/detect-holes', form);
 
         return res.json({ success: true, ...data });
     } catch (err) {
@@ -227,25 +193,12 @@ app.post('/api/unfold', upload.single('file'), async (req, res) => {
 
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
-        const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
-
-        const cacheDir = path.join(__dirname, 'cache');
-        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-        const cachePath = path.join(cacheDir, `${hash}.json`);
-
-        if (fs.existsSync(cachePath)) {
-            console.log(`[CAD-CACHE] Streaming cached unfold for ${hash}`);
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('X-CAD-Cache', 'hit');
-            return fs.createReadStream(cachePath).pipe(res);
-        }
 
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
         const form = new FormData();
         form.append('file', blob, req.file.originalname || 'model.step');
 
         const data = await callPython('/unfold', form);
-        fs.writeFileSync(cachePath, JSON.stringify(data));
         return res.json({ success: true, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
@@ -312,6 +265,7 @@ app.listen(port, async () => {
                 zip_code VARCHAR(20),
                 total_price NUMERIC(15,2) NOT NULL,
                 payment_method VARCHAR(50) DEFAULT 'COD',
+                payment_id TEXT,
                 status VARCHAR(50) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
@@ -335,6 +289,7 @@ app.listen(port, async () => {
         // Ensure all columns exist for world-class persistence
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
+        await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT;`);
 
         // Hardware Item Specification Migration
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);

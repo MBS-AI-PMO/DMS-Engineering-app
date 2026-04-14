@@ -132,11 +132,21 @@ router.post('/', async (req, res) => {
     const {
         email, fullName, phone, address, city, zipCode,
         items, // Array of { fileName, tempPath, configuration, quantity, unitPrice }
-        totalPrice
+        totalPrice,
+        payment_method,
+        payment_id
     } = req.body;
 
     if (!email || !items || items.length === 0) {
         return res.status(400).json({ success: false, error: 'Incomplete order data' });
+    }
+
+    const normalizedPaymentMethod = String(payment_method || 'COD').trim().toUpperCase();
+    const paymentMethod = ['COD', 'PAYPAL'].includes(normalizedPaymentMethod) ? normalizedPaymentMethod : 'COD';
+    const paymentId = payment_id ? String(payment_id) : null;
+
+    if (paymentMethod === 'PAYPAL' && !paymentId) {
+        return res.status(400).json({ success: false, error: 'Missing PayPal payment reference' });
     }
 
     try {
@@ -144,10 +154,10 @@ router.post('/', async (req, res) => {
 
         // 1. Create the Order
         const orderRes = await db.query(
-            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, status, admin_deletion_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'COD', 'pending', 'active')
+            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, payment_id, status, admin_deletion_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', 'active')
              RETURNING *`,
-            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, totalPrice]
+            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, totalPrice, paymentMethod, paymentId]
         );
         const orderId = orderRes.rows[0].id;
 

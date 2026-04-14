@@ -1,0 +1,4706 @@
+{
+  "metal": {
+    "id": 3,
+    "faqs": [
+      {
+        "answer": "DMS Engineering offers 6061 T6 Aluminum in 12 thickness options: .040'' (1.02mm), .063'' (1.60mm), .080 (2.03mm), .100''(2.54mm), .125'' (3.18mm), .187'' (4.75mm), .250'' (6.35mm), .313(8.0mm), .375''(9.5mm), .500'' (12.7mm), .625 (15.88), and .750 (19.05)",
+        "question": "What thicknesses does DMS Engineering offer 6061 T6 Aluminum in?"
+      },
+      {
+        "answer": "When ordering 6061 T6 Aluminum through DMS Engineering, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\".",
+        "question": "What are the minimum and maximum sizes for cutting 6061 T6 Aluminum?"
+      },
+      {
+        "answer": "You can add the following services to your 6061 T6 Aluminum parts: Anodizing, Countersinking, Deburring, Dimple Forming, Hardware Insertion, Powder Coating, Tapping, and Tumbling",
+        "question": "What additional services are available for 6061 T6 Aluminum?"
+      }
+    ],
+    "name": "6061 T6 ALUMINUM",
+    "slug": "6061-t6-aluminum",
+    "services": [
+      2
+    ],
+    "thickness": "12 thicknesses: .040\" - .750\"",
+    "created_at": "2026-03-25T13:39:45.504Z",
+    "image_path": "/uploads/metals/metal-1774607547617.png",
+    "quick_look": {
+      "cutSizes": [
+        {
+          "size": ".25\" x .375\" min",
+          "type": "solid",
+          "label": "A",
+          "action": "Instant Pricing"
+        },
+        {
+          "size": "30\" x 44\" max",
+          "type": "solid",
+          "label": "B",
+          "action": "Instant Pricing"
+        },
+        {
+          "size": "30\" x 56\" max",
+          "type": "outline",
+          "label": "C",
+          "action": "Custom Quote"
+        }
+      ],
+      "tolerance": "+/- .005\"",
+      "thicknesses": [
+        {
+          "value": ".040\"",
+          "metric": "1.02mm",
+          "services": [
+            1,
+            5,
+            6,
+            3
+          ]
+        },
+        {
+          "value": ".063\"",
+          "metric": "1.60mm",
+          "services": [
+            1,
+            8,
+            9,
+            5,
+            6,
+            11,
+            7
+          ]
+        },
+        {
+          "value": ".080\"",
+          "metric": "2.03mm",
+          "services": [
+            1,
+            8,
+            9,
+            5,
+            6,
+            11,
+            7
+          ]
+        },
+        {
+          "value": ".100\"",
+          "metric": "2.54mm",
+          "services": [
+            1,
+            8,
+            9,
+            5,
+            6,
+            11,
+            7
+          ]
+        },
+        {
+          "value": ".125\"",
+          "metric": "3.18mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            5,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".187\"",
+          "metric": "4.75mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".250\"",
+          "metric": "6.35mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".313\"",
+          "metric": "8.00mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".375\"",
+          "metric": "9.53mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".500\"",
+          "metric": "12.7mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12,
+            3
+          ]
+        },
+        {
+          "value": ".625\"",
+          "metric": "15.88mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": ".750\"",
+          "metric": "19.05mm",
+          "services": [
+            1,
+            8,
+            4,
+            9,
+            6,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "value": "1.000",
+          "metric": "25.4mm",
+          "services": []
+        },
+        {
+          "value": "1.250",
+          "metric": "31.75mm",
+          "services": []
+        },
+        {
+          "value": "1.500",
+          "metric": "38.1mm",
+          "services": []
+        },
+        {
+          "value": "1.750",
+          "metric": "44.45mm",
+          "services": []
+        },
+        {
+          "value": "2.000",
+          "metric": "50.8mm",
+          "services": []
+        }
+      ]
+    },
+    "updated_at": "2026-04-12T07:46:10.272Z",
+    "category_id": 1,
+    "description": "Versatile, high-strength aluminum with good corrosion resistance and machinability.",
+    "metal_level": false,
+    "about_section": {
+      "text": "6061 T6 Aluminum is strong and lightweight. Our laser cut 6061 aluminum is commonly found in structural applications where toughness and corrosion resistance are of high importance. That’s pretty typical for aluminum alloys in general, but what makes this 6061 series stand out is its heat-treatability. The heat-treating process, called precipitation hardening, further strengthens the alloy without robbing it of key properties.",
+      "image": "/uploads/metals/6061-about-enhanced.png",
+      "title": "What is 6061 T6 Aluminum?",
+      "capabilities": {
+        "text": "Many of our aluminum alloys are able to withstand tremendous amounts of vibration (also known as fatigue strength) making them perfectly suited for high-impact applications such as transportation and robotics. For any of these applications 6061 aluminum is a good middle of the road alloy, pairing the strength of 7075 with the malleability of 5052.",
+        "items": [
+          "Construction",
+          "Stressed components",
+          "Electronics enclosures",
+          "Automotive",
+          "Aerospace structural",
+          "Bicycle frames",
+          "Industrial applications",
+          "Robotics",
+          "And so much more!"
+        ],
+        "title": "What can you make with 6061 T6 Aluminum parts?"
+      },
+      "featureChart": [
+        {
+          "label": "Strength",
+          "rating": 5
+        },
+        {
+          "label": "Weldability",
+          "rating": 4
+        },
+        {
+          "label": "Formability",
+          "rating": 3
+        },
+        {
+          "label": "Heat Treating",
+          "rating": 5
+        },
+        {
+          "label": "Corrosion Resistance",
+          "rating": 3
+        },
+        {
+          "label": "Toughness",
+          "rating": 3
+        },
+        {
+          "label": "Machinability",
+          "rating": 4
+        },
+        {
+          "label": "Strength-to-Weight Ratio",
+          "rating": 4
+        }
+      ]
+    },
+    "category_name": "Aluminum",
+    "category_slug": "aluminum",
+    "custom_fields": {},
+    "display_order": 0,
+    "pricing_config": {
+      ".040\"": {
+        "0": "6",
+        "price_per_width": "5",
+        "price_per_length": "5"
+      },
+      ".063\"": {
+        "0": "6",
+        "price_per_width": "5",
+        "price_per_length": "6"
+      },
+      ".080\"": {
+        "0": "6",
+        "price_per_width": "6",
+        "price_per_length": "7"
+      },
+      ".100\"": {
+        "0": "6",
+        "price_per_width": "7",
+        "price_per_length": "8"
+      },
+      ".125\"": {
+        "0": "5",
+        "price_per_width": "9",
+        "price_per_length": "9"
+      },
+      ".187\"": {
+        "0": "6",
+        "price_per_width": "4",
+        "price_per_length": "4"
+      },
+      ".250\"": {
+        "0": "6",
+        "price_per_width": "2",
+        "price_per_length": "3"
+      },
+      ".313\"": {
+        "0": "5",
+        "price_per_width": "7",
+        "price_per_length": "3"
+      },
+      ".375\"": {
+        "0": "6",
+        "price_per_width": "5",
+        "price_per_length": "3"
+      },
+      ".500\"": {
+        "0": "6",
+        "price_per_width": "5",
+        "price_per_length": "6"
+      },
+      ".625\"": {
+        "0": "4",
+        "price_per_width": "7",
+        "price_per_length": "7"
+      },
+      ".750\"": {
+        "0": "6",
+        "price_per_width": "9",
+        "price_per_length": "2"
+      },
+      "1.000": {
+        "price_per_width": "8",
+        "price_per_length": "8"
+      },
+      "1.250": {
+        "price_per_width": "8",
+        "price_per_length": "8"
+      },
+      "1.500": {
+        "price_per_width": "8",
+        "price_per_length": "8"
+      },
+      "1.750": {
+        "price_per_width": "8",
+        "price_per_length": "8"
+      },
+      "2.000": {
+        "price_per_width": "9",
+        "price_per_length": "9"
+      }
+    },
+    "specifications": {
+      "properties": [
+        {
+          "label": "Material Composition",
+          "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+        },
+        {
+          "label": "Density",
+          "value": "169.344 lb/ft^3"
+        },
+        {
+          "label": "Heat treatments process",
+          "value": "T6"
+        },
+        {
+          "label": "ASTM",
+          "value": "B209-21"
+        },
+        {
+          "label": "Tensile Strength (Ultimate)",
+          "value": "45 ksi"
+        },
+        {
+          "label": "Tensile Strength (Yield)",
+          "value": "39 ksi"
+        },
+        {
+          "label": "Shear Strength",
+          "value": "30 ksi"
+        },
+        {
+          "label": "Shear Modulus",
+          "value": "3800 ksi"
+        },
+        {
+          "label": "Fatigue Strength",
+          "value": "14 ksi"
+        },
+        {
+          "label": "Brinell Hardness",
+          "value": "93"
+        },
+        {
+          "label": "Elongation at Break",
+          "value": "10%"
+        },
+        {
+          "label": "Elastic Modulus",
+          "value": "10000 ksi"
+        },
+        {
+          "label": "Poisson’s Ratio",
+          "value": ".33"
+        },
+        {
+          "label": "Thermal Conductivity",
+          "value": "170 BTU/h-ft °F"
+        },
+        {
+          "label": "Melting Point",
+          "value": "1080 °F"
+        },
+        {
+          "label": "Magnetic",
+          "value": "No"
+        },
+        {
+          "label": "Does it Rust",
+          "value": "No"
+        }
+      ],
+      "generalDetails": [],
+      "availableServices": [],
+      "laserCuttingSpecs": []
+    },
+    "thickness_level": true,
+    "thickness_specs": {
+      ".040\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "dimpleSpecs": [
+          {
+            "mm": "30.48 mm x 132.08 mm",
+            "inch": "1.200\" x 5.200\"",
+            "label": "Min dimple part size"
+          },
+          {
+            "mm": "660.4 mm x 1422.4 mm",
+            "inch": "26\" x 56\"",
+            "label": "Max dimple part size"
+          },
+          {
+            "mm": "12.7 mm",
+            "inch": ".500\"",
+            "label": "Smallest dimple"
+          },
+          {
+            "mm": "63.5 mm",
+            "inch": "2.500\"",
+            "label": "Largest dimple"
+          },
+          {
+            "mm": "3.429 mm",
+            "inch": ".135\"",
+            "label": "Dimple overall height (.500\" dimple)"
+          },
+          {
+            "mm": "3.429 mm",
+            "inch": ".135\"",
+            "label": "Dimple overall height (.750\" dimple)"
+          },
+          {
+            "mm": "4.318 mm",
+            "inch": ".170\"",
+            "label": "Dimple overall height (1.000\" dimple)"
+          },
+          {
+            "mm": "4.826 mm",
+            "inch": ".190\"",
+            "label": "Dimple overall height (1.250\" dimple)"
+          },
+          {
+            "mm": "5.207 mm",
+            "inch": ".205\"",
+            "label": "Dimple overall height (1.500\" dimple)"
+          },
+          {
+            "mm": "5.334 mm",
+            "inch": ".210\"",
+            "label": "Dimple overall height (1.750\" dimple)"
+          },
+          {
+            "mm": "5.715 mm",
+            "inch": ".225\"",
+            "label": "Dimple overall height (2.000\" dimple)"
+          },
+          {
+            "mm": "6.985 mm",
+            "inch": ".275\"",
+            "label": "Dimple overall height (2.500\" dimple)"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "Please view Catalog",
+            "inch": "Please view Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "1.02 mm",
+            "inch": "0.040\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "18",
+            "inch": "18",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "availableServices": [
+          "Laser Cutting",
+          "Dimple Forming",
+          "Hardware Insertion"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "6.35 mm x 9.525 mm",
+            "inch": "0.25\" x .375\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1117.6 mm x 762 mm",
+            "inch": "44\" x 30\"",
+            "label": "Max part size"
+          },
+          {
+            "mm": "0.406 mm",
+            "inch": ".016\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "0.356 mm",
+            "inch": ".014\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "0.508 mm",
+            "inch": ".020\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.254 mm",
+            "inch": ".010\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          5,
+          6,
+          3
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".063\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "dimpleSpecs": [
+          {
+            "mm": "30.48 mm x 132.08 mm",
+            "inch": "1.20\" x 5.20\"",
+            "label": "Min dimple part size"
+          },
+          {
+            "mm": "660.4 mm x 1422.4 mm",
+            "inch": "26\" x 56\"",
+            "label": "Max dimple part size"
+          },
+          {
+            "mm": "12.7 mm",
+            "inch": "0.5\"",
+            "label": "Smallest dimple"
+          },
+          {
+            "mm": "76.2 mm",
+            "inch": "3.0\"",
+            "label": "Largest dimple"
+          },
+          {
+            "mm": "3.988 mm",
+            "inch": "0.157\"",
+            "label": "Dimple overall height (12.7 mm dimple)"
+          },
+          {
+            "mm": "3.937 mm",
+            "inch": "0.155\"",
+            "label": "Dimple overall height (19.05 mm dimple)"
+          },
+          {
+            "mm": "4.953 mm",
+            "inch": "0.195\"",
+            "label": "Dimple overall height (25.4 mm dimple)"
+          },
+          {
+            "mm": "5.105 mm",
+            "inch": "0.201\"",
+            "label": "Dimple overall height (31.75 mm dimple)"
+          },
+          {
+            "mm": "5.791 mm",
+            "inch": "0.228\"",
+            "label": "Dimple overall height (38.1 mm dimple)"
+          },
+          {
+            "mm": "5.893 mm",
+            "inch": "0.232\"",
+            "label": "Dimple overall height (44.45 mm dimple)"
+          },
+          {
+            "mm": "6.35 mm",
+            "inch": "0.250\"",
+            "label": "Dimple overall height (50.8 mm dimple)"
+          },
+          {
+            "mm": "7.747 mm",
+            "inch": "0.305\"",
+            "label": "Dimple overall height (63.5 mm dimple)"
+          },
+          {
+            "mm": "9.398 mm",
+            "inch": "0.370\"",
+            "label": "Dimple overall height (76.2 mm dimple)"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "M6 x 1.0",
+            "inch": "M6 x 1.0",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "M2 x 0.4",
+            "inch": "M2 x 0.4",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "0.508 mm",
+            "inch": "0.020\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 0.508 mm",
+            "inch": "Tap hole size/2 + 0.020\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 127 mm",
+            "inch": "1\" x 5\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "1.6 mm",
+            "inch": "0.063\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "14",
+            "inch": "14",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Deburring",
+          "Dimple Forming",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "6.35 mm x 9.525 mm",
+            "inch": "0.25\" x 0.375\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "0.635 mm",
+            "inch": "0.025\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "0.559 mm",
+            "inch": "0.022\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "0.508 mm",
+            "inch": "0.020\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.254 mm",
+            "inch": "0.010\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          9,
+          5,
+          6,
+          11,
+          7
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".080\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "dimpleSpecs": [
+          {
+            "mm": "30.48 mm x 132.08 mm",
+            "inch": "1.20\" x 5.20\"",
+            "label": "Min dimple part size"
+          },
+          {
+            "mm": "660.4 mm x 1422.4 mm",
+            "inch": "26\" x 56\"",
+            "label": "Max dimple part size"
+          },
+          {
+            "mm": "25.4 mm",
+            "inch": "1.0\"",
+            "label": "Smallest dimple"
+          },
+          {
+            "mm": "76.2 mm",
+            "inch": "3.0\"",
+            "label": "Largest dimple"
+          },
+          {
+            "mm": "5.334 mm",
+            "inch": "0.210\"",
+            "label": "Dimple overall height (25.4 mm dimple)"
+          },
+          {
+            "mm": "5.817 mm",
+            "inch": "0.229\"",
+            "label": "Dimple overall height (31.75 mm dimple)"
+          },
+          {
+            "mm": "6.198 mm",
+            "inch": "0.244\"",
+            "label": "Dimple overall height (38.1 mm dimple)"
+          },
+          {
+            "mm": "6.477 mm",
+            "inch": "0.255\"",
+            "label": "Dimple overall height (44.45 mm dimple)"
+          },
+          {
+            "mm": "6.858 mm",
+            "inch": "0.270\"",
+            "label": "Dimple overall height (50.8 mm dimple)"
+          },
+          {
+            "mm": "8.255 mm",
+            "inch": "0.325\"",
+            "label": "Dimple overall height (63.5 mm dimple)"
+          },
+          {
+            "mm": "9.906 mm",
+            "inch": "0.390\"",
+            "label": "Dimple overall height (76.2 mm dimple)"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "M6 x 1.0",
+            "inch": "M6 x 1.0",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "M2 x 0.4",
+            "inch": "M2 x 0.4",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "0.61 mm",
+            "inch": "0.024\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 0.61 mm",
+            "inch": "Tap hole size/2 + 0.024\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 127 mm",
+            "inch": "1\" x 5\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "2.032 mm",
+            "inch": "0.080\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "12",
+            "inch": "12",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.102 mm",
+            "inch": "0.004\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Deburring",
+          "Dimple Forming",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "6.35 mm x 9.525 mm",
+            "inch": "0.25\" x 0.375\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "0.813 mm",
+            "inch": "0.032\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "0.711 mm",
+            "inch": "0.028\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "0.61 mm",
+            "inch": "0.024\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.254 mm",
+            "inch": "0.010\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          9,
+          5,
+          6,
+          11,
+          7
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".100\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "dimpleSpecs": [
+          {
+            "mm": "30.48 mm x 132.08 mm",
+            "inch": "1.20\" x 5.20\"",
+            "label": "Min dimple part size"
+          },
+          {
+            "mm": "660.4 mm x 1422.4 mm",
+            "inch": "26\" x 56\"",
+            "label": "Max dimple part size"
+          },
+          {
+            "mm": "25.4 mm",
+            "inch": "1.0\"",
+            "label": "Smallest dimple"
+          },
+          {
+            "mm": "76.2 mm",
+            "inch": "3.0\"",
+            "label": "Largest dimple"
+          },
+          {
+            "mm": "5.334 mm",
+            "inch": "0.210\"",
+            "label": "Dimple overall height (25.4 mm dimple)"
+          },
+          {
+            "mm": "5.817 mm",
+            "inch": "0.229\"",
+            "label": "Dimple overall height (31.75 mm dimple)"
+          },
+          {
+            "mm": "6.198 mm",
+            "inch": "0.244\"",
+            "label": "Dimple overall height (38.1 mm dimple)"
+          },
+          {
+            "mm": "6.477 mm",
+            "inch": "0.255\"",
+            "label": "Dimple overall height (44.45 mm dimple)"
+          },
+          {
+            "mm": "6.858 mm",
+            "inch": "0.270\"",
+            "label": "Dimple overall height (50.8 mm dimple)"
+          },
+          {
+            "mm": "8.255 mm",
+            "inch": "0.325\"",
+            "label": "Dimple overall height (63.5 mm dimple)"
+          },
+          {
+            "mm": "9.906 mm",
+            "inch": "0.390\"",
+            "label": "Dimple overall height (76.2 mm dimple)"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "M6 x 1.0",
+            "inch": "M6 x 1.0",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "M2 x 0.4",
+            "inch": "M2 x 0.4",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "0.61 mm",
+            "inch": "0.024\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 0.61 mm",
+            "inch": "Tap hole size/2 + 0.024\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 127 mm",
+            "inch": "1\" x 5\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "2.54 mm",
+            "inch": "0.100\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "12",
+            "inch": "12",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.152 mm",
+            "inch": "0.006\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.152 mm",
+            "inch": "0.006\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "USA",
+            "inch": "USA",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Deburring",
+          "Dimple Forming",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "6.35 mm x 9.525 mm",
+            "inch": "0.25\" x 0.375\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "1.016 mm",
+            "inch": "0.040\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "0.889 mm",
+            "inch": "0.035\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "0.762 mm",
+            "inch": "0.030\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.254 mm",
+            "inch": "0.010\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          9,
+          5,
+          6,
+          11,
+          7
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "787.4 mm x 939.8 mm",
+            "inch": "31\" x 37\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".125\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "dimpleSpecs": [
+          {
+            "mm": "30.48 mm x 132.08 mm",
+            "inch": "1.20\" x 5.20\"",
+            "label": "Min dimple part size"
+          },
+          {
+            "mm": "660.4 mm x 1422.4 mm",
+            "inch": "26\" x 56\"",
+            "label": "Max dimple part size"
+          },
+          {
+            "mm": "31.75 mm",
+            "inch": "1.25\"",
+            "label": "Smallest dimple"
+          },
+          {
+            "mm": "76.2 mm",
+            "inch": "3.0\"",
+            "label": "Largest dimple"
+          },
+          {
+            "mm": "6.731 mm",
+            "inch": "0.265\"",
+            "label": "Dimple overall height (31.75 mm dimple)"
+          },
+          {
+            "mm": "7.239 mm",
+            "inch": "0.285\"",
+            "label": "Dimple overall height (38.1 mm dimple)"
+          },
+          {
+            "mm": "7.696 mm",
+            "inch": "0.303\"",
+            "label": "Dimple overall height (44.45 mm dimple)"
+          },
+          {
+            "mm": "7.899 mm",
+            "inch": "0.311\"",
+            "label": "Dimple overall height (50.8 mm dimple)"
+          },
+          {
+            "mm": "9.271 mm",
+            "inch": "0.365\"",
+            "label": "Dimple overall height (63.5 mm dimple)"
+          },
+          {
+            "mm": "11.176 mm",
+            "inch": "0.440\"",
+            "label": "Dimple overall height (76.2 mm dimple)"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "M10 x 1.5",
+            "inch": "M10 x 1.5",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "M2 x 0.4",
+            "inch": "M2 x 0.4",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "0.965 mm",
+            "inch": "0.038\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 0.965 mm",
+            "inch": "Tap hole size/2 + 0.038\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "3.175 mm",
+            "inch": "0.125\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "8",
+            "inch": "8",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.152 mm",
+            "inch": "0.006\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "USA/Global",
+            "inch": "USA/Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "2.515 mm",
+            "inch": "0.099\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "11.989 mm",
+            "inch": "0.472\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "6.248 mm",
+            "inch": "0.246\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Dimple Forming",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "6.35 mm x 9.525 mm",
+            "inch": "0.25\" x 0.375\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "1.27 mm",
+            "inch": "0.050\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "1.118 mm",
+            "inch": "0.044\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "0.965 mm",
+            "inch": "0.038\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.254 mm",
+            "inch": "0.010\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          5,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".187\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate) \t",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "4-40",
+            "inch": "4-40",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "1.422 mm",
+            "inch": "0.056\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 1.422 mm",
+            "inch": "Tap hole size/2 + 0.056\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "4.75 mm",
+            "inch": "0.187\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.229 mm",
+            "inch": "0.009\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.229 mm",
+            "inch": "0.009\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "2.515 mm",
+            "inch": "0.099\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "13.487 mm",
+            "inch": "0.531\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "7.01 mm",
+            "inch": "0.276\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "12.7 mm x 12.7 mm",
+            "inch": "0.5\" x 0.5\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "1.905 mm",
+            "inch": "0.075\"",
+            "label": "Recommended Min hole size"
+          },
+          {
+            "mm": "1.067 mm",
+            "inch": "0.042\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "1.651 mm",
+            "inch": "0.065\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "1.422 mm",
+            "inch": "0.056\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.381 mm",
+            "inch": "0.015\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".250\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "4-40",
+            "inch": "4-40",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "1.905 mm",
+            "inch": "0.075\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 +1.905 mm",
+            "inch": "Tap hole size/2 +0.075\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "6.35 mm",
+            "inch": "0.250\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.686 mm",
+            "inch": "0.027\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.686 mm",
+            "inch": "0.027\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "2.515 mm",
+            "inch": "0.099\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "16.662 mm",
+            "inch": "0.656\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.585 mm",
+            "inch": "0.338\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "12.7 mm x 19.05 mm",
+            "inch": "0.5\" x 0.75\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "2.235 mm",
+            "inch": "0.088\"",
+            "label": "Recommended Min hole size"
+          },
+          {
+            "mm": "1.448 mm",
+            "inch": "0.057\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "2.413 mm",
+            "inch": "0.095\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "1.905 mm",
+            "inch": "0.075\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.889 mm",
+            "inch": "0.035\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".313\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "4-40",
+            "inch": "4-40",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "2.388 mm",
+            "inch": "0.094\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 +2.388 mm",
+            "inch": "Tap hole size/2 +0.094\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "7.95 mm",
+            "inch": "0.313\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.356 mm",
+            "inch": "0.014\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.356 mm",
+            "inch": "0.014\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "2.515 mm",
+            "inch": "0.099\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "16.662 mm",
+            "inch": "0.656\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.585 mm",
+            "inch": "0.338\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "19.05 mm x 25.4 mm",
+            "inch": "0.75\" x 1.0\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "2.286 mm",
+            "inch": "0.090\"",
+            "label": "Recommended Min hole size"
+          },
+          {
+            "mm": "1.905 mm",
+            "inch": "0.075\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "3.175 mm",
+            "inch": "0.125\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "2.388 mm",
+            "inch": "0.094\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.889 mm",
+            "inch": "0.035\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".375\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "8-32",
+            "inch": "8-32",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "2.87 mm",
+            "inch": "0.113\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 2.87 mm",
+            "inch": "Tap hole size/2 + 0.113\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "9.525 mm",
+            "inch": "0.375\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.838 mm",
+            "inch": "0.033\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.838 mm",
+            "inch": "0.033\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "3.302 mm",
+            "inch": "0.130\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "16.662 mm",
+            "inch": "0.656\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.585 mm",
+            "inch": "0.338\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.005 per foot",
+            "inch": "+/-0.005 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "19.05 mm x 25.4 mm",
+            "inch": "0.75\" x 1.0\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "3.327 mm",
+            "inch": "0.131\"",
+            "label": "Recommended Min hole size"
+          },
+          {
+            "mm": "2.159 mm",
+            "inch": "0.085\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "3.632 mm",
+            "inch": "0.143\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "2.87 mm",
+            "inch": "0.113\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "1.016 mm",
+            "inch": "0.040\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".500\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): 95.9 – 98.6 Magnesium (Mg): 0.8 – 1.2 Silicon (Si): 0.4 – 0.8 Iron (Fe): 0 – 0.7 Copper (Cu): 0.15 – 0.4 Chromium (Cr): 0.040 – 0.35 Zinc (Zn): 0 – 0.25 Manganese (Mn): 0 – 0.15 Titanium (Ti): 0 – 0.15 Residuals: 0 – 0.15"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "T6"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209-21"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "45 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "39 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3800 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "93"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "10%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "10000 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "170 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1080 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "10-32",
+            "inch": "10-32",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "3.81 mm",
+            "inch": "0.150\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 + 3.81 mm",
+            "inch": "Tap hole size/2 + 0.150\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "25.4 mm x 38.1 mm",
+            "inch": "1\" x 1.5\"",
+            "label": "Min hardware part size"
+          },
+          {
+            "mm": "914.4 mm x 1168.4 mm",
+            "inch": "36\" x 46\"",
+            "label": "Max hardware part size"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Max 4 sided box flange height"
+          },
+          {
+            "mm": "See Catalog",
+            "inch": "See Catalog",
+            "label": "Hardware specific specifications"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "12.7 mm",
+            "inch": "0.500\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "1.092 mm",
+            "inch": "0.043\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "1.092 mm",
+            "inch": "0.043\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "Global",
+            "inch": "Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "4.902 mm",
+            "inch": "0.193\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "16.662 mm",
+            "inch": "0.656\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.585 mm",
+            "inch": "0.338\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.030 per foot",
+            "inch": "+/-0.030 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "25.4 mm x 25.4 mm",
+            "inch": "1.0\" x 1.0\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "4.318 mm",
+            "inch": "0.170\"",
+            "label": "Recommended Min hole size"
+          },
+          {
+            "mm": "3.175 mm",
+            "inch": "0.125\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "4.826 mm",
+            "inch": "0.190\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "3.81 mm",
+            "inch": "0.150\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "1.27 mm",
+            "inch": "0.050\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12,
+          3
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "762 mm x 914.4 mm",
+            "inch": "30\" x 36\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".625\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): Balance (~95.8–98.6%) Magnesium (Mg): 0.8–1.2% Silicon (Si): 0.4–0.8% Iron (Fe): 0–0.7% Copper (Cu): 0.15–0.40% Chromium (Cr): 0.04–0.35% Zinc (Zn): 0–0.25% Manganese (Mn): 0–0.15% Titanium (Ti): 0–0.15% Other Residuals (each): ≤0.05%"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "N/A"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "42 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "35 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3700 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "90"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "8%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "9900 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "80 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1120 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "5/16-18",
+            "inch": "5/16-18",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 914.4 mm",
+            "inch": "36\" x 36\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "4.775 mm",
+            "inch": "0.188\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 +0.813 mm",
+            "inch": "Tap hole size/2 +0.032\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "Contact Support",
+            "inch": "Contact Support",
+            "label": "Hardware Compatibility"
+          },
+          {
+            "mm": "Press-fit",
+            "inch": "Press-fit",
+            "label": "Installation Type"
+          },
+          {
+            "mm": "Contact Support",
+            "inch": "Contact Support",
+            "label": "Min Hole to Edge"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "15.875 mm",
+            "inch": "0.625\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.584 mm",
+            "inch": "0.023\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.584 mm",
+            "inch": "0.023\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Cold Rolled",
+            "inch": "Cold Rolled",
+            "label": "Mill Finish"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "USA/Global",
+            "inch": "USA/Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "4.902 mm",
+            "inch": "0.193\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "10.846 mm",
+            "inch": "0.427\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.611 mm",
+            "inch": "0.339\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.005\"",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-0.042 per foot",
+            "inch": "+/-0.042 per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "76.2 mm x 76.2 mm",
+            "inch": "3.0\" x 3.0\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "6.35 mm",
+            "inch": "0.25\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "7.62 mm",
+            "inch": "0.3\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "4.775 mm",
+            "inch": "0.188\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.381 mm",
+            "inch": "0.015\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      ".750\"": {
+        "properties": [
+          {
+            "label": "Material Composition",
+            "value": "Aluminum (Al): Balance (~95.8–98.6%) Magnesium (Mg): 0.8–1.2% Silicon (Si): 0.4–0.8% Iron (Fe): 0–0.7% Copper (Cu): 0.15–0.40% Chromium (Cr): 0.04–0.35% Zinc (Zn): 0–0.25% Manganese (Mn): 0–0.15% Titanium (Ti): 0–0.15% Other Residuals (each): ≤0.05%"
+          },
+          {
+            "label": "Density",
+            "value": "169.344 lb/ft^3"
+          },
+          {
+            "label": "Heat treatments process",
+            "value": "N/A"
+          },
+          {
+            "label": "ASTM",
+            "value": "B209"
+          },
+          {
+            "label": "Tensile Strength (Ultimate)",
+            "value": "42 ksi"
+          },
+          {
+            "label": "Tensile Strength (Yield)",
+            "value": "35 ksi"
+          },
+          {
+            "label": "Shear Strength",
+            "value": "30 ksi"
+          },
+          {
+            "label": "Shear Modulus",
+            "value": "3700 ksi"
+          },
+          {
+            "label": "Fatigue Strength",
+            "value": "14 ksi"
+          },
+          {
+            "label": "Brinell Hardness",
+            "value": "90"
+          },
+          {
+            "label": "Elongation at Break",
+            "value": "8%"
+          },
+          {
+            "label": "Elastic Modulus",
+            "value": "9900 ksi"
+          },
+          {
+            "label": "Poisson’s Ratio",
+            "value": ".33"
+          },
+          {
+            "label": "Thermal Conductivity",
+            "value": "80 BTU/h-ft °F"
+          },
+          {
+            "label": "Melting Point",
+            "value": "1120 °F"
+          },
+          {
+            "label": "Magnetic",
+            "value": "No"
+          },
+          {
+            "label": "Does it Rust",
+            "value": "No"
+          }
+        ],
+        "tumbleSpecs": [
+          {
+            "mm": "12.7 mm x 38.1 mm",
+            "inch": "0.5\" x 1.5\"",
+            "label": "Min Part Size Tumbling"
+          },
+          {
+            "mm": "101.6 mm x 177.8 mm",
+            "inch": "4\" x 7\"",
+            "label": "Max Part Size Tumbling"
+          }
+        ],
+        "tappingSpecs": [
+          {
+            "mm": "1/2-20",
+            "inch": "1/2-20",
+            "label": "Largest Tap"
+          },
+          {
+            "mm": "3/8-16",
+            "inch": "3/8-16",
+            "label": "Smallest Tap"
+          },
+          {
+            "mm": "24.105 mm x 38.1 mm",
+            "inch": "0.95\" x 1.5\"",
+            "label": "Min Flat Part Size Tapping"
+          },
+          {
+            "mm": "914.4 mm x 914.4 mm",
+            "inch": "36\" x 36\"",
+            "label": "Max Flat Part Size Tapping"
+          },
+          {
+            "mm": "5.715 mm",
+            "inch": "0.225\"",
+            "label": "Tapping Min Hole to Edge"
+          },
+          {
+            "mm": "Tap hole size/2 +0.813 mm",
+            "inch": "Tap hole size/2 +0.032\"",
+            "label": "Tapping Min Hole Center to Material Edge"
+          }
+        ],
+        "hardwareSpecs": [
+          {
+            "mm": "Contact Support",
+            "inch": "Contact Support",
+            "label": "Hardware Compatibility"
+          },
+          {
+            "mm": "Press-fit",
+            "inch": "Press-fit",
+            "label": "Installation Type"
+          },
+          {
+            "mm": "Contact Support",
+            "inch": "Contact Support",
+            "label": "Min Hole to Edge"
+          }
+        ],
+        "anodizingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min anodizing part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max anodizing part size"
+          }
+        ],
+        "deburringSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min deburring part size"
+          },
+          {
+            "mm": "609.6 mm x 1168.4 mm",
+            "inch": "24\" x 46\"",
+            "label": "Max deburring part size"
+          }
+        ],
+        "generalDetails": [
+          {
+            "mm": "19.05 mm",
+            "inch": "0.750\"",
+            "label": "Advertised Thickness"
+          },
+          {
+            "mm": "N/A",
+            "inch": "N/A",
+            "label": "Gauge"
+          },
+          {
+            "mm": "0.787 mm",
+            "inch": "0.031\"",
+            "label": "Thickness tolerance positive"
+          },
+          {
+            "mm": "0.787 mm",
+            "inch": "0.031\"",
+            "label": "Thickness tolerance negative"
+          },
+          {
+            "mm": "Identical both sides",
+            "inch": "Identical both sides",
+            "label": "Top/Bottom finish"
+          },
+          {
+            "mm": "USA/Global",
+            "inch": "USA/Global",
+            "label": "Sourced from"
+          }
+        ],
+        "showcaseImages": [],
+        "countersinkSpecs": [
+          {
+            "mm": "25.4 mm x 101.6 mm",
+            "inch": "1\" x 4\"",
+            "label": "Min countersink part size"
+          },
+          {
+            "mm": "355.6 mm x 1168.4 mm",
+            "inch": "14\" x 46\"",
+            "label": "Max countersink part size"
+          },
+          {
+            "mm": "6.477 mm",
+            "inch": "0.255\"",
+            "label": "Countersink Min Minor"
+          },
+          {
+            "mm": "10.846 mm",
+            "inch": "0.427\"",
+            "label": "Countersink Max Major"
+          },
+          {
+            "mm": "8.611 mm",
+            "inch": "0.339\"",
+            "label": "Countersink Min Hole Center to Material Edge"
+          }
+        ],
+        "availableServices": [
+          "Laser Cutting",
+          "Anodizing",
+          "Countersinking",
+          "Deburring",
+          "Hardware Insertion",
+          "Powder Coating",
+          "Tapping",
+          "Tumbling"
+        ],
+        "laserCuttingSpecs": [
+          {
+            "mm": "Fiber laser",
+            "inch": "Fiber laser",
+            "label": "Cutting process"
+          },
+          {
+            "mm": "0.127 mm",
+            "inch": "0.127 mm",
+            "label": "Cut tolerance +/-"
+          },
+          {
+            "mm": "+/-1.067 mm per foot",
+            "inch": "+/-0.042\" per foot",
+            "label": "Flatness tolerance before cutting"
+          },
+          {
+            "mm": "76.2 mm x 76.2 mm",
+            "inch": "3.0\" x 3.0\"",
+            "label": "Min part size"
+          },
+          {
+            "mm": "1422.4 mm x 762 mm",
+            "inch": "56″ x 30″",
+            "label": "Max part size"
+          },
+          {
+            "mm": "7.62 mm",
+            "inch": "0.3\"",
+            "label": "Min hole size"
+          },
+          {
+            "mm": "9.525 mm",
+            "inch": "0.375\"",
+            "label": "Min bridge size"
+          },
+          {
+            "mm": "5.715 mm",
+            "inch": "0.225\"",
+            "label": "Min hole to edge distance"
+          },
+          {
+            "mm": "0.381 mm",
+            "inch": "0.015\"",
+            "label": "Tab and slot tolerance"
+          }
+        ],
+        "available_services": [
+          1,
+          8,
+          4,
+          9,
+          6,
+          11,
+          7,
+          12
+        ],
+        "powderCoatingSpecs": [
+          {
+            "mm": "25.4 mm x 76.2 mm",
+            "inch": "1\" x 3\"",
+            "label": "Min powder coating part size"
+          },
+          {
+            "mm": "584.2 mm x 584.2 mm",
+            "inch": "23\" x 23\"",
+            "label": "Max powder coating part size"
+          }
+        ]
+      },
+      "1.000": {
+        "available_services": []
+      },
+      "1.250": {
+        "available_services": []
+      },
+      "1.500": {
+        "available_services": []
+      },
+      "1.750": {
+        "available_services": []
+      },
+      "2.000": {
+        "available_services": []
+      }
+    }
+  },
+  "dxfSvg": null,
+  "bendTree": {
+    "id": "face_5",
+    "radius": 0,
+    "children": [
+      {
+        "id": "face_16",
+        "radius": 1.829,
+        "bendAxis": {
+          "p0": [
+            -9.652,
+            0,
+            7.619999999999999
+          ],
+          "p1": [
+            -9.652,
+            0,
+            -7.619999999999999
+          ],
+          "length": 15.24
+        },
+        "children": [
+          {
+            "id": "face_4",
+            "radius": 0,
+            "children": [
+              {
+                "id": "face_14",
+                "radius": 0.254,
+                "bendAxis": {
+                  "p0": [
+                    -11.4808,
+                    7.874,
+                    7.619999999999999
+                  ],
+                  "p1": [
+                    -11.4808,
+                    7.874,
+                    -7.619999999999999
+                  ],
+                  "length": 15.24
+                },
+                "children": [
+                  {
+                    "id": "face_3",
+                    "radius": 0,
+                    "children": [],
+                    "parentId": "face_14",
+                    "isCoplanar": true,
+                    "extraFaceIds": [],
+                    "initialAngle": 90,
+                    "is_real_bend": false,
+                    "initialNormal": [
+                      0,
+                      -1,
+                      0
+                    ]
+                  }
+                ],
+                "parentId": "face_4",
+                "isCoplanar": false,
+                "extraFaceIds": [
+                  "face_14"
+                ],
+                "initialAngle": 90,
+                "is_real_bend": true,
+                "initialNormal": [
+                  -1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "parentId": "face_16",
+            "isCoplanar": true,
+            "extraFaceIds": [],
+            "initialAngle": 90,
+            "is_real_bend": false,
+            "initialNormal": [
+              -1,
+              0,
+              0
+            ]
+          }
+        ],
+        "parentId": "face_5",
+        "isCoplanar": false,
+        "extraFaceIds": [
+          "face_16"
+        ],
+        "initialAngle": 90,
+        "is_real_bend": true,
+        "initialNormal": [
+          -1,
+          0,
+          0
+        ]
+      }
+    ],
+    "parentId": null,
+    "isCoplanar": false,
+    "extraFaceIds": [],
+    "initialAngle": 90,
+    "is_real_bend": false,
+    "initialNormal": [
+      0,
+      -1,
+      0
+    ]
+  },
+  "bendCount": 2,
+  "thickness": "9.70",
+  "dimensions": {
+    "mm": {
+      "l": "30.23",
+      "t": "9.70",
+      "w": "15.24",
+      "volume": "784.96"
+    },
+    "inches": {
+      "l": "1.190",
+      "t": "0.382",
+      "w": "0.600",
+      "volume": "0.048"
+    }
+  },
+  "selectedTaps": {},
+  "detectedBends": [
+    {
+      "p0": [
+        -9.652,
+        0,
+        7.619999999999999
+      ],
+      "p1": [
+        -9.652,
+        0,
+        -7.619999999999999
+      ],
+      "length": 15.24
+    },
+    {
+      "p0": [
+        -11.4808,
+        7.874,
+        7.619999999999999
+      ],
+      "p1": [
+        -11.4808,
+        7.874,
+        -7.619999999999999
+      ],
+      "length": 15.24
+    }
+  ],
+  "detectedHoles": [
+    {
+      "id": 0,
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "depthMm": 1.5748,
+      "position": [
+        0,
+        0.7874,
+        0
+      ],
+      "depthInches": 0.062,
+      "diameter_mm": 7.1374,
+      "diameterInches": 0.281,
+      "parent_face_id": "face_5"
+    }
+  ],
+  "selectedBends": {
+    "face_14": {
+      "angle": 90,
+      "direction": "up"
+    },
+    "face_16": {
+      "angle": 90,
+      "direction": "up"
+    }
+  },
+  "anodizingColor": {
+    "name": "Gloss Blue",
+    "color": "#03099E",
+    "gloss": 85,
+    "price": 0,
+    "base_price": 0,
+    "is_wrinkled": false
+  },
+  "selectedHardware": {},
+  "productionService": {
+    "id": 2,
+    "slug": "cnc-machining",
+    "title": "CNC Machining",
+    "config": {
+      "max_x": 914.4,
+      "max_y": 609.5999999999999,
+      "max_z": 558.8,
+      "min_x": 5.001259999999999,
+      "min_y": 5.001259999999999,
+      "min_z": 5.001259999999999
+    },
+    "max_width": "24",
+    "min_width": "0.1969",
+    "parent_id": null,
+    "base_price": "0.00",
+    "created_at": "2026-03-26T04:38:56.854Z",
+    "image_path": "/uploads/services/service-2.png",
+    "max_height": "22",
+    "max_length": "36",
+    "min_height": "0.1969",
+    "min_length": "0.1969",
+    "parent_ids": [],
+    "description": "Multiaxis CNC machining in billet stock.",
+    "display_order": 2,
+    "is_production": true,
+    "pricing_config": {
+      "base_setup": 35,
+      "price_per_width": 10,
+      "price_per_length": 10,
+      "price_per_thickness": 430
+    },
+    "dimensions_unit": "in",
+    "service_options": []
+  },
+  "selectedThickness": ".500\"",
+  "additionalServices": [
+    {
+      "id": 4,
+      "slug": "countersinking",
+      "title": "Countersinking",
+      "config": {
+        "max_x": null,
+        "max_y": null,
+        "max_z": null,
+        "min_x": null,
+        "min_y": null,
+        "min_z": null
+      },
+      "max_width": "0",
+      "min_width": "0",
+      "parent_id": 1,
+      "base_price": "0.00",
+      "created_at": "2026-03-26T04:38:56.857Z",
+      "image_path": "/uploads/services/service-4.png",
+      "max_height": "0",
+      "max_length": "0",
+      "min_height": "0",
+      "min_length": "0",
+      "parent_ids": [
+        1,
+        2
+      ],
+      "description": "Allow hardware to sit flush on your parts to reduce wear and tear.",
+      "display_order": 4,
+      "is_production": false,
+      "pricing_config": {},
+      "dimensions_unit": "in",
+      "service_options": [
+        {
+          "name": "82 # 1",
+          "angle": "82",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.359",
+          "minor_dia": "0.193"
+        },
+        {
+          "name": "82 # 2",
+          "angle": "82",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.411",
+          "minor_dia": "0.199"
+        },
+        {
+          "name": "90 # 1",
+          "angle": "90",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.394",
+          "minor_dia": "0.202"
+        },
+        {
+          "name": "90 # 2",
+          "angle": "90",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.472",
+          "minor_dia": "0.255"
+        },
+        {
+          "name": "82 # 3",
+          "angle": "82",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.531",
+          "minor_dia": "0.255"
+        },
+        {
+          "name": "82 # 4",
+          "angle": "82",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.656",
+          "minor_dia": "0.318"
+        },
+        {
+          "name": "90 # 3",
+          "angle": "90",
+          "notes": "",
+          "price": "10",
+          "major_dia": "0.63",
+          "minor_dia": "0.32"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "slug": "powder-coating",
+      "title": "Powder Coating",
+      "config": {
+        "max_x": null,
+        "max_y": null,
+        "max_z": null,
+        "min_x": null,
+        "min_y": null,
+        "min_z": null
+      },
+      "max_width": "0",
+      "min_width": "0",
+      "parent_id": null,
+      "base_price": "180.00",
+      "created_at": "2026-03-26T04:38:56.866Z",
+      "image_path": "/uploads/services/service-11.png",
+      "max_height": "0",
+      "max_length": "0",
+      "min_height": "0",
+      "min_length": "0",
+      "parent_ids": [
+        1,
+        2
+      ],
+      "description": "Give your custom cut parts a bold, long-lasting protective layer in one of Multiple options.",
+      "display_order": 11,
+      "is_production": false,
+      "pricing_config": {
+        "shop_rate": 38,
+        "batch_cost": 150,
+        "oven_width": 90,
+        "setup_time": 15,
+        "oven_length": 160
+      },
+      "dimensions_unit": "in",
+      "service_options": [
+        {
+          "name": "BK01",
+          "color": "#000000",
+          "gloss": 50,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss Black",
+          "color": "#000000",
+          "gloss": 90,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Matte Black",
+          "color": "#000000",
+          "gloss": 10,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Wrinkle Black",
+          "color": "#000000",
+          "gloss": 10,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": true
+        },
+        {
+          "name": "Metallic Gray",
+          "color": "#999B9B",
+          "gloss": 75,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": true
+        },
+        {
+          "name": "Gloss Gray",
+          "color": "#D3D3D3",
+          "gloss": 87,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss White",
+          "color": "#FFFDFA",
+          "gloss": 90,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss Blue",
+          "color": "#03099E",
+          "gloss": 85,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss Green",
+          "color": "#00ad00",
+          "gloss": 85,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss Red",
+          "color": "#DD0004",
+          "gloss": 90,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        },
+        {
+          "name": "Gloss Yellow",
+          "color": "#fff82e",
+          "gloss": 90,
+          "price": 0,
+          "base_price": 0,
+          "is_wrinkled": false
+        }
+      ]
+    }
+  ],
+  "selectedCountersinks": {
+    "0": {
+      "face": "up",
+      "hole": {
+        "id": 0,
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "depthMm": 1.5748,
+        "position": [
+          0,
+          0.7874,
+          0
+        ],
+        "depthInches": 0.062,
+        "diameter_mm": 7.1374,
+        "diameterInches": 0.281,
+        "parent_face_id": "face_5"
+      },
+      "name": "82 # 1",
+      "angle": "82",
+      "notes": "",
+      "price": "10",
+      "major_dia": "0.359",
+      "minor_dia": "0.193"
+    }
+  }
+}
