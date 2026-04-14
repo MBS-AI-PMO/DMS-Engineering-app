@@ -5,6 +5,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
 const db = require('./db');
 require('dotenv').config();
 
@@ -32,7 +33,7 @@ const port = process.env.PORT || 5000;
 
 // FIX 1: Allow your public IP in CORS so the frontend can talk to the backend
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '3.133.86.166'}`],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '18.117.111.36'}`],
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -136,43 +137,96 @@ app.get('/api/db-check', async (req, res) => {
 });
 
 // Ported Unfold Logic (STEP/STP)
-app.post('/api/unfold', upload.single('file'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No file uploaded' });
-    }
+// Common Python Helper
+const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
+const PYTHON_BASE_URL = `http://localhost:${PYTHON_PORT}`;
 
-    const filename = (req.file.originalname || req.file.filename || '').toLowerCase();
+const callPython = async (subpath, formData) => {
+    const pyRes = await fetch(`${PYTHON_BASE_URL}${subpath}`, {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(120_000),
+    });
+    if (!pyRes.ok) {
+        const errText = await pyRes.text().catch(() => '');
+        throw new Error(`Python error (${pyRes.status}): ${errText}`);
+    }
+    return pyRes.json();
+};
+
+// --- Fast Analysis (Holes/Dimensions) ---
+app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const filename = (req.file.originalname || '').toLowerCase();
     if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(req.file.path, () => { });
         return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
     }
 
-    const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
-    const PYTHON_URL = `http://localhost:${PYTHON_PORT}/unfold`;
-
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
+        const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+
+        const cacheDir = path.join(__dirname, 'cache');
+        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+        const cachePath = path.join(cacheDir, `${hash}_holes.json`);
+
+        if (fs.existsSync(cachePath)) {
+            console.log(`[CAD-CACHE] Serving cached holes for ${hash}`);
+            return res.json({ success: true, ...JSON.parse(fs.readFileSync(cachePath, 'utf8')), cached: true });
+        }
+
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
         const form = new FormData();
         form.append('file', blob, req.file.originalname || 'model.step');
 
-        const pyRes = await fetch(PYTHON_URL, {
-            method: 'POST',
-            body: form,
-            signal: AbortSignal.timeout(120_000),
-        });
-
-        if (!pyRes.ok) {
-            const errText = await pyRes.text().catch(() => '');
-            return res.status(502).json({ success: false, error: `Python backend error: ${pyRes.status}`, detail: errText });
-        }
-
-        const data = await pyRes.json();
+        const data = await callPython('/detect-holes', form);
+        fs.writeFileSync(cachePath, JSON.stringify(data));
         return res.json({ success: true, ...data });
     } catch (err) {
+        console.error('[CAD-ERROR]', err);
         return res.status(500).json({ success: false, error: err.message });
     } finally {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(req.file.path, () => { });
+    }
+});
+
+// --- Full Unfold (Bends/Flat Pattern) ---
+app.post('/api/unfold', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const filename = (req.file.originalname || '').toLowerCase();
+    if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
+        fs.unlink(req.file.path, () => { });
+        return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
+    }
+
+    try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+
+        const cacheDir = path.join(__dirname, 'cache');
+        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+        const cachePath = path.join(cacheDir, `${hash}.json`);
+
+        if (fs.existsSync(cachePath)) {
+            console.log(`[CAD-CACHE] Serving cached unfold for ${hash}`);
+            return res.json({ success: true, ...JSON.parse(fs.readFileSync(cachePath, 'utf8')), cached: true });
+        }
+
+        const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+        const form = new FormData();
+        form.append('file', blob, req.file.originalname || 'model.step');
+
+        const data = await callPython('/unfold', form);
+        fs.writeFileSync(cachePath, JSON.stringify(data));
+        return res.json({ success: true, ...data });
+    } catch (err) {
+        console.error('[CAD-ERROR]', err);
+        return res.status(500).json({ success: false, error: err.message });
+    } finally {
+        fs.unlink(req.file.path, () => { });
     }
 });
 

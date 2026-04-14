@@ -112,6 +112,23 @@ def _build_face_edge_adjacency(shape, faces):
     return edge_to_faces, edge_map
 
 
+def _json_safe(obj):
+    """Recursively convert NaNs, Infinites, and NumPy types for JSON compatibility."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.float64) or isinstance(obj, np.float32):
+        return float(obj)
+    elif isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    elif isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    return obj
+
+
 def _normalize(vec):
     length = np.linalg.norm(vec)
     if length < 1e-12:
@@ -254,7 +271,7 @@ def _estimate_thickness(faces, face_info, face_areas):
     return 0.0
 
 
-def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map):
+def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map, bend_connections=None):
     """
     Construct the hierarchical bend tree that HierarchicalProjectViewer expects.
 
@@ -263,10 +280,20 @@ def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map):
         id, parentId, children,
         initialNormal,
         isCoplanar,
+        extraFaceIds,                  # list of non-planar (cylinder/other) face IDs to render
         bendAxis: {p0, p1, length},   # only on bent children
         initialAngle,                  # degrees, only on bent children
       }
     """
+    # Build a mapping: child_planar_face_id → list of associated cylinder face IDs
+    # Cylinders are assigned to the CHILD face so they move with the rotating flange
+    cyl_for_child = {}
+    if bend_connections:
+        # We don't know which is parent/child until BFS; build both-way lookup
+        for pa, pb, ci, _ea, _eb in bend_connections:
+            cyl_for_child.setdefault(pb, []).append(ci)
+            cyl_for_child.setdefault(pa, []).append(ci)
+
     nodes = {}
     root = {
         "id": seed,
@@ -274,10 +301,12 @@ def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map):
         "children": [],
         "initialNormal": _normalize(face_info[seed][1]).tolist(),
         "isCoplanar": False,
+        "extraFaceIds": [],
     }
     nodes[seed] = root
 
     visited = {seed}
+    assigned_cyls = set()  # track which cylinders have been assigned to avoid duplicates
     queue = [seed]
 
     while queue:
@@ -292,12 +321,22 @@ def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map):
             queue.append(nb)
 
             _, nb_normal, _ = face_info[nb]
+
+            # Assign the shared cylinder face to this child node (once only)
+            extra_ids = []
+            if conn["type"] == "bend":
+                ci = conn.get("cylinder")
+                if ci is not None and ci not in assigned_cyls:
+                    extra_ids.append(ci)
+                    assigned_cyls.add(ci)
+
             child = {
                 "id": nb,
                 "parentId": cur,
                 "children": [],
                 "initialNormal": _normalize(nb_normal).tolist(),
                 "isCoplanar": conn["type"] == "coplanar",
+                "extraFaceIds": extra_ids,
             }
 
             if conn["type"] == "bend":
@@ -408,50 +447,72 @@ def _append_polyline_segments(output, points, R, t):
         output.extend(end.tolist())
 
 
-def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=None, face_info=None):
-    """
-    Project edges of the shape onto a principal plane.
-    plane_code: 'xy' (Top), 'xz' (Front), 'yz' (Side)
+def _get_line_hash(line, tol=0.1):
+    """Generate a canonical hashable tuple for a line segment regardless of orientation."""
+    p1 = (round(line[0]/tol)*tol, round(line[1]/tol)*tol, round(line[2]/tol)*tol)
+    p2 = (round(line[3]/tol)*tol, round(line[4]/tol)*tol, round(line[5]/tol)*tol)
+    # Sort endpoints to ensure same hash for same segment in any order
+    return tuple(sorted([p1, p2]))
 
-    When edge_to_faces, edge_map, and face_info are provided, only silhouette
-    edges are included: edges where at least one adjacent face has a normal
-    component along the view axis. This filters out interior mesh lines that
-    appear between faces which are both parallel to the projection direction.
+
+def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=None, face_info=None, limit_to_edges=None, exclude_edges=None):
     """
-    # Which component of the face normal determines "facing the viewer"
+    Project visible edges onto a plane. 
+    limit_to_edges: Optional list of global edge indices to project (e.g. only bends).
+    exclude_edges: Optional list of global edge indices to SKIP.
+    """
     view_axis_idx = {"xy": 2, "xz": 1, "yz": 0}[plane_code]
-    # Minimum normal component to consider a face as "facing" the view axis
-    SILHOUETTE_THRESHOLD = 0.05
+    
+    if limit_to_edges is not None:
+        # Only process the requested edges (e.g. for folded bend lines)
+        edges_to_process = []
+        for eidx in limit_to_edges:
+            if 0 < eidx <= edge_map.Extent():
+                edges_to_process.append(TopoDS.Edge_s(edge_map.FindKey(eidx)))
+    else:
+        edges_to_process = _get_edges(shape)
 
-    all_edges = _get_edges(shape)
     coords = []
-    for edge in all_edges:
-        # Silhouette filtering when adjacency data is available
-        if edge_to_faces is not None and edge_map is not None and face_info is not None:
-            eidx = edge_map.FindIndex(edge)
+    seen_edges = set()
+
+    for edge in edges_to_process:
+        eidx = edge_map.FindIndex(edge)
+        
+        # EXCLUSION: Skip edges that are already handled by other layers (e.g. bends)
+        if exclude_edges is not None and eidx in exclude_edges:
+            continue
+
+        if eidx in seen_edges and limit_to_edges is None:
+            continue
+        
+        # VISIBILITY FILTER (only for the main silhouette)
+        if limit_to_edges is None and edge_to_faces is not None and face_info is not None:
             adj_faces = edge_to_faces.get(eidx, [])
-
-            if len(adj_faces) >= 2:
-                # Include edge only if at least one adjacent face has a significant
-                # normal component along the view axis (boundary edges always pass)
-                has_view_axis_face = False
-                for fi in adj_faces:
-                    info = face_info[fi]
-                    if info[0] == "plane":
-                        if abs(info[1][view_axis_idx]) >= SILHOUETTE_THRESHOLD:
-                            has_view_axis_face = True
-                            break
-                    else:
-                        # Non-planar face (cylinder, etc.) – include to be safe
-                        has_view_axis_face = True
+            is_visible = False
+            for fi in adj_faces:
+                info = face_info[fi]
+                if info[0] == "plane":
+                    if info[1][view_axis_idx] > 0.05:
+                        is_visible = True
                         break
+                else:
+                    is_visible = True
+                    break
+            if not is_visible:
+                continue
 
-                if not has_view_axis_face:
-                    continue  # skip interior edge
+        # SMOOTHING: Use direct endpoints for straight lines to avoid jagged tessellation
+        adaptor = BRepAdaptor_Curve(edge)
+        if adaptor.GetType() == GeomAbs_Line:
+            p1, p2 = _edge_endpoints(edge)
+            pts = [p1, p2] if (p1 is not None and p2 is not None) else []
+        else:
+            pts = _sample_edge_points(edge)
 
-        pts = _sample_edge_points(edge)
         if len(pts) < 2:
             continue
+
+        seen_edges.add(eidx)
 
         # Project and flatten
         projected = []
@@ -459,15 +520,13 @@ def _get_projection_edges(shape, plane_code="xy", edge_to_faces=None, edge_map=N
             if plane_code == "xy":
                 projected.append([p[0], p[1], 0.0])
             elif plane_code == "xz":
-                # For front view (XZ), map Z to Y in 2D
                 projected.append([p[0], p[2], 0.0])
             elif plane_code == "yz":
-                # For side view (YZ), map Y to X and Z to Y in 2D
                 projected.append([p[1], p[2], 0.0])
 
         for i in range(len(projected) - 1):
-            coords.extend(projected[i])
-            coords.extend(projected[i+1])
+            coords.extend([round(v, 4) for v in projected[i]])
+            coords.extend([round(v, 4) for v in projected[i+1]])
     return coords
 
 
@@ -554,7 +613,7 @@ def detect_holes_in_step(filepath: str) -> list:
 
     # Minimum hole depth (mm) = total cluster face area / (2π·r).
     # Chamfer lead-ins and other shallow artefacts are typically < 1.5 mm deep.
-    MIN_DEPTH_MM = 1.5
+    MIN_DEPTH_MM = 0.5
 
     seen: set = set()
     holes: list = []
@@ -594,8 +653,8 @@ def detect_holes_in_step(filepath: str) -> list:
         if effective_depth < MIN_DEPTH_MM:
             continue
 
-        # Filter: slot ends and edge bosses span only ~180°; real drilled holes ≥ ~300°
-        MIN_ANGULAR_SPAN_DEG = 300.0
+        # Filter: skip tight fillets, only real holes ≥ 270°
+        MIN_ANGULAR_SPAN_DEG = 270.0
         angular_span = _compute_cluster_angular_span(
             [(faces[c["fi"]], cyl["center"]) for c in cluster],
             cyl["axis"]
@@ -637,10 +696,36 @@ def detect_holes_in_step(filepath: str) -> list:
 
     # Sort smallest → largest for consistent display
     holes.sort(key=lambda h: h["diameter_mm"])
-    for idx, h in enumerate(holes):
+    
+    # ─── New Clustering: Merge multi-diameter holes (Counterbores) ───
+    # If two 'holes' share the same position and axis but have different diameters,
+    # it's 100% a counterbore. Merge them and keep the smallest diameter (the drill size).
+    final_merged = []
+    seen_merged = set()
+    for i, h1 in enumerate(holes):
+        if i in seen_merged: continue
+        best_h = h1
+        seen_merged.add(i)
+        
+        for j in range(i + 1, len(holes)):
+            if j in seen_merged: continue
+            h2 = holes[j]
+            dist = np.linalg.norm(np.array(h1["position"]) - np.array(h2["position"]))
+            # Cross product shows if axes are parallel
+            cross = np.linalg.norm(np.cross(h1["axis"], h2["axis"]))
+            
+            # If centres match within 2.5mm and axes are parallel
+            if dist < 2.5 and cross < 0.1:
+                seen_merged.add(j)
+                # Keep the smaller one
+                if h2["diameter_mm"] < best_h["diameter_mm"]:
+                    best_h = h2
+        final_merged.append(best_h)
+
+    for idx, h in enumerate(final_merged):
         h["id"] = f"hole_{idx + 1}"
 
-    return holes
+    return _json_safe(final_merged)
 
 
 def unfold_step_file(filepath: str) -> dict:
@@ -669,7 +754,6 @@ def unfold_step_file(filepath: str) -> dict:
     edge_to_faces, edge_map = _build_face_edge_adjacency(occ_shape, faces)
 
     # Build direct face-to-face adjacency through shared edges
-    # adj[i] = [(face_j, [shared_edge_indices], bend_info_or_None), ...]
     face_adj = {i: {} for i in range(len(faces))}
     for eidx, flist in edge_to_faces.items():
         if len(flist) == 2:
@@ -683,7 +767,6 @@ def unfold_step_file(filepath: str) -> dict:
 
     # Build "through-bend" adjacency: planar_face_A <-> planar_face_B via cylinder
     bend_connections = []  # (planar_a, planar_b, cylinder_face, shared_edges_a, shared_edges_b)
-    bend_edge_ids = set()
     major_face_area = max(face_areas[i] for i in planar_faces) if planar_faces else 0.0
     panel_area_threshold = major_face_area * 0.01
     for ci in cylinder_faces:
@@ -694,14 +777,12 @@ def unfold_step_file(filepath: str) -> dict:
         if len(connected_planar) < 2:
             continue
 
-        # Real bend cylinders can touch panel faces plus thin side-wall faces.
-        # Prefer the significant sheet faces when choosing bend pairs.
         candidates = [
             (fi, edges) for fi, edges in connected_planar
             if face_areas[fi] >= panel_area_threshold
         ]
         if len(candidates) < 2:
-            candidates = connected_planar
+            continue
 
         seen_pairs = set()
         for idx in range(len(candidates)):
@@ -715,13 +796,10 @@ def unfold_step_file(filepath: str) -> dict:
                     continue
                 seen_pairs.add(pair_key)
                 bend_connections.append((pa, pb, ci, ea, eb))
-                bend_edge_ids.update(ea)
-                bend_edge_ids.update(eb)
 
     # 5. Build planar-face adjacency graph
     planar_adj = {i: [] for i in planar_faces}
 
-    # Direct planar-planar adjacency is used only for true coplanar continuation.
     for pi in planar_faces:
         for adj_fi, edges in face_adj[pi].items():
             if adj_fi in planar_adj and adj_fi != pi:
@@ -731,7 +809,6 @@ def unfold_step_file(filepath: str) -> dict:
     for pa, pb, ci, ea, eb in bend_connections:
         cyl_info = face_info[ci]
         bend_angle = _compute_bend_angle(face_info[pa], face_info[pb], cyl_info)
-        # Get the bend axis from the cylinder
         _, cyl_axis, cyl_radius, cyl_center = cyl_info
         planar_adj[pa].append({
             "neighbor": pb, "type": "bend", "cylinder": ci,
@@ -749,8 +826,6 @@ def unfold_step_file(filepath: str) -> dict:
         raise ValueError("No planar faces found — not a sheet metal part?")
 
     seed = max(planar_faces, key=lambda i: face_areas[i])
-
-    # Estimate sheet thickness once (used by K-factor correction)
     thickness_est = _estimate_thickness(faces, face_info, face_areas)
 
     # Tessellate all planar faces
@@ -772,73 +847,63 @@ def unfold_step_file(filepath: str) -> dict:
             nb = conn["neighbor"]
             if nb in visited:
                 continue
-            visited.add(nb)
-            queue.append(nb)
+
+            # Calculate candidate transform for this neighbor
+            nb_R, nb_t = None, None
+            _, n_nb, _ = face_info[nb]
+            _, seed_normal, _ = face_info[seed]
+            seed_n_unfolded = face_transforms[seed][0] @ seed_normal
 
             if conn["type"] == "coplanar":
-                # Same transform as parent
-                face_transforms[nb] = (cur_R.copy(), cur_t.copy())
+                nb_R, nb_t = cur_R.copy(), cur_t.copy()
             elif conn["type"] == "bend":
-                # Compute rotation to flatten this face
                 angle = conn["angle"]
                 bend_axis = conn["axis"]
-
-                # Get a point on the shared edge (bend line) to use as pivot
-                shared_edges_on_cur = conn.get("edges_a", conn.get("edges", []))
-                if shared_edges_on_cur:
-                    edge_shape = TopoDS.Edge_s(edge_map.FindKey(shared_edges_on_cur[0]))
+                shared_edges = conn.get("edges_a", [])
+                if shared_edges:
+                    edge_shape = TopoDS.Edge_s(edge_map.FindKey(shared_edges[0]))
                     ep1, ep2 = _edge_endpoints(edge_shape)
                     if ep1 is not None:
-                        # Transform edge endpoints to current unfolded space
-                        pivot = cur_R @ ep1 + cur_t
-                        if bend_axis is None:
-                            bend_axis = _edge_direction(edge_shape)
-                        if bend_axis is None:
-                            face_transforms[nb] = (cur_R.copy(), cur_t.copy())
-                            continue
-                        axis_in_unfolded = cur_R @ bend_axis
-                        axis_in_unfolded /= np.linalg.norm(axis_in_unfolded)
-
-                        # Determine rotation direction:
-                        # The neighbor normal after unfolding should match seed normal
-                        _, n_cur, _ = face_info[cur]
-                        _, n_nb, _ = face_info[nb]
-                        n_cur_unfolded = cur_R @ n_cur
-                        n_nb_original = n_nb
-
-                        # Try both rotation directions, pick the one that makes normals align
-                        for sign in [1, -1]:
-                            R_bend, t_bend = _rotation_matrix(axis_in_unfolded, sign * angle, pivot)
-                            # Compose with current transform
-                            new_R = R_bend @ cur_R
-                            new_t = R_bend @ cur_t + t_bend
-                            # Check if neighbor normal becomes aligned with seed normal
-                            n_nb_unfolded = new_R @ n_nb_original
-                            _, seed_normal, _ = face_info[seed]
-                            seed_n_unfolded = face_transforms[seed][0] @ seed_normal
-                            if abs(np.dot(n_nb_unfolded, seed_n_unfolded)) > 0.9:
-                                # K-factor correction: shift flange by (BA - inner_arc)
-                                if thickness_est > 0:
-                                    inner_r = conn.get("radius", 0.0)
-                                    ba = angle * (inner_r + K_FACTOR * thickness_est)
-                                    correction = ba - angle * inner_r  # = angle * K_FACTOR * t
-                                    centroid_nb = _face_centroid(faces[nb])
-                                    c_unfolded = new_R @ centroid_nb + new_t
-                                    kdir = c_unfolded - pivot
-                                    kdir[2] = 0.0
-                                    klen = np.linalg.norm(kdir)
-                                    if klen > 1e-6:
-                                        new_t = new_t + (correction / klen) * kdir
-                                face_transforms[nb] = (new_R, new_t)
-                                break
+                        cyl_center = conn.get("center")
+                        if cyl_center is not None:
+                            pivot = cur_R @ cyl_center + cur_t
                         else:
-                            # Fallback: just use positive rotation
-                            R_bend, t_bend = _rotation_matrix(axis_in_unfolded, angle, pivot)
-                            face_transforms[nb] = (R_bend @ cur_R, R_bend @ cur_t + t_bend)
-                    else:
-                        face_transforms[nb] = (cur_R.copy(), cur_t.copy())
-                else:
-                    face_transforms[nb] = (cur_R.copy(), cur_t.copy())
+                            pivot = cur_R @ ep1 + cur_t
+                            
+                        axis_dir = bend_axis if bend_axis is not None else _edge_direction(edge_shape)
+                        if axis_dir is not None:
+                            axis_in_unfolded = _normalize(cur_R @ axis_dir)
+                            
+                            for sign in [1, -1]:
+                                R_bend, t_bend = _rotation_matrix(axis_in_unfolded, sign * angle, pivot)
+                                trial_R = R_bend @ cur_R
+                                trial_t = R_bend @ cur_t + t_bend
+                                trial_n = trial_R @ n_nb
+                                if np.dot(trial_n, seed_n_unfolded) > 0.85:
+                                    if thickness_est > 0:
+                                        inner_r = conn.get("radius", 0.0)
+                                        ba = angle * (inner_r + K_FACTOR * thickness_est)
+                                        correction = ba  # Rotate around cylinder center makes gap 0, so shift by exact ba
+                                        
+                                        centroid_nb = _face_centroid(faces[nb])
+                                        c_unfolded = trial_R @ centroid_nb + trial_t
+                                        
+                                        # Direction outward from Face A boundary
+                                        edge_world = cur_R @ ep1 + cur_t
+                                        kdir = c_unfolded - edge_world
+                                        kdir = kdir - np.dot(kdir, axis_in_unfolded) * axis_in_unfolded
+                                        klen = np.linalg.norm(kdir)
+                                        if klen > 1e-6:
+                                            trial_t = trial_t + (correction / klen) * kdir
+                                    nb_R, nb_t = trial_R, trial_t
+                                    break
+            
+            if nb_R is not None:
+                final_n = nb_R @ n_nb
+                if np.dot(final_n, seed_n_unfolded) > 0.85:
+                    visited.add(nb)
+                    queue.append(nb)
+                    face_transforms[nb] = (nb_R, nb_t)
 
     seed_normal = _normalize(face_transforms[seed][0] @ face_info[seed][1])
     align_R = _rotation_between_vectors(seed_normal, np.array([0.0, 0.0, 1.0]))
@@ -855,217 +920,107 @@ def unfold_step_file(filepath: str) -> dict:
         R, t = face_transforms[fi]
         verts, tris = face_meshes[fi]
         transformed_normal = _normalize(R @ face_info[fi][1])
-        if abs(np.dot(transformed_normal, seed_normal)) < 0.8:
-            continue
+        if np.dot(transformed_normal, seed_normal) > 0.85:
+            # Final global alignment to XY
+            final_R = align_R @ R
+            final_t = align_R @ t + align_t
+            
+            t_verts = np.array([final_R @ v + final_t for v in verts])
+            face_records.append({
+                "face_id": fi,
+                "vertices": t_verts,
+                "triangles": tris,
+                "transform": (final_R, final_t)
+            })
 
-        # Transform vertices
-        transformed = (R @ verts.T).T + t
-        transformed = (align_R @ transformed.T).T + align_t
-        transformed[:, 2] = 0.0
-        face_records.append({
-            "fi": fi,
-            "verts": transformed,
-            "tris": tris,
-            "area": face_areas[fi],
-        })
-
-    if not face_records:
-        return {
-            "flatVertices": [],
-            "cutEdges": [],
-            "bendEdges": [],
-            "thickness": 0.0,
-            "bbox": {"width": 0.0, "height": 0.0},
-        }
-
-    all_flat_verts = []
-    all_cut_edges = []
-    all_bend_edges = []
-    included_faces = {rec["fi"] for rec in face_records}
+    # 8. Extract cut edges (outer/inner loops) in unfolded coordinates
+    cut_edges_3d = []
+    bend_edges_3d = []
+    bend_edge_ids = set()
+    for _, _, _, ea, eb in bend_connections:
+        bend_edge_ids.update(ea)
+        bend_edge_ids.update(eb)
 
     for rec in face_records:
-        transformed = rec["verts"]
-        tris = rec["tris"]
-
-        # Add triangle vertices to flat list
-        for tri in tris:
-            for vi in tri:
-                all_flat_verts.extend(transformed[vi].tolist())
-
-    rendered_edge_ids = set()
-    for fi in included_faces:
-        R, t = face_transforms[fi]
-        combined_R = align_R @ R
-        combined_t = align_R @ t + align_t
-
+        fi = rec["face_id"]
+        R, t = rec["transform"]
         fe_map = TopTools_IndexedMapOfShape()
         TopExp.MapShapes_s(faces[fi], TopAbs_EDGE, fe_map)
         for ei in range(1, fe_map.Extent() + 1):
-            edge_shape = TopoDS.Edge_s(fe_map.FindKey(ei))
-            eidx = edge_map.FindIndex(edge_shape)
-            if eidx <= 0 or (fi, eidx) in rendered_edge_ids:
-                continue
-            rendered_edge_ids.add((fi, eidx))
-
-            adjacent_faces = edge_to_faces.get(eidx, [])
-            other_faces = [adj_fi for adj_fi in adjacent_faces if adj_fi != fi]
-
-            if any(
-                face_info[other][0] == "plane"
-                and other in included_faces
-                and _planes_are_coplanar(face_info[fi], face_info[other])
-                for other in other_faces
-            ):
-                continue
-
-            edge_points = _sample_edge_points(edge_shape)
-            if eidx in bend_edge_ids:
-                _append_polyline_segments(all_bend_edges, edge_points, combined_R, combined_t)
+            edge = TopoDS.Edge_s(fe_map.FindKey(ei))
+            eidx_global = edge_map.FindIndex(edge)
+            pts = _sample_edge_points(edge)
+            if eidx_global in bend_edge_ids:
+                _append_polyline_segments(bend_edges_3d, pts, R, t)
             else:
-                _append_polyline_segments(all_cut_edges, edge_points, combined_R, combined_t)
+                _append_polyline_segments(cut_edges_3d, pts, R, t)
 
-    # 9. Get principal 2D projections (silhouette-filtered using face adjacency)
-    top_coords = _get_projection_edges(occ_shape, "xy", edge_to_faces, edge_map, face_info)
-    front_coords = _get_projection_edges(occ_shape, "xz", edge_to_faces, edge_map, face_info)
-    side_coords = _get_projection_edges(occ_shape, "yz", edge_to_faces, edge_map, face_info)
+    # 9. Clean up flat vertices for JSON output
+    flat_vertices = []
+    for rec in face_records:
+        for tri in rec["triangles"]:
+            for v_idx in tri:
+                v = rec["vertices"][v_idx]
+                flat_vertices.extend([round(v[0], 4), round(v[1], 4), 0.0])
 
-    # 10. Compute technical metrics for pricing
-    total_cut_perimeter = 0
-    # all_cut_edges is flat [x1,y1,z1, x2,y2,z2, ...]
-    for i in range(0, len(all_cut_edges), 6):
-        p1 = np.array(all_cut_edges[i:i+3])
-        p2 = np.array(all_cut_edges[i+3:i+6])
-        total_cut_perimeter += np.linalg.norm(p2 - p1)
+    all_pts = []
+    for rec in face_records:
+        all_pts.append(rec["vertices"])
+    
+    width, height = 0.0, 0.0
+    if all_pts:
+        all_v = np.concatenate(all_pts, axis=0)
+        v_min = np.min(all_v, axis=0)
+        v_max = np.max(all_v, axis=0)
+        width = round(float(v_max[0] - v_min[0]), 2)
+        height = round(float(v_max[1] - v_min[1]), 2)
 
-    # Simplified Loop Detection for Pierce Count
-    # We find connected components of segments in all_cut_edges
-    def count_loops(edges_list):
-        if not edges_list: return 0
-        adj = {}
-        def to_key(pt): return tuple(np.round(pt, 2))
-        for i in range(0, len(edges_list), 6):
-            p1 = to_key(edges_list[i:i+3])
-            p2 = to_key(edges_list[i+3:i+6])
-            if p1 == p2: continue
-            adj.setdefault(p1, []).append(p2)
-            adj.setdefault(p2, []).append(p1)
-        
-        loops = 0
-        visited = set()
-        for node in adj:
-            if node not in visited:
-                loops += 1
-                q = [node]
-                visited.add(node)
-                while q:
-                    curr = q.pop(0)
-                    for neighbor in adj[curr]:
-                        if neighbor not in visited:
-                            visited.add(neighbor)
-                            q.append(neighbor)
-        return loops
+    # 10. Compute Technical Views (Projections)
+    bend_ids = list(bend_edge_ids)
+    top_edges = _get_projection_edges(occ_shape, "xy", edge_to_faces, edge_map, face_info, exclude_edges=bend_ids)
+    front_edges = _get_projection_edges(occ_shape, "xz", edge_to_faces, edge_map, face_info, exclude_edges=bend_ids)
+    side_edges = _get_projection_edges(occ_shape, "yz", edge_to_faces, edge_map, face_info, exclude_edges=bend_ids)
 
-    pierce_count = count_loops(all_cut_edges)
+    # Folded bend silhouettes for Drawing View
+    top_bend_raw = _get_projection_edges(occ_shape, "xy", edge_to_faces, edge_map, face_info, limit_to_edges=bend_ids)
+    front_bend_raw = _get_projection_edges(occ_shape, "xz", edge_to_faces, edge_map, face_info, limit_to_edges=bend_ids)
+    side_bend_raw = _get_projection_edges(occ_shape, "yz", edge_to_faces, edge_map, face_info, limit_to_edges=bend_ids)
 
-    # Bend Summary (Length and Radius)
-    bend_summary = []
-    processed_bend_cylinders = set()
-    for pa, pb, ci, ea, eb in bend_connections:
-        if ci in processed_bend_cylinders: continue
-        processed_bend_cylinders.add(ci)
-        
-        # Calculate bend length from the shared edges
-        # Note: bend length is the length of the cylindrical face along its axis
-        edge_shape = TopoDS.Edge_s(edge_map.FindKey(ea[0]))
-        p1, p2 = _edge_endpoints(edge_shape)
-        bend_len = np.linalg.norm(p2 - p1) if p1 is not None else 0
-        
-        bend_summary.append({
-            "length": round(float(bend_len), 4),
-            "radius": round(float(face_info[ci][2]), 4)
-        })
+    # GEOMETRIC DEDUPLICATION: Remove bend lines that overlap with the silhouette (High Performance)
+    def chunk_lines(raw):
+        return [raw[i:i+6] for i in range(0, len(raw), 6)]
+    def flatten_lines(chunks):
+        return [val for sub in chunks for val in sub]
 
-    # 11. Compute bounding box for the flat pattern
-    if all_flat_verts:
-        varr = np.array(all_flat_verts).reshape(-1, 3)
-        mins = varr.min(axis=0)
-        maxs = varr.max(axis=0)
-        width = float(maxs[0] - mins[0])
-        height = float(maxs[1] - mins[1])
-        thickness = float(maxs[2] - mins[2])
-    else:
-        width = height = thickness = 0.0
+    # Pre-build hash sets for silhouettes
+    top_sil_hashes = {_get_line_hash(l) for l in chunk_lines(top_edges)}
+    front_sil_hashes = {_get_line_hash(l) for l in chunk_lines(front_edges)}
+    side_sil_hashes = {_get_line_hash(l) for l in chunk_lines(side_edges)}
 
-    # Use thickness_est if the flat Z range is trivially zero (all faces projected flat)
-    if thickness < 0.01 and thickness_est > 0:
-        thickness = thickness_est
+    top_bend_edges = flatten_lines([l for l in chunk_lines(top_bend_raw) if _get_line_hash(l) not in top_sil_hashes])
+    front_bend_edges = flatten_lines([l for l in chunk_lines(front_bend_raw) if _get_line_hash(l) not in front_sil_hashes])
+    side_bend_edges = flatten_lines([l for l in chunk_lines(side_bend_raw) if _get_line_hash(l) not in side_sil_hashes])
 
-    # 12. Build hierarchical bend tree + 3D face meshes for HierarchicalProjectViewer
-    bend_tree = _build_bend_tree(seed, planar_adj, face_info, faces, edge_map)
-
-    # 3D tessellations keyed by string face-id (matches JS side)
-    face_meshes_3d = {}
+    # 11. Final Serialization (Fixed: Convert all numpy types to standard lists)
+    serializable_meshes = {}
     for fi, (verts, tris) in face_meshes.items():
-        if verts.shape[0] == 0:
-            continue
-        face_meshes_3d[str(fi)] = {
-            "vertices": verts.flatten().tolist(),
-            "indices": tris.flatten().tolist(),
+        serializable_meshes[str(fi)] = {
+            "vertices": [float(v) for v in np.array(verts).flatten()],
+            "indices": [int(i) for i in np.array(tris).flatten()]
         }
 
-    return {
-        "flatVertices": all_flat_verts,
-        "cutEdges": all_cut_edges,
-        "bendEdges": all_bend_edges,
-        "topEdges": top_coords,
-        "frontEdges": front_coords,
-        "sideEdges": side_coords,
-        "thickness": thickness,
-        "bbox": {"width": width, "height": height},
-        "totalPerimeter": round(float(total_cut_perimeter), 4),
-        "pierceCount": int(pierce_count),
-        "bends": bend_summary,
-        # 3D viewer data
-        "bendTree": bend_tree,
-        "faceMeshes": face_meshes_3d,
-        "baseFaceId": seed,
-    }
-
-def export_unfolded_dxf(input_path, output_path):
-    """
-    World-Class CAD Projection: Generate Laser-Ready DXF Flat Pattern.
-    """
-    try:
-        # Load the base model
-        shape = cq.importers.importStep(input_path)
-        
-        # Robust Silhouette Projection
-        # We attempt to find the largest planar face as the projection plane
-        # fallback to Z-max if needed
-        try:
-            dxf_plane = shape.faces(">Z").workplane()
-            # Correct CadQuery DXF export syntax
-            cq.exporters.export(dxf_plane.section(), output_path)
-        except:
-            # Fallback for complex geometry: Project the entire shape silhouette
-            cq.exporters.export(shape, output_path)
-            
-        return True
-    except Exception as e:
-        print(f"Error exporting DXF: {str(e)}")
-        # Ultimate fallback: Create an empty DXF or just log the failure
-        return False
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 3:
-        print("Usage: python unfold.py <input_step> <output_dxf>")
-        sys.exit(1)
-        
-    in_path = sys.argv[1]
-    out_path = sys.argv[2]
-    
-    if export_unfolded_dxf(in_path, out_path):
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    return _json_safe({
+        "flatVertices": flat_vertices,
+        "cutEdges": [float(v) for v in cut_edges_3d],
+        "bendEdges": [float(v) for v in bend_edges_3d],
+        "topEdges": [float(v) for v in top_edges],
+        "frontEdges": [float(v) for v in front_edges],
+        "sideEdges": [float(v) for v in side_edges],
+        "topBendEdges": [float(v) for v in top_bend_edges],
+        "frontBendEdges": [float(v) for v in front_bend_edges],
+        "sideBendEdges": [float(v) for v in side_bend_edges],
+        "thickness": round(float(thickness_est), 4),
+        "bbox": {"width": float(width), "height": float(height)},
+        "faceMeshes": serializable_meshes,
+        "bendTree": _build_bend_tree(seed, planar_adj, face_info, faces, edge_map, bend_connections)
+    })

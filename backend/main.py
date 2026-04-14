@@ -1,5 +1,10 @@
-
 import os
+import platform
+from dotenv import load_dotenv
+
+# 1. Load environment variables BEFORE doing anything else
+load_dotenv()
+
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["OCP_NO_DISPLAY"] = "1"
 import json
@@ -7,12 +12,35 @@ import tempfile
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn  # Added for handling multiple requests
+import subprocess
+import shlex
+import math
+import numpy as np
+import threading
 from unfold import unfold_step_file, detect_holes_in_step
 
-# 1. Use Environment Variables for the Port
-PORT = int(os.getenv("PORT", 8000))
+# Global lock to prevent Out-Of-Memory by serializing heavy geometry tasks
+geometry_lock = threading.Lock()
 
-# 2. Add Threading support so the server doesn't freeze during heavy 3D math
+def _json_safe(obj):
+    """Recursively convert NaNs, Infinites, and NumPy types for JSON compatibility."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.float64) or isinstance(obj, np.float32):
+        return float(obj)
+    elif isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    elif isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    return obj
+
+# Use Environment Variables for the Port
+PORT = int(os.getenv("PYTHON_PORT", 8000))
+# Add Threading support so the server doesn't freeze during heavy 3D math
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -39,9 +67,15 @@ class CORSHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/unfold":
-            self._process_step_file(unfold_step_file, lambda r: r)
+            # Use the new robust library if available
+            self._process_step_file(self.unfold_with_lib_subprocess, lambda r: r)
         elif self.path == "/detect-holes":
-            self._process_step_file(detect_holes_in_step, lambda r: {"holes": r})
+            self._process_step_file(self.unfold_with_lib_subprocess, lambda r: {
+                "holes": r.get("detectedHoles", []),
+                "faceMeshes": r.get("faceMeshes", {}),
+                "bendTree": r.get("bendTree", None),
+                "thickness": r.get("thickness", 2.0)
+            })
         else:
             self.send_response(404)
             self.end_headers()
@@ -116,7 +150,7 @@ class CORSHandler(BaseHTTPRequestHandler):
         return None, None
 
     def _send_json(self, code, data):
-        payload = json.dumps(data).encode()
+        payload = json.dumps(_json_safe(data)).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -126,6 +160,59 @@ class CORSHandler(BaseHTTPRequestHandler):
 
     def _send_error(self, code, message):
         self._send_json(code, {"error": message})
+
+    def unfold_with_lib_subprocess(self, filepath):
+        """Calls unfold_lib.py using the specialized FreeCAD interpreter and merges with legacy metadata."""
+        
+        # 2. Make the fallback path OS-aware so it doesn't crash on Linux if the .env fails
+        if platform.system() == "Windows":
+            default_freecad = r"C:\Users\User\AppData\Local\Programs\FreeCAD 1.0\bin\freecadcmd.exe"
+        else:
+            default_freecad = "/usr/bin/freecadcmd"
+
+        freecad_path = os.getenv("FREECAD_PATH", default_freecad)
+        
+        # If FREECAD_PATH points to the cmd/exe, we likely want the python.exe in the same folder for subprocess
+        if freecad_path.endswith("freecadcmd.exe"):
+            freecad_python = freecad_path.replace("freecadcmd.exe", "python.exe")
+        elif freecad_path.endswith("freecadcmd"):
+            freecad_python = freecad_path # On Linux they might be the same or handled by the wrapper
+        else:
+            freecad_python = freecad_path
+
+        script_path = os.getenv("UNFOLD_LIB_PATH", os.path.join(os.path.dirname(__file__), "unfold_lib.py"))
+        
+        cmd = [freecad_python, script_path, filepath]
+        print(f"[Python-API] Executing robust unfold pass...")
+        try:
+            # Pass 1: Get professional flat pattern, bend tree, silhouettes, and holes
+            # Apply global lock to protect server RAM during heavy FreeCAD run
+            with geometry_lock:
+                print(f"[Python-API] Lock acquired for model processing...")
+                proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=90)
+                result = json.loads(proc.stdout)
+
+            # Normalize FreeCAD key names to match frontend expectations
+            # (FlatPatternViewer.buildFromBackend() looks for bendEdges/cutEdges)
+            if "bendPts" in result:
+                result["bendEdges"] = result.pop("bendPts")
+            if "cutPts" in result:
+                result["cutEdges"] = result.pop("cutPts")
+
+            # All metadata (silhouettes, holes, faceMeshes) is now integrated 
+            # into the primary Pass 1 from unfold_lib.py. 
+            # We no longer need to call the legacy OCC-based unfold_step_file.
+            return result
+        except subprocess.CalledProcessError as e:
+            print(f"[Python-API] Robust unfold failed (Exit {e.returncode}). Output:")
+            print(f"STDOUT: {e.stdout}")
+            print(f"STDERR: {e.stderr}")
+            print(f"[Python-API] Falling back to legacy engine...")
+            return unfold_step_file(filepath)
+        except Exception as e:
+            print(f"[Python-API] Merge pass unexpected error: {str(e)}")
+            traceback.print_exc()
+            return unfold_step_file(filepath)
 
     def log_message(self, format, *args):
         # Cleaner logging for PM2 logs

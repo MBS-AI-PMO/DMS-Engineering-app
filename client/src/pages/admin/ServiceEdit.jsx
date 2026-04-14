@@ -828,9 +828,9 @@ export default function ServiceEdit() {
                                     </div>
 
                                     <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Rates per Category ($)</h4>
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '20px' }}>
                                         <div className="option-input-group">
-                                            <label>Small Rate ($)</label>
+                                            <label>Small Bend Rate ($)</label>
                                             <input
                                                 type="number"
                                                 value={service.pricing_config?.small_bend_rate || 0}
@@ -838,7 +838,7 @@ export default function ServiceEdit() {
                                             />
                                         </div>
                                         <div className="option-input-group">
-                                            <label>Medium Rate ($)</label>
+                                            <label>Medium Bend Rate ($)</label>
                                             <input
                                                 type="number"
                                                 value={service.pricing_config?.med_bend_rate || 0}
@@ -846,14 +846,59 @@ export default function ServiceEdit() {
                                             />
                                         </div>
                                         <div className="option-input-group">
-                                            <label>Large Rate ($)</label>
+                                            <label>Large Bend Rate ($)</label>
                                             <input
                                                 type="number"
                                                 value={service.pricing_config?.large_bend_rate || 0}
                                                 onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_rate: parseFloat(e.target.value) || 0 } }))}
                                             />
                                         </div>
+                                        <div className="option-input-group">
+                                            <label>Other Feature Rate ($)</label>
+                                            <input
+                                                type="number"
+                                                title="Cost per offset, curl, or hem feature"
+                                                value={service.pricing_config?.other_feature_rate || 0}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, other_feature_rate: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
                                     </div>
+
+                                    <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Setup &amp; Runtime</h4>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                                        <div className="option-input-group">
+                                            <label>Setup Time (hrs)</label>
+                                            <input
+                                                type="number"
+                                                step="0.25"
+                                                title="Fixed setup time per job in hours (used with Labor Rate for setup cost)"
+                                                value={service.pricing_config?.setup_time_hours ?? 0.25}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time_hours: parseFloat(e.target.value) || 0 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Time Per Bend (sec)</label>
+                                            <input
+                                                type="number"
+                                                title="Machine cycle time per bend stroke in seconds (used for lead time)"
+                                                value={service.pricing_config?.time_per_bend_sec ?? 15}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, time_per_bend_sec: parseFloat(e.target.value) || 15 } }))}
+                                            />
+                                        </div>
+                                        <div className="option-input-group">
+                                            <label>Daily Capacity (hrs)</label>
+                                            <input
+                                                type="number"
+                                                title="Available machine hours per day (used to compute lead time in days)"
+                                                value={service.pricing_config?.daily_capacity_hours ?? 8}
+                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, daily_capacity_hours: parseFloat(e.target.value) || 8 } }))}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <p style={{ marginTop: '12px', fontSize: '11px', color: '#64748b' }}>
+                                        <strong>Formula:</strong> Cost = (Labor Rate × Setup Time) + Qty × (small_count × Small$ + med_count × Med$ + large_count × Large$ + other_count × Other$)
+                                    </p>
                                 </div>
                             );
 

@@ -344,7 +344,10 @@ router.post('/calculate', async (req, res) => {
         length_in,
         height_in,
         quantity = 1,
-        additional_services = []
+        additional_services = [],
+        taps = [],
+        hardware = [],
+        countersinks = []
     } = req.body;
 
     if (!metal_id && !service_id) {
@@ -471,26 +474,61 @@ router.post('/calculate', async (req, res) => {
             }
 
             // ── BENDING (bending.csv) ─────────────────────────────────────────
-            // cost/unit = (setup_fee / qty) + sum_of_categorised_bend_rates
-            // Bend categories (by length vs thresholds): small / med / large
-            if (main_service_cost === 0 && isBending && techData.bends && Array.isArray(techData.bends)) {
-                const setup_fee = parseFloat(config.setup_fee) || 0;
-                const med_thresh = parseFloat(config.med_bend_threshold) || 200;
-                const large_thresh = parseFloat(config.large_bend_threshold) || 500;
-                const small_rate = parseFloat(config.small_bend_rate) || 15;
-                const med_rate = parseFloat(config.med_bend_rate) || 15;
-                const large_rate = parseFloat(config.large_bend_rate) || 20;
+            // cost/unit = (setup_cost / qty) + machine_cost
+            // Setup Cost = Labor Rate * (Unique Bends + Unique Advanced Features) * Setup Time Per Feature
+            // Machine Cost = (SmallBends * RateS + MedBends * RateM + LargeBends * RateL) * Labor Rate / 3600
+            if (isBending && techData.bends && Array.isArray(techData.bends)) {
+                // Get config with defaults based on bending.csv
+                const laborRate = parseFloat(config.labor_rate) || 85;
+                const setupTimePerUnique = parseFloat(config.setup_time_per_unique) || 0.25; // hours
 
-                let bend_cost_per_unit = 0;
+                const medThreshIn = parseFloat(config.med_bend_threshold) || 8;  // inches
+                const largeThreshIn = parseFloat(config.large_bend_threshold) || 20; // inches
+
+                const runTimeSmall = parseFloat(config.run_time_small_sec) || 15; // seconds
+                const runTimeMed = parseFloat(config.run_time_med_sec) || 15;
+                const runTimeLarge = parseFloat(config.run_time_large_sec) || 20;
+                const otherTime = parseFloat(config.other_feature_run_time_sec) || 20;
+
+                let machineCostPerUnit = 0;
+                const uniqueFeatures = new Set();
+                let smallCount = 0, medCount = 0, largeCount = 0, otherCount = 0;
+
                 techData.bends.forEach(bend => {
-                    const len = parseFloat(bend.length) || 0;
-                    if (len >= large_thresh) bend_cost_per_unit += large_rate;
-                    else if (len >= med_thresh) bend_cost_per_unit += med_rate;
-                    else bend_cost_per_unit += small_rate;
+                    const lenMm = parseFloat(bend.length) || 0;
+                    const lenIn = lenMm / 25.4;
+                    const radMm = parseFloat(bend.radius) || 0;
+                    const ang = Math.round(parseFloat(bend.angle) || 0);
+
+                    // 1. Identify Unique Features (Rad + Angle + type)
+                    // Hems are ~180 degree bends
+                    const isHem = Math.abs(ang - 180) < 5;
+                    const type = isHem ? 'hem' : 'standard';
+                    uniqueFeatures.add(`${radMm}_${ang}_${type}`);
+
+                    // 2. Count for Machine Cost
+                    if (isHem) {
+                        otherCount += 1;
+                        machineCostPerUnit += otherTime;
+                    } else if (lenIn >= largeThreshIn) {
+                        largeCount += 1;
+                        machineCostPerUnit += runTimeLarge;
+                    } else if (lenIn >= medThreshIn) {
+                        medCount += 1;
+                        machineCostPerUnit += runTimeMed;
+                    } else {
+                        smallCount += 1;
+                        machineCostPerUnit += runTimeSmall;
+                    }
                 });
 
-                // One-time setup amortised over qty
-                main_service_cost = (setup_fee / qty) + bend_cost_per_unit;
+                // Calculate Totals using Bending.csv logic
+                const totalUnique = uniqueFeatures.size;
+                const setupTimeHrs = totalUnique * setupTimePerUnique;
+                const totalSetupCost = setupTimeHrs * laborRate;
+
+                // Final unit price for bending
+                main_service_cost = (totalSetupCost / qty) + (machineCostPerUnit * laborRate / 3600);
             }
 
             // ── CNC MACHINING (dimension-based fallback) ──────────────────────
@@ -520,11 +558,16 @@ router.post('/calculate', async (req, res) => {
                 const sRes = await db.query('SELECT * FROM services WHERE id = $1', [sId]);
                 if (sRes.rows.length === 0) continue;
                 const s = sRes.rows[0];
+                const sTitleLower = s.title.toLowerCase();
+
+                // Skip special manual features - they are added separately below with summarized hole costs
+                if (sTitleLower.includes('tap') || sTitleLower.includes('hardware') || sTitleLower.includes('countersink')) {
+                    continue;
+                }
 
                 let sPrice = parseFloat(s.base_price) || 0;
                 let sName = s.title;
 
-                const sTitleLower = s.title.toLowerCase();
                 const isPowder = sTitleLower.includes('powder') || sTitleLower.includes('coating');
 
                 // ── POWDER COATING (powder coating.csv) ──────────────────────
@@ -565,9 +608,74 @@ router.post('/calculate', async (req, res) => {
                     }
                 }
 
+                // ── BENDING (as additional service) ──────────────────────────
+                if (sTitleLower.includes('bend') && techData && Array.isArray(techData.bends) && techData.bends.length > 0) {
+                    const cfg = s.pricing_config || {};
+                    const laborRate = parseFloat(cfg.labor_rate) || 85;
+                    const setupTimePerUnique = parseFloat(cfg.setup_time_per_unique) || 0.25;
+                    const medThreshIn = parseFloat(cfg.med_bend_threshold) || 8;
+                    const largeThreshIn = parseFloat(cfg.large_bend_threshold) || 20;
+                    const runTimeSmall = parseFloat(cfg.run_time_small_sec) || 15;
+                    const runTimeMed = parseFloat(cfg.run_time_med_sec) || 15;
+                    const runTimeLarge = parseFloat(cfg.run_time_large_sec) || 20;
+
+                    let machineCostPerUnit = 0;
+                    const uniqueFeatures = new Set();
+
+                    techData.bends.forEach(bend => {
+                        const radMm = Math.round((bend.radius || 0) * 10) / 10;
+                        const ang = Math.round(bend.angle || 90);
+                        const isHem = Math.abs(ang - 180) < 5;
+                        const type = isHem ? 'HEM' : 'BEND';
+                        const lenIn = (bend.length || 0) / 25.4;
+
+                        uniqueFeatures.add(`${radMm}_${ang}_${type}`);
+
+                        if (isHem) {
+                            machineCostPerUnit += runTimeLarge; // Hem = Large rate
+                        } else if (lenIn >= largeThreshIn) {
+                            machineCostPerUnit += runTimeLarge;
+                        } else if (lenIn >= medThreshIn) {
+                            machineCostPerUnit += runTimeMed;
+                        } else {
+                            machineCostPerUnit += runTimeSmall;
+                        }
+                    });
+
+                    const totalUnique = uniqueFeatures.size;
+                    const setupTimeHrs = totalUnique * setupTimePerUnique;
+                    const totalSetupCost = setupTimeHrs * laborRate;
+
+                    sPrice = (totalSetupCost / qty) + (machineCostPerUnit * laborRate / 3600);
+                }
+
                 additional_cost += sPrice;
                 service_breakdown.push({ name: sName, price: sPrice });
             }
+        }
+
+        const parseManualPrice = (p) => {
+            if (p === undefined || p === null) return 0;
+            const price = parseFloat(p);
+            return isNaN(price) ? 0 : price;
+        };
+
+        if (Array.isArray(taps) && taps.length > 0) {
+            const tapTotal = taps.reduce((acc, t) => acc + parseManualPrice(t.price), 0);
+            additional_cost += tapTotal;
+            service_breakdown.push({ name: 'Tapping', price: tapTotal });
+        }
+
+        if (Array.isArray(hardware) && hardware.length > 0) {
+            const hwTotal = hardware.reduce((acc, h) => acc + parseManualPrice(h.price), 0);
+            additional_cost += hwTotal;
+            service_breakdown.push({ name: 'Hardware', price: hwTotal });
+        }
+
+        if (Array.isArray(countersinks) && countersinks.length > 0) {
+            const csTotal = countersinks.reduce((acc, c) => acc + parseManualPrice(c.price), 0);
+            additional_cost += csTotal;
+            service_breakdown.push({ name: 'Countersinking', price: csTotal });
         }
 
         let unit_total = material_cost + main_service_cost + additional_cost;

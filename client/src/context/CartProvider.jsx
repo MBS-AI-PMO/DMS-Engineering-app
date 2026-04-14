@@ -105,10 +105,14 @@ export const CartProvider = ({ children }) => {
 
       if (res.success) {
         // res.total_price already includes anodizing (sent via additional_services to the API)
-        // Calculate non-engine costs (taps and hardware) to add to the base unit établissements
+        // Calculate non-engine costs (taps, hardware, cs, bends) to add to the base unit établissements
         const totalTaps = Object.values(configuration.selectedTaps || {}).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
         const totalHardware = Object.values(configuration.selectedHardware || {}).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
-        const nonEngineUnitCost = (totalTaps + totalHardware) / newQuantity;
+        const totalCS = Object.values(configuration.selectedCountersinks || {}).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
+        const bendSvc = (configuration.additionalServices || []).find(s => s.title.toLowerCase().includes('bend'));
+        const totalBending = bendSvc ? (parseFloat(bendSvc.base_price || 0) * (configuration.bendCount || 0)) : 0;
+
+        const nonEngineUnitCost = (totalTaps + totalHardware + totalCS + totalBending) / newQuantity;
 
         const engineBase = parseFloat(res.breakdown?.unit_total || 0);
 

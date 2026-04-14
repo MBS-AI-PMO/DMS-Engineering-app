@@ -3,24 +3,25 @@ import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import {
-  Upload, X, Info, ArrowRight, FileCode, Layers, Grid3x3, Box, Square,
-  Monitor, Maximize2, Boxes, ChevronLeft,
+  Upload, X, Info, Layers, Box, Boxes, ChevronLeft,
   ChevronRight, ChevronDown, AlertCircle, AlertTriangle, Loader2, Check, Shield, Calculator,
-  Minus, Plus, Zap, TrendingDown, FileText, Settings, Grid, Lock
+  Plus, Zap, TrendingDown, FileText, Settings, Grid
 } from 'lucide-react';
-import * as OV from 'online-3d-viewer';
-import { parseString, toSVG } from 'dxf';
-import * as THREE from 'three';
-import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
-import { fetchServices, fetchMetals, calculatePrice, fetchPublicDiscounts, fetchCategories, fetchHardwareItemsByType } from '../utils/api';
+import {
+  fetchServices, calculatePrice, fetchPublicDiscounts, fetchHardwareItemsByType,
+  fetchCategories, fetchMetals, fetchPricingCncMetals, fetchPricingSheetMetals,
+  fetchCncPricingConfig, fetchMetalsByServiceId
+} from '../utils/api';
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import BendingModal from '../components/modals/BendingModal';
+import StepModelViewer from '../components/viewer/StepModelViewer';
+import DxfModelViewer from '../components/viewer/DxfModelViewer';
+import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
-import BendPanel from '../components/viewer/BendPanel';
+import PricingSidebar from '../components/pricing/PricingSidebar';
+import '../styles/PremiumPricing.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL;
 
@@ -46,59 +47,6 @@ const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
 );
 
-// ─── DXF Technical Data Extractor ────────────────────────
-// Walks DXF entities and computes totalPerimeter (mm) + pierceCount
-// needed by the laser pricing engine.
-function calcDxfTechData(entities, isInch) {
-  const toMm = v => isInch ? v * 25.4 : v;
-  let totalPerimeter = 0;
-  let pierceCount = 0;
-
-  for (const e of entities || []) {
-    if (e.type === 'LINE') {
-      const dx = (e.end?.x || 0) - (e.start?.x || 0);
-      const dy = (e.end?.y || 0) - (e.start?.y || 0);
-      totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
-
-    } else if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
-      const verts = e.vertices || [];
-      for (let i = 0; i < verts.length - 1; i++) {
-        const dx = verts[i + 1].x - verts[i].x;
-        const dy = verts[i + 1].y - verts[i].y;
-        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
-      }
-      // Close the loop if flagged closed
-      const isClosed = e.closed || (e.flag & 1);
-      if (isClosed && verts.length > 1) {
-        const dx = verts[0].x - verts[verts.length - 1].x;
-        const dy = verts[0].y - verts[verts.length - 1].y;
-        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
-        pierceCount++;
-      }
-
-    } else if (e.type === 'ARC') {
-      let startDeg = e.startAngle || 0;
-      let endDeg = e.endAngle || 0;
-      if (endDeg <= startDeg) endDeg += 360;
-      totalPerimeter += toMm((e.r || 0) * (endDeg - startDeg) * Math.PI / 180);
-
-    } else if (e.type === 'CIRCLE') {
-      totalPerimeter += toMm(2 * Math.PI * (e.r || 0));
-      pierceCount++;
-
-    } else if (e.type === 'SPLINE') {
-      const pts = e.controlPoints || e.fitPoints || [];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const dx = pts[i + 1].x - pts[i].x;
-        const dy = pts[i + 1].y - pts[i].y;
-        totalPerimeter += toMm(Math.sqrt(dx * dx + dy * dy));
-      }
-    }
-  }
-
-  return { totalPerimeter, pierceCount: Math.max(1, pierceCount) };
-}
-
 // ─── Component ──────────────────────────────────────────
 const InstantPricing = () => {
   const [files, setFiles] = useState([]);
@@ -107,18 +55,15 @@ const InstantPricing = () => {
   const [viewMode, setViewMode] = useState('3d');
   const [activeAxis, setActiveAxis] = useState('top');
   const [unit, setUnit] = useState('mm'); // mm or inch
-  const [prodUnit, setProdUnit] = useState('mm');
   const [dxfSvg, setDxfSvg] = useState(null);
-  const [dxfError, setDxfError] = useState(null);
   const [backendData, setBackendData] = useState(null);
   const [dxfTechData, setDxfTechData] = useState(null);
-  const [backendError, setBackendError] = useState(null);
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
   const unfoldAbortControllerRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
-  const [modelLoadCount, setModelLoadCount] = useState(0);
+  const [configStep, setConfigStep] = useState(0); // 0: Method, 1: Category, 2: Metal, 3: Thickness, 4: Services
 
   // Dynamic data from DB
   const [allServices, setAllServices] = useState([]);
@@ -133,15 +78,29 @@ const InstantPricing = () => {
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedThickness, setSelectedThickness] = useState(null);
+  const currentIsStep = useMemo(() => isStepFile(selectedFile?.file?.name), [selectedFile]);
+  const currentIsDxf = useMemo(() => is2DFile(selectedFile?.file?.name), [selectedFile]);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
   const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
   const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
   const [isBendingModalOpen, setIsBendingModalOpen] = useState(false);
-  const [showBendPanel, setShowBendPanel] = useState(false);
-  const activeFinishKey = Object.keys(selectedFinishColors || {})[0];
-  const activeFinishColor = selectedFinishColors?.[activeFinishKey] || null;
-  const isFinishPowderCoating = selectedAdditionalServices.find(s => s.id?.toString() === activeFinishKey?.toString())?.title?.toLowerCase().includes('powder coat');
+  const activeFinishColor = useMemo(() => {
+    // Priority order: Find any selected finish that has a color assigned
+    const keys = Object.keys(selectedFinishColors);
+    if (keys.length === 0) return null;
+    const firstWithColor = keys.find(k => selectedFinishColors[k]?.color || selectedFinishColors[k]?.hex);
+    return selectedFinishColors[firstWithColor || keys[0]];
+  }, [selectedFinishColors]);
+
+  const activeFinishKey = useMemo(() => {
+    return Object.keys(selectedFinishColors).find(k => selectedFinishColors[k] === activeFinishColor) || Object.keys(selectedFinishColors)[0];
+  }, [selectedFinishColors, activeFinishColor]);
+
+  const isFinishPowderCoating = useMemo(() => {
+    if (!activeFinishKey) return false;
+    return selectedAdditionalServices.find(s => s.id?.toString() === activeFinishKey.toString())?.title?.toLowerCase().includes('powder coat');
+  }, [selectedAdditionalServices, activeFinishKey]);
   const [selectedTaps, setSelectedTaps] = useState({});
   const [activeTapHole, setActiveTapHole] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -154,8 +113,6 @@ const InstantPricing = () => {
   const [activeCSHole, setActiveCSHole] = useState(null);
   const [expandedCSGroups, setExpandedCSGroups] = useState(new Set());
   const [isDetectingHoles, setIsDetectingHoles] = useState(false);
-  const [highlightBends, setHighlightBends] = useState(false);
-  const [holeDetectionError, setHoleDetectionError] = useState(null);
   const [detectedHoles, setDetectedHoles] = useState([]);
   const [allDiscounts, setAllDiscounts] = useState([]);
   const [priceEstimate, setPriceEstimate] = useState(null);
@@ -163,7 +120,15 @@ const InstantPricing = () => {
   const [quantity, setQuantity] = useState(1);
   const [isModelFadedManually, setIsModelFadedManually] = useState(false);
   const [bendTree, setBendTree] = useState(null);
+  const [detectedBends, setDetectedBends] = useState([]);
   const [selectedBends, setSelectedBends] = useState({});
+
+  const selectedThicknessMM = useMemo(() => {
+    if (!selectedMetal || !selectedThickness) return 0;
+    const t = (selectedMetal.quick_look?.thicknesses || []).find(th => String(th.value) === String(selectedThickness));
+    if (!t) return 0;
+    return t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
+  }, [selectedMetal, selectedThickness]);
 
   const bendList = useMemo(() => {
     const list = [];
@@ -175,73 +140,8 @@ const InstantPricing = () => {
     flatten(bendTree);
     return list;
   }, [bendTree]);
-  const [metalSearch, setMetalSearch] = useState('');
-
-  const parsedDxfRef = useRef(null);
   const stepHolesDetectedRef = useRef(false);
-  const stepViewerRef = useRef(null);
-  const dxfViewerRef = useRef(null);
-  const [viewBoxData, setViewBoxData] = useState(null);
-  const viewerInstance = useRef(null);
-  const dimensionsRef = useRef(null);
-  const modelRef = useRef(null);
-  const pendingAxisRef = useRef(null);
-  const modelOriginalDataRef = useRef(null);
-  const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
   const qty1PriceRef = useRef(null);
-  const wrinkleTexture = useRef(null);
-
-  // ── Procedural textures for 'Wrinkled' finish & cellular grain ─────────
-  const wrinkleNormal = useRef(null);
-  useEffect(() => {
-    const size = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d');
-
-    // Generate Cellular (Voronoi) Height Map
-    const points = Array.from({ length: 1800 }, () => ({ x: Math.random() * size, y: Math.random() * size }));
-    const heights = new Float32Array(size * size);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        let minDist = size;
-        for (let p of points) {
-          const dx = x - p.x, dy = y - p.y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < minDist) minDist = d;
-        }
-        heights[y * size + x] = Math.min(1.0, minDist / 20.0);
-      }
-    }
-
-    // Convert Cellular Map to Normal Map
-    const imgData = ctx.createImageData(size, size);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const idx = (y * size + x) * 4;
-        const hL = heights[y * size + (x - 1 + size) % size];
-        const hR = heights[y * size + (x + 1) % size];
-        const hU = heights[((y - 1 + size) % size) * size + x];
-        const hD = heights[((y + 1) % size) * size + x];
-
-        const nx = (hL - hR) * 1.5;
-        const ny = (hU - hD) * 1.5;
-        const nz = 0.6;
-
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        imgData.data[idx] = ((nx / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 1] = ((ny / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 2] = ((nz / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(35, 35);
-    wrinkleNormal.current = tex;
-    wrinkleTexture.current = tex;
-  }, []);
 
   const holeGroups = useMemo(() => {
     const groups = {};
@@ -253,11 +153,35 @@ const InstantPricing = () => {
     return Object.values(groups).sort((a, b) => parseFloat(a.dia) - parseFloat(b.dia));
   }, [detectedHoles]);
 
-  const isCNC = selectedProductionService?.title?.toLowerCase()?.includes('cnc');
-  const selectedThicknessMM = useMemo(
-    () => selectedThickness ? parseFloat(selectedThickness) * 25.4 : null,
-    [selectedThickness]
+  const isTappingActive = useMemo(() =>
+    selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap')),
+    [selectedAdditionalServices]
   );
+  const isCountersinkingActive = useMemo(() =>
+    selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink')),
+    [selectedAdditionalServices]
+  );
+
+  const isHardwareActive = useMemo(() =>
+    selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware')),
+    [selectedAdditionalServices]
+  );
+
+  const tapOptions = useMemo(() => {
+    const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
+    return tapSvc?.service_options || [];
+  }, [allServices]);
+
+  const csOptions = useMemo(() => {
+    const csSvc = allServices.find(s => s.title.toLowerCase().includes('countersink'));
+    return csSvc?.service_options || [];
+  }, [allServices]);
+
+  const handleHoleClick = useCallback((hole) => {
+    if (isTappingActive) setActiveTapHole(hole);
+    if (isHardwareActive) setActiveHwHole(hole);
+    if (isCountersinkingActive) setActiveCSHole(hole);
+  }, [isTappingActive, isHardwareActive, isCountersinkingActive]);
   const handleProceedToReview = () => {
     if (!selectedFile || !selectedMetal || !dimensions) return;
 
@@ -268,9 +192,19 @@ const InstantPricing = () => {
     const csCost = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
     const bendSvc = allServices.find(s => s.title.toLowerCase().includes('bend'));
     const bendCost = (selectedAdditionalServices.some(s => s.id === bendSvc?.id)) ? (parseFloat(bendSvc?.base_price || 0) * (bendList?.length || 0)) : 0;
-    const totalBatch = parseFloat(priceEstimate?.total_price || 0) + tapCost + hardwareCost + csCost + bendCost;
+    // Calculate unit costs for sub-services établissements
+    const unitTapCost = tapCost / quantity;
+    const unitHardwareCost = hardwareCost / quantity;
+    const unitCSCost = csCost / quantity;
+    const unitBendCost = bendCost / quantity;
 
-    const baseUnitPrice = (qty1PriceRef.current !== null ? qty1PriceRef.current : (totalBatch / quantity)) + (tapCost / quantity) + (hardwareCost / quantity) + (csCost / quantity) + (bendCost / quantity);
+    // Base price per unit (at Quantity 1) établissements
+    // If we have an anchored Qty 1 price from the backend, use it. Otherwise derive from current estimate.
+    const engineUnitBase = (qty1PriceRef.current !== null)
+      ? qty1PriceRef.current
+      : (parseFloat(priceEstimate?.total_price || 0) / (1 - (parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100)) / quantity);
+
+    const baseUnitPrice = engineUnitBase + unitTapCost + unitHardwareCost + unitCSCost + unitBendCost;
 
     const config = {
       productionService: selectedProductionService,
@@ -281,6 +215,11 @@ const InstantPricing = () => {
       selectedTaps,
       selectedHardware,
       selectedCountersinks,
+      selectedBends,
+      bendTree,
+      bendCount: bendList?.length || 0,
+      detectedHoles,
+      detectedBends,
       additionalServices: selectedAdditionalServices,
       dimensions: dimensions,
       dxfSvg: dxfSvg
@@ -292,11 +231,11 @@ const InstantPricing = () => {
       tempPath: selectedFile.tempPath,
       configuration: config,
       pricing: {
-        baseUnit: baseUnitPrice, // Robust anchor for long-term checkout transparency établissements
-        taps: tapCost / quantity,
-        hardware: hardwareCost / quantity,
+        baseUnit: baseUnitPrice, // Gross unit price at Qty 1 établissements
+        taps: unitTapCost,
+        hardware: unitHardwareCost,
         finish: 0,
-        // Using the requested linear model: BasePrice * (1 - DiscountTablePercent)
+        // Calculate the discounted total at current quantity linear to anchored base establishments
         total: baseUnitPrice * (1 - (parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100))
       },
       quantity: quantity
@@ -320,6 +259,20 @@ const InstantPricing = () => {
         .catch(() => setHwItemsByType(prev => ({ ...prev, [id]: [] })));
     });
   }, [selectedAdditionalServices]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch metals for the selected production service ─────────────────────
+  useEffect(() => {
+    if (!selectedProductionService) return;
+    const fetchServiceMetals = async () => {
+      try {
+        const metals = await fetchMetalsByServiceId(selectedProductionService.id);
+        if (metals) setAllMetals(metals);
+      } catch (err) {
+        console.error('Failed to fetch service-specific metals:', err);
+      }
+    };
+    fetchServiceMetals();
+  }, [selectedProductionService]);
 
   // ── File Selection Handler ──────────
   useEffect(() => {
@@ -351,25 +304,62 @@ const InstantPricing = () => {
       try {
         const results = await Promise.allSettled([
           fetchServices(),
-          fetchMetals(),
           fetchPublicDiscounts(),
-          fetchCategories()
+          fetchCategories(),
+          fetchMetals(),
+          fetchCncPricingConfig(),
+          fetchPricingSheetMetals(),
+          fetchPricingCncMetals()
         ]);
 
         const svcs = results[0].status === 'fulfilled' ? results[0].value : [];
-        const mtls = results[1].status === 'fulfilled' ? results[1].value : [];
-        const disc = results[2].status === 'fulfilled' ? results[2].value : [];
-        const cats = results[3].status === 'fulfilled' ? results[3].value : [];
+        const disc = results[1].status === 'fulfilled' ? results[1].value : [];
+        const cats = results[2].status === 'fulfilled' ? results[2].value : [];
+        const mets = results[3].status === 'fulfilled' ? results[3].value : [];
+        const cncCfg = results[4].status === 'fulfilled' ? results[4].value : null;
 
-        setAllServices(svcs || []);
-        setAllMetals(mtls || []);
         setAllDiscounts(disc || []);
         setAllCategories(cats || []);
+        setAllMetals(mets || []);
+
+        // Convert service dimension fields to mm for size locking
+        const toMM = (val, unit) => {
+          const v = parseFloat(val) || 0;
+          return v > 0 ? (unit === 'in' ? v * 25.4 : v) : null;
+        };
+        const enhancedServices = (svcs || []).map(s => {
+          const unit = s.dimensions_unit || 'in';
+          // Build config from the service's own admin-configured fields
+          const dimCfg = {
+            max_x: toMM(s.max_length, unit),
+            min_x: toMM(s.min_length, unit),
+            max_y: toMM(s.max_width, unit),
+            min_y: toMM(s.min_width, unit),
+            max_z: toMM(s.max_height, unit),
+            min_z: toMM(s.min_height, unit),
+          };
+          if (s.title.toLowerCase().includes('cnc') && cncCfg) {
+            // Merge CNC global config with service-level fields (service fields take priority)
+            return { ...s, config: { ...cncCfg, ...Object.fromEntries(Object.entries(dimCfg).filter(([, v]) => v !== null)) } };
+          }
+          return { ...s, config: dimCfg };
+        });
+
+        setAllServices(enhancedServices);
+
+        // Set default primary service (e.g. Laser Cut)
+        if (svcs && svcs.length > 0 && !selectedProductionService) {
+          const primary = svcs.find(s => s.is_production);
+          if (primary) setSelectedProductionService(primary);
+        }
       } catch (err) {
         console.error('Failed to fetch initial data:', err);
       }
     };
     loadAppData();
+    // Runs once on mount — loading metals/services/discounts/configs is a one-shot; depending on
+    // selectedProductionService would re-fetch all 7 APIs on every method change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Check backend availability on mount ───────────────
@@ -391,10 +381,7 @@ const InstantPricing = () => {
     setIsDetectingHoles(false);
     setSelectedThickness(null);
     setDxfTechData(null);
-    setHighlightBends(false);
-    parsedDxfRef.current = null;
     stepHolesDetectedRef.current = false;
-    modelOriginalDataRef.current = null;
     qty1PriceRef.current = null;
   }, [selectedFile]);
 
@@ -408,11 +395,10 @@ const InstantPricing = () => {
 
     const detect = async () => {
       setIsDetectingHoles(true);
-      setHoleDetectionError(null);
       const fd = new FormData();
       fd.append('file', selectedFile.file);
       try {
-        const r = await fetch(`${BACKEND_URL}/detect-holes`, { method: 'POST', body: fd });
+        const r = await fetch(`${BACKEND_URL}/api/detect-holes`, { method: 'POST', body: fd });
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
         const d = await r.json();
         const depthIn = dimensions?.mm?.t ? parseFloat(dimensions.mm.t) / 25.4 : 2 / 25.4;
@@ -424,10 +410,11 @@ const InstantPricing = () => {
           depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
           position: h.position,
           axis: h.axis,
+          parent_face_id: h.face_id, // PRESERVE FACE ASSOCIATION
         })));
         stepHolesDetectedRef.current = true;
       } catch (err) {
-        setHoleDetectionError('Could not detect holes: ' + err.message);
+        console.error('Could not detect holes:', err.message);
         stepHolesDetectedRef.current = true;
       } finally {
         setIsDetectingHoles(false);
@@ -436,16 +423,26 @@ const InstantPricing = () => {
     detect();
   }, [selectedAdditionalServices, selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-open modals once holes are detected ──────────
-  useEffect(() => {
-    if (detectedHoles.length === 0) return;
-    const hasTapping = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
-    const hasHardware = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware'));
-    const hasCountersinking = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink'));
-    if (hasTapping && !activeTapHole && !activeHwHole) setActiveTapHole(detectedHoles[0]);
-    else if (hasHardware && !activeHwHole && !activeTapHole) setActiveHwHole(detectedHoles[0]);
-    else if (hasCountersinking && !activeCSHole && !activeTapHole && !activeHwHole) setActiveCSHole(detectedHoles[0]);
-  }, [detectedHoles, selectedAdditionalServices]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Open one sub-service modal (closes all others first)
+  const openSubModal = (kind, svc) => {
+    setActiveTapHole(null);
+    setActiveHwHole(null);
+    setActiveCSHole(null);
+    setIsBendingModalOpen(false);
+    setIsAnodizingModalOpen(false);
+    if (kind === 'tap') {
+      setActiveTapHole(detectedHoles[0]);
+    } else if (kind === 'hw') {
+      setActiveHwHole(detectedHoles[0]);
+    } else if (kind === 'cs') {
+      setActiveCSHole(detectedHoles[0]);
+    } else if (kind === 'bend') {
+      setIsBendingModalOpen(true);
+    } else if (kind === 'finish') {
+      if (svc) setActiveFinishSvcId(svc.id);
+      setIsAnodizingModalOpen(true);
+    }
+  };
 
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
@@ -458,10 +455,18 @@ const InstantPricing = () => {
     const getEstimate = async () => {
       setIsCalculatingPrice(true);
       try {
+        // Normalize thickness to inches for backend pricing (sheet_cost_rates use inches)
+        const thicknessInInches = (() => {
+          if (!selectedThickness || !selectedMetal) return selectedThickness;
+          const tObj = (selectedMetal.quick_look?.thicknesses || []).find(th => String(th.value) === String(selectedThickness));
+          if (!tObj) return selectedThickness;
+          return tObj.metric === 'mm' ? (parseFloat(tObj.value) / 25.4).toString() : tObj.value;
+        })();
+
         const payload = {
-          metal_id: selectedMetal.id,
-          service_id: selectedProductionService.id,
-          thickness_value: selectedThickness,
+          metal_id: selectedMetal?.id || null,
+          service_id: selectedProductionService?.id || null,
+          thickness_value: thicknessInInches,
           length_in: dimensions.inches.l,
           height_in: dimensions.inches.w,
           quantity: quantity,
@@ -469,7 +474,18 @@ const InstantPricing = () => {
             const opt = selectedFinishColors[s.id];
             return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
           }),
-          taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price })),
+          taps: Object.values(selectedTaps).map(t => ({
+            name: t.name,
+            price: t.price || 0
+          })),
+          hardware: Object.values(selectedHardware).map(h => ({
+            name: h.item?.name,
+            price: h.item?.price || 0
+          })),
+          countersinks: Object.values(selectedCountersinks).map(cs => ({
+            name: cs.name,
+            price: cs.price || 0
+          })),
           technical_data: backendData ? {
             totalPerimeter: backendData.totalPerimeter,
             pierceCount: backendData.pierceCount,
@@ -504,8 +520,9 @@ const InstantPricing = () => {
 
     const timeoutId = setTimeout(getEstimate, 500); // Debounce
     return () => clearTimeout(timeoutId);
-  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedFinishColors, dimensions, quantity, toast, isCNC, backendData, dxfTechData]);
-
+    // toast/isCNC are derived — including them triggers unnecessary recalcs on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, dimensions, quantity, backendData, dxfTechData]);
 
   // ── Dimension Validation Helper ────────────────────────
 
@@ -539,8 +556,6 @@ const InstantPricing = () => {
       setSelectedFile(newFiles[0]);
       setViewMode(is2DFile(newFiles[0].file.name) ? '2d' : '3d');
       setBackendData(null);
-      setBackendError(null);
-      modelRef.current = null;
     }
     setIsImporting(false);
   }, []);
@@ -563,929 +578,12 @@ const InstantPricing = () => {
     if (selectedFile?.id === id) {
       setSelectedFile(null); setDimensions(null);
       setDxfSvg(null);
-      modelRef.current = null;
     }
   };
 
-  // ─── DXF Effect ───────────────────────────────────────
-  useEffect(() => {
-    if (!selectedFile || !is2DFile(selectedFile.file.name)) return;
-    setDxfSvg(null);
-    setDxfError(null);
-    setDimensions(null);
-
-    const loadDxf = async () => {
-      setIsImporting(true);
-      setImportProgress(0);
-      const timer = setInterval(() => {
-        setImportProgress(p => p < 90 ? p + 5 : p);
-      }, 50);
-
-      try {
-        const text = await selectedFile.file.text();
-        const parsed = parseString(text);
-        const svgStr = toSVG(parsed);
-        setDxfSvg(svgStr);
-        const h = parsed?.header ?? {};
-        let w = Math.abs((h.$EXTMAX?.x ?? 0) - (h.$EXTMIN?.x ?? 0));
-        let ht = Math.abs((h.$EXTMAX?.y ?? 0) - (h.$EXTMIN?.y ?? 0));
-        let isInch = true;
-        if (h.$INSUNITS === 4 || h.$MEASUREMENT === 1) isInch = false;
-
-        // Extract holes from CIRCLE entities
-        const circles = parsed.entities?.filter(e => e.type === 'CIRCLE') || [];
-        const defaultDepthIn = 2 / 25.4; // default 2mm material thickness
-        setDetectedHoles(circles.map((c, idx) => ({
-          id: idx,
-          diameterInches: isInch ? c.r * 2 : (c.r * 2) / 25.4,
-          depthInches: defaultDepthIn,
-          position: [c.x, c.y, c.z || 0]
-        })));
-        parsedDxfRef.current = parsed;
-        // Extract perimeter + pierce count for laser pricing engine
-        setDxfTechData(calcDxfTechData(parsed.entities, isInch));
-
-        // Always extract viewBox from SVG string if possible to ensure overlay alignment
-        const match = svgStr.match(/viewBox="([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)"/);
-        if (match) {
-          const minX = parseFloat(match[1]);
-          const minY = parseFloat(match[2]);
-          const vbW = parseFloat(match[3]);
-          const vbH = parseFloat(match[4]);
-          setViewBoxData({ minX, minY, width: vbW, height: vbH });
-          if (w === 0) w = vbW;
-          if (ht === 0) ht = vbH;
-        }
-        if (w > 0 || ht > 0) {
-          const w_raw = Math.max(w, ht);
-          const h_raw = Math.min(w, ht);
-          const w_mm = isInch ? w_raw * 25.4 : w_raw;
-          const h_mm = isInch ? h_raw * 25.4 : h_raw;
-
-          const dimsObj = {
-            is2D: false,
-            isNativeInches: isInch,
-            mm: { l: w_mm.toFixed(2), w: h_mm.toFixed(2), t: '2.00', volume: '0.00' },
-            inches: { l: (w_mm / 25.4).toFixed(3), w: (h_mm / 25.4).toFixed(3), t: (2.00 / 25.4).toFixed(3), volume: '0.000' }
-          };
-          dimensionsRef.current = dimsObj;
-          setDimensions(dimsObj);
-        }
-        clearInterval(timer);
-        setImportProgress(100);
-        setTimeout(() => setIsImporting(false), 400);
-      } catch (error) {
-        clearInterval(timer);
-        setIsImporting(false);
-        setDxfError('Failed to parse DXF file.');
-        console.error('DXF Load Error:', error);
-      }
-    };
-    loadDxf();
-  }, [selectedFile]);
-
-  // ─── DXF 3D Viewer Effect (Three JS Native) ────────────
-  useEffect(() => {
-    if (!selectedFile || !is2DFile(selectedFile.file.name)) return;
-    if (!dxfViewerRef.current) return;
-    if (viewMode !== '3d') return;
-    if (!dxfSvg) return;
-
-    let reqId;
-    let renderer, controls;
-    const currentRef = dxfViewerRef.current;
-
-    const initViewer = () => {
-      try {
-        currentRef.innerHTML = '';
-        const w = currentRef.clientWidth || 600;
-        const h = currentRef.clientHeight || 400;
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xffffff);
-        const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-        renderer.setSize(w, h);
-        currentRef.appendChild(renderer.domElement);
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableRotate = true;
-        controls.enableDamping = true;
-        const light = new THREE.DirectionalLight(0xffffff, 1.5);
-        light.position.set(100, 200, 300);
-        scene.add(light);
-        const backLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        backLight.position.set(-100, -200, -300);
-        scene.add(backLight);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-
-        const loader = new SVGLoader();
-        const svgData = loader.parse(dxfSvg);
-        const group = new THREE.Group();
-        const selectedThicknessMM = selectedThickness ? parseFloat(selectedThickness) * 25.4 : 2;
-        const thicknessNative = dimensionsRef.current?.isNativeInches ? (selectedThicknessMM / 25.4) : selectedThicknessMM;
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
-        const extrudeSettings = { depth: thicknessNative, bevelEnabled: false };
-
-        const allShapes = [];
-        svgData.paths.forEach((path) => {
-          try {
-            const shapes = SVGLoader.createShapes(path);
-            shapes.forEach(sh => allShapes.push(sh));
-          } catch (error) { console.warn('SVG Shape Error:', error); }
-          path.subPaths.forEach((sub) => {
-            const points = sub.getPoints();
-            if (points && points.length > 0) {
-              const geomTop = new THREE.BufferGeometry().setFromPoints(points);
-              const lineTop = new THREE.Line(geomTop, lineMat);
-              lineTop.position.z = thicknessNative + 0.01;
-              group.add(lineTop);
-              const geomBot = new THREE.BufferGeometry().setFromPoints(points);
-              const lineBot = new THREE.Line(geomBot, lineMat);
-              lineBot.position.z = -0.01;
-              group.add(lineBot);
-            }
-          });
-        });
-
-        const metaShapes = allShapes.map(shape => {
-          let mlnX = Infinity, mlnY = Infinity, mxX = -Infinity, mxY = -Infinity;
-          shape.getPoints().forEach(p => {
-            if (p.x < mlnX) mlnX = p.x; if (p.x > mxX) mxX = p.x;
-            if (p.y < mlnY) mlnY = p.y; if (p.y > mxY) mxY = p.y;
-          });
-          return { shape, minX: mlnX, minY: mlnY, maxX: mxX, maxY: mxY, area: (mxX - mlnX) * (mxY - mlnY), parent: null, depth: 0 };
-        });
-
-        metaShapes.sort((a, b) => a.area - b.area);
-        for (let i = 0; i < metaShapes.length; i++) {
-          const child = metaShapes[i];
-          for (let j = i + 1; j < metaShapes.length; j++) {
-            const parent = metaShapes[j];
-            if (child.minX >= parent.minX && child.maxX <= parent.maxX && child.minY >= parent.minY && child.maxY <= parent.maxY) {
-              child.parent = parent; break;
-            }
-          }
-        }
-        metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
-
-        const applyGloss = !!(activeFinishColor && isFinishPowderCoating);
-        const isWrinkled = !!(activeFinishColor?.is_wrinkled || activeFinishColor?.name?.toUpperCase().includes('WRINKLED'));
-
-        const extrudeMat = new THREE.MeshStandardMaterial({
-          color: activeFinishColor ? new THREE.Color(activeFinishColor.color) : 0xcecece,
-          roughness: applyGloss ? (isWrinkled ? 0.68 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6,
-          metalness: isWrinkled ? 0.15 : 0.05,
-          emissive: (activeFinishColor && !isFinishPowderCoating) ? new THREE.Color(activeFinishColor.color) : 0x000000,
-          emissiveIntensity: (activeFinishColor && !isFinishPowderCoating) ? 0.15 : 0,
-          normalMap: isWrinkled ? wrinkleNormal.current : null,
-          normalScale: isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0),
-          bumpScale: isWrinkled ? 2.5 : 0
-        });
-        extrudeMat.needsUpdate = true;
-
-        metaShapes.forEach(m => { if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat)); else m.parent.shape.holes.push(m.shape); });
-
-        group.scale.y = -1;
-        const box = new THREE.Box3().setFromObject(group);
-        if (!box.isEmpty()) group.position.sub(box.getCenter(new THREE.Vector3()));
-        scene.add(group);
-        const maxDim = Math.max(box.getSize(new THREE.Vector3()).x, box.getSize(new THREE.Vector3()).y, 20);
-        camera.position.set(maxDim, -maxDim, maxDim);
-        camera.up.set(0, 0, 1);
-        camera.lookAt(0, 0, 0);
-        controls.update();
-
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
-        const dl = new THREE.DirectionalLight(0xffffff, 0.7);
-        dl.position.set(100, 200, 100);
-        scene.add(dl);
-
-        const animate = () => { reqId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
-        animate();
-      } catch (err) { console.error('DXF 3D Error:', err); }
-    };
-    initViewer();
-    return () => { cancelAnimationFrame(reqId); controls?.dispose(); renderer?.dispose(); if (currentRef) currentRef.innerHTML = ''; };
-  }, [selectedFile, viewMode, dxfSvg, selectedFinishColors, activeFinishColor, isFinishPowderCoating, selectedThickness]);
-
-  // ─── STEP 3D Viewer Effect ────────────────────────────
-  useEffect(() => {
-    if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
-    if (!stepViewerRef.current) return;
-    stepViewerRef.current.innerHTML = '';
-    if (viewerInstance.current) { try { viewerInstance.current.Destroy(); } catch (e) { console.error("Error destroying viewer instance:", e); } viewerInstance.current = null; }
-    setIsImporting(true); setImportProgress(0);
-    const progressTimer = setInterval(() => { setImportProgress(p => p < 99 ? p + 0.5 : p); }, 100);
-    let checkInterval = null, localViewer = null;
-
-    const extractDimensions = (model) => {
-      if (dimensionsRef.current || !model) return;
-      try {
-        const bb = OV.GetBoundingBox(model); if (!bb?.min) return;
-        const s = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].sort((a, b) => a - b);
-        let vol = 0; try { vol = OV.CalculateVolume(model); } catch (e) { console.warn("Error calculating volume:", e); }
-        dimensionsRef.current = {
-          mm: { l: s[2].toFixed(2), w: s[1].toFixed(2), t: s[0].toFixed(2), volume: vol.toFixed(2) },
-          inches: { l: (s[2] / 25.4).toFixed(3), w: (s[1] / 25.4).toFixed(3), t: (s[0] / 25.4).toFixed(3), volume: (vol / 16387).toFixed(3) }
-        };
-        setDimensions(dimensionsRef.current);
-        if (checkInterval) clearInterval(checkInterval);
-      } catch (e) { console.error("Error extracting dimensions:", e); }
-    };
-
-    try {
-      const viewer = new OV.EmbeddedViewer(stepViewerRef.current, {
-        backgroundColor: new OV.RGBAColor(255, 255, 255, 255),
-        edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(0, 0, 0), 1),
-        onModelLoaded: () => {
-          clearInterval(progressTimer); setImportProgress(100); setTimeout(() => setIsImporting(false), 800);
-          const m = viewer.GetModel(); modelRef.current = m; extractDimensions(m);
-          if (pendingAxisRef.current) { const a = pendingAxisRef.current; pendingAxisRef.current = null; setTimeout(() => setAxisCamera(a), 100); }
-          else {
-            setTimeout(() => {
-              if (viewer && typeof viewer.FitToWindow === 'function') {
-                viewer.FitToWindow();
-                viewer.Render();
-              }
-            }, 150);
-          }
-          try {
-            const v = viewer.GetViewer();
-            const bb = OV.GetBoundingBox(m);
-            const center = new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2);
-            centroidRef.current.copy(center);
-
-            v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
-            const dl1 = new THREE.DirectionalLight(0xffffff, 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
-            const dl2 = new THREE.DirectionalLight(0xffffff, 0.4); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
-            v?.scene?.traverse(obj => {
-              if (obj.isMesh && obj.material) {
-                // Identify Native Hole Geometry
-                // We check if the mesh's center (relative to model center) matches a detected hole
-                if (detectedHoles.length > 0) {
-                  const mBB = new THREE.Box3().setFromObject(obj);
-                  const mCenter = new THREE.Vector3();
-                  mBB.getCenter(mCenter);
-
-                  // Convert mesh center in scene back to model local coordinates
-                  const localPos = mCenter.clone().add(center);
-
-                  const matchingHole = detectedHoles.find(h => {
-                    const holePos = new THREE.Vector3(...h.position);
-                    return localPos.distanceTo(holePos) < 1.0; // 1mm tolerance
-                  });
-
-                  if (matchingHole) {
-                    obj.userData.nativeHoleId = matchingHole.id;
-                    obj.userData.isNativeHole = true;
-                  }
-                }
-
-                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-                mats.forEach(m => {
-                  m.roughness = 0.4;
-                  m.metalness = 0.7;
-                  if (m.color && !obj.userData.origColor) {
-                    obj.userData.origColor = { r: m.color.r, g: m.color.g, b: m.color.b };
-                  }
-                });
-              }
-            });
-
-            // Capture root group for thickness-scaling (scale group, not individual meshes)
-            const modelRoot = v?.scene?.children.find(c => c.isGroup);
-            if (modelRoot && bb?.min && bb?.max) {
-              const axes = [
-                { axis: 'x', size: Math.abs(bb.max.x - bb.min.x), localCenter: (bb.min.x + bb.max.x) / 2 },
-                { axis: 'y', size: Math.abs(bb.max.y - bb.min.y), localCenter: (bb.min.y + bb.max.y) / 2 },
-                { axis: 'z', size: Math.abs(bb.max.z - bb.min.z), localCenter: (bb.min.z + bb.max.z) / 2 },
-              ].sort((a, b) => a.size - b.size);
-              modelOriginalDataRef.current = {
-                root: modelRoot,
-                origScale: modelRoot.scale.clone(),
-                origPosition: modelRoot.position.clone(),
-                thicknessAxis: axes[0].axis,
-                origThicknessMM: axes[0].size,
-                localCenter: axes[0].localCenter,
-              };
-            }
-          } catch { /* ignored */ }
-          setModelLoadCount(c => c + 1);
-          setTimeout(() => {
-            if (viewer && typeof viewer.FitToWindow === 'function') {
-              viewer.FitToWindow();
-              viewer.Render();
-            }
-          }, 200);
-        }
-      });
-      localViewer = viewer; viewerInstance.current = viewer; viewer.LoadModelFromFileList([selectedFile.file]);
-
-      const resizeObserver = new ResizeObserver(() => {
-        if (viewerInstance.current) {
-          try {
-            viewerInstance.current.FitToWindow();
-            viewerInstance.current.Render();
-          } catch { /* ignore */ }
-        }
-      });
-      if (stepViewerRef.current) resizeObserver.observe(stepViewerRef.current);
-
-      checkInterval = setInterval(() => { if (dimensionsRef.current) clearInterval(checkInterval); else { const m = viewer.GetModel(); if (m) extractDimensions(m); } }, 2000);
-      return () => {
-        if (checkInterval) clearInterval(checkInterval);
-        resizeObserver.disconnect();
-        try { localViewer?.Destroy(); } catch (err) { console.error("Error destroying local viewer:", err); }
-      };
-    } catch (err) { clearInterval(progressTimer); setIsImporting(false); console.error("Error initializing STEP viewer:", err); }
-  }, [selectedFile, viewMode, isQuoteFlowActive, detectedHoles]);
-
-  // ── Apply selected thickness scaling to STEP model ───────
-  useEffect(() => {
-    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
-    if (modelLoadCount === 0) return;
-    const data = modelOriginalDataRef.current;
-    if (!data?.root) return;
-
-    try {
-      const { root, origScale, origPosition, thicknessAxis, origThicknessMM, localCenter } = data;
-
-      if (!selectedThickness) {
-        root.scale.copy(origScale);
-        root.position.copy(origPosition);
-      } else {
-        const newThicknessMM = parseFloat(selectedThickness) * 25.4;
-        const scaleFactor = origThicknessMM > 0 ? newThicknessMM / origThicknessMM : 1;
-        root.scale[thicknessAxis] = origScale[thicknessAxis] * scaleFactor;
-        // Re-center: newPos = origPos + localCenter × (1 - scaleFactor)
-        root.position[thicknessAxis] = origPosition[thicknessAxis] + localCenter * (1 - scaleFactor);
-      }
-
-      setTimeout(() => {
-        try {
-          const v = viewerInstance.current?.GetViewer();
-          if (v) { v.FitToWindow(); v.Render(); }
-        } catch { /* ignore */ }
-      }, 50);
-    } catch (e) {
-      console.warn('Thickness scale error:', e);
-    }
-  }, [selectedThickness, selectedFile, modelLoadCount]);
-
-  const isTappingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('tap'));
-  const isCountersinkingActive = selectedAdditionalServices.some(s => s.title.toLowerCase().includes('countersink'));
-
-  useEffect(() => {
-    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
-    if (modelLoadCount === 0) return;
-    const apply = () => {
-      try {
-        const v = viewerInstance.current?.GetViewer();
-        if (!v?.scene) return;
-        v.scene.traverse(obj => {
-          if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
-
-          if (!obj.geometry.attributes.uv && obj.geometry.attributes.position) {
-            const pos = obj.geometry.attributes.position;
-            if (!obj.geometry.attributes.normal) obj.geometry.computeVertexNormals();
-            const norm = obj.geometry.attributes.normal;
-            const uvs = new Float32Array(pos.count * 2);
-            const scale = 35; // Calibrated for industrial micro-grain
-            for (let i = 0; i < pos.count; i++) {
-              const nx = Math.abs(norm.getX(i)), ny = Math.abs(norm.getY(i)), nz = Math.abs(norm.getZ(i));
-              const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-              if (nx > ny && nx > nz) { uvs[i * 2] = z / scale; uvs[i * 2 + 1] = y / scale; }
-              else if (ny > nx && ny > nz) { uvs[i * 2] = x / scale; uvs[i * 2 + 1] = z / scale; }
-              else { uvs[i * 2] = x / scale; uvs[i * 2 + 1] = y / scale; }
-            }
-            obj.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-            obj.geometry.attributes.uv.needsUpdate = true;
-          }
-
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((mat, idx) => {
-            if (!mat?.color) return;
-            if (!obj.userData._matCloned) {
-              const upgrade = (m) => new THREE.MeshStandardMaterial({ color: m.color, transparent: m.transparent, opacity: m.opacity, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.05 });
-              obj.material = Array.isArray(obj.material) ? obj.material.map(upgrade) : upgrade(obj.material);
-              obj.userData._matCloned = true;
-            }
-            const fm = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
-            if (!obj.userData.origColor) obj.userData.origColor = { r: fm.color.r, g: fm.color.g, b: fm.color.b };
-
-            // Set base color (Tapping vs Anodizing vs Original)
-            const isTapped = obj.userData.isNativeHole && selectedTaps[obj.userData.nativeHoleId];
-            const isActive = obj.userData.isNativeHole && activeTapHole?.id === obj.userData.nativeHoleId;
-
-            if (isTapped) {
-              fm.color.set(0x4169e1); // Professional Royal Blue for tapped holes
-              fm.emissive.set(0x000000);
-              fm.emissiveIntensity = 0;
-            } else if (isActive) {
-              fm.color.set(0x000000); // Black for active hole
-              fm.emissive.set(0x000000);
-              fm.emissiveIntensity = 0;
-            } else if (activeFinishColor) {
-              fm.color.set(activeFinishColor.color);
-              if (!isFinishPowderCoating) {
-                // Anodizing: Make it vibrant and light without adding gloss
-                fm.emissive.set(activeFinishColor.color);
-                fm.emissiveIntensity = 0.15;
-              } else {
-                fm.emissive.set(0x000000);
-                fm.emissiveIntensity = 0;
-              }
-            } else {
-              const oc = obj.userData.origColor;
-              fm.color.setRGB(oc.r, oc.g, oc.b);
-              fm.emissive.set(0x000000);
-              fm.emissiveIntensity = 0;
-            }
-
-            // Standard Material properties - Dynamic gloss & wrinkle from Admin
-            if (activeFinishColor && isFinishPowderCoating) {
-              const gloss = activeFinishColor.gloss ?? 35;
-              const isWrinkled = !!(activeFinishColor.is_wrinkled || activeFinishColor.name?.toUpperCase().includes('WRINKLED'));
-              fm.roughness = isWrinkled ? 0.68 : Math.max(0.32, 0.9 - (gloss / 100));
-              fm.metalness = isWrinkled ? 0.15 : 0.1;
-              fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
-              fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
-              fm.needsUpdate = true;
-            } else {
-              fm.roughness = 0.6; // Standard/Anodized Light Matte
-              fm.metalness = 0.05;
-              fm.normalMap = null;
-              fm.normalScale = new THREE.Vector2(0, 0);
-              fm.needsUpdate = true;
-            }
-            if (fm.bumpMap) fm.bumpMap.needsUpdate = true;
-
-            // Fade logic: ONLY ghost when manually toggled OR actively configuring a specific hole
-            const shouldFade = isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen);
-
-            // EXCEPTION: Native holes remain solid when the model is faded
-            const finalFade = (shouldFade && !obj.userData.isNativeHole) ? true : false;
-
-            fm.transparent = finalFade || fm.opacity < 1;
-            fm.opacity = (shouldFade && !obj.userData.isNativeHole) ? 0.05 : 1.0;
-
-            fm.needsUpdate = true;
-          });
-        });
-        try { v.Render(); } catch { /* silent render error */ }
-      } catch (err) { console.warn('Anodizing color error:', err); }
-    };
-    apply();
-    const tid = setTimeout(apply, 200);
-    return () => clearTimeout(tid);
-  }, [selectedFinishColors, activeFinishColor, isFinishPowderCoating, selectedFile?.file?.name, modelLoadCount, isTappingActive, activeTapHole, isAnodizingModalOpen, isModelFadedManually, detectedHoles, selectedTaps]);
-
-  const holeMarkersRef = useRef([]);
-  useEffect(() => {
-    if (!viewerInstance.current || !isStepFile(selectedFile?.file?.name)) return;
-    if (modelLoadCount === 0) return;
-
-    const updateMarkers = () => {
-      try {
-        const v = viewerInstance.current?.GetViewer();
-        if (!v?.scene) return;
-
-        let modelParent = v.scene;
-        for (const child of v.scene.children) {
-          if (child.isGroup) { modelParent = child; break; }
-        }
-
-        holeMarkersRef.current.forEach(m => { m.parent?.remove(m); m.geometry?.dispose(); m.material?.dispose(); });
-        holeMarkersRef.current = [];
-
-        const hasHwAssigned = Object.keys(selectedHardware).length > 0;
-        const hasCSAssigned = Object.keys(selectedCountersinks).length > 0;
-        if ((!isTappingActive && !hasHwAssigned && !isCountersinkingActive && !hasCSAssigned) || detectedHoles.length === 0) { try { v.Render(); } catch { /* silent render error */ } return; }
-
-        // Use the actually-displayed thickness (user-selected wins over original model dims)
-        const partT = selectedThickness
-          ? parseFloat(selectedThickness) * 25.4
-          : (dimensions?.mm?.t ? (parseFloat(dimensions.mm.t) || 2.0) : 2.0);
-
-        // ── Tapping markers ──────────────────────────────────────────────
-        if (isTappingActive) {
-          const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
-          const tapOptions = tapSvc?.service_options || [];
-
-          detectedHoles.forEach(hole => {
-            if (!hole.position) return;
-            const dia = hole.diameter_mm ? hole.diameter_mm / 25.4 : (hole.diameterInches || 0.1);
-            const mmDia = dia * 25.4;
-            if (mmDia > 100.0) return;
-
-            const isConfigured = tapOptions.some(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
-            const isTapped = !!selectedTaps[hole.id];
-            const isActive = activeTapHole?.id === hole.id;
-
-            let color = isConfigured ? 0x10b981 : 0xef4444;
-            if (isTapped) color = 0x4169e1;
-            if (isActive) color = 0xe31b23;
-
-            const safeRadius = Math.max(mmDia / 2, 0.5);
-            const geo = new THREE.CylinderGeometry(safeRadius, safeRadius, partT, 32, 1, true);
-            const mat = isTapped
-              ? new THREE.MeshBasicMaterial({ color, transparent: false, side: THREE.DoubleSide })
-              : new THREE.MeshPhongMaterial({ color, emissive: isActive ? color : 0x000000, emissiveIntensity: isActive ? 4.0 : 0, shininess: 80, side: THREE.DoubleSide, transparent: false });
-
-            const sleeve = new THREE.Mesh(geo, mat);
-            sleeve.position.set(hole.position[0], hole.position[1], hole.position[2]);
-            modelParent.add(sleeve);
-            if (hole.axis) {
-              const pos = new THREE.Vector3(...hole.position);
-              sleeve.lookAt(pos.clone().add(new THREE.Vector3(...hole.axis)));
-              sleeve.rotateX(Math.PI / 2);
-            } else {
-              sleeve.rotateX(Math.PI / 2);
-            }
-            sleeve.userData = { isHoleMarker: true, hole: { ...hole, isConfigured } };
-            modelParent.add(sleeve);
-            holeMarkersRef.current.push(sleeve);
-          });
-        }
-
-        // ── Shared thickness axis (hardware + countersink) ─────────────────
-        // Compute from hole position variance: all holes in a flat sheet share ~the
-        // same coordinate on the thickness axis (near-zero spread across that axis).
-        // This is independent of scene transforms and always matches hole.position space.
-        let hwThicknessVec;
-        {
-          const _holePositions = detectedHoles.filter(h => h.position);
-          const _computeVar = (vals) => {
-            if (vals.length < 2) return 0;
-            const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
-            return vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
-          };
-          if (_holePositions.length >= 2) {
-            const _candidates = [
-              { vec: new THREE.Vector3(1, 0, 0), v: _computeVar(_holePositions.map(h => h.position[0])) },
-              { vec: new THREE.Vector3(0, 1, 0), v: _computeVar(_holePositions.map(h => h.position[1])) },
-              { vec: new THREE.Vector3(0, 0, 1), v: _computeVar(_holePositions.map(h => h.position[2])) },
-            ];
-            _candidates.sort((a, b) => a.v - b.v);
-            hwThicknessVec = _candidates[0].vec.clone();
-          } else {
-            // Single hole: fall back to bounding-box thickness axis
-            const _ta = modelOriginalDataRef.current?.thicknessAxis || 'y';
-            hwThicknessVec = _ta === 'x' ? new THREE.Vector3(1, 0, 0)
-              : _ta === 'z' ? new THREE.Vector3(0, 0, 1)
-                : new THREE.Vector3(0, 1, 0);
-          }
-        }
-
-        // Sample panel surface color for hole fill cylinders
-        let panelHex = 0x9ca3af;
-        v.scene.traverse(o => {
-          if (o.isMesh && !o.isHardwareMarker && !o.isTapMarker && o.material?.color) {
-            panelHex = o.material.color.getHex();
-          }
-        });
-
-        // ── Hardware markers ─────────────────────────────────────────────
-        if (hasHwAssigned) {
-          const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
-
-          // Shared materials — created once, reused for all holes
-          const matCache = {};
-          const getHwMat = (c) => {
-            const k = `hw_${c}`;
-            if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide });
-            return matCache[k];
-          };
-          // Smooth metallic material for standoffs and flush studs (FrontSide — avoids inner-face artifacts)
-          const getPolishedMat = (c) => {
-            const k = `po_${c}`;
-            if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.75, roughness: 0.25, side: THREE.FrontSide });
-            return matCache[k];
-          };
-          const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 });
-
-          detectedHoles.forEach(hole => {
-            if (!hole.position) return;
-            const hw = selectedHardware[hole.id];
-            if (!hw) return;
-
-            const { item, typeId, face } = hw;
-            const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
-            const holeR = holeMmDia / 2;
-            const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
-            const baseWidthMm = item?.base_width ? parseFloat(item.base_width) * 25.4 : null;
-
-            const type = typeId || 3;
-
-            // Per-type outer radius and bore radius using exact admin-configured dimensions.
-            // tooling_diameter = required hole size (= bore through hardware body, inches)
-            // base_width = outer body width/diameter (inches)
-            // Fallbacks used only when admin hasn't configured the field.
-            let hwOuterR, hwBoreR;
-            if (type === 3) {
-              // Nut: base_width = outer hex width, tooling_diameter = bolt/bore hole diameter
-              hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.6);
-              hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
-            } else if (type === 2) {
-              // Standoff: ONLY tooling_diameter is configured in Admin (used as body diameter)
-              // The hex head is conventionally ~1.3x wider than the barrel.
-              // Bore must be strictly smaller than the barrel to prevent Z-fighting (~0.6x).
-              const barrelR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
-              hwOuterR = barrelR * 1.33; // Used as the hex head radius
-              hwBoreR = barrelR * 0.6;   // Properly sized hollow bore
-            } else if (type === 4) {
-              // Flush Nut: base_width = outer disc diameter, tooling_diameter = bore hole diameter
-              hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.5);
-              hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
-            } else {
-              // Flush Stud (Type 1): ONLY tooling_diameter is configured in Admin (used as thread major diameter)
-              hwOuterR = toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.8;
-              hwBoreR = 0;
-            }
-            // Bore must not be larger than the physical hole (would create a visible ledge/gap)
-            // and must stay visibly smaller than outer for ring to be clear.
-            if (type !== 2) {
-              hwBoreR = Math.min(hwBoreR, holeR * 0.99, hwOuterR * 0.85);
-            }
-
-            // hwFaceR: radius used to decide if a fill disc is needed.
-            // Set to hwOuterR for all types so a disc is added whenever hole > hardware body.
-            const hwFaceR = hwOuterR;
-
-            const color = HW_COLORS[typeId] || 0xB8860B;
-            const mat = getHwMat(color);
-
-            // Use the per-hole axis from the backend when available (most accurate).
-            // Fall back to the globally-computed thickness axis only when axis is missing.
-            // Canonicalize sign: ensure hole.axis points in the SAME half-space as hwThicknessVec
-            // so that faceSign=1 ('up') consistently means the same face regardless of which
-            // direction the backend happened to store the cylinder axis.
-            const rawAxis = hole.axis && hole.axis.length === 3 ? hole.axis : null;
-            let axisVec = rawAxis
-              ? new THREE.Vector3(rawAxis[0], rawAxis[1], rawAxis[2])
-              : hwThicknessVec.clone();
-            if (axisVec.dot(hwThicknessVec) < 0) axisVec.negate();
-            const axisNorm = axisVec.clone().normalize();
-            const faceSign = face === 'down' ? -1 : 1;
-            // hole.position is the geometric center of the hole cylinder (midpoint of depth).
-            // Add faceSign * partT/2 to move from center to the correct face surface.
-            const basePos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(axisNorm.clone().multiplyScalar(faceSign * partT * 0.5));
-
-            const addHWMesh = (geo, m, center) => {
-              const mesh = new THREE.Mesh(geo, m);
-              mesh.isHardwareMarker = true;
-              mesh.position.copy(center);
-              mesh.lookAt(center.clone().add(axisVec));
-              mesh.rotateX(Math.PI / 2);
-              modelParent.add(mesh);
-              holeMarkersRef.current.push(mesh);
-            };
-
-            // Helper: build a LatheGeometry hollow-ring (washer) profile at a given height h.
-            // Points sweep inner wall → bottom face → outer wall → top face → close, all in (r, y) space.
-            const makeRingGeo = (innerR, outerR, h, segs = 32) => {
-              const pts = [
-                new THREE.Vector2(innerR, h / 2),
-                new THREE.Vector2(innerR, -h / 2),
-                new THREE.Vector2(outerR, -h / 2),
-                new THREE.Vector2(outerR, h / 2),
-                new THREE.Vector2(innerR, h / 2),
-              ];
-              return new THREE.LatheGeometry(pts, segs);
-            };
-
-            // ── Hole filler: panel-colored disc ring that visually closes the gap when hole > hardware outer
-            if (hwFaceR < holeR) {
-              const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
-              const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
-              addHWMesh(makeRingGeo(hwOuterR * 0.99, holeR * 1.02, partT), fillMat, holeCenterPos);
-            }
-
-            if (type === 3) {
-              // Nut — hollow hex-cylinder body above surface + thin washer disc on back face
-              const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, partT * 0.6);
-              const discH = Math.max(partT * 0.12, 0.8);
-              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2));
-              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, nutH, 32), mat, bodyCenter);
-              const discCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
-              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, discCenter);
-            } else if (type === 2) {
-              // Flush Standoff — Hexagonal base flange with a round barrel
-              const standoffH = item?.length ? parseFloat(item.length) * 25.4 : partT * 1.8;
-              const headH = Math.max(partT * 0.15, 1.0);
-
-              // Barrel extending from front face (basePos)
-              const barrelR = toolingDiaMm ? toolingDiaMm / 2 : holeR;
-              const safeBarrelR = Math.min(barrelR, hwOuterR * 0.95);
-              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2));
-              const soMat = getPolishedMat(color);
-              addHWMesh(new THREE.CylinderGeometry(safeBarrelR, safeBarrelR, standoffH, 64, 1, false), soMat, bodyCenter);
-
-              // Bore going through the barrel
-              addHWMesh(new THREE.CylinderGeometry(hwBoreR, hwBoreR, standoffH + 1.0, 64, 1, false), boreMat, bodyCenter);
-
-              // Hex head on the opposite (back) face
-              const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
-              addHWMesh(new THREE.CylinderGeometry(hwOuterR, hwOuterR, headH, 6, 1, false), soMat, headCenter);
-            } else if (type === 4) {
-              // Flush Nut — thin hollow washer ring on each sheet face (LatheGeometry, no Z-fighting)
-              const discH = Math.max(partT * 0.15, 1.0);
-              const topCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * discH / 2));
-              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, topCenter);
-              const botCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + discH / 2)));
-              addHWMesh(makeRingGeo(hwBoreR, hwOuterR, discH, 32), mat, botCenter);
-            } else if (type === 1) {
-              // Flush Stud — threaded shaft (dense ring ridges) + flat round head on back face
-              // tooling_diameter represents the hole/major thread size.
-              const ridgeR = hwOuterR; // major (crest) radius matches tooling dimension
-              const shaftR = ridgeR * 0.8; // inner root radius
-              const knurlR = ridgeR * 1.05; // knurl is slightly larger to bite into the material
-              // Since baseWidthMm doesn't exist for Type 1, accurately proportion head to 1.8x thread dia
-              const headR = ridgeR * 1.8;
-
-              const studH = item?.length ? parseFloat(item.length) * 25.4 : partT * 2.2;
-              const headH = Math.max(partT * 0.18, 1.2);
-
-              // Knurled Shank (Gear-like section) sits flush with basePos (face where thread starts) and extends slightly BACK into the hole
-              const knurlH = Math.max(partT * 0.4, 1.5);
-              const knurlCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (knurlH / 2)));
-
-              const bodyCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2));
-              const headCenter = basePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (partT + headH / 2)));
-
-              const soMat = getPolishedMat(color);
-
-              // Knurled ring (16 segments for gear look)
-              addHWMesh(new THREE.CylinderGeometry(knurlR, knurlR, knurlH, 16, 1, false), soMat, knurlCenter);
-
-              // Threaded Shaft: dense continuous V-groove lathe geometry
-              const pitch = Math.max(ridgeR * 0.25, 0.4); // finer pitch to simulate a realistic screw thread
-              const numThreads = Math.floor(studH / pitch);
-
-              const threadPts = [];
-              threadPts.push(new THREE.Vector2(0, 0)); // cap bottom
-              threadPts.push(new THREE.Vector2(shaftR, 0));
-              for (let i = 0; i < numThreads; i++) {
-                const yMid = pitch * (i + 0.5);
-                const yEnd = pitch * (i + 1);
-                threadPts.push(new THREE.Vector2(ridgeR, yMid)); // thread peak
-                threadPts.push(new THREE.Vector2(shaftR, yEnd)); // thread root
-              }
-              threadPts.push(new THREE.Vector2(shaftR, studH));
-              threadPts.push(new THREE.Vector2(0, studH)); // cap top
-
-              const threadGeo = new THREE.LatheGeometry(threadPts, 32);
-              threadGeo.translate(0, -studH / 2, 0); // center it on Y axis like CylinderGeometry does
-
-              addHWMesh(threadGeo, soMat, bodyCenter);
-              // Head: flat round disc on the back face
-              addHWMesh(new THREE.CylinderGeometry(headR, headR, headH, 64, 1, false), soMat, headCenter);
-            } else {
-              const m = new THREE.Mesh(new THREE.CylinderGeometry(hwOuterR, hwOuterR, partT, 16, 1, true), mat);
-              m.isHardwareMarker = true;
-              m.position.copy(basePos);
-              m.lookAt(basePos.clone().add(axisVec));
-              m.rotateX(Math.PI / 2);
-              modelParent.add(m);
-              holeMarkersRef.current.push(m);
-            }
-          });
-        }
-
-        // ── Countersink markers ──────────────────────────────────────────────
-        if (isCountersinkingActive || hasCSAssigned) {
-          const csConeMat = new THREE.MeshStandardMaterial({
-            color: 0x7c3aed, metalness: 0.4, roughness: 0.3, side: THREE.DoubleSide,
-            emissive: 0x4c1d95, emissiveIntensity: 0.35,
-          });
-          const csBackDiscMat = new THREE.MeshStandardMaterial({
-            color: 0x9d4edd, side: THREE.BackSide,
-            emissive: 0x4c1d95, emissiveIntensity: 0.2,
-          });
-
-          detectedHoles.forEach(hole => {
-            if (!hole.position) return;
-            const cs = selectedCountersinks[hole.id];
-            if (!cs) return;
-
-            const holeMmDia = hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4;
-            const holeR2 = holeMmDia / 2;
-            const csMajorR = cs.major_dia ? parseFloat(cs.major_dia) * 25.4 / 2 : holeR2 * 1.5;
-            const csMinorR = cs.minor_dia ? parseFloat(cs.minor_dia) * 25.4 / 2 : holeR2;
-
-            // Same thickness axis used for hardware markers
-            const axisVec2 = hwThicknessVec.clone();
-            const axisNorm2 = axisVec2.clone().normalize();
-            const faceSign = cs.face === 'down' ? -1 : 1;
-            // Pull wide rim slightly outside the surface (0.05mm) to prevent z-fighting without generating a visible gap
-            const basePos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(axisNorm2.clone().multiplyScalar(faceSign * (partT * 0.5 + 0.05)));
-
-            const addCSMesh = (geo, m, center) => {
-              const mesh = new THREE.Mesh(geo, m);
-              mesh.isHardwareMarker = true;
-              mesh.position.copy(center);
-              mesh.lookAt(center.clone().add(axisVec2));
-              mesh.rotateX(Math.PI / 2);
-              modelParent.add(mesh);
-              holeMarkersRef.current.push(mesh);
-            };
-
-            const coneH = Math.min(Math.max(csMajorR * 0.6, 2.0), partT * 0.95);
-
-            // Hole filler: solid plug covering the full hole depth but hollowed out perfectly to fit the cone
-            if (csMajorR < holeR2) {
-              const innerRadiusAtFace = csMajorR * 0.98;
-              const innerRadiusAway = csMinorR * 0.98;
-              const outerRadius = holeR2 * 1.02;
-
-              const yFace = faceSign * (partT / 2);
-              const yAway = -faceSign * (partT / 2);
-              const yConeBase = yFace - faceSign * coneH;
-
-              const pts = faceSign === 1 ? [
-                new THREE.Vector2(innerRadiusAtFace, yFace),
-                new THREE.Vector2(innerRadiusAway, yConeBase),
-                new THREE.Vector2(innerRadiusAway, yAway),
-                new THREE.Vector2(outerRadius, yAway),
-                new THREE.Vector2(outerRadius, yFace),
-                new THREE.Vector2(innerRadiusAtFace, yFace)
-              ] : [
-                new THREE.Vector2(innerRadiusAway, yAway),
-                new THREE.Vector2(innerRadiusAway, yConeBase),
-                new THREE.Vector2(innerRadiusAtFace, yFace),
-                new THREE.Vector2(outerRadius, yFace),
-                new THREE.Vector2(outerRadius, yAway),
-                new THREE.Vector2(innerRadiusAway, yAway)
-              ];
-
-              const fillGeo = new THREE.LatheGeometry(pts, 32);
-              const fillMat = new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4 });
-
-              const holeCenterPos = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2]);
-              addCSMesh(fillGeo, fillMat, holeCenterPos);
-            }
-
-            // Cap cone height to fit within material — wide rim at surface, narrow tip into material
-            const coneCenter = basePos2.clone().add(axisNorm2.clone().multiplyScalar(-faceSign * coneH / 2));
-            addCSMesh(
-              new THREE.CylinderGeometry(csMajorR * 0.98, csMinorR * 0.9, coneH, 32, 1, true),
-              csConeMat, coneCenter
-            );
-
-            // Back nut-ring — sits flush with the opposite face (tiny 0.05mm offset to prevent z-fighting)
-            // lookAt must point away from viewer (faceSign) so BackSide material is visible from outside
-            const backPos2 = new THREE.Vector3(hole.position[0], hole.position[1], hole.position[2])
-              .add(axisNorm2.clone().multiplyScalar(-faceSign * (partT * 0.5 + 0.05)));
-            const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csBackDiscMat);
-            backRing.isHardwareMarker = true;
-            backRing.position.copy(backPos2);
-            backRing.lookAt(backPos2.clone().add(axisNorm2.clone().multiplyScalar(faceSign)));
-            modelParent.add(backRing);
-            holeMarkersRef.current.push(backRing);
-          });
-        }
-
-        v.Render();
-      } catch (err) { console.warn('Hole marker error:', err); }
-    };
-
-    updateMarkers();
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, selectedHardware, activeHwHole, selectedFile?.file?.name, modelLoadCount, allServices, dimensions, selectedThickness, isCountersinkingActive, selectedCountersinks, activeCSHole]);
-
-  useEffect(() => {
-    const viewerEl = stepViewerRef.current;
-    if (!viewerEl) return;
-
-    const onViewerClick = (event) => {
-      const v = viewerInstance.current?.GetViewer();
-      if (!v?.scene || !v?.camera) return;
-      const rect = viewerEl.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, v.camera);
-      const intersects = raycaster.intersectObjects(holeMarkersRef.current, true);
-      if (intersects.length > 0) {
-        const clickedMarker = intersects[0].object;
-        if (clickedMarker.userData.hole) {
-          setActiveTapHole(clickedMarker.userData.hole);
-        }
-      }
-    };
-
-    viewerEl.addEventListener('click', onViewerClick);
-    return () => {
-      viewerEl.removeEventListener('click', onViewerClick);
-    };
-  }, [detectedHoles, activeTapHole, modelLoadCount, isTappingActive]);
-
-  const handleUnfold = useCallback(async () => {
+  const handleUnfold = useCallback(async (isBackground = false) => {
     // Only return early if we have BOTH backendData AND the bendTree analysis (if it's a STEP file)
-    const needsBending = isStepFile(selectedFile?.file?.name);
-    if (!selectedFile || is2DFile(selectedFile.file.name) || (backendData && (!needsBending || bendTree))) {
+    if (!selectedFile || is2DFile(selectedFile.file.name) || (backendData && (bendTree))) {
       if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); }
       return;
     }
@@ -1494,7 +592,7 @@ const InstantPricing = () => {
     if (unfoldAbortControllerRef.current) unfoldAbortControllerRef.current.abort();
     unfoldAbortControllerRef.current = new AbortController();
 
-    setIsLoadingUnfold(true); setBackendError(null);
+    if (!isBackground) setIsLoadingUnfold(true);
     const fd = new FormData(); fd.append('file', selectedFile.file);
     try {
       const r = await fetch(`${BACKEND_URL}/api/unfold`, {
@@ -1510,87 +608,57 @@ const InstantPricing = () => {
 
         // Initialize selectedBends with default values (90 degrees)
         const initial = {};
+        const bendsList = [];
         const flatten = (node) => {
           if (node.bendAxis) {
             initial[node.id] = { angle: 90, direction: 'up' };
+            bendsList.push(node.bendAxis);
           }
           if (node.children) node.children.forEach(flatten);
         };
         flatten(d.bendTree);
         setSelectedBends(initial);
+        setDetectedBends(bendsList);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.warn('Error during unfold stage:', err);
-      setBackendError(err.message);
     } finally {
       setIsLoadingUnfold(false);
       unfoldAbortControllerRef.current = null;
     }
   }, [selectedFile, backendData, bendTree]);
 
-  // ── Auto-unfold every STEP file on upload ────────────────────────────────
-  // Triggers bend analysis + flat-pattern generation for all STEP files so the
-  // 2D view, live bending panel, and laser pricing all work without manual action.
-  useEffect(() => {
-    if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
-    if (backendData || isLoadingUnfold) return;
-    handleUnfold();
-  }, [selectedFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Fast Analysis Stage (Holes/Dimensions) ────────────────────────────────
+  const handleQuickAnalysis = useCallback(async () => {
+    if (!selectedFile || !currentIsStep || dimensions) return;
 
-  const setAxisCamera = (axis) => {
-    const v = viewerInstance.current?.GetViewer();
-    if (!v) return;
-    const model = viewerInstance.current.GetModel();
-    let distance = 500;
-    if (model) {
-      const box = OV.GetBoundingBox(model);
-      if (box && box.min && box.max) {
-        const size = [box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z];
-        distance = Math.max(...size) * 2;
+    const fd = new FormData(); fd.append('file', selectedFile.file);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/detect-holes`, { method: 'POST', body: fd });
+      if (!r.ok) throw new Error('Quick analysis failed');
+      const d = await r.json();
+      if (d.success) {
+        setDetectedHoles(d.holes || []);
+        if (d.bendTree) setBendTree(d.bendTree);
+        if (d.faceMeshes) setBackendData(d);
+        // Note: Dimensions are extracted by the viewer, but we could also get them from backend here
       }
+    } catch (err) {
+      console.warn('Quick analysis error:', err);
     }
-    const configs = {
-      top: { eye: [0, distance, 0], up: [0, 0, -1] },
-      front: { eye: [0, 0, distance], up: [0, 1, 0] },
-      side: { eye: [distance, 0, 0], up: [0, 1, 0] },
-      flat: { eye: [0, distance, 0], up: [0, 0, -1] }
-    };
-    const c = configs[axis];
-    if (c) {
-      v.SetCamera(new OV.Camera(
-        new OV.Coord3D(...c.eye),
-        new OV.Coord3D(0, 0, 0),
-        new OV.Coord3D(...c.up),
-        45
-      ));
-      v.SetProjectionMode(OV.ProjectionMode.Orthographic);
-      if (v && typeof v.FitToWindow === 'function') {
-        setTimeout(() => v.FitToWindow(), 10);
-        setTimeout(() => { v.FitToWindow(); v.Render(); }, 150);
-      } else if (v && typeof v.Render === 'function') {
-        v.Render();
-      }
-    }
-  };
+  }, [selectedFile, currentIsStep, dimensions]);
 
+  // ── Analysis Orchestrator ────────────────────────────────────────────────
   useEffect(() => {
-    if (viewerInstance.current) {
-      const timer = setTimeout(() => {
-        try {
-          const v = viewerInstance.current.GetViewer();
-          if (v) {
-            v.FitToWindow();
-            v.Render();
-          }
-        } catch { /* ignore */ }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [viewMode, selectedFile, modelLoadCount, isQuoteFlowActive]);
+    if (!selectedFile || !currentIsStep) return;
 
-  const currentIsDxf = is2DFile(selectedFile?.file?.name ?? '');
-  const currentIsStep = isStepFile(selectedFile?.file?.name ?? '');
+    // 1) Show holes/dims instantly via fast proxy
+    handleQuickAnalysis();
+
+    // 2) Trigger heavy unfold in background (don't block UI)
+    handleUnfold(true);
+  }, [selectedFile, currentIsStep, handleQuickAnalysis, handleUnfold]);
 
   return (
     <div className={`instant-pricing-container ${isQuoteFlowActive || files.length > 0 ? 'ip-fullpage qf-active' : ''}`}>
@@ -1636,7 +704,7 @@ const InstantPricing = () => {
         .ip-section-title::after { content:''; flex:1; height:1px; background:#e8eaed; }
         .ip-viewer-frame { flex:1; margin:0; border-radius:0; overflow:hidden; border:none; background:#ffffff; position:relative; }
         .ip-toolbar { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; background:#ffffff; border-bottom:1.5px solid #e8eaed; }
-        .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e6ea; gap:2px; }
+        .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e8f0; gap:2px; }
         .ip-pill-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; }
         .ip-pill-btn.active { background:#1a1a2e; color:#ffffff; }
         .ip-axis-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; text-transform:uppercase; }
@@ -1838,34 +906,16 @@ const InstantPricing = () => {
                 <div className="ip-toolbar">
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
-                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); setAxisCamera('top'); } }}>3D View</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); setActiveAxis('flat'); setAxisCamera('flat'); }}>2D View</button>
+                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); } }}>3D View</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
                     </div>
                     <div className="ip-pill-toggle">
                       {['top', 'front', 'side', 'flat']
                         .filter(ax => (viewMode === '3d' && ax !== 'flat') || (viewMode === '2d' && ax === 'flat'))
                         .map(ax => (
-                          <button key={ax} className={`ip-axis-btn ${activeAxis === ax ? 'active' : ''}`} onClick={() => { setActiveAxis(ax); setAxisCamera(ax); }}>{ax}</button>
+                          <button key={ax} className={`ip-axis-btn ${activeAxis === ax ? 'active' : ''}`} onClick={() => { setActiveAxis(ax); }}>{ax}</button>
                         ))}
                     </div>
-                    {bendTree && viewMode === '3d' && (
-                      <button
-                        className={`ip-pill-btn${showBendPanel ? ' active' : ''}`}
-                        onClick={() => setShowBendPanel(v => !v)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                      >
-                        <Layers size={11} />
-                        Bends
-                        <span style={{
-                          background: showBendPanel ? '#fff' : '#ef4444',
-                          color: showBendPanel ? '#ef4444' : '#fff',
-                          borderRadius: 8, padding: '1px 5px',
-                          fontSize: 9, fontWeight: 800, minWidth: 14, textAlign: 'center'
-                        }}>
-                          {(() => { let n = 0; const ct = (node) => { if (node.bendAxis) n++; (node.children || []).forEach(ct); }; ct(bendTree); return n; })()}
-                        </span>
-                      </button>
-                    )}
                   </div>
                   <div className="ip-pill-toggle">
                     <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
@@ -1873,179 +923,114 @@ const InstantPricing = () => {
                   </div>
                 </div>
                 <div className="ip-viewer-frame qf-main-canvas">
-                  {(isImporting || isCalculatingPrice || isDetectingHoles || isLoadingUnfold) && (
+                  {currentIsStep && viewMode === '3d' && (
+                    <StepModelViewer
+                      selectedFile={selectedFile}
+                      viewMode={viewMode}
+                      activeAxis={activeAxis}
+                      selectedThickness={selectedThickness}
+                      activeFinishColor={activeFinishColor}
+                      isFinishPowderCoating={isFinishPowderCoating}
+                      isModelFadedManually={isModelFadedManually}
+                      detectedHoles={detectedHoles}
+                      selectedTaps={selectedTaps}
+                      activeTapHole={activeTapHole}
+                      setActiveTapHole={setActiveTapHole}
+                      selectedHardware={selectedHardware}
+                      selectedCountersinks={selectedCountersinks}
+                      isTappingActive={isTappingActive}
+                      isCountersinkingActive={isCountersinkingActive}
+                      isHardwareActive={isHardwareActive}
+                      tapOptions={tapOptions}
+                      csOptions={csOptions}
+                      hwItemsByType={hwItemsByType}
+                      allServices={allServices}
+                      dimensions={dimensions}
+                      onDimensionsExtracted={setDimensions}
+                      setIsImporting={setIsImporting}
+                      setImportProgress={setImportProgress}
+                    />
+                  )}
+                  {currentIsStep && viewMode === '2d' && (
+                    <FlatPatternViewer
+                      backendData={backendData}
+                      holes={detectedHoles}
+                    />
+                  )}
+                  {currentIsDxf && (
+                    <DxfModelViewer
+                      selectedFile={selectedFile}
+                      viewMode={viewMode}
+                      activeFinishColor={activeFinishColor}
+                      isFinishPowderCoating={isFinishPowderCoating}
+                      selectedThickness={selectedThickness}
+                      onDimensionsExtracted={setDimensions}
+                      onHolesDetected={setDetectedHoles}
+                      onTechDataExtracted={setDxfTechData}
+                      setIsImporting={setIsImporting}
+                      setImportProgress={setImportProgress}
+                    />
+                  )}
+
+                  {(isDetectingHoles || isLoadingUnfold || isCalculatingPrice) && (
                     <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
-                        <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 900, color: '#ef4444' }}>{importProgress > 0 ? `${importProgress.toFixed(0)}%` : ''}</div>
                       </div>
                       <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                        {isImporting ? 'Importing Asset...' : isLoadingUnfold ? 'Preparing Flat Pattern...' : isCalculatingPrice ? 'Calculating Quote...' : 'Analyzing Features...'}
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginTop: '8px', letterSpacing: '0.5px' }}>
-                        PLEASE WAIT WHILE WE PROCESS YOUR CAD DATA
+                        {isLoadingUnfold ? 'Preparing Flat Pattern...' : isCalculatingPrice ? 'Calculating Quote...' : 'Analyzing Features...'}
                       </div>
                     </div>
                   )}
-                  {(dxfError || backendError || holeDetectionError) && (
-                    <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 3, background: '#fef2f2', color: '#ef4444', padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AlertTriangle size={12} />{dxfError || backendError || holeDetectionError}
-                    </div>
-                  )}
-                  {viewMode === '3d' && currentIsStep && (
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                      {/* When bend data is ready, show live-bending viewer; fall back to OV viewer */}
-                      {backendData?.faceMeshes && bendTree ? (
-                        <HierarchicalProjectViewer
-                          bendTree={bendTree}
-                          faceMeshes={backendData.faceMeshes}
-                          selectedBends={selectedBends}
-                          activeBendId={null}
-                        />
-                      ) : (
-                        <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />
-                      )}
-                      {/* Inline bend configuration panel */}
-                      {showBendPanel && bendTree && (
-                        <BendPanel
-                          bendTree={bendTree}
-                          selectedBends={selectedBends}
-                          onUpdateBend={(id, val) => setSelectedBends(prev => ({ ...prev, [id]: val }))}
-                          onClose={() => setShowBendPanel(false)}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{ highlightBends }} backendData={backendData} sourceFlatData={null} formatKind="drawing" /> : <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Preparing Pattern...</div>)}
-                  {currentIsDxf && <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>{dxfSvg ? <div dangerouslySetInnerHTML={{ __html: dxfSvg }} /> : <div>Parsing...</div>}</div>}
                 </div>
               </div>
 
               {/* ── RIGHT PANEL: Model Details ── */}
               <div className="ip-right-panel">
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#ef4444,#dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Info size={15} color="#fff" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', letterSpacing: '0.5px' }}>Model Details</div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600 }}>Extracted from CAD file</div>
-                  </div>
-                </div>
-
-                {/* File Info */}
-                {selectedFile && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div className="ip-section-title">File Info</div>
-                    <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 8, background: '#fff0f0', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <FileText size={16} color="#ef4444" />
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedFile.file.name}</div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 3, alignItems: 'center' }}>
-                          <span className="ip-badge" style={{ background: '#dbeafe', color: '#1d4ed8' }}>{selectedFile.file.name.split('.').pop().toUpperCase()}</span>
-                          <span className="ip-badge" style={{ background: '#dcfce7', color: '#15803d' }}>CAD MODEL</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dimensions ? (
-                  <>
-                    {/* Dimensions */}
-                    <div style={{ marginBottom: 16 }}>
-                      <div className="ip-section-title">{unit === 'mm' ? 'Metric' : 'Imperial'} Dimensions</div>
-                      {[
-                        { label: 'Length', symbol: 'L', key: 'l', bg: '#eff6ff', iconBg: '#dbeafe', iconColor: '#3b82f6' },
-                        { label: 'Width', symbol: 'W', key: 'w', bg: '#f0fdf4', iconBg: '#dcfce7', iconColor: '#22c55e' },
-                        { label: 'Thickness', symbol: 'T', key: 't', bg: '#fff7ed', iconBg: '#fed7aa', iconColor: '#f97316' },
-                      ].map(item => (
-                        <div key={item.key} className="ip-dim-row" style={{ background: item.bg }}>
-                          <div>
-                            <div className="ip-dim-label">{item.label} <span style={{ opacity: 0.5 }}>({item.symbol})</span></div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
-                              <span className="ip-dim-value" style={{ color: item.iconColor }}>
-                                {unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}
-                              </span>
-                              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{unit}</span>
-                            </div>
-                          </div>
-                          <div className="ip-dim-icon" style={{ background: item.iconBg }}>
-                            {item.key === 't' ? <Shield size={14} color={item.iconColor} /> : <Box size={14} color={item.iconColor} />}
-                          </div>
-                        </div>
-                      ))}
-                      {selectedThickness && (
-                        <div className="ip-dim-row" style={{ background: '#fdf4ff', border: '1.5px solid #e9d5ff' }}>
-                          <div>
-                            <div className="ip-dim-label">New Thickness <span style={{ opacity: 0.5 }}>(NT)</span></div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
-                              <span className="ip-dim-value" style={{ color: '#a855f7' }}>
-                                {unit === 'mm'
-                                  ? (selectedThicknessMM || 0).toFixed(2)
-                                  : parseFloat(selectedThickness).toFixed(3)}
-                              </span>
-                              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{unit}</span>
-                            </div>
-                          </div>
-                          <div className="ip-dim-icon" style={{ background: '#f3e8ff' }}>
-                            <Layers size={14} color="#a855f7" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Analysis */}
-                    <div style={{ marginBottom: 20 }}>
-                      <div className="ip-section-title">Analysis</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</span>
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
-                            {unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'mm³' : 'in³'}</span>
-                        </div>
-                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Footprint</span>
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
-                            {unit === 'mm'
-                              ? (parseFloat(dimensions.mm.l) * parseFloat(dimensions.mm.w) / 100).toFixed(1)
-                              : (parseFloat(dimensions.inches.l) * parseFloat(dimensions.inches.w)).toFixed(3)}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>{unit === 'mm' ? 'cm²' : 'in²'}</span>
-                        </div>
-                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aspect Ratio</span>
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
-                            {(parseFloat(dimensions.mm.l) / parseFloat(dimensions.mm.w)).toFixed(2)}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>L / W</span>
-                        </div>
-                        <div className="ip-stat-chip" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                          <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Format</span>
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
-                            {selectedFile?.file.name.split('.').pop().toUpperCase() || '—'}
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>File type</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Proceed */}
-                    <button className="ip-proceed-btn" onClick={() => setIsQuoteFlowActive(true)}>
-                      PROCEED TO QUOTE <ChevronRight size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 40 }}>
-                    <Loader2 size={28} style={{ color: '#ef4444', animation: 'spin 1s linear infinite' }} />
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.5px' }}>CALCULATING DIMENSIONS...</div>
-                  </div>
-                )}
+                <PricingSidebar
+                  selectedFile={selectedFile}
+                  dimensions={dimensions}
+                  selectedProductionService={selectedProductionService}
+                  setSelectedProductionService={setSelectedProductionService}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  selectedMetal={selectedMetal}
+                  setSelectedMetal={setSelectedMetal}
+                  selectedThickness={selectedThickness}
+                  selectedThicknessMM={selectedThicknessMM}
+                  setSelectedThickness={setSelectedThickness}
+                  quantity={quantity}
+                  setQuantity={setQuantity}
+                  selectedAdditionalServices={selectedAdditionalServices}
+                  setSelectedAdditionalServices={setSelectedAdditionalServices}
+                  selectedTaps={selectedTaps}
+                  setSelectedTaps={setSelectedTaps}
+                  selectedHardware={selectedHardware}
+                  setSelectedHardware={setSelectedHardware}
+                  selectedCountersinks={selectedCountersinks}
+                  setSelectedCountersinks={setSelectedCountersinks}
+                  selectedFinishColors={selectedFinishColors}
+                  setSelectedFinishColors={setSelectedFinishColors}
+                  allServices={allServices}
+                  detectedHoles={detectedHoles}
+                  isLoadingUnfold={isLoadingUnfold}
+                  bendList={bendList}
+                  priceEstimate={priceEstimate}
+                  isCalculatingPrice={isCalculatingPrice}
+                  allDiscounts={allDiscounts}
+                  handleUnfold={handleUnfold}
+                  setIsBendingModalOpen={setIsBendingModalOpen}
+                  setIsAnodizingModalOpen={setIsAnodizingModalOpen}
+                  setActiveFinishSvcId={setActiveFinishSvcId}
+                  setActiveTapHole={setActiveTapHole}
+                  setActiveHwHole={setActiveHwHole}
+                  setActiveCSHole={setActiveCSHole}
+                  handleProceedToReview={handleProceedToReview}
+                  is2DFile={is2DFile}
+                  isStepFile={isStepFile}
+                  isQuoteFlowActive={isQuoteFlowActive}
+                  setIsQuoteFlowActive={setIsQuoteFlowActive}
+                />
               </div>
             </div>
           ) : (
@@ -2068,127 +1053,111 @@ const InstantPricing = () => {
                     <ChevronLeft size={13} /> BACK
                   </button>
                 </div>
-                <div className="ip-qf-viewer">
-                  {viewMode === '3d' && currentIsStep && <div ref={stepViewerRef} style={{ width: '100%', height: '100%' }} />}
-
-                  {/* Premium Vibrant Legend */}
-                  {isTappingActive && currentIsStep && (
-                    <div
-                      className="position-absolute p-2 rounded-3 border"
-                      style={{
-                        top: '12px',
-                        right: '12px',
-                        zIndex: 20,
-                        background: 'rgba(255, 255, 255, 0.7)',
-                        backdropFilter: 'blur(8px)',
-                        borderColor: 'rgba(0, 0, 0, 0.05)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                        width: 'max-content'
-                      }}
-                    >
-                      <div className="d-flex flex-column gap-1">
-                        <div className="d-flex align-items-center gap-2 small fw-bold">
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#4169e1' }} />
-                          <span style={{ fontSize: '10px', letterSpacing: '0.5px' }}>TAPPED</span>
-                        </div>
-                        <div className="d-flex align-items-center gap-2 small fw-bold">
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#10b981' }} />
-                          <span style={{ fontSize: '10px', letterSpacing: '0.5px' }}>COMPATIBLE</span>
-                        </div>
-                        <div className="d-flex align-items-center gap-2 small fw-bold">
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#ef4444' }} />
-                          <span style={{ fontSize: '10px', letterSpacing: '0.5px' }}>INELIGIBLE</span>
-                        </div>
-                        <div className="d-flex align-items-center gap-2 small fw-bold">
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', background: '#000000' }} />
-                          <span style={{ fontSize: '10px', letterSpacing: '0.5px' }}>SELECTED</span>
-                        </div>
+                <div className="ip-qf-viewer" style={{ position: 'relative' }}>
+                  {/* --- Tap Legend Overlay --- */}
+                  {isTappingActive && viewMode === '3d' && (
+                    <div style={{
+                      position: 'absolute', top: 16, right: 16, zIndex: 50,
+                      background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)',
+                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 8
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Tap Legend</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#4169e1', boxShadow: '0 0 8px #4169e180' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Tapped</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b98180' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Compatible</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef444480' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Incompatible</span>
                       </div>
                     </div>
                   )}
 
-                  {viewMode === '2d' && currentIsStep && (backendData ? <FlatPatternViewer geometries={[]} options={{ highlightBends }} backendData={backendData} sourceFlatData={null} formatKind="drawing" holes={detectedHoles} activeHoleId={activeTapHole?.id} /> : <div className="p-5 text-center">Preparing...</div>)}
+                  {currentIsStep ? (
+                    <StepModelViewer
+                      selectedFile={selectedFile}
+                      viewMode={viewMode}
+                      activeAxis={activeAxis}
+                      selectedThickness={selectedThickness}
+                      activeFinishColor={activeFinishColor}
+                      isFinishPowderCoating={isFinishPowderCoating}
+                      isModelFadedManually={isModelFadedManually}
+                      detectedHoles={detectedHoles}
+                      selectedTaps={selectedTaps}
+                      isTappingActive={isTappingActive}
+                      activeTapHole={activeTapHole}
+                      setActiveTapHole={setActiveTapHole}
+                      selectedHardware={selectedHardware}
+                      isHardwareActive={isHardwareActive}
+                      hwItemsByType={hwItemsByType}
+                      selectedCountersinks={selectedCountersinks}
+                      csOptions={csOptions}
+                      isCountersinkingActive={isCountersinkingActive}
+                      dimensions={dimensions}
+                      allServices={allServices}
+                      backendData={backendData}
+                    />
+                  ) : (
+                    currentIsStep && (
+                      <StepModelViewer
+                        selectedFile={selectedFile}
+                        viewMode={viewMode}
+                        activeAxis={activeAxis}
+                        selectedThickness={selectedThickness}
+                        activeFinishColor={activeFinishColor}
+                        isFinishPowderCoating={isFinishPowderCoating}
+                        isModelFadedManually={isModelFadedManually}
+                        detectedHoles={detectedHoles}
+                        onHoleClick={handleHoleClick}
+                        selectedTaps={selectedTaps}
+                        isTappingActive={isTappingActive}
+                        activeTapHole={activeTapHole}
+                        setActiveTapHole={setActiveTapHole}
+                        selectedHardware={selectedHardware}
+                        selectedCountersinks={selectedCountersinks}
+                        isCountersinkingActive={isCountersinkingActive}
+                        isHardwareActive={isHardwareActive}
+                        tapOptions={tapOptions}
+                        csOptions={csOptions}
+                        hwItemsByType={hwItemsByType}
+                        isAnodizingModalOpen={isAnodizingModalOpen}
+                        allServices={allServices}
+                        dimensions={dimensions}
+                        onDimensionsExtracted={setDimensions}
+                        setIsImporting={setIsImporting}
+                        setImportProgress={setImportProgress}
+                        isBendingActive={false}
+                        detectedBends={detectedBends}
+                        backendData={backendData}
+                      />
+                    )
+                  )}
                   {currentIsDxf && (
-                    <div className="dxf-svg-wrapper h-100 w-100 d-flex align-items-center justify-content-center p-3 position-relative overflow-hidden">
-                      {dxfSvg ? (
-                        <div className="position-relative d-flex align-items-center justify-content-center" style={{ width: '100%', height: '100%' }}>
-                          <style>{`
-                            .dxf-svg-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-                            .dxf-svg-content svg { width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
-                            .dxf-svg-content svg * {
-                              fill: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex || 'rgba(0,0,0,0.4)') : 'rgba(0,0,0,0.05)'} !important;
-                              fill-opacity: ${(isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen)) ? 0.05 : (activeFinishColor ? 0.8 : 0.1)} !important;
-                              stroke: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex) : '#000'} !important;
-                              stroke-opacity: ${(isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen)) ? 0.1 : 1.0} !important;
-                              stroke-width: 2px !important;
-                              transition: all 0.3s ease;
-                            }
-                            /* Native Hole Highlighting */
-                            ${detectedHoles.map(hole => {
-                            const isTapped = !!selectedTaps[hole.id];
-                            const isActive = activeTapHole?.id === hole.id;
-                            if (!isTapped && !isActive) return '';
+                    <DxfModelViewer
+                      selectedFile={selectedFile}
+                      viewMode={viewMode}
+                      activeFinishColor={activeFinishColor}
+                      isFinishPowderCoating={isFinishPowderCoating}
+                      selectedThickness={selectedThickness}
+                      onDimensionsExtracted={setDimensions}
+                      onHolesDetected={setDetectedHoles}
+                      onTechDataExtracted={setDxfTechData}
+                      setIsImporting={setIsImporting}
+                      setImportProgress={setImportProgress}
+                    />
+                  )}
 
-                            // Target native SVG circles by proximity/attributes if possible, 
-                            // or use the overlay approach but pinned perfectly.
-                            // Since DXF SVGs can be complex, we'll keep the overlay but 
-                            // remove its 'Marker' feel to make it look native.
-                            return '';
-                          }).join('')}
-                          `}</style>
-
-                          <div className="dxf-svg-content" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: dxfSvg }} />
-
-                          {/* 2D Tapping Markers Overlay */}
-                          {viewBoxData && (
-                            <svg
-                              viewBox={`${viewBoxData.minX} ${viewBoxData.minY} ${viewBoxData.width} ${viewBoxData.height}`}
-                              className="position-absolute inset-0 pointer-events-none"
-                              style={{ width: '100%', height: '100%', zIndex: 10, left: 0, top: 0 }}
-                            >
-                              <defs>
-                                <radialGradient id="neonGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                                  <stop offset="0%" style={{ stopColor: '#006064', stopOpacity: 1 }} />
-                                  <stop offset="70%" style={{ stopColor: '#00b8d4', stopOpacity: 1 }} />
-                                  <stop offset="100%" style={{ stopColor: '#00f2ff', stopOpacity: 0.9 }} />
-                                </radialGradient>
-                              </defs>
-                              <g transform={`translate(0, ${viewBoxData.minY * 2 + viewBoxData.height}) scale(1, -1)`}>
-                                {detectedHoles.map(hole => {
-                                  const mmDia = (hole.diameterInches || 0.1) * 25.4;
-                                  if (mmDia > 100.0) return null;
-                                  const isTapped = !!selectedTaps[hole.id];
-                                  const isActive = activeTapHole?.id === hole.id;
-
-                                  if (!isTapped && !isActive) return null;
-
-                                  let color = isTapped ? 'url(#neonGradient)' : '#000000';
-
-                                  return (
-                                    <circle
-                                      key={hole.id}
-                                      cx={hole.position[0]}
-                                      cy={hole.position[1]}
-                                      r={(mmDia / 2) * 1.02}
-                                      fill={color}
-                                      fillOpacity={1.0}
-                                      stroke="none"
-                                      style={{
-                                        transition: 'all 0.3s ease',
-                                        cursor: 'pointer',
-                                        pointerEvents: 'auto',
-                                        filter: isTapped ? 'drop-shadow(0 0 2px rgba(0, 255, 234, 0.4))' : 'none'
-                                      }}
-                                      onClick={() => setActiveTapHole(hole)}
-                                    />
-                                  );
-                                })}
-                              </g>
-                            </svg>
-                          )}
-
-                        </div>
-                      ) : <div>Parsing...</div>}
+                  {(isLoadingUnfold || isCalculatingPrice) && (
+                    <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
+                      <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
+                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                        {isLoadingUnfold ? 'Preparing Flat Pattern...' : 'Calculating...'}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2210,885 +1179,689 @@ const InstantPricing = () => {
                         <div key={item.key} style={{ background: item.bg, border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
                           <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
                           <div style={{ fontSize: '14px', fontWeight: 900, color: item.color, fontFamily: 'monospace', lineHeight: 1.2 }}>{unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}</div>
-                          <div style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>{unit}</div>
                         </div>
                       ))}
                     </div>
-                    {selectedThickness && (
-                      <div style={{ marginTop: 6, background: '#fdf4ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 10px' }}>
-                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Thickness</div>
-                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#a855f7', fontFamily: 'monospace', lineHeight: 1.2 }}>
-                          {unit === 'mm'
-                            ? (selectedThicknessMM || 0).toFixed(2)
-                            : parseFloat(selectedThickness).toFixed(3)}
-                        </div>
-                        <div style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>{unit}</div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
 
-              <div className="ip-qf-mid">
-                {!selectedProductionService ? (
-                  <div className="animate-fade-in p-2">
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                      <div className="d-flex align-items-center gap-3">
-                        <h2 className="fs-5 fw-bold m-0">Select production method:</h2>
-                        <div className="d-flex align-items-center bg-white rounded-pill p-1 border shadow-sm" style={{ height: '24px', border: '1px solid #e2e8f0' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setProdUnit('mm'); }}
-                            className={`btn btn-sm rounded-pill px-2 py-0 h-100 fw-black transition-all ${prodUnit === 'mm' ? 'bg-danger text-white shadow-sm' : 'text-muted'}`}
-                            style={{ fontSize: '8px', border: 'none', minWidth: '32px' }}
-                          >
-                            MM
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setProdUnit('inch'); }}
-                            className={`btn btn-sm rounded-pill px-2 py-0 h-100 fw-black transition-all ${prodUnit === 'inch' ? 'bg-danger text-white shadow-sm' : 'text-muted'}`}
-                            style={{ fontSize: '8px', border: 'none', minWidth: '32px' }}
-                          >
-                            IN
-                          </button>
+              <div className="ip-qf-mid" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+                {/* ── wizard Selection Header ──────────────── */}
+                {(selectedProductionService || selectedCategory || selectedMetal || selectedThickness) && (
+                  <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    {selectedProductionService && (
+                      <div className="ip-step-summary">
+                        <div className="label"><Zap size={10} /> METHOD</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="value">{selectedProductionService.title}</span>
+                          <button className="change-btn" onClick={() => { setConfigStep(0); setSelectedCategory(null); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
                         </div>
                       </div>
-                      <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-10 rounded-pill px-3 py-1 fw-normal text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
-                        {allServices.filter(s => !!s.is_production || s.is_production == "1").length} active
-                      </span>
-                    </div>
-                    <div className="d-flex flex-column gap-2">
-                      {allServices.filter(s => !!s.is_production || s.is_production == "1").map(svc => {
-                        const { fits, reason } = (() => {
-                          if (!dimensions) return { fits: true };
-                          const { l, w, t } = dimensions.mm;
-                          const unitRatio = svc.dimensions_unit === 'in' ? 25.4 : 1;
-                          const maxL = (parseFloat(svc.max_length) || 0) * unitRatio;
-                          const maxW = (parseFloat(svc.max_width) || 0) * unitRatio;
-                          const maxH = (parseFloat(svc.max_height) || 0) * unitRatio;
-                          const partMax = Math.max(l, w);
-                          const partMin = Math.min(l, w);
-                          const svcMax = Math.max(maxL, maxW);
-                          const svcMin = Math.min(maxL, maxW);
-                          const fitsMaxL = svcMax === 0 || partMax <= svcMax;
-                          const fitsMaxW = svcMin === 0 || partMin <= svcMin;
-                          const fitsMaxH = maxH === 0 || t <= maxH;
-                          const minL = (parseFloat(svc.min_length) || 0) * unitRatio;
-                          const minW = (parseFloat(svc.min_width) || 0) * unitRatio;
-                          const minH = (parseFloat(svc.min_height) || 0) * unitRatio;
-                          const svcMinLong = Math.max(minL, minW);
-                          const svcMinShort = Math.min(minL, minW);
-                          const fitMinL = svcMinLong === 0 || partMax >= svcMinLong;
-                          const fitMinW = svcMinShort === 0 || partMin >= svcMinShort;
-                          const fitMinH = minH === 0 || t >= minH;
-                          if (!fitsMaxL || !fitsMaxW) return { fits: false, reason: `Exceeds max dimensions (${Math.round(svcMax)}×${Math.round(svcMin)}mm)` };
-                          if (!fitsMaxH) return { fits: false, reason: `Exceeds max thickness (${Math.round(maxH)}mm)` };
-                          if (!fitMinL || !fitMinW) return { fits: false, reason: `Below min dimensions (${Math.round(svcMinLong)}×${Math.round(svcMinShort)}mm)` };
-                          if (!fitMinH) return { fits: false, reason: `Below min thickness (${Math.round(minH)}mm)` };
-                          return { fits: true };
-                        })();
-                        return (
-                          <button
-                            key={svc.id}
-                            disabled={!fits}
-                            className={`btn text-start p-3 rounded-4 border-2 transition-all d-flex flex-column gap-2 position-relative ${fits
-                              ? 'bg-white border-light-subtle shadow-sm hover-shadow hover-translate-y'
-                              : 'bg-light opacity-50 cursor-not-allowed grayscale'
-                              }`}
-                            style={{
-                              border: fits ? '1.5px solid #e8eaed' : '1.5px solid transparent',
-                              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                            }}
-                            onClick={() => {
-                              const title = svc.title.toLowerCase();
-                              const isCNC = title.includes('cnc');
-
-                              if (isCNC) {
-                                const config = svc.pricing_config || {};
-                                if (!config.base_setup && !config.price_per_width) {
-                                  toast('This service (CNC) is not yet configured for pricing by admin.', 'error');
-                                  return;
-                                }
-                              } else {
-                                if (!svc.base_price && (!svc.pricing_rules || svc.pricing_rules.length === 0)) {
-                                  // We'll be more lenient here as standard services might use the new decoupled model
-                                  // but let's check if it has a base price at least
-                                }
+                    )}
+                    {selectedCategory && (
+                      <div className="ip-step-summary">
+                        <div className="label"><Grid size={10} /> CATEGORY</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="value">{selectedCategory.name}</span>
+                          <button className="change-btn" onClick={() => { setConfigStep(1); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
+                        </div>
+                      </div>
+                    )}
+                    {selectedMetal && (
+                      <div className="ip-step-summary">
+                        <div className="label"><Box size={10} /> METAL</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="value">{selectedMetal.name}</span>
+                          <button className="change-btn" onClick={() => { setConfigStep(2); setSelectedThickness(null); }}>CHANGE</button>
+                        </div>
+                      </div>
+                    )}
+                    {selectedThickness && (
+                      <div className="ip-step-summary">
+                        <div className="label"><Layers size={10} /> THICKNESS</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="value">{selectedThickness}mm</span>
+                          <button className="change-btn" onClick={() => { setConfigStep(3); }}>CHANGE</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div style={{ padding: '24px 20px', flex: 1, overflowY: 'auto' }}>
+                  {/* ── Wizard Progress Stepper ── */}
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
+                    {[
+                      { label: 'Method', num: 0 },
+                      { label: 'Category', num: 1 },
+                      { label: 'Material', num: 2 },
+                      { label: 'Thickness', num: 3 },
+                      { label: 'Services', num: 4 },
+                    ].map((s, i, arr) => {
+                      const done = configStep > s.num;
+                      const active = configStep === s.num;
+                      return (
+                        <React.Fragment key={s.num}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                            <div style={{
+                              width: 28, height: 28, borderRadius: '50%',
+                              background: done ? '#10b981' : active ? '#ef4444' : '#f1f5f9',
+                              border: `2px solid ${done ? '#10b981' : active ? '#ef4444' : '#e2e8f0'}`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              transition: 'all 0.25s',
+                            }}>
+                              {done
+                                ? <Check size={13} color="#fff" strokeWidth={3} />
+                                : <span style={{ fontSize: 11, fontWeight: 900, color: active ? '#fff' : '#94a3b8' }}>{s.num + 1}</span>
                               }
-                              setSelectedProductionService(svc);
-                            }}
-                          >
-                            <div className="d-flex justify-content-between align-items-center w-100">
-                              <div className="d-flex align-items-center gap-2">
-                                <div className={`p-2 rounded-3 ${fits ? 'bg-danger bg-opacity-10 text-danger' : 'bg-secondary bg-opacity-10 text-muted'}`}>
-                                  {svc.title.toLowerCase().includes('cnc') ? <Box size={18} /> : <Zap size={18} />}
-                                </div>
-                                <strong className={`fs-5 d-block m-0 ${fits ? 'text-dark' : 'text-muted'}`}>{svc.title}</strong>
-                              </div>
-                              {!fits && (
-                                <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2 small fw-bold">
-                                  CAPACITY EXCEEDED
-                                </span>
-                              )}
-                              {fits && (
-                                <div className="text-danger opacity-0 hover-opacity-100 transition-all">
-                                  <ArrowRight size={20} />
-                                </div>
-                              )}
                             </div>
-                            <span className="text-muted fw-medium" style={{ fontSize: '12px', lineHeight: '1.4' }}>
-                              {svc.description}
-                            </span>
-
-                            {/* Size Constraints Display */}
-                            <div className="mt-2 pt-2 border-top border-light-subtle d-flex flex-wrap gap-2">
-                              {(() => {
-                                const unitRatio = svc.dimensions_unit === 'in' ? 25.4 : 1;
-                                const convert = (val) => {
-                                  if (!val) return '0';
-                                  const mmVal = parseFloat(val) * unitRatio;
-                                  return prodUnit === 'mm' ? mmVal.toFixed(1) : (mmVal / 25.4).toFixed(2);
-                                };
-                                return (
-                                  <>
-                                    {(svc.max_length > 0 || svc.max_width > 0) && (
-                                      <div className="d-flex align-items-center gap-1 bg-light px-2 py-1 rounded-2">
-                                        <Maximize2 size={10} className="text-muted" />
-                                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b' }}>
-                                          MAX: {convert(svc.max_length)}{prodUnit} × {convert(svc.max_width)}{prodUnit}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {(svc.min_length > 0 || svc.min_width > 0) && (
-                                      <div className="d-flex align-items-center gap-1 bg-light px-2 py-1 rounded-2">
-                                        <ArrowRight size={10} className="text-muted" style={{ transform: 'rotate(180deg)' }} />
-                                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b' }}>
-                                          MIN: {convert(svc.min_length)}{prodUnit} × {convert(svc.min_width)}{prodUnit}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {(svc.max_height > 0 || svc.min_height > 0) && (
-                                      <div className="d-flex align-items-center gap-1 bg-light px-2 py-1 rounded-2">
-                                        <Layers size={10} className="text-muted" />
-                                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b' }}>
-                                          THICKNESS: {svc.min_height > 0 ? `${convert(svc.min_height)}${prodUnit} - ` : 'UP TO '}{convert(svc.max_height)}{prodUnit}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-
-                            {!fits && (
-                              <span className="mt-auto pt-2 text-danger small fw-bold d-flex align-items-center gap-2">
-                                <AlertCircle size={14} /> {reason}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : !selectedCategory ? (
-                  <div className="animate-fade-in p-2">
-                    <div style={{ background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Zap size={13} color="#ef4444" />
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Method</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedProductionService.title}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => setSelectedProductionService(null)}>CHANGE</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <h2 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#1e293b' }}>Select Category</h2>
-                      <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 fw-bold text-uppercase" style={{ fontSize: '9px' }}>
-                        {allCategories.filter(cat => allMetals.some(m => m.category_id === cat.id && m.services?.includes(selectedProductionService.id))).length} Categories
-                      </span>
-                    </div>
-
-                    <div className="d-flex flex-column gap-2 pb-3">
-                      {allCategories.map(cat => {
-                        const catMetals = allMetals.filter(m => m.category_id === cat.id);
-                        const isAvailable = catMetals.some(m => (m.services || []).map(id => Number(id)).includes(Number(selectedProductionService?.id)));
-                        return (
-                          <button
-                            key={cat.id}
-                            disabled={!isAvailable}
-                            className={`btn text-start p-2 rounded-4 border transition-all d-flex align-items-center gap-3 px-4 w-100 ${isAvailable
-                              ? 'bg-white border-light-subtle shadow-sm hover-shadow-sm hover-translate-y group'
-                              : 'bg-light opacity-50 cursor-not-allowed grayscale border-transparent'
-                              }`}
-                            style={{
-                              transition: 'all 0.2s ease-in-out',
-                              minHeight: '60px'
-                            }}
-                            onClick={() => setSelectedCategory(cat)}
-                          >
-                            <div className={`p-2 rounded-3 transition-all border border-transparent ${isAvailable
-                              ? 'bg-light group-hover-bg-danger group-hover-bg-opacity-10 group-hover-border-danger group-hover-border-opacity-10'
-                              : 'bg-secondary bg-opacity-10'
-                              }`}>
-                              {cat.slug.includes('aluminum') ? <Layers size={18} className={isAvailable ? "group-hover-text-danger transition-all opacity-75" : "text-muted"} /> :
-                                cat.slug.includes('steel') ? <Shield size={18} className={isAvailable ? "group-hover-text-danger transition-all opacity-75" : "text-muted"} /> :
-                                  cat.slug.includes('brass') || cat.slug.includes('copper') ? <Zap size={18} className={isAvailable ? "group-hover-text-danger transition-all opacity-75" : "text-muted"} /> :
-                                    <Box size={18} className={isAvailable ? "group-hover-text-danger transition-all opacity-75" : "text-muted"} />}
-                            </div>
-                            <div className="flex-grow-1">
-                              <div className="d-flex align-items-center gap-2">
-                                <strong className={`d-block m-0 fw-bold ${isAvailable ? 'text-dark' : 'text-muted'}`} style={{ fontSize: '14px' }}>{cat.name}</strong>
-                                {!isAvailable && <span className="badge bg-secondary bg-opacity-10 text-muted rounded-pill px-2 py-0 fw-bold text-uppercase" style={{ fontSize: '8px' }}>NOT AVAILABLE</span>}
-                              </div>
-                              <span className="text-muted opacity-75 fw-bold text-uppercase d-block" style={{ fontSize: '10px', letterSpacing: '0.5px' }}>{catMetals.length} Items</span>
-                            </div>
-                            {isAvailable && <ArrowRight size={16} className="text-danger opacity-0 group-hover-opacity-100 transition-all" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : !selectedMetal ? (
-                  <div className="animate-fade-in">
-                    {/* Compact breadcrumb card */}
-                    <div style={{ background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 7, marginBottom: 7, borderBottom: '1px solid #e8eaed' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Zap size={13} color="#ef4444" />
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Method</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedProductionService.title}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); }}>CHANGE</button>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Grid size={13} color="#64748b" />
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Category</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>{selectedCategory.name}</span>
-                          <button className="btn btn-link text-danger text-decoration-none p-0 fw-bold" style={{ fontSize: '10px' }} onClick={() => setSelectedCategory(null)}>CHANGE</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Header row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <button className="btn btn-light rounded-circle border p-1" onClick={() => setSelectedCategory(null)}>
-                        <ChevronLeft size={16} className="text-dark" />
-                      </button>
-                      <h2 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#1e293b' }}>Select Material</h2>
-                      <div style={{ flex: 1, position: 'relative' }}>
-                        <input
-                          type="text"
-                          className="form-control rounded-pill border-light-subtle"
-                          placeholder="Search materials..."
-                          value={metalSearch}
-                          onChange={(e) => setMetalSearch(e.target.value)}
-                          style={{ height: '34px', fontSize: '12px', paddingLeft: '32px' }}
-                        />
-                        <Grid className="position-absolute translate-middle-y text-muted" style={{ top: '50%', left: '10px' }} size={13} />
-                      </div>
-                    </div>
-
-                    <div className="d-flex flex-column gap-2">
-                      {(() => {
-                        const parseCutSizeStr = (sizeStr) => {
-                          if (!sizeStr) return null;
-                          const clean = sizeStr.replace(/['"]/g, '').replace(/\b(min|max)\b/gi, '').trim();
-                          const parts = clean.split(/\s*[xX×]\s*/);
-                          if (parts.length < 2) return null;
-                          const a = parseFloat(parts[0]);
-                          const b = parseFloat(parts[1]);
-                          return (isNaN(a) || isNaN(b)) ? null : { l: Math.max(a, b), w: Math.min(a, b) };
-                        };
-                        return allMetals
-                          .filter(m => Number(m.category_id) === Number(selectedCategory?.id))
-                          .filter(m => m.name.toLowerCase().includes((metalSearch || '').toLowerCase()))
-                          .map(m => {
-                            const isCompatible = (m.services || []).map(id => Number(id)).includes(Number(selectedProductionService?.id));
-
-                            const cutSizes = m.quick_look?.cutSizes || [];
-                            const minEntry = cutSizes.find(cs => cs.label?.trim().toUpperCase() === 'A');
-                            const maxEntry = cutSizes.find(cs => cs.label?.trim().toUpperCase() === 'B');
-                            const minSize = parseCutSizeStr(minEntry?.size);
-                            const maxSize = parseCutSizeStr(maxEntry?.size);
-
-                            let _sizeBlock = null;
-                            if (dimensions && (minSize || maxSize)) {
-                              const ratio = 25.4;
-                              const partLong = Math.max(parseFloat(dimensions.mm.l) || 0, parseFloat(dimensions.mm.w) || 0);
-                              const partShort = Math.min(parseFloat(dimensions.mm.l) || 0, parseFloat(dimensions.mm.w) || 0);
-                              const aboveMin = !minSize || (partLong >= minSize.l * ratio && partShort >= minSize.w * ratio);
-                              const belowMax = !maxSize || (partLong <= maxSize.l * ratio && partShort <= maxSize.w * ratio);
-
-                              if (!aboveMin) _sizeBlock = `Too small (min ${minEntry.size})`;
-                              else if (!belowMax) _sizeBlock = `Too large (max ${maxEntry.size})`;
-                            }
-
-                            return { ...m, isCompatible, _sizeBlock, minSizeLabel: minEntry?.size, maxSizeLabel: maxEntry?.size };
-                          })
-                          .map(metal => {
-                            const isDisabled = !metal.isCompatible || !!metal._sizeBlock;
-                            return (
-                              <button
-                                key={metal.id}
-                                disabled={isDisabled}
-                                className={`btn text-start d-flex align-items-center justify-content-between transition-all ${isDisabled ? 'bg-light opacity-50 cursor-not-allowed grayscale' : 'text-dark bg-white shadow-sm hover-shadow hover-translate-y'}`}
-                                style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${isDisabled ? 'transparent' : '#e8eaed'}` }}
-                                onClick={() => !isDisabled && setSelectedMetal(metal)}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                                  <div style={{ width: 34, height: 34, borderRadius: 8, background: metal.isCompatible ? '#f1f5f9' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flex_shrink: 0 }}>
-                                    <Shield size={16} color={metal.isCompatible ? "#64748b" : "#94a3b8"} />
-                                  </div>
-                                  <div style={{ flex: 1 }}>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <div style={{ fontSize: '12px', fontWeight: 800, color: metal.isCompatible ? '#1e293b' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{metal.name}</div>
-                                      {!metal.isCompatible && <span className="badge bg-secondary bg-opacity-10 text-muted rounded-pill px-2 py-0 fw-bold text-uppercase" style={{ fontSize: '8px' }}>NOT SUPPORTED</span>}
-                                    </div>
-
-                                    {metal._sizeBlock ? (
-                                      <span style={{ fontSize: '9px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase' }}>SIZE OUT OF RANGE — {metal._sizeBlock}</span>
-                                    ) : (
-                                      <div className="d-flex flex-column gap-1 mt-1">
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                          <span style={{ background: '#f1f5f9', borderRadius: 4, padding: '1px 6px', fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IN STOCK</span>
-                                          {metal.minSizeLabel && <span style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>MIN: {metal.minSizeLabel}</span>}
-                                          {metal.maxSizeLabel && <span style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>MAX: {metal.maxSizeLabel}</span>}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                {!isDisabled && <ArrowRight size={15} color="#ef4444" />}
-                                {isDisabled && metal.isCompatible && <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2 small fw-bold ms-2">SIZE OUT OF RANGE</span>}
-                              </button>
-                            );
-                          });
-                      })()}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="animate-fade-in">
-                    <div className="mb-4 bg-light p-4 rounded-5 small fw-bold d-flex flex-column gap-3 border border-light-subtle shadow-sm">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
-                          <Zap size={14} className="text-danger" /> Method
-                        </div>
-                        <div className="d-flex align-items-center gap-3">
-                          <span className="text-dark fw-black">{selectedProductionService.title}</span>
-                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => { setSelectedProductionService(null); setSelectedCategory(null); setSelectedMetal(null); }}>CHANGE</button>
-                        </div>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
-                          <Grid size={14} className="text-dark" /> Category
-                        </div>
-                        <div className="d-flex align-items-center gap-3">
-                          <span className="text-dark fw-black">{selectedCategory?.name}</span>
-                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => { setSelectedCategory(null); setSelectedMetal(null); }}>CHANGE</button>
-                        </div>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
-                          <Shield size={14} className="text-dark" /> Metal
-                        </div>
-                        <div className="d-flex align-items-center gap-3">
-                          <span className="text-dark fw-black">{selectedMetal.name}</span>
-                          <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => setSelectedMetal(null)}>CHANGE</button>
-                        </div>
-                      </div>
-                      {selectedThickness && (
-                        <div className="d-flex justify-content-between align-items-center">
-                          <div className="d-flex align-items-center gap-2 text-muted fw-black text-uppercase letter-spacing-1" style={{ fontSize: '10px' }}>
-                            <TrendingDown size={14} className="text-dark" /> Thickness
+                            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', color: done ? '#10b981' : active ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>{s.label}</span>
                           </div>
-                          <div className="d-flex align-items-center gap-3">
-                            <span className="text-dark fw-black">{selectedThickness}"</span>
-                            <button className="btn btn-link text-danger p-0 text-decoration-none small fw-bold transition-all hover-opacity-75" onClick={() => setSelectedThickness(null)}>CHANGE</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── Step: Select Thickness ── */}
-                    {!selectedThickness ? (
-                      <div className="animate-fade-in">
-                        <h2 className="h4 fw-bold mb-2">Select Thickness</h2>
-                        <p className="text-muted small mb-4">Choose the standard thickness for {selectedMetal.name}</p>
-                        <div className="d-flex flex-column gap-2">
-                          {(selectedMetal.quick_look?.thicknesses || []).map(t => (
-                            <button
-                              key={t.value}
-                              className="btn text-start p-3 rounded-4 border-2 bg-white border-light-subtle shadow-sm transition-all hover-border-danger translate-y-hover"
-                              style={{ border: '1.5px solid #e8eaed' }}
-                              onClick={() => setSelectedThickness(t.value)}
-                            >
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                  <strong>{t.label || t.value}"</strong>
-                                  {t.metric && <span className="text-muted ms-2 small">({t.metric})</span>}
-                                </div>
-                                <ArrowRight size={15} color="#ef4444" />
-                              </div>
-                            </button>
-                          ))}
-                          {!(selectedMetal.quick_look?.thicknesses?.length) && (
-                            <p className="text-muted small">No standard thicknesses configured for this material.</p>
+                          {i < arr.length - 1 && (
+                            <div style={{ flex: 1, height: 2, background: done ? '#10b981' : '#e2e8f0', margin: '0 6px', marginBottom: 20, transition: 'background 0.3s', borderRadius: 2 }} />
                           )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {configStep === 0 && (
+                    <div className="wizard-screen">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select production method:</h2>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <div className="ip-badge metric">MM</div>
+                          <div className="ip-badge outline">IN</div>
+                          <div className="ip-badge red">{files.length} ACTIVE</div>
                         </div>
                       </div>
-                    ) : (
-                      <div className="animate-fade-in">
-                        <h2 className="h4 fw-bold mb-2">Additional Services</h2>
-                        <p className="text-muted small mb-4">Enhance your part with extra processes</p>
-                        <div className="d-flex flex-column gap-3">
-                          {allServices.filter(svc => {
-                            // Must be a sub-service of the selected production service
-                            const parentIds = (svc.parent_ids || []).map(id => Number(id));
-                            return parentIds.includes(Number(selectedProductionService?.id));
-                          }).map(svc => {
-                            let isLocked = false;
-                            // Check what this metal+thickness actually supports
-                            if (selectedMetal) {
-                              const allowedIds = new Set();
-                              (selectedMetal.services || []).forEach(id => allowedIds.add(Number(id)));
-                              if (selectedThickness) {
-                                const t = (selectedMetal.quick_look?.thicknesses || []).find(t => String(t.value) === String(selectedThickness));
-                                (t?.services || []).forEach(id => allowedIds.add(Number(id)));
-                              } else {
-                                (selectedMetal.quick_look?.thicknesses || []).forEach(t => {
-                                  (t.services || []).forEach(id => allowedIds.add(Number(id)));
-                                });
-                              }
-                              // If this metal/thickness doesn't explicitly support this subservice, lock it
-                              if (allowedIds.size > 0 && !allowedIds.has(Number(svc.id))) {
-                                isLocked = true;
-                              }
-                            }
 
-                            const isSelected = selectedAdditionalServices.some(s => s.id === svc.id);
-                            const title = svc.title.toLowerCase();
-                            const isTap = title.includes('tap');
-                            const isFinish = title.includes('anodiz') || title.includes('powder coat');
-                            const isHardware = title.includes('hardware');
-                            const isCS = title.includes('countersink');
-
-                            return (
-                              <div key={svc.id} className={`position-relative rounded-4 border-2 p-4 transition-all ${isLocked ? 'bg-light grayscale border-light opacity-50 cursor-not-allowed' : (isSelected ? 'border-danger bg-danger bg-opacity-5' : 'border-light bg-white hover-bg-light shadow-none')}`} style={{ cursor: isLocked ? 'not-allowed' : 'pointer' }} onClick={() => {
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {allServices.filter(s => s.is_production).map(svc => {
+                          const isActive = selectedProductionService?.id === svc.id;
+                          const cfg = svc.config || {};
+                          const dim = dimensions?.mm || null;
+                          const dL = dim ? parseFloat(dim.l) : 0;
+                          const dW = dim ? parseFloat(dim.w) : 0;
+                          const dT = dim ? parseFloat(dim.t) : 0;
+                          const isTooLarge = dim && ((cfg.max_x && dL > cfg.max_x) || (cfg.max_y && dW > cfg.max_y));
+                          const isTooSmall = dim && ((cfg.min_x && dL < cfg.min_x) || (cfg.min_y && dW < cfg.min_y));
+                          const isTooThick = dim && cfg.max_z && dT > cfg.max_z;
+                          const isTooThin = dim && cfg.min_z && dT < cfg.min_z;
+                          const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
+                          const lockReason = isTooThick
+                            ? `Part thickness ${dT.toFixed(3)}mm exceeds max ${parseFloat(cfg.max_z).toFixed(3)}mm`
+                            : isTooThin
+                              ? `Part thickness ${dT.toFixed(3)}mm below min ${parseFloat(cfg.min_z).toFixed(3)}mm`
+                              : isTooLarge
+                                ? `Part (${dL.toFixed(3)}×${dW.toFixed(3)}mm) exceeds max size (${parseFloat(cfg.max_x).toFixed(3)}×${parseFloat(cfg.max_y).toFixed(3)}mm)`
+                                : isTooSmall
+                                  ? `Part (${dL.toFixed(3)}×${dW.toFixed(3)}mm) below minimum size (${parseFloat(cfg.min_x).toFixed(3)}×${parseFloat(cfg.min_y).toFixed(3)}mm)`
+                                  : '';
+                          return (
+                            <div
+                              key={svc.id}
+                              className={`ip-wizard-card ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                              onClick={() => {
                                 if (isLocked) return;
-                                if (isFinish) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedFinishColors(p => { const n = { ...p }; delete n[svc.id]; return n; }); }
-                                } else if (isTap) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveHwHole(null); if (detectedHoles.length > 0) setActiveTapHole(detectedHoles[0]); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedTaps({}); setActiveTapHole(null); }
-                                } else if (isHardware) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); if (detectedHoles.length > 0) setActiveHwHole(detectedHoles[0]); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedHardware({}); setActiveHwHole(null); setHwItemsByType({}); }
-                                } else if (isCS) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); setActiveTapHole(null); setActiveHwHole(null); if (detectedHoles.length > 0) setActiveCSHole(detectedHoles[0]); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setSelectedCountersinks({}); setActiveCSHole(null); }
-                                } else if (title.includes('bend')) {
-                                  if (!isSelected) { setSelectedAdditionalServices(p => [...p, svc]); handleUnfold(); setIsBendingModalOpen(true); }
-                                  else { setSelectedAdditionalServices(p => p.filter(x => x.id !== svc.id)); setBendTree(null); setBackendData(null); }
-                                } else {
-                                  setSelectedAdditionalServices(p => isSelected ? p.filter(x => x.id !== svc.id) : [...p, svc]);
-                                }
-                              }}>
-                                <div className="d-flex align-items-center gap-3">
-                                  <div className={`rounded-circle border d-flex align-items-center justify-content-center ${isLocked ? 'bg-transparent border-secondary border-opacity-25' : (isSelected ? 'bg-white border-white text-danger' : 'bg-white border-secondary border-opacity-25')}`} style={{ width: '28px', height: '28px', flexShrink: 0 }}>
-                                    {isLocked ? <Lock size={14} className="text-secondary" /> : (isSelected ? <Check size={16} strokeWidth={4} /> : <div />)}
+                                setSelectedProductionService(svc);
+                                setConfigStep(1);
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: 16 }}>
+                                <div className={`icon-box ${svc.title.toLowerCase().includes('cnc') ? 'blue' : 'red'}`}>
+                                  {svc.title.toLowerCase().includes('cnc') ? <Box size={20} /> : <Zap size={20} />}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                    <div style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{svc.title}</div>
+                                    {isLocked && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fee2e2', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
+                                        <AlertCircle size={11} color="#ef4444" />
+                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Not Compatible</span>
+                                      </div>
+                                    )}
+                                    {!isLocked && isActive && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#dcfce7', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
+                                        <Check size={11} color="#16a34a" strokeWidth={3} />
+                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>Selected</span>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="flex-grow-1 overflow-hidden">
-                                    <div className="d-flex align-items-center gap-2">
-                                      <strong className={`d-block fs-5 fw-black ${isSelected ? 'text-white' : 'text-dark'}`}>{svc.title}</strong>
-                                      {isLocked && <span className="badge bg-secondary bg-opacity-10 text-muted rounded-pill px-2 py-0 fw-bold border border-secondary border-opacity-25" style={{ fontSize: '9px', letterSpacing: '0.5px' }}>NOT SUPPORTED</span>}
+                                  <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.4, marginBottom: isLocked && lockReason ? 8 : 12 }}>{svc.description || 'Precision production.'}</div>
+                                  {isLocked && lockReason && (
+                                    <div style={{ marginBottom: 10, fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <AlertTriangle size={12} color="#dc2626" />
+                                      {lockReason}
                                     </div>
-                                    <p className={`m-0 text-truncate ${isSelected ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{isLocked ? 'Not available for this metal and thickness' : (svc.description || 'Premium process')}</p>
-
-                                    <div className="mt-2 d-flex flex-wrap gap-2">
-                                      {(() => {
-                                        const unitRatio = svc.dimensions_unit === 'in' ? 25.4 : 1;
-                                        const convert = (val) => { if (!val) return '0'; return (parseFloat(val) * unitRatio).toFixed(1); };
-                                        return (
-                                          <>
-                                            {(svc.max_length > 0 || svc.max_width > 0) && (
-                                              <div className={`d-flex align-items-center gap-1 px-2 py-0.5 rounded-2 ${isSelected ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`}>
-                                                <Maximize2 size={9} />
-                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>MAX: {convert(svc.max_length)}mm × {convert(svc.max_width)}mm</span>
-                                              </div>
-                                            )}
-                                            {(svc.max_height > 0 || svc.min_height > 0) && (
-                                              <div className={`d-flex align-items-center gap-1 px-2 py-0.5 rounded-2 ${isSelected ? 'bg-white bg-opacity-20 text-white' : 'bg-light text-muted'}`}>
-                                                <Layers size={9} />
-                                                <span style={{ fontSize: '9px', fontWeight: 800 }}>THICKNESS: {svc.min_height > 0 ? `${convert(svc.min_height)}mm - ` : ''}{convert(svc.max_height)}mm</span>
-                                              </div>
-                                            )}
-                                          </>
-                                        );
-                                      })()}
+                                  )}
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+                                    <div className="card-stat">
+                                      <Check size={10} color="#10b981" />
+                                      <span>MAX: {parseFloat(cfg.max_x || '3048').toFixed(3)}×{parseFloat(cfg.max_y || '1524').toFixed(3)}mm</span>
+                                    </div>
+                                    <div className="card-stat">
+                                      <ChevronLeft size={10} color="#6366f1" />
+                                      <span>MIN: {parseFloat(cfg.min_x || '6.3').toFixed(3)}×{parseFloat(cfg.min_y || '6.3').toFixed(3)}mm</span>
+                                    </div>
+                                    <div className="card-stat">
+                                      <Layers size={10} color="#f59e0b" />
+                                      <span>T: {parseFloat(cfg.min_z || '0.5').toFixed(3)}–{parseFloat(cfg.max_z || '25.4').toFixed(3)}mm</span>
                                     </div>
                                   </div>
                                 </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-                                {isSelected && isTap && detectedHoles.length > 0 && (
-                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex gap-5">
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
-                                        <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
+                  {configStep === 1 && (
+                    <div className="wizard-screen">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Category</h2>
+                        <div className="ip-badge outline">{allCategories.length} CATEGORIES</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {allCategories.map(cat => {
+                          const metalCount = allMetals.filter(m => m.category_id === cat.id).length;
+                          const isAvailable = metalCount > 0;
+                          const isActive = selectedCategory?.id === cat.id;
+                          return (
+                            <div
+                              key={cat.id}
+                              className={`ip-category-bar ${isActive ? 'active' : ''} ${!isAvailable ? 'locked' : ''}`}
+                              onClick={() => {
+                                if (!isAvailable) return;
+                                setSelectedCategory(cat);
+                                setConfigStep(2);
+                              }}
+                            >
+                              <div className="icon-disc"><Grid size={16} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>{cat.name}</div>
+                                  {!isAvailable && <div className="ip-badge outline" style={{ fontSize: 9 }}>Not Available</div>}
+                                </div>
+                                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>{metalCount} {metalCount === 1 ? 'ITEM' : 'ITEMS'}</div>
+                              </div>
+                              {isAvailable && <ChevronRight size={18} color="#cbd5e1" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {configStep === 2 && (
+                    <div className="wizard-screen">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Material</h2>
+                        <div className="ip-badge outline">IN STOCK</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {(allMetals || []).filter(m => m.category_id === selectedCategory?.id).map(met => {
+                          const isActive = selectedMetal?.id === met.id;
+                          const dim = dimensions?.mm || { l: 0, w: 0, t: 0 };
+                          const mL = parseFloat(dim.l) || 0;
+                          const mW = parseFloat(dim.w) || 0;
+                          const mT = parseFloat(dim.t) || 0;
+                          const isTooLarge = (met.max_x && mL > met.max_x) || (met.max_y && mW > met.max_y);
+                          const isTooSmall = (met.min_x && mL < met.min_x) || (met.min_y && mW < met.min_y);
+                          const isTooThick = met.max_z && mT > met.max_z;
+                          const isTooThin = met.min_z && mT < met.min_z;
+                          const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
+                          const lockReason = isTooThick
+                            ? `Part thickness ${mT.toFixed(3)}mm exceeds max ${parseFloat(met.max_z).toFixed(3)}mm`
+                            : isTooThin
+                              ? `Part thickness ${mT.toFixed(3)}mm below min ${parseFloat(met.min_z).toFixed(3)}mm`
+                              : isTooLarge ? 'Part exceeds max sheet size'
+                                : isTooSmall ? 'Part below minimum sheet size' : '';
+
+                          return (
+                            <div
+                              key={met.id}
+                              className={`ip-wizard-card ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                              onClick={() => {
+                                if (isLocked) return;
+                                setSelectedMetal(met);
+                                setConfigStep(3);
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                                <div className="icon-box green"><Box size={20} /></div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                                    <div style={{ fontSize: 17, fontWeight: 800, color: '#1e293b' }}>{met.name}</div>
+                                    {isLocked && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fee2e2', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
+                                        <AlertCircle size={10} color="#ef4444" />
+                                        <span style={{ fontSize: 9, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase' }}>Not Supported</span>
                                       </div>
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>TAPPED</span>
-                                        <span className="fw-black text-white fs-4">{Object.keys(selectedTaps).length}</span>
-                                      </div>
-                                    </div>
-                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm text-danger h-auto py-2" onClick={(e) => { e.stopPropagation(); setActiveTapHole(detectedHoles[0]); }}>MANAGE</button>
+                                    )}
                                   </div>
-                                )}
+                                  {isLocked && lockReason && (
+                                    <div style={{ marginBottom: 8, fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '4px 8px', borderRadius: 5, border: '1px solid #fecaca' }}>{lockReason}</div>
+                                  )}
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    <div className="card-stat" style={{ color: '#10b981' }}>IN STOCK</div>
+                                    <div className="card-stat">MIN: {parseFloat(met.min_x || '25').toFixed(3)}" × {parseFloat(met.min_y || '0.375').toFixed(3)}"</div>
+                                    <div className="card-stat">MAX: {parseFloat(met.max_x || '30').toFixed(3)}" × {parseFloat(met.max_y || '43').toFixed(3)}"</div>
+                                  </div>
+                                </div>
+                                {!isLocked && <ChevronRight size={20} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-                                {isSelected && isHardware && detectedHoles.length > 0 && (
-                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex gap-4 align-items-end">
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
-                                        <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
-                                      </div>
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>ASSIGNED</span>
-                                        <span className="fw-black text-white fs-4">{Object.keys(selectedHardware).length}</span>
-                                      </div>
-                                      {Object.keys(selectedHardware).length > 0 && (
-                                        <div className="d-flex gap-1 flex-wrap mb-1">
-                                          {HW_TYPES.filter(t => Object.values(selectedHardware).some(h => h.typeId === t.id)).map(t => (
-                                            <span key={t.id} className="badge rounded-pill fw-bold" style={{ fontSize: '9px', background: t.color }}>{t.label}</span>
-                                          ))}
+                  {configStep === 3 && (
+                    <div className="wizard-screen">
+                      <div style={{ marginBottom: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Thickness</h2>
+                        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Choose the gauge for <strong>{selectedMetal?.name}</strong></p>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                        {(selectedMetal?.quick_look?.thicknesses || []).map(t => {
+                          const tMM = t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
+                          const modelTMM = parseFloat(dimensions?.mm?.t || 0);
+                          const isMatch = modelTMM > 0 && Math.abs(tMM - modelTMM) < 0.15;
+                          const isActive = selectedThickness === t.value;
+                          return (
+                            <div
+                              key={t.value}
+                              style={{
+                                background: isActive ? '#fff5f5' : '#ffffff',
+                                border: `1.5px solid ${isActive ? '#ef4444' : isMatch ? '#10b981' : '#e2e8f0'}`,
+                                borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+                                transition: 'all 0.15s', position: 'relative',
+                                boxShadow: isActive ? '0 0 0 2px rgba(239,68,68,0.15)' : isMatch ? '0 0 0 2px rgba(16,185,129,0.12)' : 'none',
+                              }}
+                              onClick={() => { setSelectedThickness(t.value); setConfigStep(4); }}
+                            >
+                              {isMatch && (
+                                <div style={{ position: 'absolute', top: 8, right: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '1px 5px', fontSize: 8, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                  ≈ Model
+                                </div>
+                              )}
+                              <div style={{ fontSize: 22, fontWeight: 900, color: isActive ? '#ef4444' : '#1e293b', fontFamily: 'monospace', lineHeight: 1.1 }}>
+                                {t.metric === 'mm' ? `${parseFloat(t.value).toFixed(3)}` : parseFloat(t.value).toFixed(3)}"
+                              </div>
+                              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 3 }}>
+                                {t.metric === 'mm' ? `${(tMM / 25.4).toFixed(3)}"` : `${tMM.toFixed(3)} mm`}
+                              </div>
+                              {t.gauge && (
+                                <div style={{ marginTop: 6, fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  {t.gauge}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {configStep === 4 && (
+                    <div className="wizard-screen">
+                      <div style={{ marginBottom: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Additional Services</h2>
+                        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Enhance your part with extra processes</p>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {allServices
+                          .filter(s => {
+                            if (!selectedMetal) return false;
+
+                            // 1) Must be assigned to the selected production method (parent service)
+                            let pids = s.parent_ids;
+                            if (typeof pids === 'string') {
+                              try { pids = JSON.parse(pids); } catch { pids = []; }
+                            }
+                            const pidsOk = Array.isArray(pids) && pids.map(Number).includes(Number(selectedProductionService?.id));
+                            if (!pidsOk) return false;
+
+                            // 2) Parse services assigned directly to the metal
+                            let metalSvcs = selectedMetal.services;
+                            if (typeof metalSvcs === 'string') {
+                              try { metalSvcs = JSON.parse(metalSvcs); } catch { metalSvcs = []; }
+                            }
+                            const metalSvcsNums = Array.isArray(metalSvcs) ? metalSvcs.map(Number) : [];
+
+                            // 3) Check all thicknesses to see if any thickness supports this service
+                            const anyThickHas = (selectedMetal.quick_look?.thicknesses || []).some(t => {
+                              let ts = t.services;
+                              if (typeof ts === 'string') { try { ts = JSON.parse(ts); } catch { ts = []; } }
+                              return Array.isArray(ts) && ts.map(Number).includes(Number(s.id));
+                            });
+
+                            // Only show if explicitly assigned at metal or thickness level
+                            return (metalSvcsNums.includes(Number(s.id)) || anyThickHas);
+                          })
+                          .map(svc => {
+                            const isActive = selectedAdditionalServices.some(s => s.id === svc.id);
+
+                            // Check if the service is assigned globally to the metal
+                            let metalSvcsRoot = selectedMetal?.services;
+                            if (typeof metalSvcsRoot === 'string') { try { metalSvcsRoot = JSON.parse(metalSvcsRoot); } catch { metalSvcsRoot = []; } }
+                            const hasMetalGrant = Array.isArray(metalSvcsRoot) && metalSvcsRoot.map(Number).includes(Number(svc.id));
+
+                            const selectedThicknessObj = (selectedMetal?.quick_look?.thicknesses || []).find(t => String(t.value) === String(selectedThickness));
+                            let tServices = selectedThicknessObj?.services;
+                            if (typeof tServices === 'string') {
+                              try { tServices = JSON.parse(tServices); } catch { tServices = []; }
+                            }
+                            const tServicesNums = Array.isArray(tServices) ? tServices.map(Number) : [];
+                            const isThicknessLocked = !hasMetalGrant && !tServicesNums.includes(Number(svc.id));
+
+                            // If it's specifically assigned to this thickness, it's supported even if global bendable flag is false
+                            const isBendUnsupported = svc.title.toLowerCase().includes('bend') && !selectedMetal?.is_bendable && !tServicesNums.includes(Number(svc.id));
+
+                            const isUnsupported = (isBendUnsupported || isThicknessLocked);
+                            const lockReason = isBendUnsupported
+                              ? `${selectedMetal?.name} is typically not bendable`
+                              : isThicknessLocked
+                                ? `Not available for ${selectedThickness}mm thickness`
+                                : '';
+
+                            const svcTitle = svc.title.toLowerCase();
+                            const svcIcon = svcTitle.includes('bend') ? <Layers size={16} />
+                              : svcTitle.includes('tap') ? <Settings size={16} />
+                                : svcTitle.includes('hardware') ? <Boxes size={16} />
+                                  : svcTitle.includes('countersink') ? <ChevronDown size={16} />
+                                    : svcTitle.includes('anodiz') ? <Zap size={16} />
+                                      : svcTitle.includes('powder') || svcTitle.includes('coat') ? <Grid size={16} />
+                                        : <Settings size={16} />;
+
+                            const kind = svcTitle.includes('bend') ? 'bend'
+                              : svcTitle.includes('tap') ? 'tap'
+                                : svcTitle.includes('hardware') ? 'hw'
+                                  : svcTitle.includes('countersink') ? 'cs'
+                                    : (svcTitle.includes('anodiz') || svcTitle.includes('powder') || svcTitle.includes('coat')) ? 'finish'
+                                      : null;
+                            const holeCount = detectedHoles.length;
+                            const configuredCount = kind === 'tap' ? Object.keys(selectedTaps).length
+                              : kind === 'hw' ? Object.keys(selectedHardware).length
+                                : kind === 'cs' ? Object.keys(selectedCountersinks).length
+                                  : kind === 'bend' ? (bendList?.length || 0)
+                                    : kind === 'finish' ? (selectedFinishColors?.[svc.id] ? 1 : 0)
+                                      : 0;
+                            const totalForKind = (kind === 'tap' || kind === 'hw' || kind === 'cs') ? holeCount
+                              : kind === 'bend' ? (bendList?.length || 0)
+                                : kind === 'finish' ? 1
+                                  : 0;
+                            return (
+                              <React.Fragment key={svc.id}>
+                                <div
+                                  className={`ip-category-bar ${isActive ? 'active' : ''} ${isUnsupported ? 'locked' : ''}`}
+                                  style={{ pointerEvents: isUnsupported ? 'none' : 'auto' }}
+                                  onClick={() => {
+                                    if (isUnsupported) return;
+                                    const t = svc.title.toLowerCase();
+                                    const kind = t.includes('bend') ? 'bend'
+                                      : t.includes('tap') ? 'tap'
+                                        : t.includes('hardware') ? 'hw'
+                                          : t.includes('countersink') ? 'cs'
+                                            : (t.includes('anodiz') || t.includes('powder') || t.includes('coat')) ? 'finish'
+                                              : null;
+                                    if (isActive) {
+                                      // Uncheck: remove + clear its configured state + close its modal
+                                      setSelectedAdditionalServices(prev => prev.filter(s => s.id !== svc.id));
+                                      if (kind === 'bend') { setSelectedBends({}); setIsBendingModalOpen(false); }
+                                      else if (kind === 'tap') { setSelectedTaps({}); setActiveTapHole(null); }
+                                      else if (kind === 'hw') { setSelectedHardware({}); setActiveHwHole(null); }
+                                      else if (kind === 'cs') { setSelectedCountersinks({}); setActiveCSHole(null); }
+                                      else if (kind === 'finish') {
+                                        setSelectedFinishColors(prev => { const n = { ...prev }; delete n[svc.id]; return n; });
+                                        setIsAnodizingModalOpen(false);
+                                        setActiveFinishSvcId(null);
+                                      }
+                                    } else {
+                                      // Check: add + open this modal (closes all others)
+                                      setSelectedAdditionalServices(prev => [...prev, svc]);
+                                      if (kind) openSubModal(kind, svc);
+                                    }
+                                  }}
+                                >
+                                  <div className="icon-disc">{svcIcon}</div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>{svc.title}</div>
+                                      {isUnsupported && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fee2e2', borderRadius: 4, padding: '2px 7px', flexShrink: 0 }}>
+                                          <AlertCircle size={9} color="#ef4444" />
+                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                            {lockReason || 'Not Supported'}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {!isUnsupported && parseFloat(svc.base_price || 0) > 0 && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>
+                                          from ${parseFloat(svc.base_price).toFixed(2)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{svc.description || 'Professional finish.'}</div>
+                                  </div>
+                                  {!isUnsupported && (
+                                    <div className={`selection-dot ${isActive ? 'active' : ''}`} style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isActive ? '#ef4444' : '#e2e8f0'}`, background: isActive ? '#ef4444' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+                                      {isActive && <Check size={10} color="#fff" strokeWidth={3} />}
+                                    </div>
+                                  )}
+                                </div>
+                                {isActive && kind && !isUnsupported && (
+                                  <div style={{ marginTop: 6, marginBottom: 10, marginLeft: 12, marginRight: 12, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                                      {(kind === 'tap' || kind === 'hw' || kind === 'cs') && (
+                                        <>
+                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Detected</span>
+                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{holeCount} hole{holeCount === 1 ? '' : 's'}</span>
+                                          </div>
+                                          <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
+                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Configured</span>
+                                            <span style={{ fontSize: 14, fontWeight: 900, color: configuredCount > 0 ? '#059669' : '#94a3b8' }}>{configuredCount} / {totalForKind}</span>
+                                          </div>
+                                        </>
+                                      )}
+                                      {kind === 'bend' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Bends</span>
+                                          <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{bendList?.length || 0} detected</span>
+                                        </div>
+                                      )}
+                                      {kind === 'finish' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Color</span>
+                                          <span style={{ fontSize: 14, fontWeight: 900, color: selectedFinishColors?.[svc.id] ? '#059669' : '#94a3b8' }}>{selectedFinishColors?.[svc.id]?.name || 'Not selected'}</span>
                                         </div>
                                       )}
                                     </div>
-                                    <button className="btn btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ background: 'white', color: '#B8860B', border: 'none', fontSize: '12px' }} onClick={(e) => { e.stopPropagation(); setActiveHwHole(detectedHoles[0]); }}>MANAGE</button>
-                                  </div>
-                                )}
-
-                                {isSelected && isCS && detectedHoles.length > 0 && (
-                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex gap-5">
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>HOLES</span>
-                                        <span className="fw-black text-white fs-4">{detectedHoles.length}</span>
-                                      </div>
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>COUNTERSUNK</span>
-                                        <span className="fw-black text-white fs-4">{Object.keys(selectedCountersinks).length}</span>
-                                      </div>
-                                    </div>
-                                    <button className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2" style={{ color: '#7c3aed' }} onClick={(e) => { e.stopPropagation(); setActiveCSHole(detectedHoles[0]); }}>MANAGE</button>
-                                  </div>
-                                )}
-
-                                {isSelected && isFinish && selectedFinishColors[svc.id] && (
-                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex align-items-center gap-3">
-                                      <div className="rounded-circle shadow-lg" style={{ backgroundColor: selectedFinishColors[svc.id].color, width: '24px', height: '24px', border: '3px solid white' }} />
-                                      <span className="fw-black text-white fs-6">{(selectedFinishColors[svc.id].name || '').toUpperCase()} {selectedFinishColors[svc.id].is_wrinkled ? '(WRINKLED)' : ''}</span>
-                                    </div>
-                                    <button className="btn btn-link text-white p-0 text-decoration-none small fw-black fs-6" onClick={(e) => { e.stopPropagation(); setActiveFinishSvcId(svc.id); setIsAnodizingModalOpen(true); }}>CHANGE</button>
-                                  </div>
-                                )}
-
-                                {isSelected && (title.includes('bend') || title.includes('fold')) && (
-                                  <div className="mt-4 pt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center animate-fade-in">
-                                    <div className="d-flex gap-5">
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>BENDS</span>
-                                        <span className="fw-black text-white fs-4">{isLoadingUnfold ? '...' : (bendList?.length || 0)}</span>
-                                      </div>
-                                      <div className="d-flex flex-column">
-                                        <span className="text-white opacity-60 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>CONFIGURED</span>
-                                        <span className="fw-black text-white fs-4">{isLoadingUnfold ? '...' : Object.keys(selectedBends).length}</span>
-                                      </div>
-                                    </div>
                                     <button
-                                      className="btn btn-white btn-sm rounded-pill px-4 fw-black shadow-sm h-auto py-2"
-                                      disabled={isLoadingUnfold}
-                                      onClick={(e) => { e.stopPropagation(); setIsBendingModalOpen(true); }}
+                                      onClick={(e) => { e.stopPropagation(); openSubModal(kind, svc); }}
+                                      style={{ border: 'none', background: '#1e293b', color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                                     >
-                                      {isLoadingUnfold ? 'ANALYZING...' : 'MANAGE BENDS'}
+                                      Manage
                                     </button>
                                   </div>
                                 )}
-                              </div>
+                              </React.Fragment>
                             );
                           })}
-                        </div>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="ip-qf-right">
-                {selectedMetal ? (
-                  <div className="animate-fade-in d-flex flex-column h-100">
-                    <div className="bg-white p-3 rounded-4 mb-2 border border-light shadow-none">
-                      <label className="d-block fw-bold text-muted small text-uppercase mb-2 letter-spacing-1">Order Quantity</label>
-                      <div className="d-flex align-items-center bg-light-subtle rounded-4 p-1 overflow-hidden border">
-                        <button className="btn btn-white border-0 rounded-3 shadow-none p-2" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus size={14} /></button>
-                        <input type="number" className="form-control text-center fw-bold fs-5 border-0 bg-transparent shadow-none" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} />
-                        <button className="btn btn-white border-0 rounded-3 shadow-none p-2" onClick={() => setQuantity(quantity + 1)}><Plus size={14} /></button>
+                {/* ── Volume Discounts: fixed tiers (2, 10, 50, 100, 1000) ── */}
+                {(() => {
+                  const ALLOWED_TIERS = [2, 5, 10, 50, 100, 1000];
+                  const seen = new Set();
+                  const tiers = (allDiscounts || [])
+                    .filter(d => d.is_active !== false && parseFloat(d.discount_percent) > 0 && ALLOWED_TIERS.includes(Number(d.min_quantity)))
+                    .filter(d => { if (seen.has(Number(d.min_quantity))) return false; seen.add(Number(d.min_quantity)); return true; })
+                    .sort((a, b) => a.min_quantity - b.min_quantity);
+                  if (tiers.length === 0) return null;
+                  return (
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 10 }}>Volume Discounts</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {tiers.map((d, i) => {
+                          const reached = quantity >= d.min_quantity;
+                          return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 14px', borderRadius: 8, background: reached ? '#fff5f5' : '#ffffff', border: `1.5px solid ${reached ? '#fecaca' : '#e8eaed'}` }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{d.min_quantity}+ UNITS</span>
+                              <span style={{ fontSize: 13, fontWeight: 900, color: '#ef4444' }}>{parseFloat(d.discount_percent).toFixed(2)}% OFF</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
+                  );
+                })()}
 
-                    <div className="flex-grow-1 overflow-auto hide-scrollbar pe-1">
-                      {allDiscounts.length > 0 && (
-                        <div className="mb-3">
-                          <span className="text-muted d-block mb-2 fw-black text-uppercase letter-spacing-2" style={{ fontSize: '11px' }}>Volume Discounts</span>
-                          <div className="d-flex flex-column gap-1">
-                            {(() => {
-                              const targetQuantities = [2, 10, 50, 100, 1000];
-                              const activeTiers = targetQuantities.filter(q =>
-                                allDiscounts.some(d => (d.quantities || []).some(trigger => trigger <= q))
-                              );
-
-                              if (activeTiers.length === 0) {
-                                return <span className="text-muted small italic">No active discounts</span>;
-                              }
-
-                              return activeTiers.map(qty => {
-                                const applicableTiers = allDiscounts.filter(d => (d.quantities || []).some(q => q <= qty));
-                                if (applicableTiers.length === 0) return null;
-                                const bestTier = applicableTiers.reduce((prev, current) =>
-                                  (prev.discount_percent > current.discount_percent) ? prev : current
-                                );
-
-                                return (
-                                  <div key={qty} className="bg-light px-3 py-2 rounded-3 border border-light-subtle d-flex justify-content-between align-items-center">
-                                    <span className="small fw-bold text-dark">{qty}+ UNITS</span>
-                                    <span className="small fw-black text-danger">{bestTier.discount_percent}% OFF</span>
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-dark text-white rounded-5 shadow-22xl position-relative mb-3 mt-auto d-flex flex-column" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', maxHeight: '60vh', overflow: 'hidden' }}>
-                      <div className="position-relative z-1 d-flex flex-column h-100" style={{ overflow: 'hidden' }}>
-                        <div className="p-4 pb-2 ip-breakdown-scroll" style={{ overflowY: 'auto', flex: 1 }}>
-                          <span className="small text-white opacity-50 fw-bold text-uppercase letter-spacing-1 d-block mb-3">Project Breakdown</span>
-                          <div className="d-flex flex-column gap-3 mb-4 p-4 rounded-4 border border-white border-opacity-10" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
-                            <div className="d-flex justify-content-between align-items-center">
-                              <div className="d-flex flex-column">
-                                <span className="opacity-70 small">Material Cost</span>
-                                <span className="text-white-50" style={{ fontSize: '10px' }}>
-                                  {isLoadingUnfold ? 'Analysing part geometry…' : 'Sheet nesting formula — cost ÷ parts per 4×8 sheet'}
-                                </span>
-                              </div>
-                              {isCalculatingPrice ? <PriceSkeleton /> : (
-                                <span className="fw-black fs-5">${(priceEstimate?.breakdown?.material_cost || 0).toFixed(2)}</span>
-                              )}
-                            </div>
-
-                            <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
-                              <div className="d-flex flex-column">
-                                <span className="opacity-70 small">Fabrication cost</span>
-                                <span className="text-white-50" style={{ fontSize: '10px' }}>
-                                  {isLoadingUnfold
-                                    ? 'Analysing part geometry…'
-                                    : selectedProductionService?.title + ' setup & process'}
-                                </span>
-                              </div>
-                              {isCalculatingPrice || isLoadingUnfold ? <PriceSkeleton /> : (
-                                <span className="fw-black fs-5">${(priceEstimate?.breakdown?.production_cost || 0).toFixed(2)}</span>
-                              )}
-                            </div>
-
-                            {/* Detailed Service Breakdown */}
-                            {(priceEstimate?.breakdown?.service_breakdown || []).filter(svc => !svc.name?.toLowerCase().includes('tapping') && !svc.name?.toLowerCase().includes('hardware') && !svc.name?.toLowerCase().includes('countersink')).map((svc, idx) => (
-                              <div key={idx} className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
-                                <div className="d-flex flex-column">
-                                  <span className="opacity-70 small">{svc.name}</span>
-                                  <span className="text-white-50" style={{ fontSize: '10px' }}>
-                                    {svc.name?.toLowerCase().includes('anodiz') || svc.name?.toLowerCase().includes('powder') ? 'Configured Finish' :
-                                      svc.name?.toLowerCase().includes('bend') ? 'Bending Service' : 'Premium Process'}
-                                  </span>
-                                </div>
-                                {isCalculatingPrice ? <PriceSkeleton /> : (
-                                  <span className="fw-black fs-5">${parseFloat(svc.price || 0).toFixed(2)}</span>
-                                )}
-                              </div>
-                            ))}
-
-                            {(() => {
-                              const tapTotal = Object.values(selectedTaps).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
-                              if (tapTotal <= 0) return null;
-                              const tapCount = Object.values(selectedTaps).length;
-                              return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
-                                  <div className="d-flex flex-column">
-                                    <span className="opacity-70 small">Tapping Cost</span>
-                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{tapCount} hole{tapCount !== 1 ? 's' : ''} configured</span>
-                                  </div>
-                                  {isCalculatingPrice ? <PriceSkeleton /> : (
-                                    <span className="fw-black fs-5">${tapTotal.toFixed(2)}</span>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {(() => {
-                              const hwTotal = Object.values(selectedHardware).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
-                              if (hwTotal <= 0) return null;
-                              const hwCount = Object.values(selectedHardware).length;
-                              const usedTypes = HW_TYPES.filter(t => Object.values(selectedHardware).some(h => h.typeId === t.id));
-                              return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
-                                  <div className="d-flex flex-column">
-                                    <span className="opacity-70 small">Hardware Cost</span>
-                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{hwCount} hole{hwCount !== 1 ? 's' : ''} · {usedTypes.map(t => t.label).join(', ')}</span>
-                                  </div>
-                                  {isCalculatingPrice ? <PriceSkeleton /> : (
-                                    <span className="fw-black fs-5">${hwTotal.toFixed(2)}</span>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {(() => {
-                              const csTotal = Object.values(selectedCountersinks).reduce((acc, cs) => acc + (parseFloat(cs.price) || 0), 0);
-                              if (csTotal <= 0) return null;
-                              const csCount = Object.values(selectedCountersinks).length;
-                              return (
-                                <div className="d-flex justify-content-between align-items-center pt-2 border-top border-white border-opacity-10">
-                                  <div className="d-flex flex-column">
-                                    <span className="opacity-70 small">Countersinking Cost</span>
-                                    <span className="text-white-50" style={{ fontSize: '10px' }}>{csCount} hole{csCount !== 1 ? 's' : ''} countersunk</span>
-                                  </div>
-                                  {isCalculatingPrice ? <PriceSkeleton /> : (
-                                    <span className="fw-black fs-5">${csTotal.toFixed(2)}</span>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          {/* ── Discount row ── */}
-                          {priceEstimate?.breakdown?.discount_percent > 0 && (() => {
-                            const discountPct = parseFloat(priceEstimate.breakdown.discount_percent) / 100;
-                            const extraPerPiece =
-                              Object.values(selectedTaps).reduce((a, t) => a + (parseFloat(t.price) || 0), 0) +
-                              Object.values(selectedHardware).reduce((a, { item }) => a + (parseFloat(item?.price) || 0), 0) +
-                              Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0);
-                            const fullUnitPrice = (priceEstimate.breakdown.unit_total || 0) + extraPerPiece;
-                            const totalDiscount = fullUnitPrice * discountPct * quantity;
-                            return (
-                              <div className="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 mb-2" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                                <div className="d-flex flex-column">
-                                  <span style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.82rem' }}>
-                                    Quantity Discount ({priceEstimate.breakdown.discount_percent}% off)
-                                  </span>
-                                  <span style={{ color: 'rgba(74,222,128,0.7)', fontSize: '10px' }}>
-                                    {priceEstimate.breakdown.applied_tier?.name || `${quantity} units`}
-                                  </span>
-                                </div>
-                                {isCalculatingPrice ? <PriceSkeleton /> : (
-                                  <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '1.05rem' }}>
-                                    −${totalDiscount.toFixed(2)}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          <div className="text-center">
-                            <span className="small text-white fw-bold text-uppercase letter-spacing-1 d-block mb-1">Total Project Estimate</span>
-                            <div className="d-flex align-items-baseline justify-content-center gap-2">
-                              {isCalculatingPrice ? <PriceSkeleton width="150px" height="42px" /> : (
-                                <>
-                                  <span className="fs-4 text-danger fw-black">$</span>
-                                  <strong className="fs-huge fw-black text-danger">
-                                    {(() => {
-                                      const discountPct = parseFloat(priceEstimate?.breakdown?.discount_percent || 0) / 100;
-                                      const bendSvc = allServices.find(s => s.title.toLowerCase().includes('bend'));
-                                      const bendCostPer = (selectedAdditionalServices.some(s => s.id === bendSvc?.id)) ? (parseFloat(bendSvc?.base_price || 0) * (bendList?.length || 0)) : 0;
-                                      const extraPerPiece =
-                                        Object.values(selectedTaps).reduce((a, t) => a + (parseFloat(t.price) || 0), 0) +
-                                        Object.values(selectedHardware).reduce((a, { item }) => a + (parseFloat(item?.price) || 0), 0) +
-                                        Object.values(selectedCountersinks).reduce((a, cs) => a + (parseFloat(cs.price) || 0), 0) +
-                                        bendCostPer;
-                                      const fullUnitPrice = (priceEstimate?.breakdown?.unit_total || 0) + extraPerPiece;
-                                      return (fullUnitPrice * (1 - discountPct) * quantity).toFixed(2);
-                                    })()}
-                                  </strong>
-                                </>
-                              )}
-                            </div>
-
-                            {/* ── Warnings ── */}
-                            {(priceEstimate?.breakdown?.warnings?.length > 0) && (
-                              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                {priceEstimate.breakdown.warnings.map((w, i) => (
-                                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 12px', borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)' }}>
-                                    <AlertTriangle size={14} color="#fbbf24" style={{ flexShrink: 0, marginTop: 1 }} />
-                                    <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600, lineHeight: 1.4 }}>{w}</span>
-                                  </div>
-                                ))}
-                              </div>
+                {/* ── Configuration Progress (before metal selected) ── */}
+                {!selectedMetal ? (
+                  <div>
+                    <h2 style={{ fontSize: 22, fontWeight: 900, color: '#1e293b', margin: '0 0 4px' }}>Quote Summary</h2>
+                    <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 28 }}>Configuration Progress</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                      {[
+                        { label: 'Production Method', value: selectedProductionService?.title, step: 0 },
+                        { label: 'Category', value: selectedCategory?.name, step: 1 },
+                        { label: 'Material', value: selectedMetal?.name, step: 2 },
+                        { label: 'Thickness', value: selectedThickness ? `${selectedThickness}"` : null, step: 3 },
+                        { label: 'Additional Services', value: configStep >= 4 ? `${selectedAdditionalServices.length} selected` : null, step: 4 },
+                      ].map((item, i, arr) => {
+                        const active = configStep === item.step;
+                        const displayValue = item.step === 0 && selectedProductionService?.title ? selectedProductionService.title
+                          : item.step === 1 && selectedCategory?.name ? selectedCategory.name
+                            : item.step === 2 && selectedMetal?.name ? selectedMetal.name
+                              : item.step === 3 && selectedThickness ? `${selectedThickness}"`
+                                : item.step === 4 && configStep >= 4 ? `${selectedAdditionalServices.length} selected`
+                                  : null;
+                        return (
+                          <div key={i} style={{ display: 'flex', gap: 14, position: 'relative', paddingBottom: i < arr.length - 1 ? 20 : 0 }}>
+                            {i < arr.length - 1 && (
+                              <div style={{ position: 'absolute', left: 9, top: 24, width: 2, height: 'calc(100% - 4px)', background: displayValue ? '#10b981' : '#e2e8f0', transition: 'background 0.3s' }} />
                             )}
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: displayValue ? '#10b981' : active ? '#ef4444' : 'transparent', border: `2px solid ${displayValue ? '#10b981' : active ? '#ef4444' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1, transition: 'all 0.25s' }}>
+                              {displayValue && <Check size={10} color="#fff" strokeWidth={3} />}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: displayValue ? '#1e293b' : '#94a3b8' }}>{item.label}</div>
+                              <div style={{ fontSize: 12, color: displayValue ? '#10b981' : '#cbd5e1', fontWeight: displayValue ? 700 : 500, marginTop: 1 }}>{displayValue || 'Pending Selection'}</div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="p-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-                          <button
-                            className="btn btn-danger w-100 py-3 rounded-4 fw-bold fs-6 shadow-lg border-0 transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2 hover-bg-danger-dark"
-                            onClick={handleProceedToReview}
-                            disabled={isImporting || !selectedFile?.tempPath}
-                          >
-                            {isImporting ? (
-                              <><Loader2 size={18} className="animate-spin" /> UPLOADING ASSET...</>
-                            ) : (
-                              <>{selectedFile?.tempPath ? 'PROCEED TO REVIEW' : 'WAITING FOR UPLOAD...'}<ArrowRight size={18} className="opacity-75" /></>
-                            )}
-                          </button>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
-                  <div className="h-100 d-flex flex-column align-items-center justify-content-center px-4">
-                    <div className="bg-white p-5 rounded-circle border border-light mb-5 d-flex align-items-center justify-content-center shadow-none" style={{ width: '120px', height: '120px' }}>
-                      <Calculator size={60} className="text-danger opacity-25" />
+                  /* ── Full Quote Panel (after metal selected) ── */
+                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    {/* ORDER QUANTITY */}
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 10 }}>Order Quantity</div>
+                      <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                        <button
+                          onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                          style={{ width: 44, height: 44, background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
+                          onMouseEnter={e => e.target.style.background = '#f8fafc'}
+                          onMouseLeave={e => e.target.style.background = 'transparent'}
+                        >−</button>
+                        <div style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>{quantity}</div>
+                        <button
+                          onClick={() => setQuantity(q => q + 1)}
+                          style={{ width: 44, height: 44, background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
+                          onMouseEnter={e => e.target.style.background = '#f8fafc'}
+                          onMouseLeave={e => e.target.style.background = 'transparent'}
+                        >+</button>
+                      </div>
                     </div>
-                    <h3 className="fw-bold fs-4 mb-2 text-dark">Quote Summary</h3>
-                    <p className="text-muted mb-5 small text-center text-uppercase letter-spacing-1">Configuration Progress</p>
-                    <div className="w-100 d-flex flex-column gap-0 max-w-sm position-relative">
-                      <div className="position-absolute border-start border-2 border-light-subtle h-100" style={{ left: '12px', top: '10px', zIndex: 0 }} />
-                      <div className="d-flex align-items-center gap-3 mb-4 position-relative z-1">
-                        <div className={`rounded-circle d-flex align-items-center justify-content-center shadow-sm ${selectedProductionService ? 'bg-success text-white' : 'bg-white border-2 border-light-subtle'}`} style={{ width: '26px', height: '26px' }}>
-                          {selectedProductionService ? <Check size={14} /> : <div className="rounded-circle bg-light" style={{ width: '8px', height: '8px' }} />}
+
+                    {/* PROJECT BREAKDOWN */}
+                    <div style={{ flex: 1 }} />
+                    <div style={{ background: '#1a1a2e', borderRadius: 16, padding: '22px 20px', color: '#fff', marginTop: 'auto' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#64748b', marginBottom: 18 }}>Project Breakdown</div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
+                          <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>
                         </div>
-                        <div className="d-flex flex-column">
-                          <span className={`fw-bold small ${selectedProductionService ? 'text-dark' : 'text-muted'}`}>Production Method</span>
-                          <span className="text-muted" style={{ fontSize: '10px' }}>{selectedProductionService ? selectedProductionService.title : 'Pending Selection'}</span>
-                        </div>
+                        {isCalculatingPrice
+                          ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
+                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(priceEstimate?.breakdown?.material_cost ?? 0).toFixed(2)}</span>
+                        }
                       </div>
-                      <div className="d-flex align-items-center gap-3 position-relative z-1">
-                        <div className={`rounded-circle d-flex align-items-center justify-content-center shadow-sm ${selectedMetal ? 'bg-success text-white' : 'bg-white border-2 border-light-subtle'}`} style={{ width: '26px', height: '26px' }}>
-                          {selectedMetal ? <Check size={14} /> : <div className="rounded-circle bg-light" style={{ width: '8px', height: '8px' }} />}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Fabrication Cost</div>
+                          <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>
                         </div>
-                        <div className="d-flex flex-column">
-                          <span className={`fw-bold small ${selectedMetal ? 'text-dark' : 'text-muted'}`}>Material Selection</span>
-                          <span className="text-muted" style={{ fontSize: '10px' }}>{selectedMetal ? selectedMetal.name : 'Pending Selection'}</span>
-                        </div>
+                        {isCalculatingPrice
+                          ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
+                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(priceEstimate?.breakdown?.production_cost ?? 0).toFixed(2)}</span>
+                        }
                       </div>
+
+                      {/* PER UNIT PRICING INFO */}
+                      {quantity > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Unit Price (Discounted)</span>
+                          <span style={{ fontSize: 13, fontWeight: 900, color: '#10b981' }}>
+                            ${(priceEstimate?.breakdown?.final_unit_price || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      {(() => {
+                        const rows = priceEstimate?.breakdown?.service_breakdown || [];
+                        if (rows.length === 0) return null;
+                        return (
+                          <div style={{ paddingBottom: 12 }}>
+                            {rows.map((r, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
+                                {isCalculatingPrice
+                                  ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
+                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(parseFloat(r.price) || 0).toFixed(2)}</span>
+                                }
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4 }} />
+
+                      <div style={{ marginTop: 16, marginBottom: 18 }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 }}>Total Project Estimate</div>
+                        {isCalculatingPrice
+                          ? <div className="skeleton-price" style={{ width: 130, height: 32, borderRadius: 6 }} />
+                          : <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                            $ {priceEstimate?.total_price ? priceEstimate.total_price.toFixed(2) : '0.00'}
+                          </div>
+                        }
+                      </div>
+
+                      <button
+                        className="ip-proceed-btn"
+                        style={{ background: '#ef4444', marginTop: 0 }}
+                        onClick={handleProceedToReview}
+                        disabled={!priceEstimate}
+                      >
+                        PROCEED TO REVIEW <ChevronRight size={16} />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -3096,7 +1869,8 @@ const InstantPricing = () => {
             </div>
           )}
         </div>
-      )}
+      )
+      }
 
       <StyleTag />
 
@@ -3237,7 +2011,9 @@ const InstantPricing = () => {
                     if (!svc) return <div className="text-center py-5 text-danger fw-bold fs-5">Tapping service not added to selection</div>;
                     const assigned = selectedTaps[activeTapHole.id];
                     const dia = activeTapHole.diameterInches || 0;
-                    const options = svc.service_options || [];
+                    let options = svc.service_options || [];
+                    if (typeof options === 'string') { try { options = JSON.parse(options); } catch { options = []; } }
+                    if (!Array.isArray(options)) options = [];
                     const compatible = options.filter(tap => dia >= (parseFloat(tap.min_diameter) || 0) && dia <= (parseFloat(tap.max_diameter) || 0));
                     const incompatible = options.filter(tap => !compatible.includes(tap));
 
@@ -3846,6 +2622,7 @@ const InstantPricing = () => {
         }}
         bendTree={bendTree}
         faceMeshes={backendData?.faceMeshes}
+        stepFile={selectedFile?.file || null}
         selectedBends={selectedBends}
         onUpdateBend={(id, config) => setSelectedBends(prev => ({ ...prev, [id]: config }))}
       />

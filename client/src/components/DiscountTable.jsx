@@ -3,7 +3,7 @@ import React from 'react';
 const DiscountTable = ({ allDiscounts, currentQuantity }) => {
   if (!allDiscounts || allDiscounts.length === 0) return null;
 
-  const targetQuantities = [2, 10, 50, 100, 1000];
+  const targetQuantities = [2, 5, 10, 50, 100, 1000];
 
   // Filter only quantities that have at least one discount trigger <= that quantity
   const activeTiers = targetQuantities.filter(q =>

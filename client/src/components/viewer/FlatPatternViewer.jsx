@@ -203,10 +203,20 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     const bendPts = data.bendEdges || data.bend_edges || [];
     const cutPts = data.cutEdges || data.cut_edges || [];
 
+    // Technical projection layers
+    const topEdges = data.topEdges || [];
+    const topBendEdges = data.topBendEdges || [];
+    const frontEdges = data.frontEdges || [];
+    const sideEdges = data.sideEdges || [];
+
     return {
       unfoldedGeometry,
       cutPts,
       bendPts,
+      topEdges,
+      topBendEdges,
+      frontEdges,
+      sideEdges,
       bounds: unfoldedGeometry.boundingBox.clone(),
       hasFilledFace: true,
       mode: 'backend',
@@ -328,32 +338,39 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     }
 
     // Cut lines (solid)
-    if (viewData.cutPts.length >= 6) {
+    const activeCutPts = viewData.cutPts;
+
+    if (activeCutPts.length >= 6) {
       const cutGeometry = new THREE.BufferGeometry();
       cutGeometry.setAttribute(
         'position',
-        new THREE.Float32BufferAttribute(viewData.cutPts, 3)
+        new THREE.Float32BufferAttribute(activeCutPts, 3)
       );
       group.add(
         new THREE.LineSegments(
           cutGeometry,
-          new THREE.LineBasicMaterial({ color: 0x1f2937, linewidth: 1 })
+          new THREE.LineBasicMaterial({ color: 0x111827, linewidth: 1 })
         )
       );
     }
 
     // Bend lines (dashed)
-    if (viewData.bendPts.length >= 6) {
+    const activeBendPts = viewData.bendPts;
+
+    if (activeBendPts.length >= 6) {
       const bendGeometry = new THREE.BufferGeometry();
       bendGeometry.setAttribute(
         'position',
-        new THREE.Float32BufferAttribute(viewData.bendPts, 3)
+        new THREE.Float32BufferAttribute(activeBendPts, 3)
       );
+
+      // Professional Cyan (0x0ed6e6) for all bend lines
+      const bendColor = highlightBends ? 0xff0000 : 0x0ed6e6;
 
       const bendLine = new THREE.LineSegments(
         bendGeometry,
         new THREE.LineDashedMaterial({
-          color: highlightBends ? 0xff0000 : 0x4b5563, // Brighter red for highlight
+          color: bendColor,
           dashSize: maxDim * (highlightBends ? 0.05 : 0.018),
           gapSize: maxDim * (highlightBends ? 0.02 : 0.012),
           linewidth: highlightBends ? 4 : 2,
@@ -411,12 +428,12 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     fitCamera();
   }, [
     geometries,
-    highlightBends,
-    gridEnabled,
+    options,
     backendData,
     sourceFlatData,
-    holes,          // Added dependency
-    activeHoleId,   // Added dependency
+    holes,
+    activeHoleId,
+    formatKind,
     fitCamera,
     buildFromBackend,
     buildFromSource,

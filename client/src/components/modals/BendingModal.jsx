@@ -1,12 +1,12 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  X, Minus, Plus,
-  RotateCcw, Sliders, ChevronRight,
+  X, RotateCcw, Sliders,
   ArrowUp, ArrowDown, HelpCircle,
   Layers
 } from 'lucide-react';
+import * as OV from 'online-3d-viewer';
 import HierarchicalProjectViewer from '../viewer/HierarchicalProjectViewer';
 
 const BendingModal = ({
@@ -14,10 +14,36 @@ const BendingModal = ({
   onClose,
   bendTree,
   faceMeshes,
+  stepFile,
   selectedBends,
   onUpdateBend
 }) => {
   const [activeBendId, setActiveBendId] = useState(null);
+  const ovMountRef = useRef(null);
+  const ovInstanceRef = useRef(null);
+
+  // OV viewer: shown only when faceMeshes is not yet available (fallback)
+  useEffect(() => {
+    if (!isOpen || !stepFile || !ovMountRef.current || faceMeshes) return;
+    ovMountRef.current.innerHTML = '';
+    if (ovInstanceRef.current) {
+      try { ovInstanceRef.current.Destroy(); } catch (_) {}
+      ovInstanceRef.current = null;
+    }
+    const viewer = new OV.EmbeddedViewer(ovMountRef.current, {
+      backgroundColor: new OV.RGBAColor(255, 255, 255, 255),
+      edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(0, 0, 0), 1),
+      onModelLoaded: () => {
+        try { viewer.FitToWindow(); viewer.Render(); } catch (_) {}
+      },
+    });
+    ovInstanceRef.current = viewer;
+    viewer.LoadModelFromFileList([stepFile]);
+    return () => {
+      try { ovInstanceRef.current?.Destroy(); } catch (_) {}
+      ovInstanceRef.current = null;
+    };
+  }, [isOpen, stepFile, faceMeshes]);
 
   // Flatten tree for list view
   const bendList = useMemo(() => {
@@ -107,52 +133,69 @@ const BendingModal = ({
                 return (
                   <motion.div
                     key={bend.id}
-                    className={`p-4 rounded-4 cursor-pointer transition-all border-2 d-flex align-items-center justify-content-between ${isActive ? 'bg-primary text-white border-primary shadow-lg scale-102' : 'bg-white border-light-subtle hover-border-primary text-dark'
-                      }`}
+                    className={`p-3 rounded-4 cursor-pointer transition-all border-2 d-flex align-items-center justify-content-between ${isActive ? 'bg-primary text-white border-primary shadow-lg' : 'bg-white border-light-subtle hover-border-primary text-dark'}`}
                     onClick={() => setActiveBendId(bend.id)}
                     whileTap={{ scale: 0.98 }}
                   >
                     <div className="d-flex align-items-center gap-3">
                       <div className={`rounded-3 p-2 ${isActive ? 'bg-white text-primary' : 'bg-light text-muted'}`}>
-                        <RotateCcw size={18} />
+                        <RotateCcw size={16} />
                       </div>
                       <div>
-                        <div className="fw-black" style={{ fontSize: '15px' }}>BEND #{idx + 1}</div>
-                        <div className={`small fw-bold opacity-75`}>
-                          Initial: {Math.round(bend.initialAngle)}° • Current: {Math.round(config.angle)}°
+                        <div className="fw-black" style={{ fontSize: '14px' }}>BEND #{idx + 1}</div>
+                        <div className="small fw-bold opacity-75">
+                          {Math.round(config.angle)}° · {config.direction === 'up' ? '▲ Up' : '▼ Down'}
                         </div>
                       </div>
                     </div>
-                    {isActive && <ChevronRight size={18} className="animate-bounce-x" />}
+                    <button
+                      title="Flip direction"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateBend(bend.id, { ...config, direction: config.direction === 'up' ? 'down' : 'up' });
+                      }}
+                      style={{
+                        background: isActive ? 'rgba(255,255,255,0.2)' : '#f1f5f9',
+                        border: 'none',
+                        borderRadius: 8,
+                        width: 32,
+                        height: 32,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: isActive ? '#fff' : '#64748b',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {config.direction === 'up' ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
+                    </button>
                   </motion.div>
                 );
               })}
             </div>
           </div>
 
-          {/* Main: 3D Viewer */}
+          {/* Main: 3D Viewer — HierarchicalProjectViewer when data ready, OV fallback otherwise */}
           <div className="flex-grow-1 position-relative bg-white border-end">
-            <HierarchicalProjectViewer
-              bendTree={bendTree}
-              faceMeshes={faceMeshes}
-              selectedBends={selectedBends}
-              activeBendId={activeBendId}
-              onBendClick={setActiveBendId}
-            />
-
-            {/* 3D Context Indicators */}
-            <div className="position-absolute bottom-4 start-4 d-flex gap-3">
-              <div className="glass-morphism p-3 rounded-4 border d-flex align-items-center gap-2">
-                <div className="bg-primary rounded-circle" style={{ width: '8px', height: '8px' }} />
-                <span className="fw-black small text-dark">ACTIVE SEGMENT</span>
-              </div>
-            </div>
+            {faceMeshes ? (
+              <HierarchicalProjectViewer
+                bendTree={bendTree}
+                faceMeshes={faceMeshes}
+                selectedBends={selectedBends}
+                activeBendId={activeBendId}
+                onBendClick={setActiveBendId}
+              />
+            ) : (
+              <div ref={ovMountRef} style={{ width: '100%', height: '100%' }} />
+            )}
           </div>
 
           {/* Right: Controls */}
           <div className="p-5 d-flex flex-column bg-white shadow-sm" style={{ width: '420px' }}>
             {activeBendId ? (() => {
               const bend = bendList.find(b => b.id === activeBendId);
+              if (!bend) return null;
               const config = selectedBends[activeBendId] || { angle: bend.initialAngle, direction: 'up' };
 
               return (
