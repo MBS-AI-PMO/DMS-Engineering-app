@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import StepModelViewer from './StepModelViewer';
 
 const noop = () => {};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const BACKEND_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
 const toVector3Array = (value) => {
   if (Array.isArray(value) && value.length >= 3) {
@@ -89,6 +92,56 @@ const normalizeViewerFile = (file) => {
   return modelFile ? { file: modelFile } : null;
 };
 
+const sanitizeStepPath = (value) => {
+  if (typeof value !== 'string') return null;
+  let raw = value.trim();
+  if (!raw) return null;
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      raw = new URL(raw).pathname || '';
+    }
+  } catch {
+    // Keep the original string when URL parsing fails.
+  }
+
+  raw = raw.split('?')[0].split('#')[0];
+  if (!/\.(step|stp)$/i.test(raw)) return null;
+
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    // If decoding fails, keep raw as-is.
+  }
+
+  return raw.replace(/^\/+/, '');
+};
+
+const inferSourceStepPath = (file, selectedFile, configuration) => {
+  const candidates = [
+    configuration?.tempPath,
+    file?.tempPath,
+    file?.path,
+    file?.url,
+    file?.file?.path,
+    file?.file?.url,
+    selectedFile?.path,
+    selectedFile?.url,
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = sanitizeStepPath(candidate);
+    if (resolved) return resolved;
+  }
+
+  return null;
+};
+
+const isConfiguredStepPath = (pathValue) => {
+  if (!pathValue) return false;
+  return /configured_preview|configured[_-]|_conf(?:ig(?:ured)?)?/i.test(pathValue);
+};
+
 const isStepLikeFile = (file) => {
   if (!file) return false;
 
@@ -110,6 +163,7 @@ const getActiveFinishColor = (configuration) => {
     return {
       color: configuration.metal.color,
       name: configuration.metal.name || 'Base Material',
+      isBaseMaterialFallback: true,
     };
   }
 
@@ -137,6 +191,10 @@ const ProjectViewer = ({
   const selectedTaps = useMemo(() => normalizeHoleAssignments(configuration.selectedTaps || {}), [configuration.selectedTaps]);
   const selectedHardware = useMemo(() => normalizeHoleAssignments(configuration.selectedHardware || {}), [configuration.selectedHardware]);
   const selectedCountersinks = useMemo(() => normalizeHoleAssignments(configuration.selectedCountersinks || {}), [configuration.selectedCountersinks]);
+  const configurePreviewAbortRef = useRef(null);
+  const configurePreviewSeqRef = useRef(0);
+  const configurePreviewKeyRef = useRef('');
+  const [configuredPreviewUrl, setConfiguredPreviewUrl] = useState(null);
 
   const detectedHoles = useMemo(
     () => mergeDetectedHoles(configuration, selectedTaps, selectedHardware, selectedCountersinks),
@@ -157,6 +215,127 @@ const ProjectViewer = ({
   }, [configuration?.selectedThickness]);
 
   const isSupported = useMemo(() => isStepLikeFile(file) || isStepLikeFile(selectedFile), [file, selectedFile]);
+  const hasConfiguredCuts = useMemo(
+    () => (
+      Object.keys(selectedCountersinks || {}).length > 0 ||
+      Object.keys(selectedTaps || {}).length > 0 ||
+      Object.keys(selectedHardware || {}).length > 0
+    ),
+    [selectedCountersinks, selectedTaps, selectedHardware]
+  );
+
+  const sourceStepPath = useMemo(
+    () => inferSourceStepPath(file, selectedFile, configuration),
+    [file, selectedFile, configuration]
+  );
+
+  const sourceIsConfigured = useMemo(() => isConfiguredStepPath(sourceStepPath), [sourceStepPath]);
+
+  const configuredPreviewPayload = useMemo(() => {
+    if (!isSupported || !hasConfiguredCuts || !sourceStepPath || sourceIsConfigured) return null;
+
+    const finishColor = (activeFinishColor && !activeFinishColor?.isBaseMaterialFallback)
+      ? (activeFinishColor?.color || activeFinishColor?.hex || (typeof activeFinishColor === 'string' ? activeFinishColor : null))
+      : null;
+    const mmThickness = configuration?.dimensions?.mm?.t || selectedThickness || null;
+
+    return {
+      tempPath: sourceStepPath,
+      configuration: {
+        selectedTaps,
+        selectedHardware,
+        selectedCountersinks,
+        thickness: mmThickness,
+        dimensions: mmThickness ? { mm: { t: mmThickness } } : null,
+        anodizingColor: finishColor ? { color: finishColor } : null,
+      }
+    };
+  }, [
+    isSupported,
+    hasConfiguredCuts,
+    sourceStepPath,
+    sourceIsConfigured,
+    selectedTaps,
+    selectedHardware,
+    selectedCountersinks,
+    selectedThickness,
+    activeFinishColor,
+    configuration?.dimensions?.mm?.t,
+  ]);
+
+  useEffect(() => {
+    if (!configuredPreviewPayload) {
+      if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+      configurePreviewKeyRef.current = '';
+      setConfiguredPreviewUrl(null);
+      return;
+    }
+
+    const key = JSON.stringify(configuredPreviewPayload);
+    if (key === configurePreviewKeyRef.current && configuredPreviewUrl) return;
+
+    const seq = configurePreviewSeqRef.current + 1;
+    configurePreviewSeqRef.current = seq;
+
+    if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+    const controller = new AbortController();
+    configurePreviewAbortRef.current = controller;
+
+    const timerId = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/pricing/configure-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(configuredPreviewPayload),
+          signal: controller.signal,
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Failed to generate configured preview');
+        }
+
+        if (seq !== configurePreviewSeqRef.current) return;
+
+        configurePreviewKeyRef.current = key;
+        if (!data.previewPath) {
+          setConfiguredPreviewUrl(null);
+          return;
+        }
+
+        const relativePath = String(data.previewPath).replace(/^\/+/, '');
+        const resolved = BACKEND_URL ? `${BACKEND_URL}/${relativePath}` : `/${relativePath}`;
+        setConfiguredPreviewUrl(resolved);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        console.error('ProjectViewer configured preview error:', err);
+        if (seq === configurePreviewSeqRef.current) setConfiguredPreviewUrl(null);
+      }
+    }, 180);
+
+    return () => clearTimeout(timerId);
+  }, [configuredPreviewPayload, configuredPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+    };
+  }, []);
+
+  const configuredFileUrl = useMemo(() => {
+    if (!sourceIsConfigured) return null;
+
+    const direct = selectedFile?.url || selectedFile?.path || file?.path || file?.url || null;
+    if (!direct) return null;
+    if (/^(?:https?:)?\/\//i.test(direct) || String(direct).startsWith('blob:') || String(direct).startsWith('data:')) {
+      return direct;
+    }
+
+    const cleaned = String(direct).replace(/^\/+/, '');
+    return BACKEND_URL ? `${BACKEND_URL}/${cleaned}` : `/${cleaned}`;
+  }, [sourceIsConfigured, selectedFile, file]);
+
+  const modelUrlOverride = configuredPreviewUrl || configuredFileUrl || null;
 
   const handleDimensionsExtracted = (dimensions) => {
     if (!onDimensionsExtracted) return;
@@ -186,6 +365,7 @@ const ProjectViewer = ({
       {isSupported && selectedFile ? (
         <StepModelViewer
           selectedFile={selectedFile}
+          modelUrlOverride={modelUrlOverride}
           detectedHoles={detectedHoles}
           selectedTaps={selectedTaps}
           activeTapHole={null}

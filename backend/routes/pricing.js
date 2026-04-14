@@ -1,7 +1,100 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { spawn } = require('child_process');
 const router = express.Router();
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+
+const previewJobs = new Map();
+const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v8-bidirectional-nut-hole-resize';
+
+const runPythonScript = (pythonPath, scriptName, args, cwd) => {
+    return new Promise((resolve, reject) => {
+        const py = spawn(pythonPath, [scriptName, ...args], { cwd });
+        let stdout = '';
+        let stderr = '';
+
+        py.stdout.on('data', (data) => { stdout += data.toString(); });
+        py.stderr.on('data', (data) => { stderr += data.toString(); });
+        py.on('error', (err) => reject(err));
+        py.on('close', (code) => {
+            if (code === 0) return resolve({ stdout, stderr });
+            const msg = (stderr || stdout || `Python process exited with code ${code}`).trim();
+            reject(new Error(msg));
+        });
+    });
+};
+
+const findModelInputPath = (backendRoot, tempPath) => {
+    const fileName = path.basename(String(tempPath || ''));
+    const candidates = [
+        path.resolve(backendRoot, String(tempPath || '')),
+        path.resolve(backendRoot, 'temp_uploads', fileName),
+        path.resolve(backendRoot, 'uploads', 'orders', fileName)
+    ];
+
+    const backendRootNorm = backendRoot.toLowerCase();
+    for (const candidate of candidates) {
+        const normalized = candidate.toLowerCase();
+        if (!normalized.startsWith(backendRootNorm)) continue;
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return null;
+};
+
+const compactHardwareAssignments = (selectedHardware = {}) => {
+    if (!selectedHardware || typeof selectedHardware !== 'object') return {};
+
+    const compacted = {};
+    for (const [holeId, config] of Object.entries(selectedHardware)) {
+        if (!config || typeof config !== 'object') continue;
+
+        const hole = config.hole || {};
+        const item = config.item || {};
+
+        compacted[holeId] = {
+            typeId: config.typeId ?? null,
+            face: config.face ?? null,
+            hole: {
+                id: hole.id ?? holeId,
+                position: hole.position ?? null,
+                axis: hole.axis ?? null,
+                diameter_mm: hole.diameter_mm ?? null,
+                diameter_in: hole.diameter_in ?? null,
+                diameterInches: hole.diameterInches ?? null,
+                depth_mm: hole.depth_mm ?? null,
+                depthMm: hole.depthMm ?? null,
+                depthInches: hole.depthInches ?? null
+            },
+            item: {
+                name: item.name ?? null,
+                size_spec: item.size_spec ?? null,
+                tooling_diameter: item.tooling_diameter ?? null,
+                minor_dia: item.minor_dia ?? null,
+                shank: item.shank ?? null,
+                base_width: item.base_width ?? null,
+                major_dia: item.major_dia ?? null,
+                length: item.length ?? null
+            }
+        };
+    }
+
+    return compacted;
+};
+
+const compactPreviewConfig = (configuration = {}) => {
+    return {
+        selectedTaps: configuration.selectedTaps || {},
+        selectedCountersinks: configuration.selectedCountersinks || {},
+        selectedHardware: compactHardwareAssignments(configuration.selectedHardware || {}),
+        thickness: configuration.thickness ?? configuration.selectedThickness ?? configuration?.dimensions?.mm?.t ?? null,
+        dimensions: configuration.dimensions || null,
+        anodizingColor: configuration.anodizingColor || null
+    };
+};
 
 // ── Admin Routes ─────────────────────────────────────────
 
@@ -305,6 +398,96 @@ router.get('/discounts', async (req, res) => {
     } catch (err) {
         console.error('Error fetching public discounts:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch discounts' });
+    }
+});
+
+// ── Configured STEP Preview (Fast Cached) ─────────────────────────────────
+router.post('/configure-preview', async (req, res) => {
+    const { tempPath, configuration = {} } = req.body || {};
+
+    if (!tempPath || typeof tempPath !== 'string') {
+        return res.status(400).json({ success: false, error: 'tempPath is required' });
+    }
+
+    const lowerPath = tempPath.toLowerCase();
+    if (!lowerPath.endsWith('.step') && !lowerPath.endsWith('.stp')) {
+        return res.status(400).json({ success: false, error: 'Only STEP/STP files are supported' });
+    }
+
+    try {
+        const backendRoot = path.resolve(__dirname, '..');
+        const inputPath = findModelInputPath(backendRoot, tempPath);
+        if (!inputPath) {
+            return res.status(404).json({ success: false, error: 'Source STEP file not found' });
+        }
+
+        const previewConfig = compactPreviewConfig(configuration);
+        const hasCountersinks = Object.keys(previewConfig.selectedCountersinks || {}).length > 0;
+        const hasTaps = Object.keys(previewConfig.selectedTaps || {}).length > 0;
+        const hasNutResizing = Object.values(previewConfig.selectedHardware || {}).some((hw) => {
+            const t = Number(hw?.typeId);
+            return t === 3 || t === 4;
+        });
+        if (!hasCountersinks && !hasTaps && !hasNutResizing) {
+            return res.json({ success: true, skipped: true, cached: true, previewPath: null });
+        }
+
+        const stat = fs.statSync(inputPath);
+        const scriptPath = path.join(backendRoot, 'process_configured.py');
+        const scriptMtimeMs = fs.existsSync(scriptPath) ? fs.statSync(scriptPath).mtimeMs : 0;
+        const cacheHash = crypto.createHash('sha1')
+            .update(JSON.stringify({
+                engine: CONFIGURED_PREVIEW_ENGINE_VERSION,
+                scriptMtimeMs,
+                source: path.basename(inputPath),
+                size: stat.size,
+                mtimeMs: stat.mtimeMs,
+                cfg: previewConfig
+            }))
+            .digest('hex')
+            .slice(0, 20);
+
+        const previewDir = path.join(backendRoot, 'temp_uploads', 'configured_preview');
+        fs.mkdirSync(previewDir, { recursive: true });
+
+        const outputFileName = `preview_${cacheHash}.step`;
+        const outputPath = path.join(previewDir, outputFileName);
+        const relativeOutputPath = `temp_uploads/configured_preview/${outputFileName}`;
+
+        if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+            return res.json({ success: true, cached: true, previewPath: relativeOutputPath });
+        }
+
+        let job = previewJobs.get(cacheHash);
+        if (!job) {
+            job = (async () => {
+                const configPath = path.join(previewDir, `cfg_${cacheHash}.json`);
+                fs.writeFileSync(configPath, JSON.stringify(previewConfig));
+
+                try {
+                    const pythonPath = process.env.PYTHON_PATH || 'python';
+                    await runPythonScript(pythonPath, 'process_configured.py', [inputPath, outputPath, configPath], backendRoot);
+                } finally {
+                    try { if (fs.existsSync(configPath)) fs.unlinkSync(configPath); } catch (e) { /* ignore */ }
+                }
+            })();
+            previewJobs.set(cacheHash, job);
+        }
+
+        try {
+            await job;
+        } finally {
+            if (previewJobs.get(cacheHash) === job) previewJobs.delete(cacheHash);
+        }
+
+        if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size <= 0) {
+            return res.status(500).json({ success: false, error: 'Configured preview generation failed' });
+        }
+
+        return res.json({ success: true, cached: false, previewPath: relativeOutputPath });
+    } catch (err) {
+        console.error('Error generating configured preview:', err);
+        return res.status(500).json({ success: false, error: err.message || 'Failed to generate configured preview' });
     }
 });
 

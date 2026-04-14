@@ -81,6 +81,127 @@ def parse_inches_to_mm(value):
     return parsed * 25.4
 
 
+SCREW_GAUGE_MAJOR_IN = {
+    0: 0.060,
+    1: 0.073,
+    2: 0.086,
+    3: 0.099,
+    4: 0.112,
+    5: 0.125,
+    6: 0.138,
+    8: 0.164,
+    10: 0.190,
+    12: 0.216,
+}
+
+
+def parse_size_spec_major_diameter_in(size_spec):
+    if size_spec is None:
+        return None
+
+    raw = str(size_spec).strip().upper()
+    if not raw:
+        return None
+
+    normalized = re.sub(r'\s+', '', raw)
+
+    # Metric thread, e.g. M3x0.5 -> 3.0 mm major diameter.
+    metric_match = re.match(r'^M(\d+(?:\.\d+)?)', normalized)
+    if metric_match:
+        try:
+            major_mm = float(metric_match.group(1))
+            if major_mm > 0:
+                return major_mm / 25.4
+        except Exception:
+            pass
+
+    # Fractional imperial, e.g. 1/4-20.
+    frac_match = re.match(r'^(\d+)/(\d+)-\d+', normalized)
+    if frac_match:
+        try:
+            num = float(frac_match.group(1))
+            den = float(frac_match.group(2))
+            if abs(den) > 1e-9:
+                return num / den
+        except Exception:
+            pass
+
+    # Numbered imperial, e.g. #6-32 or 6-32.
+    gauge_match = re.match(r'^#?(\d+)-\d+', normalized)
+    if gauge_match:
+        try:
+            gauge = int(gauge_match.group(1))
+            return SCREW_GAUGE_MAJOR_IN.get(gauge)
+        except Exception:
+            pass
+
+    return None
+
+
+def resolve_nut_target_diameter_mm(item_data):
+    if not isinstance(item_data, dict):
+        return None
+
+    # 1) Explicit bore fields if provided.
+    for key in ('minor_dia', 'major_dia'):
+        explicit_mm = parse_inches_to_mm(item_data.get(key))
+        if explicit_mm is not None and explicit_mm > 0:
+            return explicit_mm
+
+    # 2) Infer from thread size spec (most reliable in this catalog).
+    size_spec = item_data.get('size_spec') or item_data.get('name')
+    major_in = parse_size_spec_major_diameter_in(size_spec)
+    if major_in is not None and major_in > 0:
+        # Slight clearance so visual/physical fit matches hardware insertion intent.
+        return major_in * 25.4 * 1.02
+
+    # 3) Optional shank only when it looks like a real inch diameter.
+    shank_in = parse_numeric(item_data.get('shank'))
+    if shank_in is not None and 0.04 <= shank_in <= 0.6:
+        return shank_in * 25.4
+
+    # 4) Tooling diameter is a last resort and often not the thread bore for nuts.
+    tooling_in = parse_numeric(item_data.get('tooling_diameter'))
+    base_width_in = parse_numeric(item_data.get('base_width'))
+    if tooling_in is not None and tooling_in > 0:
+        if base_width_in is None or tooling_in < (base_width_in * 0.9):
+            return tooling_in * 25.4
+
+    return None
+
+
+def hole_diameter_mm(hole_data):
+    """Extract hole diameter in mm from supported payload keys."""
+    if not isinstance(hole_data, dict):
+        return None
+
+    dia_mm = parse_numeric(hole_data.get('diameter_mm'))
+    if dia_mm is not None and dia_mm > 0:
+        return dia_mm
+
+    dia_in = parse_numeric(hole_data.get('diameter_in'))
+    if dia_in is None:
+        dia_in = parse_numeric(hole_data.get('diameterInches'))
+    if dia_in is not None and dia_in > 0:
+        return dia_in * 25.4
+
+    return None
+
+
+def make_axis_cylinder(origin, axis, radius, height):
+    """Create a cylinder centered at origin and aligned to axis."""
+    plane = cq.Plane(origin=cq.Vector(*origin), normal=cq.Vector(*axis))
+    safe_radius = max(float(radius), 0.01)
+    safe_height = max(float(height), 0.1)
+    return (
+        cq.Workplane(plane)
+        .workplane(offset=-(safe_height * 0.5))
+        .circle(safe_radius)
+        .extrude(safe_height)
+        .val()
+    )
+
+
 def parse_vector3(value):
     """Accept [x,y,z] or {x,y,z}."""
     if isinstance(value, (list, tuple)) and len(value) >= 3:
@@ -108,7 +229,7 @@ def normalize_vector3(vec, fallback=(0.0, 0.0, 1.0)):
 
 def process_configured_model(input_path, output_path, configuration_json):
     """
-    Physical hole cutting (taps + countersinks) and high-fidelity coloring.
+    Physical hole cutting (taps + hardware fit + countersinks) and high-fidelity coloring.
     """
     try:
         print(f"[CAD-KERNEL] Processing: {input_path}")
@@ -123,8 +244,12 @@ def process_configured_model(input_path, output_path, configuration_json):
             config = json.loads(configuration_json)
             
         selected_taps = config.get('selectedTaps', {})
+        selected_hardware = config.get('selectedHardware', {})
         selected_countersinks = config.get('selectedCountersinks', {})
-        print(f"[CAD-KERNEL] Found {len(selected_taps)} tapped holes and {len(selected_countersinks)} countersinks to process.")
+        print(
+            f"[CAD-KERNEL] Found {len(selected_taps)} tapped holes, "
+            f"{len(selected_hardware)} hardware assignments and {len(selected_countersinks)} countersinks to process."
+        )
 
         thickness_mm = parse_numeric(config.get('thickness'))
         if thickness_mm is None:
@@ -158,6 +283,79 @@ def process_configured_model(input_path, output_path, configuration_json):
                     tool = cq.Workplane("XY").workplane(offset=pz - (height/2)).center(px, py).circle(diameter/2).extrude(height).val()
                     # Apply cut directly to the shape
                     model = cq.Workplane(model.val().cut(tool))
+
+        # 1.5 Resize holes for nut hardware (type 3/4): shrink oversized or enlarge undersized.
+        if selected_hardware and isinstance(selected_hardware, dict):
+            for hw_id, hw_info in selected_hardware.items():
+                if not hw_info or not isinstance(hw_info, dict):
+                    continue
+
+                hw_type = parse_numeric(hw_info.get('typeId'))
+                if hw_type is None or int(hw_type) not in (3, 4):
+                    continue
+
+                hole_data = hw_info.get('hole') or {}
+                item_data = hw_info.get('item') or {}
+
+                hole_pos = parse_vector3(hole_data.get('position'))
+                if hole_pos is None:
+                    print(f"[CAD-KERNEL] Skip nut resize {hw_id}: missing hole position")
+                    continue
+
+                hole_axis = normalize_vector3(parse_vector3(hole_data.get('axis')), fallback=(0.0, 0.0, 1.0))
+                original_hole_dia_mm = hole_diameter_mm(hole_data)
+
+                target_dia_mm = resolve_nut_target_diameter_mm(item_data)
+
+                if target_dia_mm is None or target_dia_mm <= 0:
+                    print(f"[CAD-KERNEL] Skip nut resize {hw_id}: missing target bore diameter")
+                    continue
+
+                target_hole_r = max((target_dia_mm / 2.0) - 0.002, 0.01)
+
+                # If source hole diameter is unknown, still enforce target by cutting to bore size.
+                if original_hole_dia_mm is None or original_hole_dia_mm <= 0:
+                    original_hole_dia_mm = 0.0
+
+                original_hole_r = original_hole_dia_mm / 2.0
+                resize_tol = 0.02
+                radius_delta = original_hole_r - target_hole_r
+                if abs(radius_delta) <= resize_tol:
+                    continue
+
+                hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
+                if hole_depth_mm is None:
+                    hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
+                if hole_depth_mm is None:
+                    hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
+                local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+
+                try:
+                    if radius_delta > 0:
+                        # Hole is too large: fill then re-drill to target.
+                        fill_overrun = 0.02
+                        resize_depth = max(local_thickness + fill_overrun, 0.6)
+                        plug_radius = original_hole_r + 0.02
+                        plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
+                        model = cq.Workplane(model.val().fuse(plug)).clean()
+
+                        pilot_depth = max(local_thickness + 0.08, 0.7)
+                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
+                        model = cq.Workplane(model.val().cut(pilot)).clean()
+                        direction = "reduced"
+                    else:
+                        # Hole is too small (or unknown): open it directly to target.
+                        pilot_depth = max(local_thickness + 0.08, 0.7)
+                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
+                        model = cq.Workplane(model.val().cut(pilot)).clean()
+                        direction = "enlarged"
+
+                    print(
+                        f"[CAD-KERNEL] RESIZED HOLE FOR NUT(type={int(hw_type)}): id={hw_id}, "
+                        f"{direction}, original={original_hole_dia_mm:.3f}mm -> target={target_dia_mm:.3f}mm"
+                    )
+                except Exception as hw_resize_err:
+                    print(f"[CAD-KERNEL] Failed nut resize {hw_id}: {hw_resize_err}")
         
         # 2. Perform Countersink Cuts
         if selected_countersinks:
@@ -172,18 +370,13 @@ def process_configured_model(input_path, output_path, configuration_json):
                     continue
 
                 hole_axis = normalize_vector3(parse_vector3(hole_data.get('axis')), fallback=(0.0, 0.0, 1.0))
+                original_hole_dia_mm = hole_diameter_mm(hole_data)
 
                 major_dia_mm = parse_inches_to_mm(cs_info.get('major_dia'))
                 minor_dia_mm = parse_inches_to_mm(cs_info.get('minor_dia'))
 
                 if minor_dia_mm is None:
-                    minor_dia_mm = parse_numeric(hole_data.get('diameter_mm'))
-                if minor_dia_mm is None:
-                    hole_dia_in = parse_numeric(hole_data.get('diameter_in'))
-                    if hole_dia_in is None:
-                        hole_dia_in = parse_numeric(hole_data.get('diameterInches'))
-                    if hole_dia_in is not None:
-                        minor_dia_mm = hole_dia_in * 25.4
+                    minor_dia_mm = original_hole_dia_mm
 
                 if major_dia_mm is None and minor_dia_mm is not None:
                     major_dia_mm = minor_dia_mm * 1.4
@@ -218,6 +411,32 @@ def process_configured_model(input_path, output_path, configuration_json):
                 if hole_depth_mm is None:
                     hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
                 local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+
+                # If the existing hole is larger than the countersink's minor diameter,
+                # rebuild that bore first so the countersink fits correctly.
+                original_hole_r = (original_hole_dia_mm / 2.0) if original_hole_dia_mm else None
+                oversize_tol = 0.02
+                if original_hole_r is not None and original_hole_r > (minor_r + oversize_tol):
+                    try:
+                        # Fill oversized bores almost flush to avoid any raised witness ring,
+                        # then heal split faces so the patch blends like native geometry.
+                        fill_overrun = 0.02
+                        resize_depth = max(local_thickness + fill_overrun, 0.6)
+                        plug_radius = original_hole_r + 0.02
+                        plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
+                        model = cq.Workplane(model.val().fuse(plug)).clean()
+
+                        target_hole_radius = max(minor_r - 0.002, 0.01)
+                        pilot_depth = max(local_thickness + 0.08, 0.7)
+                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_radius, pilot_depth)
+                        model = cq.Workplane(model.val().cut(pilot)).clean()
+
+                        print(
+                            f"[CAD-KERNEL] RESIZED HOLE FOR COUNTERSINK: id={cs_id}, "
+                            f"original={original_hole_dia_mm:.3f}mm -> target={minor_dia_mm:.3f}mm"
+                        )
+                    except Exception as resize_err:
+                        print(f"[CAD-KERNEL] Failed hole resize for countersink {cs_id}: {resize_err}")
 
                 max_depth = max(0.2, local_thickness * 0.95)
                 cone_depth_mm = min(cone_depth_mm, max_depth)
@@ -261,12 +480,53 @@ def process_configured_model(input_path, output_path, configuration_json):
                         f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
                         f"face={'down' if face_sign < 0 else 'up'}"
                     )
-                    model = cq.Workplane(model.val().cut(tool))
+                    model = cq.Workplane(model.val().cut(tool)).clean()
+
+                    # Add a subtle opposite-face witness ring visual.
+                    back_face_sign = -face_sign
+                    back_inward_dir = normalize_vector3(
+                        (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),
+                        fallback=(0.0, 0.0, 1.0 if face_sign > 0 else -1.0)
+                    )
+                    back_surface_center = (
+                        hole_pos[0] + hole_axis[0] * back_face_sign * (local_thickness * 0.5),
+                        hole_pos[1] + hole_axis[1] * back_face_sign * (local_thickness * 0.5),
+                        hole_pos[2] + hole_axis[2] * back_face_sign * (local_thickness * 0.5),
+                    )
+                    back_entry_origin = (
+                        back_surface_center[0] - back_inward_dir[0] * 0.03,
+                        back_surface_center[1] - back_inward_dir[1] * 0.03,
+                        back_surface_center[2] - back_inward_dir[2] * 0.03,
+                    )
+
+                    witness_depth = min(max(0.06, cone_depth_mm * 0.12), max(0.12, local_thickness * 0.2))
+                    witness_inner_r = max(minor_r * 1.01, minor_r + 0.01)
+                    witness_outer_r = min(max(witness_inner_r + 0.05, minor_r * 1.35), major_r * 0.92)
+
+                    if witness_outer_r > witness_inner_r + 1e-4 and witness_depth > 0:
+                        witness_plane = cq.Plane(
+                            origin=cq.Vector(*back_entry_origin),
+                            normal=cq.Vector(*back_inward_dir)
+                        )
+                        witness_tool = (
+                            cq.Workplane(witness_plane)
+                            .circle(witness_outer_r)
+                            .circle(witness_inner_r)
+                            .extrude(max(witness_depth, 0.02))
+                            .val()
+                        )
+                        model = cq.Workplane(model.val().cut(witness_tool)).clean()
                 except Exception as cut_err:
                     print(f"[CAD-KERNEL] Failed countersink cut {cs_id}: {cut_err}")
 
         # 3. Apply Visual Finishes
-        hex_color = config.get('anodizingColor', {}).get('color', '#808080')
+        anodizing_color = config.get('anodizingColor')
+        if isinstance(anodizing_color, dict):
+            hex_color = anodizing_color.get('color') or anodizing_color.get('hex') or '#2f2f2f'
+        elif isinstance(anodizing_color, str) and anodizing_color.strip():
+            hex_color = anodizing_color.strip()
+        else:
+            hex_color = '#2f2f2f'
         rgb = hex_to_rgb(hex_color)
         part_color = cq.Color(rgb[0], rgb[1], rgb[2], 1.0)
 

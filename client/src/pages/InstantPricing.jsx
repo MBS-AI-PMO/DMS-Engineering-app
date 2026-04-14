@@ -60,8 +60,13 @@ const InstantPricing = () => {
   const [isLoadingUnfold, setIsLoadingUnfold] = useState(false);
   const unfoldAbortControllerRef = useRef(null);
   const unfoldRequestSeqRef = useRef(0);
+  const configurePreviewAbortRef = useRef(null);
+  const configurePreviewSeqRef = useRef(0);
+  const configurePreviewKeyRef = useRef('');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [isGeneratingConfiguredPreview, setIsGeneratingConfiguredPreview] = useState(false);
+  const [configuredPreviewUrl, setConfiguredPreviewUrl] = useState(null);
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
   const [configStep, setConfigStep] = useState(0); // 0: Method, 1: Category, 2: Metal, 3: Thickness, 4: Services
 
@@ -87,10 +92,15 @@ const InstantPricing = () => {
   const activeFinishColor = useMemo(() => {
     // Priority order: Find any selected finish that has a color assigned
     const keys = Object.keys(selectedFinishColors);
-    if (keys.length === 0) return null;
+    if (keys.length === 0) {
+      if (selectedMetal?.color) {
+        return { color: selectedMetal.color, name: selectedMetal.name || 'Base Material', isBaseMaterialFallback: true };
+      }
+      return null;
+    }
     const firstWithColor = keys.find(k => selectedFinishColors[k]?.color || selectedFinishColors[k]?.hex);
     return selectedFinishColors[firstWithColor || keys[0]];
-  }, [selectedFinishColors]);
+  }, [selectedFinishColors, selectedMetal]);
 
   const activeFinishKey = useMemo(() => {
     return Object.keys(selectedFinishColors).find(k => selectedFinishColors[k] === activeFinishColor) || Object.keys(selectedFinishColors)[0];
@@ -260,6 +270,39 @@ const InstantPricing = () => {
     selectedAdditionalServices.some(s => s.title.toLowerCase().includes('hardware')),
     [selectedAdditionalServices]
   );
+
+  const showHardwareFitLegend = useMemo(() => {
+    return isHardwareActive && viewMode === '3d' && Object.keys(selectedHardware || {}).length > 0;
+  }, [isHardwareActive, viewMode, selectedHardware]);
+
+  const hasConfiguredCuts = useMemo(() => {
+    return (
+      Object.keys(selectedCountersinks || {}).length > 0 ||
+      Object.keys(selectedTaps || {}).length > 0 ||
+      Object.keys(selectedHardware || {}).length > 0
+    );
+  }, [selectedCountersinks, selectedTaps, selectedHardware]);
+
+  const configuredPreviewPayload = useMemo(() => {
+    if (!selectedFile?.tempPath || !currentIsStep || !hasConfiguredCuts) return null;
+
+    const finishColor = (activeFinishColor && !activeFinishColor?.isBaseMaterialFallback)
+      ? (activeFinishColor?.color || activeFinishColor?.hex || (typeof activeFinishColor === 'string' ? activeFinishColor : null))
+      : null;
+    const mmThickness = dimensions?.mm?.t || selectedThickness || null;
+
+    return {
+      tempPath: selectedFile.tempPath,
+      configuration: {
+        selectedTaps,
+        selectedHardware,
+        selectedCountersinks,
+        thickness: mmThickness,
+        dimensions: mmThickness ? { mm: { t: mmThickness } } : null,
+        anodizingColor: finishColor ? { color: finishColor } : null,
+      }
+    };
+  }, [selectedFile?.tempPath, currentIsStep, hasConfiguredCuts, selectedTaps, selectedHardware, selectedCountersinks, dimensions?.mm?.t, selectedThickness, activeFinishColor]);
 
   const tapOptions = useMemo(() => {
     const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
@@ -778,6 +821,70 @@ const InstantPricing = () => {
     handleUnfold(true);
   }, [selectedFile, currentIsStep, handleUnfold]);
 
+  // ── Real Configured-Cut STEP Preview (debounced + abortable) ─────────────
+  useEffect(() => {
+    if (!configuredPreviewPayload) {
+      if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+      configurePreviewKeyRef.current = '';
+      setConfiguredPreviewUrl(null);
+      setIsGeneratingConfiguredPreview(false);
+      return;
+    }
+
+    const key = JSON.stringify(configuredPreviewPayload);
+    if (key === configurePreviewKeyRef.current && configuredPreviewUrl) return;
+
+    const seq = configurePreviewSeqRef.current + 1;
+    configurePreviewSeqRef.current = seq;
+
+    if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+    const controller = new AbortController();
+    configurePreviewAbortRef.current = controller;
+
+    const timerId = setTimeout(async () => {
+      setIsGeneratingConfiguredPreview(true);
+      try {
+        const response = await fetch('/api/pricing/configure-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(configuredPreviewPayload),
+          signal: controller.signal,
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Failed to generate configured preview');
+        }
+
+        if (seq !== configurePreviewSeqRef.current) return;
+
+        configurePreviewKeyRef.current = key;
+        if (!data.previewPath) {
+          setConfiguredPreviewUrl(null);
+          return;
+        }
+
+        const relativePath = String(data.previewPath).replace(/^\/+/, '');
+        const resolved = BACKEND_URL ? `${BACKEND_URL}/${relativePath}` : `/${relativePath}`;
+        setConfiguredPreviewUrl(resolved);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        console.error('Configured STEP preview error:', err);
+        if (seq === configurePreviewSeqRef.current) setConfiguredPreviewUrl(null);
+      } finally {
+        if (seq === configurePreviewSeqRef.current) setIsGeneratingConfiguredPreview(false);
+      }
+    }, 180);
+
+    return () => clearTimeout(timerId);
+  }, [configuredPreviewPayload, configuredPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
+    };
+  }, []);
+
   return (
     <div className={`instant-pricing-container ${isQuoteFlowActive || files.length > 0 ? 'ip-fullpage qf-active' : ''}`}>
       <style>{`
@@ -1041,9 +1148,28 @@ const InstantPricing = () => {
                   </div>
                 </div>
                 <div className="ip-viewer-frame qf-main-canvas">
+                  {showHardwareFitLegend && (
+                    <div style={{
+                      position: 'absolute', top: 14, left: 14, zIndex: 52,
+                      background: 'rgba(15, 23, 42, 0.82)', backdropFilter: 'blur(8px)',
+                      padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 260
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole auto-adjusted</span>
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
+                        The hole was enlarged or reduced to match the selected hardware bore.
+                      </div>
+                    </div>
+                  )}
+
                   {currentIsStep && viewMode === '3d' && (
                     <StepModelViewer
                       selectedFile={selectedFile}
+                      modelUrlOverride={configuredPreviewUrl}
                       viewMode={viewMode}
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
@@ -1056,6 +1182,7 @@ const InstantPricing = () => {
                       setActiveTapHole={setActiveTapHole}
                       selectedHardware={selectedHardware}
                       selectedCountersinks={selectedCountersinks}
+                      showCountersinkMarkers={false}
                       countersinkMarkerStyle="camouflage"
                       isTappingActive={isTappingActive}
                       isCountersinkingActive={isCountersinkingActive}
@@ -1097,13 +1224,19 @@ const InstantPricing = () => {
                     />
                   )}
 
-                  {(isDetectingHoles || isLoadingUnfold || isCalculatingPrice) && (
+                  {(isDetectingHoles || isLoadingUnfold || isCalculatingPrice || isGeneratingConfiguredPreview) && (
                     <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
                       </div>
                       <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                        {isLoadingUnfold ? 'Preparing Flat Pattern...' : isCalculatingPrice ? 'Calculating Quote...' : 'Analyzing Features...'}
+                        {isLoadingUnfold
+                          ? 'Preparing Flat Pattern...'
+                          : isGeneratingConfiguredPreview
+                            ? 'Applying Configured Cuts...'
+                            : isCalculatingPrice
+                              ? 'Calculating Quote...'
+                              : 'Analyzing Features...'}
                       </div>
                     </div>
                   )}
@@ -1167,9 +1300,9 @@ const InstantPricing = () => {
                       <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!backendData || !bendTree) handleUnfold(); }}>2D FLAT</button>
                     </div>
                     <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
-                    {isCountersinkingActive && !isModelFadedManually && (
+                    {isCountersinkingActive && isGeneratingConfiguredPreview && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '3px 8px', fontSize: '10px', fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: 11 }}>⚠</span> Toggle FADE to view countersinks
+                        <span style={{ fontSize: 11 }}>⚙</span> Generating countersink cuts
                       </div>
                     )}
                   </div>
@@ -1178,6 +1311,24 @@ const InstantPricing = () => {
                   </button>
                 </div>
                 <div className="ip-qf-viewer" style={{ position: 'relative' }}>
+                  {showHardwareFitLegend && (
+                    <div style={{
+                      position: 'absolute', top: 16, left: 16, zIndex: 51,
+                      background: 'rgba(15, 23, 42, 0.82)', backdropFilter: 'blur(8px)',
+                      padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 260
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole auto-adjusted</span>
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
+                        The hole was enlarged or reduced to match the selected hardware bore.
+                      </div>
+                    </div>
+                  )}
+
                   {/* --- Tap Legend Overlay --- */}
                   {isTappingActive && viewMode === '3d' && (
                     <div style={{
@@ -1209,6 +1360,7 @@ const InstantPricing = () => {
                   {currentIsStep && viewMode === '3d' ? (
                     <StepModelViewer
                       selectedFile={selectedFile}
+                      modelUrlOverride={configuredPreviewUrl}
                       viewMode={viewMode}
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
@@ -1224,6 +1376,7 @@ const InstantPricing = () => {
                       isHardwareActive={isHardwareActive}
                       hwItemsByType={hwItemsByType}
                       selectedCountersinks={selectedCountersinks}
+                      showCountersinkMarkers={false}
                       countersinkMarkerStyle="camouflage"
                       csOptions={csOptions}
                       isCountersinkingActive={isCountersinkingActive}
@@ -1259,11 +1412,11 @@ const InstantPricing = () => {
                     />
                   )}
 
-                  {(isLoadingUnfold || isCalculatingPrice) && (
+                  {(isLoadingUnfold || isCalculatingPrice || isGeneratingConfiguredPreview) && (
                     <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
                       <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
                       <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                        {isLoadingUnfold ? 'Preparing Flat Pattern...' : 'Calculating...'}
+                        {isLoadingUnfold ? 'Preparing Flat Pattern...' : isGeneratingConfiguredPreview ? 'Applying Configured Cuts...' : 'Calculating...'}
                       </div>
                     </div>
                   )}

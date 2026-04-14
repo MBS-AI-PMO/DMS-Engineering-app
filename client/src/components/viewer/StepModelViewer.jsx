@@ -52,6 +52,68 @@ const getWrinkleNormal = () => {
   return tex;
 };
 
+const SCREW_GAUGE_MAJOR_IN = {
+  0: 0.060,
+  1: 0.073,
+  2: 0.086,
+  3: 0.099,
+  4: 0.112,
+  5: 0.125,
+  6: 0.138,
+  8: 0.164,
+  10: 0.190,
+  12: 0.216,
+};
+
+const parseSizeSpecMajorIn = (sizeSpec) => {
+  if (!sizeSpec) return null;
+  const normalized = String(sizeSpec).trim().toUpperCase().replace(/\s+/g, '');
+  if (!normalized) return null;
+
+  const metric = normalized.match(/^M(\d+(?:\.\d+)?)/);
+  if (metric) {
+    const mm = Number(metric[1]);
+    return Number.isFinite(mm) && mm > 0 ? (mm / 25.4) : null;
+  }
+
+  const fractional = normalized.match(/^(\d+)\/(\d+)-\d+/);
+  if (fractional) {
+    const n = Number(fractional[1]);
+    const d = Number(fractional[2]);
+    return Number.isFinite(n) && Number.isFinite(d) && d !== 0 ? (n / d) : null;
+  }
+
+  const gauge = normalized.match(/^#?(\d+)-\d+/);
+  if (gauge) {
+    const g = Number(gauge[1]);
+    return Number.isFinite(g) ? (SCREW_GAUGE_MAJOR_IN[g] ?? null) : null;
+  }
+
+  return null;
+};
+
+const resolveNutBoreMm = (item) => {
+  const minorDiaIn = item?.minor_dia ? Number(item.minor_dia) : null;
+  if (Number.isFinite(minorDiaIn) && minorDiaIn > 0) return minorDiaIn * 25.4;
+
+  const majorDiaIn = item?.major_dia ? Number(item.major_dia) : null;
+  if (Number.isFinite(majorDiaIn) && majorDiaIn > 0) return majorDiaIn * 25.4;
+
+  const sizeMajorIn = parseSizeSpecMajorIn(item?.size_spec || item?.name || '');
+  if (Number.isFinite(sizeMajorIn) && sizeMajorIn > 0) return sizeMajorIn * 25.4 * 1.02;
+
+  const shankIn = item?.shank ? Number(item.shank) : null;
+  if (Number.isFinite(shankIn) && shankIn >= 0.04 && shankIn <= 0.6) return shankIn * 25.4;
+
+  const toolingIn = item?.tooling_diameter ? Number(item.tooling_diameter) : null;
+  const baseIn = item?.base_width ? Number(item.base_width) : null;
+  if (Number.isFinite(toolingIn) && toolingIn > 0) {
+    if (!Number.isFinite(baseIn) || toolingIn < (baseIn * 0.9)) return toolingIn * 25.4;
+  }
+
+  return null;
+};
+
 const StepModelViewer = ({
   selectedFile,
   detectedHoles = [],
@@ -63,6 +125,7 @@ const StepModelViewer = ({
   selectedHardware = {},
   isHardwareActive = false,
   hwItemsByType = {},
+  modelUrlOverride = null,
   selectedCountersinks = {},
   showCountersinkMarkers = true,
   countersinkMarkerStyle = 'highlight',
@@ -131,9 +194,10 @@ const StepModelViewer = ({
     };
 
     try {
+      const disableEdgesForConfiguredPreview = Boolean(modelUrlOverride);
       const viewer = new OV.EmbeddedViewer(currentRef, {
         backgroundColor: new OV.RGBAColor(255, 255, 255, 255),
-        edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(0, 0, 0), 1),
+        edgeSettings: new OV.EdgeSettings(!disableEdgesForConfiguredPreview, new OV.RGBColor(0, 0, 0), 1),
         onModelLoaded: () => {
           clearInterval(progressTimer); onProgress(100);
           const m = viewer.GetModel();
@@ -147,13 +211,14 @@ const StepModelViewer = ({
           centroidRef.current.copy(center);
 
           // Add lighting
-          v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
-          const dl1 = new THREE.DirectionalLight(0xffffff, 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
-          const dl2 = new THREE.DirectionalLight(0xffffff, 0.4); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
+          v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, disableEdgesForConfiguredPreview ? 0.95 : 1.2));
+          const dl1 = new THREE.DirectionalLight(0xffffff, disableEdgesForConfiguredPreview ? 0.56 : 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
+          const dl2 = new THREE.DirectionalLight(0xffffff, disableEdgesForConfiguredPreview ? 0.28 : 0.4); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
 
           // Match holes & Initialize Materials
           const colorStr = (typeof activeFinishColor === 'string') ? activeFinishColor : (activeFinishColor?.color || activeFinishColor?.hex || '');
           const finishHex = colorStr ? parseInt(colorStr.replace('#', '0x')) : null;
+          const shouldForceFinishColor = finishHex !== null && !(disableEdgesForConfiguredPreview && activeFinishColor?.isBaseMaterialFallback);
 
           v?.scene?.traverse(obj => {
             if (obj.isMesh && obj.material) {
@@ -177,7 +242,7 @@ const StepModelViewer = ({
                 if (m.color && !obj.userData.origColor) {
                   obj.userData.origColor = { r: m.color.r, g: m.color.g, b: m.color.b };
                 }
-                if (finishHex !== null) m.color.setHex(finishHex);
+                if (shouldForceFinishColor) m.color.setHex(finishHex);
               });
             }
           });
@@ -209,8 +274,8 @@ const StepModelViewer = ({
 
       viewerInstance.current = viewer;
       const modelFile = selectedFile?.file;
-      const modelUrl = selectedFile?.url || selectedFile?.path || modelFile?.path || modelFile?.url;
-      const isBrowserFile = (typeof File !== 'undefined') && modelFile instanceof File;
+      const modelUrl = modelUrlOverride || selectedFile?.url || selectedFile?.path || modelFile?.path || modelFile?.url;
+      const isBrowserFile = !modelUrlOverride && (typeof File !== 'undefined') && modelFile instanceof File;
 
       if (isBrowserFile) {
         viewer.LoadModelFromFileList([modelFile]);
@@ -241,7 +306,7 @@ const StepModelViewer = ({
       console.error("StepViewer error:", e);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFile]);
+  }, [selectedFile, modelUrlOverride]);
 
   // --- Thickness Scaling ---
   useEffect(() => {
@@ -270,6 +335,11 @@ const StepModelViewer = ({
       try {
         const v = viewerInstance.current?.GetViewer();
         if (!v?.scene) return;
+        const useConfiguredPreviewShading = Boolean(modelUrlOverride);
+        const finishColorStr = (typeof activeFinishColor === 'string')
+          ? activeFinishColor
+          : (activeFinishColor?.color || activeFinishColor?.hex || '');
+        const hasForcedFinishColor = Boolean(finishColorStr) && !(useConfiguredPreviewShading && activeFinishColor?.isBaseMaterialFallback);
 
         v.scene.traverse(obj => {
           if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
@@ -313,9 +383,12 @@ const StepModelViewer = ({
 
             if (isTapped) { fm.color.set(0x2563eb); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             else if (isActive) { fm.color.set(0xf59e0b); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
-            else if (activeFinishColor) {
-              fm.color.set(activeFinishColor.color);
-              if (!isFinishPowderCoating) { fm.emissive.set(activeFinishColor.color); fm.emissiveIntensity = 0.15; }
+            else if (hasForcedFinishColor) {
+              fm.color.set(finishColorStr);
+              if (!isFinishPowderCoating && !useConfiguredPreviewShading) {
+                fm.emissive.set(finishColorStr);
+                fm.emissiveIntensity = 0.08;
+              }
               else { fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             } else {
               const oc = obj.userData.origColor; fm.color.setRGB(oc.r, oc.g, oc.b);
@@ -330,7 +403,9 @@ const StepModelViewer = ({
               fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
               fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
             } else {
-              fm.roughness = 0.6; fm.metalness = 0.05; fm.normalMap = null;
+              fm.roughness = useConfiguredPreviewShading ? 0.72 : 0.6;
+              fm.metalness = useConfiguredPreviewShading ? 0.04 : 0.05;
+              fm.normalMap = null;
             }
 
             const shouldFade = isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen);
@@ -344,7 +419,7 @@ const StepModelViewer = ({
       } catch (err) { console.warn('Style application error:', err); }
     };
     apply();
-  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps]);
+  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps, modelUrlOverride]);
 
   // --- Live Finish Color Updates ---
   useEffect(() => {
@@ -352,6 +427,7 @@ const StepModelViewer = ({
     if (!v || modelLoadCount === 0) return;
     const colorStr = (typeof activeFinishColor === 'string') ? activeFinishColor : (activeFinishColor?.color || activeFinishColor?.hex || '');
     const finishHex = colorStr ? parseInt(colorStr.replace('#', '0x')) : null;
+    const shouldForceFinishColor = finishHex !== null && !(modelUrlOverride && activeFinishColor?.isBaseMaterialFallback);
 
     const viewer = v.GetViewer();
     if (!viewer) return;
@@ -360,7 +436,7 @@ const StepModelViewer = ({
       if (obj.isMesh && !obj.userData.isHoleMarker && !obj.isHardwareMarker) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(m => {
-          if (finishHex !== null) {
+          if (shouldForceFinishColor) {
             m.color.setHex(finishHex);
           } else if (obj.userData.origColor) {
             m.color.setRGB(obj.userData.origColor.r, obj.userData.origColor.g, obj.userData.origColor.b);
@@ -369,7 +445,7 @@ const StepModelViewer = ({
       }
     });
     try { v.Render(); } catch { console.debug('Scene update omitted'); }
-  }, [activeFinishColor, modelLoadCount]);
+  }, [activeFinishColor, modelLoadCount, modelUrlOverride]);
 
   // --- Markers Management (Tapping, Hardware, Countersinks) ---
   useEffect(() => {
@@ -415,7 +491,20 @@ const StepModelViewer = ({
         }
 
         let panelHex = 0x9ca3af;
-        v.scene.traverse(o => { if (o.isMesh && !o.userData.isHoleMarker && !o.isHardwareMarker && o.material?.color) panelHex = o.material.color.getHex(); });
+        const panelColorWeights = new Map();
+        v.scene.traverse(o => {
+          if (!o.isMesh || o.userData.isHoleMarker || o.isHardwareMarker || !o.material) return;
+          const posCount = o.geometry?.attributes?.position?.count || 1;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((m) => {
+            if (!m?.color) return;
+            const hex = m.color.getHex();
+            panelColorWeights.set(hex, (panelColorWeights.get(hex) || 0) + posCount);
+          });
+        });
+        if (panelColorWeights.size > 0) {
+          panelHex = Array.from(panelColorWeights.entries()).sort((a, b) => b[1] - a[1])[0][0];
+        }
 
         const makeRing = (iR, oR, h) => new THREE.LatheGeometry([new THREE.Vector2(iR, h / 2), new THREE.Vector2(iR, -h / 2), new THREE.Vector2(oR, -h / 2), new THREE.Vector2(oR, h / 2), new THREE.Vector2(iR, h / 2)], 32);
 
@@ -475,27 +564,44 @@ const StepModelViewer = ({
             const toolingDiaMm = item?.tooling_diameter ? parseFloat(item.tooling_diameter) * 25.4 : null;
             const baseWidthMm = item?.base_width ? parseFloat(item.base_width) * 25.4 : null;
             const lengthMm = item?.length ? parseFloat(item.length) * 25.4 : null;
-            const type = typeId || 3;
+            const majorDiaMm = item?.major_dia ? parseFloat(item.major_dia) * 25.4 : null;
+            const resolvedNutBoreMm = resolveNutBoreMm(item);
+            const type = Number(typeId) || 3;
             let hwOuterR, hwBoreR;
-            if (type === 3) { hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.6); hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR; }
+            if (type === 3) {
+              // Nuts: use admin-configured dimensions as the source of truth.
+              const configuredOuterMm = baseWidthMm || majorDiaMm || null;
+              const configuredBoreMm = resolvedNutBoreMm;
+              hwOuterR = configuredOuterMm ? (configuredOuterMm / 2) : (configuredBoreMm ? (configuredBoreMm / 2) * 1.65 : holeR * 1.6);
+              hwBoreR = configuredBoreMm ? (configuredBoreMm / 2) : (hwOuterR * 0.55);
+            }
             else if (type === 2) { const br = toolingDiaMm ? toolingDiaMm / 2 : holeR; hwOuterR = br * 1.33; hwBoreR = br * 0.6; }
-            else if (type === 4) { hwOuterR = baseWidthMm ? baseWidthMm / 2 : (toolingDiaMm ? toolingDiaMm * 1.5 : holeR * 1.5); hwBoreR = toolingDiaMm ? toolingDiaMm / 2 : holeR; }
+            else if (type === 4) {
+              const configuredOuterMm = baseWidthMm || majorDiaMm || null;
+              const configuredBoreMm = resolvedNutBoreMm;
+              hwOuterR = configuredOuterMm ? (configuredOuterMm / 2) : (configuredBoreMm ? (configuredBoreMm / 2) * 1.7 : holeR * 1.5);
+              hwBoreR = configuredBoreMm ? (configuredBoreMm / 2) : (hwOuterR * 0.55);
+            }
             else {
               const studShankR = toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9;
               hwOuterR = baseWidthMm ? baseWidthMm / 2 : studShankR * 1.65;
               hwBoreR = 0;
             }
-            if (type !== 2) hwBoreR = Math.min(hwBoreR, holeR * 0.99, hwOuterR * 0.85);
+            if (type === 3 || type === 4) {
+              hwBoreR = Math.min(hwBoreR, hwOuterR * 0.85);
+            } else if (type !== 2) {
+              hwBoreR = Math.min(hwBoreR, holeR * 0.99, hwOuterR * 0.85);
+            }
 
-            const color = HW_COLORS[typeId] || 0xB8860B;
-            const mat = getMarkerMat(`hw_${color}`, () => new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
-            const nutBodyMat = getMarkerMat(`hw_nut_matte_${color}`, () => new THREE.MeshStandardMaterial({ color, metalness: 0.18, roughness: 0.82, side: THREE.DoubleSide }));
-            const soMat = getMarkerMat(`so_${color}`, () => new THREE.MeshStandardMaterial({ color, metalness: 0.75, roughness: 0.25 }));
+            const defaultColor = HW_COLORS[type] || 0xB8860B;
+            const mat = getMarkerMat(`hw_${defaultColor}`, () => new THREE.MeshStandardMaterial({ color: defaultColor, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
+            const soMat = getMarkerMat(`so_${defaultColor}`, () => new THREE.MeshStandardMaterial({ color: defaultColor, metalness: 0.75, roughness: 0.25 }));
 
             let axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : hwThicknessVec.clone();
             if (axisVec.dot(hwThicknessVec) < 0) axisVec.negate();
             const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
+            const shouldUsePhysicalNutResize = Boolean(modelUrlOverride);
             const surfaceLift = Math.max(0.35, origT * 0.08) / Math.max(scaleFactor, 1e-6);
             const thinDiscH = Math.max(0.06, 0.16 / Math.max(scaleFactor, 1e-6));
             const baseCenter = new THREE.Vector3(...hole.position);
@@ -504,31 +610,98 @@ const StepModelViewer = ({
 
             const maxAllowedHoleR = item?.max_hole_diameter ? (parseFloat(item.max_hole_diameter) * 25.4 / 2) : null;
 
-            const addHoleAdjustDiscs = (targetR, hardwareOuterR = null) => {
-              if (!targetR || holeR <= targetR * 1.01) return;
-              if (maxAllowedHoleR !== null && holeR <= maxAllowedHoleR) return;
+            const addHoleAdjustDiscs = (targetR, hardwareOuterR = null, options = {}) => {
+              const {
+                applyFront = true,
+                applyBack = true,
+                includeTail = true,
+                visibleOuterROverride = null,
+                useMaxAllowedLimit = true,
+              } = options;
+
+              if (!targetR || targetR <= 0) return false;
+              // Absolute tolerance avoids treating near-identical holes as reduced.
+              if (holeR <= targetR + 0.03) return false;
+              if (useMaxAllowedLimit && maxAllowedHoleR !== null && holeR <= maxAllowedHoleR + 0.03) return false;
+
               const fillMat = getMarkerMat(`fill_${panelHex}`, () => new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
               const innerR = Math.max(0.2, targetR * 0.99);
               // Visible adjustment disc size should be consistent for the same hardware item.
-              const visibleOuterR = Math.max(innerR + 0.08, hardwareOuterR ? (hardwareOuterR * 1.35) : (targetR * 1.6));
-              addMesh(makeRing(innerR, visibleOuterR, thinDiscH), fillMat, basePos.clone(), axisVec);
-              addMesh(makeRing(innerR, visibleOuterR, thinDiscH), fillMat, backSurfacePos.clone(), axisVec);
+              const visibleOuterR = Math.min(
+                holeR * 1.005,
+                Math.max(
+                  innerR + 0.08,
+                  visibleOuterROverride || (hardwareOuterR ? (hardwareOuterR * 1.2) : (targetR * 1.4))
+                )
+              );
+
+              if (applyFront) addMesh(makeRing(innerR, visibleOuterR, thinDiscH), fillMat, basePos.clone(), axisVec);
+              if (applyBack) addMesh(makeRing(innerR, visibleOuterR, thinDiscH), fillMat, backSurfacePos.clone(), axisVec);
 
               // If detected hole is much larger, add non-prominent filler from visible disc to hole wall.
-              if (holeR > visibleOuterR * 1.01) {
+              if (includeTail && holeR > visibleOuterR * 1.01) {
                 const tailOuterR = holeR * 1.01;
-                addMesh(makeRing(visibleOuterR, tailOuterR, thinDiscH * 0.8), fillMat, basePos.clone(), axisVec);
-                addMesh(makeRing(visibleOuterR, tailOuterR, thinDiscH * 0.8), fillMat, backSurfacePos.clone(), axisVec);
+                if (applyFront) addMesh(makeRing(visibleOuterR, tailOuterR, thinDiscH * 0.8), fillMat, basePos.clone(), axisVec);
+                if (applyBack) addMesh(makeRing(visibleOuterR, tailOuterR, thinDiscH * 0.8), fillMat, backSurfacePos.clone(), axisVec);
               }
+
+              return true;
+            };
+
+            const addFrontHoleReducerSleeve = (targetR, options = {}) => {
+              const {
+                sleeveDepthMm = Math.max(0.45, Math.min(1.4, origT * 0.12)),
+                outerROverride = null,
+                hardwareOuterR = null,
+              } = options;
+
+              if (!targetR || targetR <= 0) return false;
+              if (holeR <= targetR + 0.03) return false;
+
+              const fillMat = getMarkerMat(`fill_${panelHex}`, () => new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
+              const innerR = Math.max(0.2, targetR * 0.995);
+              const autoOuterR = Math.max(
+                innerR + 0.12,
+                hardwareOuterR ? (hardwareOuterR * 1.02) : (innerR * 1.18)
+              );
+              const outerR = Math.max(innerR + 0.06, Math.min(holeR * 1.005, outerROverride || autoOuterR));
+              const sleeveH = Math.min(Math.max(sleeveDepthMm, thinDiscH * 2.0), Math.max(0.6, origT * 0.24));
+              const sleeveCenterOffset = Math.max(0.0, (origT * 0.5) - (sleeveH * 0.5) + 0.02);
+              const sleevePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(faceSign * sleeveCenterOffset));
+              addMesh(makeRing(innerR, outerR, sleeveH), fillMat, sleevePos, axisVec);
+              return true;
             };
 
             if (type === 3) {
-              addHoleAdjustDiscs(hwBoreR, hwOuterR);
+              const reductionTargetR = Math.max(hwBoreR || 0, 0.2);
+              const nutInnerR = Math.min(reductionTargetR, hwOuterR * 0.85);
+
+              const needsAutoFit = Math.abs(holeR - nutInnerR) > 0.03;
+              if (!shouldUsePhysicalNutResize) {
+                const reducedFaceLip = addHoleAdjustDiscs(nutInnerR, hwOuterR, {
+                  applyFront: true,
+                  applyBack: false,
+                  includeTail: false,
+                  visibleOuterROverride: Math.max(nutInnerR + 0.06, nutInnerR * 1.1),
+                  useMaxAllowedLimit: false,
+                });
+                const reducedFaceSleeve = addFrontHoleReducerSleeve(nutInnerR, {
+                  sleeveDepthMm: Math.max(0.5, Math.min(1.2, origT * 0.1)),
+                  hardwareOuterR: hwOuterR,
+                });
+                // For non-configured fallback, visual fillers are only meaningful when reducing oversized holes.
+                // Keep warning color tied to true fit mismatch in either direction.
+                void reducedFaceLip;
+                void reducedFaceSleeve;
+              }
+
+              const nutColor = needsAutoFit ? 0xDC2626 : panelHex;
+              const nutBodyMat = getMarkerMat(
+                `hw_nut_matte_${nutColor}_${needsAutoFit ? 'adjusted' : 'native'}`,
+                () => new THREE.MeshStandardMaterial({ color: nutColor, metalness: 0.18, roughness: 0.82, side: THREE.DoubleSide })
+              );
               const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, origT * 0.6);
-              const nutBackDiscExtra = Math.max(0.72, 0.95 / Math.max(scaleFactor, 1e-6));
-              const nutBackDiscPos = backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * nutBackDiscExtra));
-              addMesh(makeRing(hwBoreR, hwOuterR, nutH), nutBodyMat, basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2)), axisVec);
-              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), mat, nutBackDiscPos, axisVec);
+              addMesh(makeRing(nutInnerR, hwOuterR, nutH), nutBodyMat, basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2)), axisVec);
             } else if (type === 2) {
               const standoffH = item?.length ? parseFloat(item.length) * 25.4 : origT * 1.8;
               const standoffBackExtra = Math.max(0.34, 0.52 / Math.max(scaleFactor, 1e-6));
@@ -591,12 +764,20 @@ const StepModelViewer = ({
               modelRoot.add(hexHeadMesh);
               holeMarkersRef.current.push(hexHeadMesh);
             } else if (type === 4) {
-              addHoleAdjustDiscs(hwBoreR, hwOuterR);
+              const needsAutoFit = Math.abs(holeR - hwBoreR) > 0.03;
+              if (!shouldUsePhysicalNutResize) {
+                addHoleAdjustDiscs(hwBoreR, hwOuterR);
+              }
+              const flushNutColor = needsAutoFit ? 0xDC2626 : panelHex;
+              const flushNutMat = getMarkerMat(
+                `hw_flush_nut_${flushNutColor}_${needsAutoFit ? 'adjusted' : 'native'}`,
+                () => new THREE.MeshStandardMaterial({ color: flushNutColor, metalness: 0.26, roughness: 0.72, side: THREE.DoubleSide })
+              );
               const flushNutBackExtra = Math.max(0.34, 0.52 / Math.max(scaleFactor, 1e-6));
               const flushNutFrontPos = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * flushNutBackExtra));
               const flushNutBackPos = backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * flushNutBackExtra));
-              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), mat, flushNutFrontPos, axisVec);
-              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), mat, flushNutBackPos, axisVec);
+              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), flushNutMat, flushNutFrontPos, axisVec);
+              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), flushNutMat, flushNutBackPos, axisVec);
             } else if (type === 1) {
               // Flush stud: solid shank + clean round screw head on opposite side.
               const studShankR = Math.max(0.35, toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9);
@@ -607,15 +788,15 @@ const StepModelViewer = ({
               const domeR = headR * 0.92;
               const domeH = Math.max(0.3, Math.min(0.9, headR * 0.22));
 
-              const studBodyMat = getMarkerMat(`stud_body_${color}`, () => new THREE.MeshStandardMaterial({
-                color,
+              const studBodyMat = getMarkerMat(`stud_body_${defaultColor}`, () => new THREE.MeshStandardMaterial({
+                color: defaultColor,
                 metalness: 0.52,
                 roughness: 0.36,
                 side: THREE.DoubleSide,
               }));
 
-              const screwHeadMat = getMarkerMat(`stud_head_${color}`, () => new THREE.MeshStandardMaterial({
-                color,
+              const screwHeadMat = getMarkerMat(`stud_head_${defaultColor}`, () => new THREE.MeshStandardMaterial({
+                color: defaultColor,
                 metalness: 0.38,
                 roughness: 0.46,
                 side: THREE.DoubleSide,
