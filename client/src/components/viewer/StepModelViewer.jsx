@@ -676,7 +676,7 @@ const StepModelViewer = ({
               const reductionTargetR = Math.max(hwBoreR || 0, 0.2);
               const nutInnerR = Math.min(reductionTargetR, hwOuterR * 0.85);
 
-              const needsAutoFit = Math.abs(holeR - nutInnerR) > 0.03;
+              const needsReduction = holeR > (nutInnerR + 0.03);
               if (!shouldUsePhysicalNutResize) {
                 const reducedFaceLip = addHoleAdjustDiscs(nutInnerR, hwOuterR, {
                   applyFront: true,
@@ -695,9 +695,9 @@ const StepModelViewer = ({
                 void reducedFaceSleeve;
               }
 
-              const nutColor = needsAutoFit ? 0xDC2626 : panelHex;
+              const nutColor = needsReduction ? 0xDC2626 : panelHex;
               const nutBodyMat = getMarkerMat(
-                `hw_nut_matte_${nutColor}_${needsAutoFit ? 'adjusted' : 'native'}`,
+                `hw_nut_matte_${nutColor}_${needsReduction ? 'reduced' : 'native'}`,
                 () => new THREE.MeshStandardMaterial({ color: nutColor, metalness: 0.18, roughness: 0.82, side: THREE.DoubleSide })
               );
               const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, origT * 0.6);
@@ -764,13 +764,13 @@ const StepModelViewer = ({
               modelRoot.add(hexHeadMesh);
               holeMarkersRef.current.push(hexHeadMesh);
             } else if (type === 4) {
-              const needsAutoFit = Math.abs(holeR - hwBoreR) > 0.03;
+              const needsReduction = holeR > (hwBoreR + 0.03);
               if (!shouldUsePhysicalNutResize) {
                 addHoleAdjustDiscs(hwBoreR, hwOuterR);
               }
-              const flushNutColor = needsAutoFit ? 0xDC2626 : panelHex;
+              const flushNutColor = needsReduction ? 0xDC2626 : panelHex;
               const flushNutMat = getMarkerMat(
-                `hw_flush_nut_${flushNutColor}_${needsAutoFit ? 'adjusted' : 'native'}`,
+                `hw_flush_nut_${flushNutColor}_${needsReduction ? 'reduced' : 'native'}`,
                 () => new THREE.MeshStandardMaterial({ color: flushNutColor, metalness: 0.26, roughness: 0.72, side: THREE.DoubleSide })
               );
               const flushNutBackExtra = Math.max(0.34, 0.52 / Math.max(scaleFactor, 1e-6));

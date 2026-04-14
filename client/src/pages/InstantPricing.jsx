@@ -1158,10 +1158,10 @@ const InstantPricing = () => {
                       <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole auto-adjusted</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole reduced to fit hardware</span>
                       </div>
                       <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
-                        The hole was enlarged or reduced to match the selected hardware bore.
+                        Red appears only when the original hole was larger than the nut bore.
                       </div>
                     </div>
                   )}
@@ -1321,10 +1321,10 @@ const InstantPricing = () => {
                       <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole auto-adjusted</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red nut: hole reduced to fit hardware</span>
                       </div>
                       <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
-                        The hole was enlarged or reduced to match the selected hardware bore.
+                        Red appears only when the original hole was larger than the nut bore.
                       </div>
                     </div>
                   )}
