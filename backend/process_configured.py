@@ -170,6 +170,37 @@ def resolve_nut_target_diameter_mm(item_data):
     return None
 
 
+def resolve_standoff_target_diameter_mm(item_data):
+    if not isinstance(item_data, dict):
+        return None
+
+    # Primary fit driver for standoffs: tooling diameter.
+    tooling_mm = parse_inches_to_mm(item_data.get('tooling_diameter'))
+    if tooling_mm is not None and tooling_mm > 0:
+        return tooling_mm
+
+    # Secondary fit sources.
+    shank_mm = parse_inches_to_mm(item_data.get('shank'))
+    if shank_mm is not None and shank_mm > 0:
+        return shank_mm
+
+    minor_mm = parse_inches_to_mm(item_data.get('minor_dia'))
+    if minor_mm is not None and minor_mm > 0:
+        return minor_mm
+
+    major_mm = parse_inches_to_mm(item_data.get('major_dia'))
+    if major_mm is not None and major_mm > 0:
+        return major_mm
+
+    # Last fallback from thread notation.
+    size_spec = item_data.get('size_spec') or item_data.get('name')
+    major_in = parse_size_spec_major_diameter_in(size_spec)
+    if major_in is not None and major_in > 0:
+        return major_in * 25.4
+
+    return None
+
+
 def hole_diameter_mm(hole_data):
     """Extract hole diameter in mm from supported payload keys."""
     if not isinstance(hole_data, dict):
@@ -227,11 +258,24 @@ def normalize_vector3(vec, fallback=(0.0, 0.0, 1.0)):
             return (0.0, 0.0, 1.0)
     return (x / mag, y / mag, z / mag)
 
-def process_configured_model(input_path, output_path, configuration_json):
+
+def maybe_clean(workplane_obj, do_clean=True):
+    if not do_clean:
+        return workplane_obj
+    try:
+        return workplane_obj.clean()
+    except Exception:
+        return workplane_obj
+
+def process_configured_model(input_path, output_path, configuration_json, mode='full', report_output_path=None):
     """
     Physical hole cutting (taps + hardware fit + countersinks) and high-fidelity coloring.
     """
     try:
+        mode_key = str(mode or 'full').strip().lower()
+        preview_mode = mode_key == 'preview'
+        clean_each_step = not preview_mode
+
         print(f"[CAD-KERNEL] Processing: {input_path}")
         # Load the base model
         model = cq.importers.importStep(input_path)
@@ -284,14 +328,32 @@ def process_configured_model(input_path, output_path, configuration_json):
                     # Apply cut directly to the shape
                     model = cq.Workplane(model.val().cut(tool))
 
-        # 1.5 Resize holes for nut hardware (type 3/4): shrink oversized or enlarge undersized.
+        hardware_resize_report = {}
+        batched_resize_plugs = []
+        batched_resize_pilots = []
+
+        # 1.5 Resize holes for hardware requiring bore fit (standoffs + nuts):
+        # shrink oversized bores or enlarge undersized bores.
         if selected_hardware and isinstance(selected_hardware, dict):
             for hw_id, hw_info in selected_hardware.items():
+                hw_key = str(hw_id)
                 if not hw_info or not isinstance(hw_info, dict):
+                    hardware_resize_report[hw_key] = {
+                        'action': 'skipped',
+                        'reason': 'invalid_hardware_config',
+                    }
                     continue
 
                 hw_type = parse_numeric(hw_info.get('typeId'))
-                if hw_type is None or int(hw_type) not in (3, 4):
+                if hw_type is None:
+                    hardware_resize_report[hw_key] = {
+                        'action': 'skipped',
+                        'reason': 'missing_type',
+                    }
+                    continue
+
+                hw_type_int = int(hw_type)
+                if hw_type_int not in (2, 3, 4):
                     continue
 
                 hole_data = hw_info.get('hole') or {}
@@ -299,16 +361,29 @@ def process_configured_model(input_path, output_path, configuration_json):
 
                 hole_pos = parse_vector3(hole_data.get('position'))
                 if hole_pos is None:
-                    print(f"[CAD-KERNEL] Skip nut resize {hw_id}: missing hole position")
+                    print(f"[CAD-KERNEL] Skip hardware resize {hw_id}: missing hole position")
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'skipped',
+                        'reason': 'missing_hole_position',
+                    }
                     continue
 
                 hole_axis = normalize_vector3(parse_vector3(hole_data.get('axis')), fallback=(0.0, 0.0, 1.0))
                 original_hole_dia_mm = hole_diameter_mm(hole_data)
 
-                target_dia_mm = resolve_nut_target_diameter_mm(item_data)
+                if hw_type_int in (3, 4):
+                    target_dia_mm = resolve_nut_target_diameter_mm(item_data)
+                else:
+                    target_dia_mm = resolve_standoff_target_diameter_mm(item_data)
 
                 if target_dia_mm is None or target_dia_mm <= 0:
-                    print(f"[CAD-KERNEL] Skip nut resize {hw_id}: missing target bore diameter")
+                    print(f"[CAD-KERNEL] Skip hardware resize {hw_id}: missing target bore diameter")
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'skipped',
+                        'reason': 'missing_target_diameter',
+                    }
                     continue
 
                 target_hole_r = max((target_dia_mm / 2.0) - 0.002, 0.01)
@@ -321,6 +396,13 @@ def process_configured_model(input_path, output_path, configuration_json):
                 resize_tol = 0.02
                 radius_delta = original_hole_r - target_hole_r
                 if abs(radius_delta) <= resize_tol:
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'unchanged',
+                        'direction': 'none',
+                        'original_dia_mm': round(original_hole_dia_mm, 6),
+                        'target_dia_mm': round(target_dia_mm, 6),
+                    }
                     continue
 
                 hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
@@ -337,25 +419,57 @@ def process_configured_model(input_path, output_path, configuration_json):
                         resize_depth = max(local_thickness + fill_overrun, 0.6)
                         plug_radius = original_hole_r + 0.02
                         plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
-                        model = cq.Workplane(model.val().fuse(plug)).clean()
-
                         pilot_depth = max(local_thickness + 0.08, 0.7)
                         pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
-                        model = cq.Workplane(model.val().cut(pilot)).clean()
+
+                        if preview_mode:
+                            batched_resize_plugs.append(plug)
+                            batched_resize_pilots.append(pilot)
+                        else:
+                            model = maybe_clean(cq.Workplane(model.val().fuse(plug)), clean_each_step)
+                            model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
                         direction = "reduced"
                     else:
                         # Hole is too small (or unknown): open it directly to target.
                         pilot_depth = max(local_thickness + 0.08, 0.7)
                         pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
-                        model = cq.Workplane(model.val().cut(pilot)).clean()
+                        if preview_mode:
+                            batched_resize_pilots.append(pilot)
+                        else:
+                            model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
                         direction = "enlarged"
 
                     print(
-                        f"[CAD-KERNEL] RESIZED HOLE FOR NUT(type={int(hw_type)}): id={hw_id}, "
+                        f"[CAD-KERNEL] RESIZED HOLE FOR HARDWARE(type={hw_type_int}): id={hw_id}, "
                         f"{direction}, original={original_hole_dia_mm:.3f}mm -> target={target_dia_mm:.3f}mm"
                     )
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'resized',
+                        'direction': direction,
+                        'original_dia_mm': round(original_hole_dia_mm, 6),
+                        'target_dia_mm': round(target_dia_mm, 6),
+                    }
                 except Exception as hw_resize_err:
-                    print(f"[CAD-KERNEL] Failed nut resize {hw_id}: {hw_resize_err}")
+                    print(f"[CAD-KERNEL] Failed hardware resize {hw_id}: {hw_resize_err}")
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'failed',
+                        'reason': str(hw_resize_err),
+                        'original_dia_mm': round(original_hole_dia_mm, 6),
+                        'target_dia_mm': round(target_dia_mm, 6),
+                    }
+
+            if preview_mode:
+                try:
+                    if batched_resize_plugs:
+                        plug_shape = batched_resize_plugs[0] if len(batched_resize_plugs) == 1 else cq.Compound.makeCompound(batched_resize_plugs)
+                        model = maybe_clean(cq.Workplane(model.val().fuse(plug_shape)), clean_each_step)
+                    if batched_resize_pilots:
+                        pilot_shape = batched_resize_pilots[0] if len(batched_resize_pilots) == 1 else cq.Compound.makeCompound(batched_resize_pilots)
+                        model = maybe_clean(cq.Workplane(model.val().cut(pilot_shape)), clean_each_step)
+                except Exception as batch_resize_err:
+                    print(f"[CAD-KERNEL] Failed batched hardware resize pass: {batch_resize_err}")
         
         # 2. Perform Countersink Cuts
         if selected_countersinks:
@@ -424,12 +538,12 @@ def process_configured_model(input_path, output_path, configuration_json):
                         resize_depth = max(local_thickness + fill_overrun, 0.6)
                         plug_radius = original_hole_r + 0.02
                         plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
-                        model = cq.Workplane(model.val().fuse(plug)).clean()
+                        model = maybe_clean(cq.Workplane(model.val().fuse(plug)), clean_each_step)
 
                         target_hole_radius = max(minor_r - 0.002, 0.01)
                         pilot_depth = max(local_thickness + 0.08, 0.7)
                         pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_radius, pilot_depth)
-                        model = cq.Workplane(model.val().cut(pilot)).clean()
+                        model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
 
                         print(
                             f"[CAD-KERNEL] RESIZED HOLE FOR COUNTERSINK: id={cs_id}, "
@@ -480,63 +594,76 @@ def process_configured_model(input_path, output_path, configuration_json):
                         f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
                         f"face={'down' if face_sign < 0 else 'up'}"
                     )
-                    model = cq.Workplane(model.val().cut(tool)).clean()
+                    model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
 
-                    # Add a subtle opposite-face witness ring visual.
-                    back_face_sign = -face_sign
-                    back_inward_dir = normalize_vector3(
-                        (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),
-                        fallback=(0.0, 0.0, 1.0 if face_sign > 0 else -1.0)
-                    )
-                    back_surface_center = (
-                        hole_pos[0] + hole_axis[0] * back_face_sign * (local_thickness * 0.5),
-                        hole_pos[1] + hole_axis[1] * back_face_sign * (local_thickness * 0.5),
-                        hole_pos[2] + hole_axis[2] * back_face_sign * (local_thickness * 0.5),
-                    )
-                    back_entry_origin = (
-                        back_surface_center[0] - back_inward_dir[0] * 0.03,
-                        back_surface_center[1] - back_inward_dir[1] * 0.03,
-                        back_surface_center[2] - back_inward_dir[2] * 0.03,
-                    )
-
-                    witness_depth = min(max(0.06, cone_depth_mm * 0.12), max(0.12, local_thickness * 0.2))
-                    witness_inner_r = max(minor_r * 1.01, minor_r + 0.01)
-                    witness_outer_r = min(max(witness_inner_r + 0.05, minor_r * 1.35), major_r * 0.92)
-
-                    if witness_outer_r > witness_inner_r + 1e-4 and witness_depth > 0:
-                        witness_plane = cq.Plane(
-                            origin=cq.Vector(*back_entry_origin),
-                            normal=cq.Vector(*back_inward_dir)
+                    # The witness-ring detail is only needed in final manufacturing output.
+                    if not preview_mode:
+                        back_face_sign = -face_sign
+                        back_inward_dir = normalize_vector3(
+                            (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),
+                            fallback=(0.0, 0.0, 1.0 if face_sign > 0 else -1.0)
                         )
-                        witness_tool = (
-                            cq.Workplane(witness_plane)
-                            .circle(witness_outer_r)
-                            .circle(witness_inner_r)
-                            .extrude(max(witness_depth, 0.02))
-                            .val()
+                        back_surface_center = (
+                            hole_pos[0] + hole_axis[0] * back_face_sign * (local_thickness * 0.5),
+                            hole_pos[1] + hole_axis[1] * back_face_sign * (local_thickness * 0.5),
+                            hole_pos[2] + hole_axis[2] * back_face_sign * (local_thickness * 0.5),
                         )
-                        model = cq.Workplane(model.val().cut(witness_tool)).clean()
+                        back_entry_origin = (
+                            back_surface_center[0] - back_inward_dir[0] * 0.03,
+                            back_surface_center[1] - back_inward_dir[1] * 0.03,
+                            back_surface_center[2] - back_inward_dir[2] * 0.03,
+                        )
+
+                        witness_depth = min(max(0.06, cone_depth_mm * 0.12), max(0.12, local_thickness * 0.2))
+                        witness_inner_r = max(minor_r * 1.01, minor_r + 0.01)
+                        witness_outer_r = min(max(witness_inner_r + 0.05, minor_r * 1.35), major_r * 0.92)
+
+                        if witness_outer_r > witness_inner_r + 1e-4 and witness_depth > 0:
+                            witness_plane = cq.Plane(
+                                origin=cq.Vector(*back_entry_origin),
+                                normal=cq.Vector(*back_inward_dir)
+                            )
+                            witness_tool = (
+                                cq.Workplane(witness_plane)
+                                .circle(witness_outer_r)
+                                .circle(witness_inner_r)
+                                .extrude(max(witness_depth, 0.02))
+                                .val()
+                            )
+                            model = maybe_clean(cq.Workplane(model.val().cut(witness_tool)), clean_each_step)
                 except Exception as cut_err:
                     print(f"[CAD-KERNEL] Failed countersink cut {cs_id}: {cut_err}")
 
-        # 3. Apply Visual Finishes
-        anodizing_color = config.get('anodizingColor')
-        if isinstance(anodizing_color, dict):
-            hex_color = anodizing_color.get('color') or anodizing_color.get('hex') or '#2f2f2f'
-        elif isinstance(anodizing_color, str) and anodizing_color.strip():
-            hex_color = anodizing_color.strip()
-        else:
-            hex_color = '#2f2f2f'
-        rgb = hex_to_rgb(hex_color)
-        part_color = cq.Color(rgb[0], rgb[1], rgb[2], 1.0)
-
-        # 4. Wrapping in Assembly
-        assy = cq.Assembly(model, color=part_color, name="Configured_Manufacturing_Part")
-                
-        # Export the Final Production Asset
+        # Export the final asset; preview mode skips expensive assembly/color wrapping.
         path_obj = Path(output_path)
         path_obj.parent.mkdir(parents=True, exist_ok=True)
-        assy.save(output_path, "STEP")
+        if preview_mode:
+            shape = model.val() if hasattr(model, 'val') else model
+            cq.exporters.export(shape, output_path)
+        else:
+            anodizing_color = config.get('anodizingColor')
+            if isinstance(anodizing_color, dict):
+                hex_color = anodizing_color.get('color') or anodizing_color.get('hex') or '#2f2f2f'
+            elif isinstance(anodizing_color, str) and anodizing_color.strip():
+                hex_color = anodizing_color.strip()
+            else:
+                hex_color = '#2f2f2f'
+            rgb = hex_to_rgb(hex_color)
+            part_color = cq.Color(rgb[0], rgb[1], rgb[2], 1.0)
+            assy = cq.Assembly(model, color=part_color, name="Configured_Manufacturing_Part")
+            assy.save(output_path, "STEP")
+
+        if report_output_path:
+            try:
+                report_obj = {
+                    'hardwareResize': hardware_resize_report,
+                }
+                report_path_obj = Path(report_output_path)
+                report_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                report_path_obj.write_text(json.dumps(report_obj), encoding='utf-8')
+            except Exception as report_err:
+                print(f"[CAD-KERNEL] Failed writing report JSON: {report_err}")
+
         print(f"[CAD-KERNEL] Success: Configured model saved to {output_path}")
         return True
 
@@ -548,14 +675,21 @@ def process_configured_model(input_path, output_path, configuration_json):
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("Usage: python process_configured.py <input_step> <output_step> <config_json>")
+        print("Usage: python process_configured.py <input_step> <output_step> <config_json> [--mode=full|preview] [--report-json=<path>]")
         sys.exit(1)
         
     in_path = sys.argv[1]
     out_path = sys.argv[2]
     config_file = sys.argv[3]
+    mode = 'full'
+    report_json_path = None
+    for arg in sys.argv[4:]:
+        if isinstance(arg, str) and arg.startswith('--mode='):
+            mode = arg.split('=', 1)[1].strip() or 'full'
+        elif isinstance(arg, str) and arg.startswith('--report-json='):
+            report_json_path = arg.split('=', 1)[1].strip() or None
     
-    success = process_configured_model(in_path, out_path, config_file)
+    success = process_configured_model(in_path, out_path, config_file, mode=mode, report_output_path=report_json_path)
     if success:
         sys.exit(0)
     else:

@@ -8,7 +8,51 @@ const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const previewJobs = new Map();
-const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v8-bidirectional-nut-hole-resize';
+const previewResultCache = new Map();
+const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v10-standoff-resize-preview-report';
+const PREVIEW_RESULT_TTL_MS = 8 * 60 * 1000;
+const PREVIEW_RESULT_CACHE_MAX = 256;
+
+const cleanupPreviewResultCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of previewResultCache.entries()) {
+        if (!entry || entry.expiresAt <= now) {
+            previewResultCache.delete(key);
+        }
+    }
+
+    while (previewResultCache.size > PREVIEW_RESULT_CACHE_MAX) {
+        const oldestKey = previewResultCache.keys().next().value;
+        if (!oldestKey) break;
+        previewResultCache.delete(oldestKey);
+    }
+};
+
+const getHotPreviewResult = (cacheHash) => {
+    cleanupPreviewResultCache();
+    const entry = previewResultCache.get(cacheHash);
+    if (!entry) return null;
+    return entry.value || null;
+};
+
+const setHotPreviewResult = (cacheHash, value) => {
+    cleanupPreviewResultCache();
+    previewResultCache.set(cacheHash, {
+        value,
+        expiresAt: Date.now() + PREVIEW_RESULT_TTL_MS,
+    });
+};
+
+const safeReadJson = (filePath) => {
+    try {
+        if (!filePath || !fs.existsSync(filePath)) return null;
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        if (!raw || !raw.trim()) return null;
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+};
 
 const runPythonScript = (pythonPath, scriptName, args, cwd) => {
     return new Promise((resolve, reject) => {
@@ -77,7 +121,8 @@ const compactHardwareAssignments = (selectedHardware = {}) => {
                 shank: item.shank ?? null,
                 base_width: item.base_width ?? null,
                 major_dia: item.major_dia ?? null,
-                length: item.length ?? null
+                length: item.length ?? null,
+                max_hole_diameter: item.max_hole_diameter ?? null
             }
         };
     }
@@ -424,12 +469,12 @@ router.post('/configure-preview', async (req, res) => {
         const previewConfig = compactPreviewConfig(configuration);
         const hasCountersinks = Object.keys(previewConfig.selectedCountersinks || {}).length > 0;
         const hasTaps = Object.keys(previewConfig.selectedTaps || {}).length > 0;
-        const hasNutResizing = Object.values(previewConfig.selectedHardware || {}).some((hw) => {
+        const hasHardwareResizing = Object.values(previewConfig.selectedHardware || {}).some((hw) => {
             const t = Number(hw?.typeId);
-            return t === 3 || t === 4;
+            return t === 2 || t === 3 || t === 4;
         });
-        if (!hasCountersinks && !hasTaps && !hasNutResizing) {
-            return res.json({ success: true, skipped: true, cached: true, previewPath: null });
+        if (!hasCountersinks && !hasTaps && !hasHardwareResizing) {
+            return res.json({ success: true, skipped: true, cached: true, previewPath: null, hardwareResizeReport: {} });
         }
 
         const stat = fs.statSync(inputPath);
@@ -453,9 +498,33 @@ router.post('/configure-preview', async (req, res) => {
         const outputFileName = `preview_${cacheHash}.step`;
         const outputPath = path.join(previewDir, outputFileName);
         const relativeOutputPath = `temp_uploads/configured_preview/${outputFileName}`;
+        const reportFileName = `report_${cacheHash}.json`;
+        const reportPath = path.join(previewDir, reportFileName);
+
+        const hotResult = getHotPreviewResult(cacheHash);
+        if (hotResult && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+            return res.json({
+                success: true,
+                cached: true,
+                hot: true,
+                previewPath: hotResult.previewPath || relativeOutputPath,
+                hardwareResizeReport: hotResult.hardwareResizeReport || {}
+            });
+        }
 
         if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-            return res.json({ success: true, cached: true, previewPath: relativeOutputPath });
+            const cachedReport = safeReadJson(reportPath);
+            const cachedResult = {
+                previewPath: relativeOutputPath,
+                hardwareResizeReport: cachedReport?.hardwareResize || {}
+            };
+            setHotPreviewResult(cacheHash, cachedResult);
+            return res.json({
+                success: true,
+                cached: true,
+                previewPath: relativeOutputPath,
+                hardwareResizeReport: cachedResult.hardwareResizeReport
+            });
         }
 
         let job = previewJobs.get(cacheHash);
@@ -466,7 +535,12 @@ router.post('/configure-preview', async (req, res) => {
 
                 try {
                     const pythonPath = process.env.PYTHON_PATH || 'python';
-                    await runPythonScript(pythonPath, 'process_configured.py', [inputPath, outputPath, configPath], backendRoot);
+                    await runPythonScript(
+                        pythonPath,
+                        'process_configured.py',
+                        [inputPath, outputPath, configPath, '--mode=preview', `--report-json=${reportPath}`],
+                        backendRoot
+                    );
                 } finally {
                     try { if (fs.existsSync(configPath)) fs.unlinkSync(configPath); } catch (e) { /* ignore */ }
                 }
@@ -484,7 +558,18 @@ router.post('/configure-preview', async (req, res) => {
             return res.status(500).json({ success: false, error: 'Configured preview generation failed' });
         }
 
-        return res.json({ success: true, cached: false, previewPath: relativeOutputPath });
+        const generatedReport = safeReadJson(reportPath);
+        const generatedResult = {
+            previewPath: relativeOutputPath,
+            hardwareResizeReport: generatedReport?.hardwareResize || {}
+        };
+        setHotPreviewResult(cacheHash, generatedResult);
+        return res.json({
+            success: true,
+            cached: false,
+            previewPath: relativeOutputPath,
+            hardwareResizeReport: generatedResult.hardwareResizeReport
+        });
     } catch (err) {
         console.error('Error generating configured preview:', err);
         return res.status(500).json({ success: false, error: err.message || 'Failed to generate configured preview' });

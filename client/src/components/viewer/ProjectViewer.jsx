@@ -195,6 +195,7 @@ const ProjectViewer = ({
   const configurePreviewSeqRef = useRef(0);
   const configurePreviewKeyRef = useRef('');
   const [configuredPreviewUrl, setConfiguredPreviewUrl] = useState(null);
+  const [configuredHardwareResizeReport, setConfiguredHardwareResizeReport] = useState({});
 
   const detectedHoles = useMemo(
     () => mergeDetectedHoles(configuration, selectedTaps, selectedHardware, selectedCountersinks),
@@ -215,13 +216,21 @@ const ProjectViewer = ({
   }, [configuration?.selectedThickness]);
 
   const isSupported = useMemo(() => isStepLikeFile(file) || isStepLikeFile(selectedFile), [file, selectedFile]);
+  const selectedHardwareForPreview = useMemo(() => {
+    const entries = Object.entries(selectedHardware || {}).filter(([, hw]) => {
+      const typeId = Number(hw?.typeId);
+      return typeId === 2 || typeId === 3 || typeId === 4;
+    });
+    return Object.fromEntries(entries);
+  }, [selectedHardware]);
+
   const hasConfiguredCuts = useMemo(
     () => (
       Object.keys(selectedCountersinks || {}).length > 0 ||
       Object.keys(selectedTaps || {}).length > 0 ||
-      Object.keys(selectedHardware || {}).length > 0
+      Object.keys(selectedHardwareForPreview || {}).length > 0
     ),
-    [selectedCountersinks, selectedTaps, selectedHardware]
+    [selectedCountersinks, selectedTaps, selectedHardwareForPreview]
   );
 
   const sourceStepPath = useMemo(
@@ -243,7 +252,7 @@ const ProjectViewer = ({
       tempPath: sourceStepPath,
       configuration: {
         selectedTaps,
-        selectedHardware,
+        selectedHardware: selectedHardwareForPreview,
         selectedCountersinks,
         thickness: mmThickness,
         dimensions: mmThickness ? { mm: { t: mmThickness } } : null,
@@ -256,7 +265,7 @@ const ProjectViewer = ({
     sourceStepPath,
     sourceIsConfigured,
     selectedTaps,
-    selectedHardware,
+    selectedHardwareForPreview,
     selectedCountersinks,
     selectedThickness,
     activeFinishColor,
@@ -268,6 +277,7 @@ const ProjectViewer = ({
       if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
       configurePreviewKeyRef.current = '';
       setConfiguredPreviewUrl(null);
+      setConfiguredHardwareResizeReport({});
       return;
     }
 
@@ -297,6 +307,12 @@ const ProjectViewer = ({
 
         if (seq !== configurePreviewSeqRef.current) return;
 
+        const nextResizeReport =
+          (data?.hardwareResizeReport && typeof data.hardwareResizeReport === 'object')
+            ? data.hardwareResizeReport
+            : {};
+        setConfiguredHardwareResizeReport(nextResizeReport);
+
         configurePreviewKeyRef.current = key;
         if (!data.previewPath) {
           setConfiguredPreviewUrl(null);
@@ -309,9 +325,12 @@ const ProjectViewer = ({
       } catch (err) {
         if (err?.name === 'AbortError') return;
         console.error('ProjectViewer configured preview error:', err);
-        if (seq === configurePreviewSeqRef.current) setConfiguredPreviewUrl(null);
+        if (seq === configurePreviewSeqRef.current) {
+          setConfiguredPreviewUrl(null);
+          setConfiguredHardwareResizeReport({});
+        }
       }
-    }, 180);
+    }, 220);
 
     return () => clearTimeout(timerId);
   }, [configuredPreviewPayload, configuredPreviewUrl]);
@@ -373,10 +392,12 @@ const ProjectViewer = ({
           isTappingActive={false}
           tapOptions={[]}
           selectedHardware={selectedHardware}
-          isHardwareActive={false}
+          hardwareResizeReport={configuredHardwareResizeReport}
+          isHardwareActive={Object.keys(selectedHardware || {}).length > 0}
           hwItemsByType={{}}
           selectedCountersinks={selectedCountersinks}
           showCountersinkMarkers={false}
+          countersinkMarkerStyle="camouflage"
           csOptions={[]}
           isCountersinkingActive={false}
           activeFinishColor={activeFinishColor}

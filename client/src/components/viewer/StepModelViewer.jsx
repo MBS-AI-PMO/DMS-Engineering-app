@@ -114,6 +114,27 @@ const resolveNutBoreMm = (item) => {
   return null;
 };
 
+const resolveStandoffFitMm = (item) => {
+  const toolingIn = item?.tooling_diameter ? Number(item.tooling_diameter) : null;
+  if (Number.isFinite(toolingIn) && toolingIn > 0) return toolingIn * 25.4;
+
+  const shankIn = item?.shank ? Number(item.shank) : null;
+  if (Number.isFinite(shankIn) && shankIn > 0) return shankIn * 25.4;
+
+  const minorIn = item?.minor_dia ? Number(item.minor_dia) : null;
+  if (Number.isFinite(minorIn) && minorIn > 0) return minorIn * 25.4;
+
+  const majorIn = item?.major_dia ? Number(item.major_dia) : null;
+  if (Number.isFinite(majorIn) && majorIn > 0) return majorIn * 25.4;
+
+  const sizeMajorIn = parseSizeSpecMajorIn(item?.size_spec || item?.name || '');
+  if (Number.isFinite(sizeMajorIn) && sizeMajorIn > 0) return sizeMajorIn * 25.4;
+
+  return null;
+};
+
+const PREVIEW_MATTE_HEX = 0x767d86;
+
 const StepModelViewer = ({
   selectedFile,
   detectedHoles = [],
@@ -123,6 +144,7 @@ const StepModelViewer = ({
   isTappingActive,
   tapOptions = [],
   selectedHardware = {},
+  hardwareResizeReport = {},
   isHardwareActive = false,
   hwItemsByType = {},
   modelUrlOverride = null,
@@ -177,7 +199,11 @@ const StepModelViewer = ({
     currentRef.innerHTML = '';
 
     onProgress(0);
-    const progressTimer = setInterval(() => { onProgress(p => p < 99 ? p + 0.5 : p); }, 100);
+    let syntheticProgress = 0;
+    const progressTimer = setInterval(() => {
+      syntheticProgress = Math.min(99, syntheticProgress + 0.5);
+      onProgress(syntheticProgress);
+    }, 100);
 
     const extractDimensions = (model) => {
       if (!model) return;
@@ -194,7 +220,8 @@ const StepModelViewer = ({
     };
 
     try {
-      const disableEdgesForConfiguredPreview = Boolean(modelUrlOverride);
+      const useConfiguredPreviewShading = Boolean(modelUrlOverride);
+      const disableEdgesForConfiguredPreview = useConfiguredPreviewShading;
       const viewer = new OV.EmbeddedViewer(currentRef, {
         backgroundColor: new OV.RGBAColor(255, 255, 255, 255),
         edgeSettings: new OV.EdgeSettings(!disableEdgesForConfiguredPreview, new OV.RGBColor(0, 0, 0), 1),
@@ -211,14 +238,15 @@ const StepModelViewer = ({
           centroidRef.current.copy(center);
 
           // Add lighting
-          v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x999999, disableEdgesForConfiguredPreview ? 0.95 : 1.2));
-          const dl1 = new THREE.DirectionalLight(0xffffff, disableEdgesForConfiguredPreview ? 0.56 : 0.7); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
-          const dl2 = new THREE.DirectionalLight(0xffffff, disableEdgesForConfiguredPreview ? 0.28 : 0.4); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
+          v?.scene?.add(new THREE.HemisphereLight(0xffffff, 0x7b8794, useConfiguredPreviewShading ? 0.4 : 0.84));
+          const dl1 = new THREE.DirectionalLight(0xffffff, useConfiguredPreviewShading ? 0.42 : 0.55); dl1.position.set(100, 200, 100); v?.scene?.add(dl1);
+          const dl2 = new THREE.DirectionalLight(0xffffff, useConfiguredPreviewShading ? 0.14 : 0.24); dl2.position.set(-100, -200, -100); v?.scene?.add(dl2);
 
           // Match holes & Initialize Materials
           const colorStr = (typeof activeFinishColor === 'string') ? activeFinishColor : (activeFinishColor?.color || activeFinishColor?.hex || '');
           const finishHex = colorStr ? parseInt(colorStr.replace('#', '0x')) : null;
-          const shouldForceFinishColor = finishHex !== null && !(disableEdgesForConfiguredPreview && activeFinishColor?.isBaseMaterialFallback);
+          const isBaseFallbackFinish = Boolean(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback);
+          const shouldForceFinishColor = finishHex !== null && !isBaseFallbackFinish;
 
           v?.scene?.traverse(obj => {
             if (obj.isMesh && obj.material) {
@@ -238,11 +266,13 @@ const StepModelViewer = ({
               }
               const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
               mats.forEach(m => {
-                m.roughness = 0.4; m.metalness = 0.7;
+                m.roughness = useConfiguredPreviewShading ? 0.5 : 0.62;
+                m.metalness = useConfiguredPreviewShading ? 0.16 : 0.08;
                 if (m.color && !obj.userData.origColor) {
                   obj.userData.origColor = { r: m.color.r, g: m.color.g, b: m.color.b };
                 }
-                if (shouldForceFinishColor) m.color.setHex(finishHex);
+                if (useConfiguredPreviewShading) m.color.setHex(PREVIEW_MATTE_HEX);
+                else if (shouldForceFinishColor) m.color.setHex(finishHex);
               });
             }
           });
@@ -339,7 +369,9 @@ const StepModelViewer = ({
         const finishColorStr = (typeof activeFinishColor === 'string')
           ? activeFinishColor
           : (activeFinishColor?.color || activeFinishColor?.hex || '');
-        const hasForcedFinishColor = Boolean(finishColorStr) && !(useConfiguredPreviewShading && activeFinishColor?.isBaseMaterialFallback);
+        const hasForcedFinishColor = Boolean(finishColorStr)
+          && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback)
+          && !useConfiguredPreviewShading;
 
         v.scene.traverse(obj => {
           if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
@@ -383,6 +415,11 @@ const StepModelViewer = ({
 
             if (isTapped) { fm.color.set(0x2563eb); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             else if (isActive) { fm.color.set(0xf59e0b); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
+            else if (useConfiguredPreviewShading) {
+              fm.color.setHex(PREVIEW_MATTE_HEX);
+              fm.emissive.set(0x000000);
+              fm.emissiveIntensity = 0;
+            }
             else if (hasForcedFinishColor) {
               fm.color.set(finishColorStr);
               if (!isFinishPowderCoating && !useConfiguredPreviewShading) {
@@ -391,11 +428,15 @@ const StepModelViewer = ({
               }
               else { fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             } else {
-              const oc = obj.userData.origColor; fm.color.setRGB(oc.r, oc.g, oc.b);
+              const oc = obj.userData.origColor;
+              fm.color.setRGB(oc.r, oc.g, oc.b);
+              if (useConfiguredPreviewShading) {
+                fm.color.multiplyScalar(0.68);
+              }
               fm.emissive.set(0x000000); fm.emissiveIntensity = 0;
             }
 
-            if (activeFinishColor && isFinishPowderCoating) {
+            if (!useConfiguredPreviewShading && activeFinishColor && isFinishPowderCoating) {
               const gloss = activeFinishColor.gloss ?? 35;
               const isWrinkled = !!(activeFinishColor.is_wrinkled || activeFinishColor.name?.toUpperCase().includes('WRINKLED'));
               fm.roughness = isWrinkled ? 0.68 : Math.max(0.32, 0.9 - (gloss / 100));
@@ -403,8 +444,8 @@ const StepModelViewer = ({
               fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
               fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
             } else {
-              fm.roughness = useConfiguredPreviewShading ? 0.72 : 0.6;
-              fm.metalness = useConfiguredPreviewShading ? 0.04 : 0.05;
+              fm.roughness = useConfiguredPreviewShading ? 0.92 : 0.65;
+              fm.metalness = useConfiguredPreviewShading ? 0.03 : 0.05;
               fm.normalMap = null;
             }
 
@@ -427,7 +468,10 @@ const StepModelViewer = ({
     if (!v || modelLoadCount === 0) return;
     const colorStr = (typeof activeFinishColor === 'string') ? activeFinishColor : (activeFinishColor?.color || activeFinishColor?.hex || '');
     const finishHex = colorStr ? parseInt(colorStr.replace('#', '0x')) : null;
-    const shouldForceFinishColor = finishHex !== null && !(modelUrlOverride && activeFinishColor?.isBaseMaterialFallback);
+    const useConfiguredPreviewShading = Boolean(modelUrlOverride);
+    const shouldForceFinishColor = finishHex !== null
+      && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback)
+      && !useConfiguredPreviewShading;
 
     const viewer = v.GetViewer();
     if (!viewer) return;
@@ -436,7 +480,9 @@ const StepModelViewer = ({
       if (obj.isMesh && !obj.userData.isHoleMarker && !obj.isHardwareMarker) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(m => {
-          if (shouldForceFinishColor) {
+          if (useConfiguredPreviewShading) {
+            m.color.setHex(PREVIEW_MATTE_HEX);
+          } else if (shouldForceFinishColor) {
             m.color.setHex(finishHex);
           } else if (obj.userData.origColor) {
             m.color.setRGB(obj.userData.origColor.r, obj.userData.origColor.g, obj.userData.origColor.b);
@@ -704,32 +750,87 @@ const StepModelViewer = ({
               addMesh(makeRing(nutInnerR, hwOuterR, nutH), nutBodyMat, basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2)), axisVec);
             } else if (type === 2) {
               const standoffH = item?.length ? parseFloat(item.length) * 25.4 : origT * 1.8;
-              const standoffBackExtra = Math.max(0.34, 0.52 / Math.max(scaleFactor, 1e-6));
-              const standoffBackPos = backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * standoffBackExtra));
 
               // Make standoff look truly fitted: use tooling diameter as the target hole fit.
-              const targetFitR = toolingDiaMm ? (toolingDiaMm / 2) : holeR;
+              const resizeReportEntry =
+                (hardwareResizeReport && typeof hardwareResizeReport === 'object')
+                  ? (hardwareResizeReport[String(holeId)] || hardwareResizeReport[String(hole.id)] || null)
+                  : null;
+              const reportAction = String(resizeReportEntry?.action || '').toLowerCase();
+              const reportDirection = String(resizeReportEntry?.direction || '').toLowerCase();
+
+              const standoffFitMm = resolveStandoffFitMm(item);
+              const reportTargetDiaMm = Number(resizeReportEntry?.target_dia_mm);
+              const effectiveFitMm = Number.isFinite(reportTargetDiaMm) && reportTargetDiaMm > 0
+                ? reportTargetDiaMm
+                : standoffFitMm;
+              const targetFitR = effectiveFitMm ? (effectiveFitMm / 2) : holeR;
+
+              // In configured preview, color must follow backend resize report only.
+              const isConfiguredPreview = Boolean(modelUrlOverride);
+              const backendDecisionKnown = reportAction === 'resized' || reportAction === 'unchanged' || reportAction === 'skipped' || reportAction === 'failed';
+              const heuristicNeedsReduction = holeR > (targetFitR + 0.02);
+              const reportNeedsReduction = reportAction === 'resized' && reportDirection === 'reduced';
+              const needsReduction = isConfiguredPreview
+                ? (backendDecisionKnown ? reportNeedsReduction : false)
+                : (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction);
+
+              const standoffColor = needsReduction ? 0xDC2626 : panelHex;
               const seamOverlap = Math.max(0.015, 0.03 / Math.max(scaleFactor, 1e-6));
               const shankR = Math.max(0.4, targetFitR + seamOverlap);
               const wallT = Math.max(0.24, shankR * 0.22);
               const boreR = Math.max(0.2, shankR - wallT);
 
-              addHoleAdjustDiscs(shankR, hwOuterR);
+              if (!shouldUsePhysicalNutResize) {
+                addHoleAdjustDiscs(shankR, hwOuterR, {
+                  applyFront: true,
+                  applyBack: false,
+                  includeTail: false,
+                  visibleOuterROverride: Math.max(shankR + 0.08, shankR * 1.1),
+                  useMaxAllowedLimit: false,
+                });
+              }
 
               const standoffOuterR = shankR;
               const standoffInnerR = Math.min(Math.max(boreR, 0.2), standoffOuterR * 0.9);
-              const backBaseH = Math.max(0.8, 1.2 / Math.max(scaleFactor, 1e-6));
+              const flangeH = Math.max(0.8, 1.2 / Math.max(scaleFactor, 1e-6));
+              const bodyH = Math.max(0.8, standoffH - flangeH);
               const hexHeadR = Math.max(hwOuterR, standoffOuterR * 1.05);
+              const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
+              const selectedSurfaceContact = baseCenter.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+              );
+              const oppositeSurfaceContact = baseCenter.clone().add(
+                axisNorm.clone().multiplyScalar(-faceSign * (origT * 0.5 - contactInset))
+              );
+              const standoffBodyCenter = selectedSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (bodyH * 0.5 - contactInset))
+              );
+              const oppositeHeadPos = oppositeSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(-faceSign * (flangeH * 0.5 - contactInset))
+              );
 
-              // True hollow standoff body, visible as open from both ends.
+              const standoffMat = getMarkerMat(
+                `hw_standoff_${standoffColor}_${needsReduction ? 'reduced' : 'native'}`,
+                () => new THREE.MeshStandardMaterial({
+                  color: standoffColor,
+                  metalness: needsReduction ? 0.1 : 0.28,
+                  roughness: needsReduction ? 0.52 : 0.68,
+                  emissive: needsReduction ? 0x4b0000 : 0x000000,
+                  emissiveIntensity: needsReduction ? 0.34 : 0.0,
+                  side: THREE.DoubleSide
+                })
+              );
+
+              // Standoff body contacts the selected face directly (no visible air gap).
               addMesh(
-                makeRing(standoffInnerR, standoffOuterR, standoffH),
-                soMat,
-                basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * standoffH / 2)),
+                makeRing(standoffInnerR, standoffOuterR, bodyH),
+                standoffMat,
+                standoffBodyCenter,
                 axisVec
               );
 
-              // Back flange/head as hex profile (like PEM standoff head), with hollow center.
+              // Front flange/head as hex profile, kept on the same side as the standoff body.
               const hexShape = new THREE.Shape();
               for (let i = 0; i < 6; i++) {
                 const a = (Math.PI / 3) * i;
@@ -745,17 +846,17 @@ const StepModelViewer = ({
               hexShape.holes.push(hexHole);
 
               const hexRingGeo = new THREE.ExtrudeGeometry(hexShape, {
-                depth: backBaseH,
+                depth: flangeH,
                 bevelEnabled: false,
                 curveSegments: 32,
               });
               // Center geometry around its extrusion axis for easier placement.
-              hexRingGeo.translate(0, 0, -backBaseH / 2);
+              hexRingGeo.translate(0, 0, -flangeH / 2);
 
-              const hexHeadMesh = new THREE.Mesh(hexRingGeo, soMat);
+              const hexHeadMesh = new THREE.Mesh(hexRingGeo, standoffMat);
               hexHeadMesh.userData.isHoleMarker = true;
               hexHeadMesh.isHardwareMarker = true;
-              hexHeadMesh.position.copy(standoffBackPos);
+              hexHeadMesh.position.copy(oppositeHeadPos);
               hexHeadMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisVec.clone().normalize());
               if (modelRoot !== v.scene) {
                 hexHeadMesh.scale.set(1, 1, 1);
@@ -847,24 +948,29 @@ const StepModelViewer = ({
 
         // --- Countersinks ---
         if (showCountersinkMarkers && (isCountersinkingActive || hasCSAssigned)) {
+          const useConfiguredPreviewShading = Boolean(modelUrlOverride);
           const panelColor = new THREE.Color(panelHex);
           const csIsCamouflage = countersinkMarkerStyle === 'camouflage';
-          const csConeColor = csIsCamouflage
-            ? panelColor.clone().multiplyScalar(0.84).getHex()
-            : 0x7c3aed;
-          const csLipColor = csIsCamouflage
-            ? panelColor.clone().multiplyScalar(0.60).getHex()
-            : 0x9d4edd;
+          const csConeColor = useConfiguredPreviewShading
+            ? PREVIEW_MATTE_HEX
+            : (csIsCamouflage
+              ? panelColor.clone().multiplyScalar(0.84).getHex()
+              : 0x7c3aed);
+          const csLipColor = useConfiguredPreviewShading
+            ? PREVIEW_MATTE_HEX
+            : (csIsCamouflage
+              ? panelColor.clone().multiplyScalar(0.60).getHex()
+              : 0x9d4edd);
 
           const csConeMat = getMarkerMat(
             `cs_cone_${csIsCamouflage ? 'camouflage' : 'highlight'}_${csConeColor}`,
             () => new THREE.MeshStandardMaterial({
               color: csConeColor,
-              metalness: csIsCamouflage ? 0.72 : 0.4,
-              roughness: csIsCamouflage ? 0.46 : 0.3,
+              metalness: useConfiguredPreviewShading ? 0.03 : (csIsCamouflage ? 0.72 : 0.4),
+              roughness: useConfiguredPreviewShading ? 0.92 : (csIsCamouflage ? 0.46 : 0.3),
               side: THREE.DoubleSide,
-              emissive: csIsCamouflage ? 0x000000 : 0x4c1d95,
-              emissiveIntensity: csIsCamouflage ? 0.0 : 0.35
+              emissive: (csIsCamouflage || useConfiguredPreviewShading) ? 0x000000 : 0x4c1d95,
+              emissiveIntensity: (csIsCamouflage || useConfiguredPreviewShading) ? 0.0 : 0.35
             })
           );
           const csLipMat = getMarkerMat(
@@ -872,14 +978,17 @@ const StepModelViewer = ({
             () => new THREE.MeshStandardMaterial({
               color: csLipColor,
               side: THREE.DoubleSide,
-              metalness: csIsCamouflage ? 0.55 : 0.35,
-              roughness: csIsCamouflage ? 0.5 : 0.4,
-              emissive: csIsCamouflage ? 0x000000 : 0x4c1d95,
-              emissiveIntensity: csIsCamouflage ? 0.0 : 0.2
+              metalness: useConfiguredPreviewShading ? 0.02 : (csIsCamouflage ? 0.55 : 0.35),
+              roughness: useConfiguredPreviewShading ? 0.95 : (csIsCamouflage ? 0.5 : 0.4),
+              emissive: (csIsCamouflage || useConfiguredPreviewShading) ? 0x000000 : 0x4c1d95,
+              emissiveIntensity: (csIsCamouflage || useConfiguredPreviewShading) ? 0.0 : 0.2
             })
           );
 
           Object.entries(selectedCountersinks).forEach(([holeId, cs]) => {
+            // Hardware fit coloring should remain authoritative on holes with assigned hardware.
+            if (selectedHardware && Object.prototype.hasOwnProperty.call(selectedHardware, String(holeId))) return;
+
             const hole = detectedHoles.find(h => h.id.toString() === holeId.toString());
             if (!hole) return;
             const holeR = (hole.diameter_mm || (hole.diameterInches || 0.1) * 25.4) / 2;
@@ -898,7 +1007,8 @@ const StepModelViewer = ({
             const backDiscPos = backPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * csBackDiscExtra));
 
             if (csMajorR < holeR) {
-              const fillMat = getMarkerMat(`fill_${panelHex}`, () => new THREE.MeshStandardMaterial({ color: panelHex, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
+              const fillColor = useConfiguredPreviewShading ? PREVIEW_MATTE_HEX : panelHex;
+              const fillMat = getMarkerMat(`fill_${fillColor}`, () => new THREE.MeshStandardMaterial({ color: fillColor, metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
               addMesh(makeRing(csMajorR * 0.99, holeR * 1.01, csDiscH), fillMat, basePos.clone(), hwThicknessVec);
 
               // Add disc to the other side as well (the back side of the hole)
@@ -921,7 +1031,7 @@ const StepModelViewer = ({
             if (modelRoot !== v.scene) { lipRing.scale.set(1, 1, 1); lipRing.scale[_ta] = 1 / scaleFactor; }
             modelRoot.add(lipRing); holeMarkersRef.current.push(lipRing);
 
-            if (!csIsCamouflage) {
+            if (!csIsCamouflage && !useConfiguredPreviewShading) {
               const backRing = new THREE.Mesh(new THREE.RingGeometry(csMinorR, csMinorR * 1.8, 32), csLipMat);
               backRing.position.copy(backDiscPos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (csDiscH * 0.5))));
               backRing.lookAt(backRing.position.clone().add(axisNorm.clone().multiplyScalar(faceSign)));
@@ -932,7 +1042,7 @@ const StepModelViewer = ({
         }
 
         // --- Bending ---
-        if (isBendingActive && detectedBends.length > 0) {
+        if (isBendingActive && detectedBends.length > 0 && !modelUrlOverride) {
           const bendMat = getMarkerMat('bend_line', () => new THREE.MeshPhongMaterial({
             color: 0x00f3ff, // Electric Cyan
             emissive: 0x00f3ff,
@@ -970,7 +1080,7 @@ const StepModelViewer = ({
       } catch (err) { console.warn('Marker error:', err); }
     };
     updateMarkers();
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, tapOptions, selectedHardware, modelLoadCount, selectedThickness, isCountersinkingActive, csOptions, selectedCountersinks, showCountersinkMarkers, countersinkMarkerStyle, isBendingActive, detectedBends]);
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, tapOptions, selectedHardware, hardwareResizeReport, modelLoadCount, selectedThickness, isCountersinkingActive, csOptions, selectedCountersinks, showCountersinkMarkers, countersinkMarkerStyle, isBendingActive, detectedBends]);
 
   // --- Click / Interaction ---
   useEffect(() => {

@@ -17,10 +17,43 @@ import shlex
 import math
 import numpy as np
 import threading
+import uuid
+import time
+from urllib.parse import urlparse, parse_qs
 from unfold import unfold_step_file, detect_holes_in_step
 
 # Global lock to prevent Out-Of-Memory by serializing heavy geometry tasks
 geometry_lock = threading.Lock()
+UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
+UNFOLD_JOB_TTL_SECONDS = 15 * 60
+unfold_jobs = {}
+unfold_jobs_lock = threading.Lock()
+
+
+def _set_unfold_job(job_id, **fields):
+    now = time.time()
+    with unfold_jobs_lock:
+        job = unfold_jobs.get(job_id, {})
+        job.update(fields)
+        job["updated_at"] = now
+        if "created_at" not in job:
+            job["created_at"] = now
+        unfold_jobs[job_id] = job
+        return dict(job)
+
+
+def _get_unfold_job(job_id):
+    with unfold_jobs_lock:
+        job = unfold_jobs.get(job_id)
+        return dict(job) if job else None
+
+
+def _cleanup_unfold_jobs():
+    cutoff = time.time() - UNFOLD_JOB_TTL_SECONDS
+    with unfold_jobs_lock:
+        stale_ids = [job_id for job_id, job in unfold_jobs.items() if job.get("updated_at", 0) < cutoff]
+        for job_id in stale_ids:
+            unfold_jobs.pop(job_id, None)
 
 def _json_safe(obj):
     """Recursively convert NaNs, Infinites, and NumPy types for JSON compatibility."""
@@ -59,32 +92,44 @@ class CORSHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/health":
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
             self._send_json(200, {"status": "ok", "engine": "FreeCAD/CadQuery"})
+        elif parsed.path == "/unfold-job/status":
+            self._handle_unfold_job_status(parsed)
         else:
             self.send_response(404)
             self.end_headers()
 
     def do_POST(self):
-        if self.path == "/unfold":
+        post_path = self.path.split("?", 1)[0]
+        if post_path == "/unfold":
             # Use the new robust library if available
-            self._process_step_file(self.unfold_with_lib_subprocess, lambda r: r)
-        elif self.path == "/detect-holes":
-            self._process_step_file(self.unfold_with_lib_subprocess, lambda r: {
+            self._process_step_file(
+                lambda fp: self.unfold_with_lib_subprocess(fp, profile="fast2d"),
+                lambda r: r
+            )
+        elif post_path == "/detect-holes":
+            self._process_step_file(
+                lambda fp: self.unfold_with_lib_subprocess(fp, profile="holes_fast"),
+                lambda r: {
                 "holes": r.get("detectedHoles", []),
                 "faceMeshes": r.get("faceMeshes", {}),
                 "bendTree": r.get("bendTree", None),
                 "thickness": r.get("thickness", 2.0)
-            })
+                }
+            )
+        elif post_path == "/unfold-job/start":
+            self._start_unfold_job()
         else:
             self.send_response(404)
             self.end_headers()
 
-    def _process_step_file(self, processor, wrap):
+    def _save_uploaded_step_file(self):
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type:
             self._send_error(400, "Expected multipart/form-data")
-            return
+            return None, None
 
         try:
             boundary = content_type.split("boundary=")[1].strip()
@@ -94,32 +139,123 @@ class CORSHandler(BaseHTTPRequestHandler):
             file_content, filename = self._parse_multipart(body, boundary)
             if file_content is None:
                 self._send_error(400, "No file found in upload")
-                return
+                return None, None
 
             ext = os.path.splitext(filename)[1].lower() if filename else ".step"
             if ext not in (".step", ".stp"):
                 self._send_error(400, f"Unsupported file type: {ext}")
-                return
+                return None, None
 
-            # Use a secure temp directory
             with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                 tmp.write(file_content)
-                tmp_path = tmp.name
-
-            try:
-                # Actual 3D processing happens here
-                result = processor(tmp_path)
-                self._send_json(200, wrap(result))
-            except Exception as e:
-                traceback.print_exc()
-                self._send_error(500, f"Processing failed: {str(e)}")
-            finally:
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-
+                return tmp.name, filename
         except Exception as e:
             traceback.print_exc()
             self._send_error(500, f"Server error: {str(e)}")
+            return None, None
+
+    def _process_step_file(self, processor, wrap):
+        tmp_path, _filename = self._save_uploaded_step_file()
+        if not tmp_path:
+            return
+
+        try:
+            # Actual 3D processing happens here
+            result = processor(tmp_path)
+            self._send_json(200, wrap(result))
+        except Exception as e:
+            traceback.print_exc()
+            self._send_error(500, f"Processing failed: {str(e)}")
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def _start_unfold_job(self):
+        tmp_path, _filename = self._save_uploaded_step_file()
+        if not tmp_path:
+            return
+
+        job_id = uuid.uuid4().hex
+        _set_unfold_job(
+            job_id,
+            status="queued",
+            percent=0.0,
+            stage="Queued",
+            result=None,
+            error=None,
+        )
+
+        worker = threading.Thread(
+            target=self._run_unfold_job,
+            args=(job_id, tmp_path),
+            daemon=True,
+        )
+        worker.start()
+        self._send_json(200, {"success": True, "jobId": job_id})
+
+    def _run_unfold_job(self, job_id, tmp_path):
+        def on_progress(percent, stage):
+            _set_unfold_job(
+                job_id,
+                status="running",
+                percent=max(0.0, min(100.0, float(percent))),
+                stage=str(stage or "Processing"),
+            )
+
+        try:
+            on_progress(2, "Preparing CAD engine")
+            result = self.unfold_with_lib_subprocess(
+                tmp_path,
+                profile="fast2d",
+                progress_callback=on_progress,
+            )
+            _set_unfold_job(
+                job_id,
+                status="completed",
+                percent=100.0,
+                stage="Completed",
+                result=result,
+                error=None,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            _set_unfold_job(
+                job_id,
+                status="failed",
+                percent=100.0,
+                stage="Failed",
+                error=str(e),
+            )
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def _handle_unfold_job_status(self, parsed):
+        _cleanup_unfold_jobs()
+        params = parse_qs(parsed.query)
+        job_id = (params.get("jobId") or [None])[0]
+        if not job_id:
+            self._send_error(400, "jobId is required")
+            return
+
+        job = _get_unfold_job(job_id)
+        if not job:
+            self._send_error(404, "Job not found")
+            return
+
+        payload = {
+            "success": True,
+            "jobId": job_id,
+            "status": job.get("status", "queued"),
+            "percent": job.get("percent", 0.0),
+            "stage": job.get("stage", "Queued"),
+        }
+        if job.get("status") == "completed":
+            payload["result"] = job.get("result")
+        if job.get("status") == "failed":
+            payload["error"] = job.get("error") or "Unfold job failed"
+
+        self._send_json(200, payload)
 
     def _parse_multipart(self, body, boundary):
         """Simple multipart parser — extracts the first file part."""
@@ -161,7 +297,7 @@ class CORSHandler(BaseHTTPRequestHandler):
     def _send_error(self, code, message):
         self._send_json(code, {"error": message})
 
-    def unfold_with_lib_subprocess(self, filepath):
+    def unfold_with_lib_subprocess(self, filepath, profile="full", progress_callback=None):
         """Calls unfold_lib.py using the specialized FreeCAD interpreter and merges with legacy metadata."""
         
         # 2. Make the fallback path OS-aware so it doesn't crash on Linux if the .env fails
@@ -181,16 +317,88 @@ class CORSHandler(BaseHTTPRequestHandler):
             freecad_python = freecad_path
 
         script_path = os.getenv("UNFOLD_LIB_PATH", os.path.join(os.path.dirname(__file__), "unfold_lib.py"))
-        
-        cmd = [freecad_python, script_path, filepath]
+
+        cmd = [freecad_python, script_path, filepath, f"--profile={profile}"]
         print(f"[Python-API] Executing robust unfold pass...")
+
+        def _report_progress(percent, stage):
+            if not progress_callback:
+                return
+            try:
+                progress_callback(float(percent), stage)
+            except Exception:
+                pass
+
+        def _consume_stderr_line(raw_line):
+            line = raw_line.rstrip("\r\n")
+            if line.startswith(UNFOLD_PROGRESS_PREFIX):
+                payload_text = line[len(UNFOLD_PROGRESS_PREFIX):]
+                try:
+                    payload = json.loads(payload_text)
+                    _report_progress(payload.get("percent", 0.0), payload.get("stage", "Processing"))
+                except Exception:
+                    print(f"[Python-API] Progress parse warning: {payload_text}")
+            elif line:
+                print(f"[Python-API] {line}")
+
         try:
             # Pass 1: Get professional flat pattern, bend tree, silhouettes, and holes
             # Apply global lock to protect server RAM during heavy FreeCAD run
             with geometry_lock:
                 print(f"[Python-API] Lock acquired for model processing...")
-                proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=90)
-                result = json.loads(proc.stdout)
+                _report_progress(4, "Starting FreeCAD worker")
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                )
+
+                stdout_chunks = []
+                stderr_chunks = []
+
+                def _read_stdout():
+                    try:
+                        for out_line in proc.stdout:
+                            stdout_chunks.append(out_line)
+                    except Exception:
+                        pass
+
+                def _read_stderr():
+                    try:
+                        for err_line in proc.stderr:
+                            stderr_chunks.append(err_line)
+                            _consume_stderr_line(err_line)
+                    except Exception:
+                        pass
+
+                stdout_thread = threading.Thread(target=_read_stdout, daemon=True)
+                stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+                stdout_thread.start()
+                stderr_thread.start()
+
+                return_code = proc.wait(timeout=120)
+                stdout_thread.join(timeout=2)
+                stderr_thread.join(timeout=2)
+
+                stdout_text = "".join(stdout_chunks).strip()
+                stderr_text = "".join(stderr_chunks).strip()
+
+                if return_code != 0:
+                    raise subprocess.CalledProcessError(
+                        return_code,
+                        cmd,
+                        output=stdout_text,
+                        stderr=stderr_text,
+                    )
+
+                if not stdout_text:
+                    raise RuntimeError("Unfold subprocess returned empty output")
+
+                result_line = stdout_text.splitlines()[-1]
+                result = json.loads(result_line)
+                _report_progress(100, "Completed")
 
             # All metadata (silhouettes, holes, faceMeshes) is now integrated 
             # into the primary Pass 1 from unfold_lib.py. 
@@ -201,10 +409,12 @@ class CORSHandler(BaseHTTPRequestHandler):
             print(f"STDOUT: {e.stdout}")
             print(f"STDERR: {e.stderr}")
             print(f"[Python-API] Falling back to legacy engine...")
+            _report_progress(92, "Using fallback CAD engine")
             return unfold_step_file(filepath)
         except Exception as e:
             print(f"[Python-API] Merge pass unexpected error: {str(e)}")
             traceback.print_exc()
+            _report_progress(92, "Using fallback CAD engine")
             return unfold_step_file(filepath)
 
     def log_message(self, format, *args):

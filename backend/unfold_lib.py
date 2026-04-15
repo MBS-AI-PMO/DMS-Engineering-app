@@ -7,6 +7,8 @@ import traceback
 import time
 import numpy as np
 
+PROGRESS_PREFIX = "__PROGRESS__"
+
 # 1. Add FreeCAD and lib_unfold to path
 def setup_paths():
     # Detect bin directory of the current interpreter (which should be the FreeCAD one)
@@ -34,6 +36,18 @@ from unfold import (
     compute_unbend_transform,
     BendDirection
 )
+
+
+def emit_progress(percent, stage):
+    """Emit structured progress for parent processes that parse stderr."""
+    try:
+        pct = max(0.0, min(100.0, float(percent)))
+        payload = {"percent": round(pct, 2), "stage": str(stage or "Processing")}
+        sys.stderr.write(f"{PROGRESS_PREFIX}{json.dumps(payload)}\n")
+        sys.stderr.flush()
+    except Exception:
+        # Progress reporting must never interrupt geometry processing.
+        pass
 
 def _normalize(vec):
     length = np.linalg.norm(vec)
@@ -188,10 +202,12 @@ def detect_holes_fc(fc_shape):
         for c in cluster:
             f = fc_shape.Faces[c["fi"]]
             for e in f.Edges:
-                try:
-                    pts = e.discretize(Number=20)
-                except Exception:
-                    pts = [v.Point for v in e.Vertexes]
+                pts = [v.Point for v in e.Vertexes]
+                if len(pts) < 2:
+                    try:
+                        pts = e.discretize(Number=8)
+                    except Exception:
+                        pts = [v.Point for v in e.Vertexes]
                 for p in pts:
                     cluster_points.append(np.array([p.x, p.y, p.z]))
         coverage = _angular_coverage(cluster_points, c1["center"], c1["axis"])
@@ -355,14 +371,65 @@ def get_projections(fc_shape):
 
     return views
 
-def unfold_with_lib(filepath):
+def unfold_with_lib(filepath, profile="full"):
+    profile_key = str(profile or "full").strip().lower()
+    include_unfold = profile_key in ("full", "fast2d", "2d", "unfold")
+    include_face_meshes = profile_key == "full"
+    include_projections = profile_key == "full"
+    include_holes = profile_key in ("full", "holes", "holes_fast")
+    estimate_thickness = profile_key != "holes_fast"
+
     t0 = time.time()
+    emit_progress(4, "Loading STEP model")
     # 1. Load STEP directly using FreeCAD Part
     fc_shape = Part.Shape()
     fc_shape.read(filepath)
     sys.stderr.write(f"[Profiling] Load STEP: {time.time() - t0:.3f}s\n")
+
+    if not include_unfold:
+        thickness = 2.0
+        if estimate_thickness:
+            emit_progress(28, "Estimating sheet thickness")
+            try:
+                planar_faces = [
+                    (i, float(face.Area))
+                    for i, face in enumerate(fc_shape.Faces)
+                    if face.Surface.TypeId == "Part::GeomPlane"
+                ]
+                if planar_faces:
+                    root_idx = max(planar_faces, key=lambda x: x[1])[0]
+                    thickness = float(EstimateThickness.using_best_method(fc_shape, root_idx))
+            except Exception:
+                # Keep robust fallback thickness for downstream UI flows.
+                thickness = 2.0
+
+        holes_data = []
+        if include_holes:
+            emit_progress(58 if estimate_thickness else 42, "Detecting holes")
+            holes_data = detect_holes_fc(fc_shape)
+
+        emit_progress(96, "Finalizing analysis")
+        return _json_safe({
+            "success": True,
+            "flatVertices": [],
+            "cutEdges": [],
+            "bendEdges": [],
+            "thickness": round(float(thickness), 4),
+            "bendTree": None,
+            "faceMeshes": {},
+            "bends": [],
+            "bbox": {"width": 0.0, "height": 0.0},
+            "topEdges": [],
+            "frontEdges": [],
+            "sideEdges": [],
+            "topBendEdges": [],
+            "frontBendEdges": [],
+            "sideBendEdges": [],
+            "detectedHoles": holes_data,
+        })
     
     t_start = time.time()
+    emit_progress(12, "Scanning model faces")
     # Robust root face selection: Look for the largest pair of parallel faces (top/bottom)
     # to avoid picking a narrow edge face as the root.
     potential_roots = []
@@ -404,6 +471,7 @@ def unfold_with_lib(filepath):
     
     for root_idx in root_candidates[:5]:
         try:
+            emit_progress(20 + (root_candidates.index(root_idx) * 4), f"Evaluating unfold root {root_idx}")
             # Adjacency and Thickness
             print(f"[Debug] Testing root {root_idx} (area {fc_shape.Faces[root_idx].Area:.2f})", file=sys.stderr)
             root_face = fc_shape.Faces[root_idx]
@@ -435,6 +503,7 @@ def unfold_with_lib(filepath):
 
             # 3. Perform Unfolding traversal
             t_unfold_start = time.time()
+            emit_progress(38, "Unfolding bends")
             for u, v in dg.edges():
                 bend_face = fc_shape.Faces[v]
                 edge_idx = dg.get_edge_data(u, v)["label"]
@@ -459,6 +528,7 @@ def unfold_with_lib(filepath):
                 else:
                     dg.nodes[v]["unbend_transform"] = Matrix()
             sys.stderr.write(f"[Profiling] Unfold traversal: {time.time() - t_unfold_start:.3f}s\n")
+            emit_progress(62, "Generating flat pattern geometry")
             
             # If we reach here without exception, this root worked!
             chosen_root = root_idx
@@ -488,6 +558,7 @@ def unfold_with_lib(filepath):
     flat_vertices = []
     cut_edges_2d = []
     bend_edges_2d = []
+    emit_progress(70, "Building bend hierarchy")
     
     def build_frontend_tree(node_id, parent_id=None, accumulated_m=None):
         """O(n) traversal: accumulated_m is the product of unbend transforms from root to
@@ -585,19 +656,21 @@ def unfold_with_lib(filepath):
 
     root_node = build_frontend_tree(root_idx)
 
-    # Tessellate all faces for HierarchicalProjectViewer.
-    # deflection=5.0 provides a major reduction in triangle count for faster loading.
     face_meshes = {}
-    for i, face in enumerate(fc_shape.Faces):
-        try:
-            verts, tris = _tessellate_fc_face(face, deflection=5.0)
-            if verts.shape[0] > 0 and tris.shape[0] > 0:
-                face_meshes[f"face_{i}"] = {
-                    "vertices": verts.flatten().tolist(),
-                    "indices": tris.flatten().tolist(),
-                }
-        except Exception:
-            pass
+    if include_face_meshes:
+        emit_progress(80, "Preparing 3D face meshes")
+        # Tessellate all faces for HierarchicalProjectViewer.
+        # deflection=5.0 provides a major reduction in triangle count for faster loading.
+        for i, face in enumerate(fc_shape.Faces):
+            try:
+                verts, tris = _tessellate_fc_face(face, deflection=5.0)
+                if verts.shape[0] > 0 and tris.shape[0] > 0:
+                    face_meshes[f"face_{i}"] = {
+                        "vertices": verts.flatten().tolist(),
+                        "indices": tris.flatten().tolist(),
+                    }
+            except Exception:
+                pass
 
     # Calculate bounding box for 2D layout centering
     width, height = 0, 0
@@ -623,15 +696,26 @@ def unfold_with_lib(filepath):
     traverse_bends(root_node)
 
     # 6. Technical views only — holes are detected separately by /api/detect-holes
-    t_views = time.time()
-    views = get_projections(fc_shape)
-    sys.stderr.write(f"[Profiling] Projections: {time.time() - t_views:.3f}s\n")
+    views = {
+        "top": {"edges": [], "bend_edges": []},
+        "front": {"edges": [], "bend_edges": []},
+        "side": {"edges": [], "bend_edges": []},
+    }
+    if include_projections:
+        t_views = time.time()
+        emit_progress(88, "Generating orthographic projections")
+        views = get_projections(fc_shape)
+        sys.stderr.write(f"[Profiling] Projections: {time.time() - t_views:.3f}s\n")
 
-    t_holes = time.time()
-    holes_data = detect_holes_fc(fc_shape)
-    sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
+    holes_data = []
+    if include_holes:
+        t_holes = time.time()
+        emit_progress(92, "Detecting holes")
+        holes_data = detect_holes_fc(fc_shape)
+        sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
     sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")
+    emit_progress(98, "Finalizing response")
 
     return _json_safe({
         "success": True,
@@ -654,4 +738,8 @@ def unfold_with_lib(filepath):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print(json.dumps(unfold_with_lib(sys.argv[1])))
+        cli_profile = "full"
+        for arg in sys.argv[2:]:
+            if arg.startswith("--profile="):
+                cli_profile = arg.split("=", 1)[1].strip() or "full"
+        print(json.dumps(unfold_with_lib(sys.argv[1], profile=cli_profile)))
