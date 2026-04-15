@@ -127,6 +127,32 @@ const sanitizeStepPath = (value) => {
   return raw.replace(/^\/+/, '');
 };
 
+const isAbsoluteHttpUrl = (value) => /^https?:\/\//i.test(String(value || '').trim());
+
+const toBackendAssetUrl = (assetPath, fallbackModelUrl) => {
+  if (!assetPath) return null;
+
+  const raw = String(assetPath).trim();
+  if (!raw) return null;
+  if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('blob:') || raw.startsWith('data:')) {
+    return raw;
+  }
+
+  const cleaned = raw.replace(/^\/+/, '');
+  if (BACKEND_URL) return `${BACKEND_URL}/${cleaned}`;
+
+  if (isAbsoluteHttpUrl(fallbackModelUrl)) {
+    try {
+      const origin = new URL(String(fallbackModelUrl)).origin;
+      return `${origin}/${cleaned}`;
+    } catch {
+      // If URL parsing fails, fall through to site-relative path.
+    }
+  }
+
+  return `/${cleaned}`;
+};
+
 const inferSourceStepPath = (file, selectedFile, configuration, tempPath) => {
   const candidates = [
     tempPath,
@@ -212,7 +238,19 @@ const ProjectViewer = ({
   isPreview = false,
   tempPath = null,
 }) => {
-  const selectedFile = useMemo(() => normalizeViewerFile(file), [file]);
+  const selectedFile = useMemo(() => {
+    const normalized = normalizeViewerFile(file);
+    if (!normalized) return null;
+
+    const hasDirectUrl = Boolean(
+      normalized.url || normalized.path || normalized.file?.url || normalized.file?.path
+    );
+    if (hasDirectUrl || !tempPath) return normalized;
+
+    const fallbackUrl = toBackendAssetUrl(tempPath, null);
+    if (!fallbackUrl) return normalized;
+    return { ...normalized, url: fallbackUrl };
+  }, [file, tempPath]);
   const selectedTaps = useMemo(() => normalizeHoleAssignments(configuration.selectedTaps || {}), [configuration.selectedTaps]);
   const selectedHardware = useMemo(() => normalizeHoleAssignments(configuration.selectedHardware || {}), [configuration.selectedHardware]);
   const selectedCountersinks = useMemo(() => normalizeHoleAssignments(configuration.selectedCountersinks || {}), [configuration.selectedCountersinks]);
@@ -342,6 +380,11 @@ const ProjectViewer = ({
     configuration?.dimensions?.mm?.t,
   ]);
 
+  const fallbackModelUrl = useMemo(
+    () => selectedFile?.url || selectedFile?.path || file?.url || file?.path || null,
+    [selectedFile, file]
+  );
+
   useEffect(() => {
     if (!configuredPreviewPayload) {
       if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
@@ -389,8 +432,7 @@ const ProjectViewer = ({
           return;
         }
 
-        const relativePath = String(data.previewPath).replace(/^\/+/, '');
-        const resolved = BACKEND_URL ? `${BACKEND_URL}/${relativePath}` : `/${relativePath}`;
+        const resolved = toBackendAssetUrl(data.previewPath, fallbackModelUrl);
         setConfiguredPreviewUrl(resolved);
       } catch (err) {
         if (err?.name === 'AbortError') return;
@@ -403,7 +445,7 @@ const ProjectViewer = ({
     }, 220);
 
     return () => clearTimeout(timerId);
-  }, [configuredPreviewPayload, configuredPreviewUrl]);
+  }, [configuredPreviewPayload, configuredPreviewUrl, fallbackModelUrl]);
 
   useEffect(() => {
     return () => {
@@ -416,13 +458,8 @@ const ProjectViewer = ({
 
     const direct = selectedFile?.url || selectedFile?.path || file?.path || file?.url || null;
     if (!direct) return null;
-    if (/^(?:https?:)?\/\//i.test(direct) || String(direct).startsWith('blob:') || String(direct).startsWith('data:')) {
-      return direct;
-    }
-
-    const cleaned = String(direct).replace(/^\/+/, '');
-    return BACKEND_URL ? `${BACKEND_URL}/${cleaned}` : `/${cleaned}`;
-  }, [sourceIsConfigured, selectedFile, file]);
+    return toBackendAssetUrl(direct, fallbackModelUrl);
+  }, [sourceIsConfigured, selectedFile, file, fallbackModelUrl]);
 
   const modelUrlOverride = configuredPreviewUrl || configuredFileUrl || null;
 
