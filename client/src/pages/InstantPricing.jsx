@@ -291,7 +291,7 @@ const InstantPricing = () => {
   const selectedHardwareForPreview = useMemo(() => {
     const entries = Object.entries(selectedHardware || {}).filter(([, hw]) => {
       const typeId = Number(hw?.typeId);
-      return typeId === 2 || typeId === 3 || typeId === 4;
+      return typeId === 1 || typeId === 2 || typeId === 3 || typeId === 4;
     });
     return Object.fromEntries(entries);
   }, [selectedHardware]);

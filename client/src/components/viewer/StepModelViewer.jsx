@@ -133,7 +133,27 @@ const resolveStandoffFitMm = (item) => {
   return null;
 };
 
+const resolveStudFitMm = (item) => {
+  const shankIn = item?.shank ? Number(item.shank) : null;
+  if (Number.isFinite(shankIn) && shankIn > 0) return shankIn * 25.4;
+
+  const toolingIn = item?.tooling_diameter ? Number(item.tooling_diameter) : null;
+  if (Number.isFinite(toolingIn) && toolingIn > 0) return toolingIn * 25.4;
+
+  const minorIn = item?.minor_dia ? Number(item.minor_dia) : null;
+  if (Number.isFinite(minorIn) && minorIn > 0) return minorIn * 25.4;
+
+  const majorIn = item?.major_dia ? Number(item.major_dia) : null;
+  if (Number.isFinite(majorIn) && majorIn > 0) return majorIn * 25.4;
+
+  const sizeMajorIn = parseSizeSpecMajorIn(item?.size_spec || item?.name || '');
+  if (Number.isFinite(sizeMajorIn) && sizeMajorIn > 0) return sizeMajorIn * 25.4;
+
+  return null;
+};
+
 const PREVIEW_MATTE_HEX = 0x767d86;
+const REDUCED_HARDWARE_HEX = 0xC62828;
 
 const StepModelViewer = ({
   selectedFile,
@@ -180,6 +200,33 @@ const StepModelViewer = ({
 
   // Persistent Material Cache to prevent memory leaks and redundant object creation
   const matCache = useRef(new Map());
+
+  const disposeMaterial = (material) => {
+    try {
+      if (!material) return;
+      if (Array.isArray(material)) {
+        material.forEach((m) => { if (m?.dispose) m.dispose(); });
+      } else if (material.dispose) {
+        material.dispose();
+      }
+    } catch {
+      // Ignore disposal issues from already released WebGL resources.
+    }
+  };
+
+  const resetMarkerMaterialCache = () => {
+    matCache.current.forEach((cachedMat) => disposeMaterial(cachedMat));
+    matCache.current.clear();
+  };
+
+  const createReducedHardwareMaterial = () => new THREE.MeshStandardMaterial({
+    color: REDUCED_HARDWARE_HEX,
+    emissive: 0x1a0000,
+    emissiveIntensity: 0.08,
+    metalness: 0.16,
+    roughness: 0.52,
+    side: THREE.DoubleSide,
+  });
 
   // --- Procedural Texture (module-cached, generated once per session) ---
   useEffect(() => {
@@ -327,6 +374,14 @@ const StepModelViewer = ({
       return () => {
         clearInterval(progressTimer);
         resizeObserver.disconnect();
+
+        holeMarkersRef.current.forEach((m) => {
+          m.parent?.remove(m);
+          if (m.geometry?.dispose) m.geometry.dispose();
+        });
+        holeMarkersRef.current = [];
+        resetMarkerMaterialCache();
+
         try { viewer.Destroy(); } catch (e) {
           console.warn('Viewer destroy error:', e);
         }
@@ -503,8 +558,9 @@ const StepModelViewer = ({
         if (!v?.scene) return;
 
         // Cleanup markers
-        holeMarkersRef.current.forEach(m => { m.parent?.remove(m); if (m.geometry) m.geometry.dispose(); if (m.material) { if (Array.isArray(m.material)) m.material.forEach(mat => mat.dispose()); else m.material.dispose(); } });
+        holeMarkersRef.current.forEach(m => { m.parent?.remove(m); if (m.geometry) m.geometry.dispose(); });
         holeMarkersRef.current = [];
+        resetMarkerMaterialCache();
 
         const hasHwAssigned = Object.keys(selectedHardware).length > 0;
         const hasCSAssigned = Object.keys(selectedCountersinks).length > 0;
@@ -612,6 +668,7 @@ const StepModelViewer = ({
             const lengthMm = item?.length ? parseFloat(item.length) * 25.4 : null;
             const majorDiaMm = item?.major_dia ? parseFloat(item.major_dia) * 25.4 : null;
             const resolvedNutBoreMm = resolveNutBoreMm(item);
+            const resolvedStudFitMm = resolveStudFitMm(item);
             const type = Number(typeId) || 3;
             let hwOuterR, hwBoreR;
             if (type === 3) {
@@ -629,9 +686,9 @@ const StepModelViewer = ({
               hwBoreR = configuredBoreMm ? (configuredBoreMm / 2) : (hwOuterR * 0.55);
             }
             else {
-              const studShankR = toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9;
-              hwOuterR = baseWidthMm ? baseWidthMm / 2 : studShankR * 1.65;
-              hwBoreR = 0;
+              const studFitR = resolvedStudFitMm ? (resolvedStudFitMm / 2) : (toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9);
+              hwOuterR = baseWidthMm ? Math.max(baseWidthMm / 2, studFitR * 1.12) : studFitR * 1.45;
+              hwBoreR = studFitR;
             }
             if (type === 3 || type === 4) {
               hwBoreR = Math.min(hwBoreR, hwOuterR * 0.85);
@@ -744,7 +801,9 @@ const StepModelViewer = ({
               const nutColor = needsReduction ? 0xDC2626 : panelHex;
               const nutBodyMat = getMarkerMat(
                 `hw_nut_matte_${nutColor}_${needsReduction ? 'reduced' : 'native'}`,
-                () => new THREE.MeshStandardMaterial({ color: nutColor, metalness: 0.18, roughness: 0.82, side: THREE.DoubleSide })
+                () => needsReduction
+                  ? createReducedHardwareMaterial()
+                  : new THREE.MeshStandardMaterial({ color: nutColor, metalness: 0.18, roughness: 0.82, side: THREE.DoubleSide })
               );
               const nutH = item?.length ? parseFloat(item.length) * 25.4 : Math.max(3, origT * 0.6);
               addMesh(makeRing(nutInnerR, hwOuterR, nutH), nutBodyMat, basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * nutH / 2)), axisVec);
@@ -768,11 +827,11 @@ const StepModelViewer = ({
 
               // In configured preview, color must follow backend resize report only.
               const isConfiguredPreview = Boolean(modelUrlOverride);
-              const backendDecisionKnown = reportAction === 'resized' || reportAction === 'unchanged' || reportAction === 'skipped' || reportAction === 'failed';
-              const heuristicNeedsReduction = holeR > (targetFitR + 0.02);
+              const backendDecisionKnown = reportAction === 'resized' || reportAction === 'unchanged';
+              const heuristicNeedsReduction = holeR > (targetFitR + 0.05);
               const reportNeedsReduction = reportAction === 'resized' && reportDirection === 'reduced';
               const needsReduction = isConfiguredPreview
-                ? (backendDecisionKnown ? reportNeedsReduction : false)
+                ? (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction)
                 : (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction);
 
               const standoffColor = needsReduction ? 0xDC2626 : panelHex;
@@ -812,14 +871,14 @@ const StepModelViewer = ({
 
               const standoffMat = getMarkerMat(
                 `hw_standoff_${standoffColor}_${needsReduction ? 'reduced' : 'native'}`,
-                () => new THREE.MeshStandardMaterial({
-                  color: standoffColor,
-                  metalness: needsReduction ? 0.1 : 0.28,
-                  roughness: needsReduction ? 0.52 : 0.68,
-                  emissive: needsReduction ? 0x4b0000 : 0x000000,
-                  emissiveIntensity: needsReduction ? 0.34 : 0.0,
-                  side: THREE.DoubleSide
-                })
+                () => needsReduction
+                  ? createReducedHardwareMaterial()
+                  : new THREE.MeshStandardMaterial({
+                    color: standoffColor,
+                    metalness: 0.28,
+                    roughness: 0.68,
+                    side: THREE.DoubleSide
+                  })
               );
 
               // Standoff body contacts the selected face directly (no visible air gap).
@@ -865,83 +924,234 @@ const StepModelViewer = ({
               modelRoot.add(hexHeadMesh);
               holeMarkersRef.current.push(hexHeadMesh);
             } else if (type === 4) {
-              const needsReduction = holeR > (hwBoreR + 0.03);
-              if (!shouldUsePhysicalNutResize) {
-                addHoleAdjustDiscs(hwBoreR, hwOuterR);
-              }
+              const resizeReportEntry =
+                (hardwareResizeReport && typeof hardwareResizeReport === 'object')
+                  ? (hardwareResizeReport[String(holeId)] || hardwareResizeReport[String(hole.id)] || null)
+                  : null;
+              const reportAction = String(resizeReportEntry?.action || '').toLowerCase();
+              const reportDirection = String(resizeReportEntry?.direction || '').toLowerCase();
+
+              const flushNutFitMm = resolveNutBoreMm(item);
+              const reportTargetDiaMm = Number(resizeReportEntry?.target_dia_mm);
+              const effectiveFitMm = Number.isFinite(reportTargetDiaMm) && reportTargetDiaMm > 0
+                ? reportTargetDiaMm
+                : flushNutFitMm;
+              const targetFitR = effectiveFitMm
+                ? (effectiveFitMm / 2)
+                : Math.max(0.3, hwBoreR || holeR * 0.75);
+
+              const isConfiguredPreview = Boolean(modelUrlOverride);
+              const backendDecisionKnown = reportAction === 'resized' || reportAction === 'unchanged';
+              const heuristicNeedsReduction = holeR > (targetFitR + 0.05);
+              const reportNeedsReduction = reportAction === 'resized' && reportDirection === 'reduced';
+              const needsReduction = isConfiguredPreview
+                ? (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction)
+                : (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction);
+
               const flushNutColor = needsReduction ? 0xDC2626 : panelHex;
+              const seamOverlap = Math.max(0.015, 0.03 / Math.max(scaleFactor, 1e-6));
+              const clinchOuterR = Math.max(targetFitR + seamOverlap, targetFitR + 0.14);
+              const clinchInnerR = Math.max(0.2, Math.min(hwBoreR * 0.92, clinchOuterR - 0.14));
+              const hexHeadR = Math.max(hwOuterR, clinchOuterR * 1.08);
+              const headInnerR = Math.max(0.2, Math.min(clinchInnerR * 1.02, hexHeadR * 0.82));
+              const clinchBodyH = Math.max(0.55, Math.min(Math.max(0.95, origT * 0.36), 1.5));
+              const hexHeadH = Math.max(0.38, Math.min(0.95, hexHeadR * 0.18));
+
+              if (!shouldUsePhysicalNutResize) {
+                addHoleAdjustDiscs(targetFitR, hexHeadR, {
+                  applyFront: true,
+                  applyBack: false,
+                  includeTail: false,
+                  visibleOuterROverride: Math.max(targetFitR + 0.08, targetFitR * 1.12),
+                  useMaxAllowedLimit: false,
+                });
+                addFrontHoleReducerSleeve(targetFitR, {
+                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, origT * 0.11)),
+                  hardwareOuterR: hexHeadR,
+                });
+              }
+
+              const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
+              const selectedSurfaceContact = baseCenter.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+              );
+              const flushNutBodyPos = selectedSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(-faceSign * (clinchBodyH * 0.5 - contactInset * 0.35))
+              );
+              const flushNutHeadPos = selectedSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (hexHeadH * 0.5 - contactInset * 0.15))
+              );
+
               const flushNutMat = getMarkerMat(
                 `hw_flush_nut_${flushNutColor}_${needsReduction ? 'reduced' : 'native'}`,
-                () => new THREE.MeshStandardMaterial({ color: flushNutColor, metalness: 0.26, roughness: 0.72, side: THREE.DoubleSide })
+                () => needsReduction
+                  ? createReducedHardwareMaterial()
+                  : new THREE.MeshStandardMaterial({
+                    color: flushNutColor,
+                    metalness: 0.24,
+                    roughness: 0.62,
+                    side: THREE.DoubleSide,
+                  })
               );
-              const flushNutBackExtra = Math.max(0.34, 0.52 / Math.max(scaleFactor, 1e-6));
-              const flushNutFrontPos = basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * flushNutBackExtra));
-              const flushNutBackPos = backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * flushNutBackExtra));
-              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), flushNutMat, flushNutFrontPos, axisVec);
-              addMesh(makeRing(hwBoreR, hwOuterR, thinDiscH), flushNutMat, flushNutBackPos, axisVec);
-            } else if (type === 1) {
-              // Flush stud: solid shank + clean round screw head on opposite side.
-              const studShankR = Math.max(0.35, toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9);
-              const studH = lengthMm || Math.max(origT * 2.2, 4.0);
-              const headR = baseWidthMm ? Math.max(studShankR * 1.15, baseWidthMm / 2) : studShankR * 1.45;
-              addHoleAdjustDiscs(studShankR, headR);
-              const headDiskH = Math.max(0.65, Math.min(1.45, headR * 0.28));
-              const domeR = headR * 0.92;
-              const domeH = Math.max(0.3, Math.min(0.9, headR * 0.22));
 
-              const studBodyMat = getMarkerMat(`stud_body_${defaultColor}`, () => new THREE.MeshStandardMaterial({
-                color: defaultColor,
-                metalness: 0.52,
-                roughness: 0.36,
-                side: THREE.DoubleSide,
-              }));
-
-              const screwHeadMat = getMarkerMat(`stud_head_${defaultColor}`, () => new THREE.MeshStandardMaterial({
-                color: defaultColor,
-                metalness: 0.38,
-                roughness: 0.46,
-                side: THREE.DoubleSide,
-              }));
-
+              // Clinch body is slightly tucked into the selected face hole.
               addMesh(
-                new THREE.CylinderGeometry(studShankR, studShankR * 0.98, studH, 48),
-                studBodyMat,
-                basePos.clone().add(axisNorm.clone().multiplyScalar(faceSign * studH / 2)),
+                makeRing(clinchInnerR, clinchOuterR, clinchBodyH),
+                flushNutMat,
+                flushNutBodyPos,
                 axisVec
               );
 
-              // Main round screw head.
-              addMesh(
-                new THREE.CylinderGeometry(headR, headR * 0.97, headDiskH, 48),
-                screwHeadMat,
-                backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (headDiskH / 2))),
-                axisVec
-              );
+              // Visible face is a single hex head on the selected side.
+              const hexShape = new THREE.Shape();
+              for (let i = 0; i < 6; i++) {
+                const a = (Math.PI / 3) * i;
+                const x = hexHeadR * Math.cos(a);
+                const y = hexHeadR * Math.sin(a);
+                if (i === 0) hexShape.moveTo(x, y);
+                else hexShape.lineTo(x, y);
+              }
+              hexShape.closePath();
 
-              // Gentle dome crown for screw-head silhouette.
-              addMesh(
-                new THREE.SphereGeometry(domeR, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2),
-                screwHeadMat,
-                backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (headDiskH + domeH * 0.35))),
-                axisVec
-              );
+              const hexHole = new THREE.Path();
+              hexHole.absarc(0, 0, headInnerR * 1.01, 0, Math.PI * 2, false);
+              hexShape.holes.push(hexHole);
 
-              // Add rounded ring details to mimic a real screw-head collar profile.
-              const screwHeadRidgeGeo = new THREE.TorusGeometry(Math.max(studShankR * 1.02, headR * 0.78), Math.max(0.05, headR * 0.06), 14, 30);
-              const screwHeadRidgeOffsets = [0.22, 0.5, 0.78].map(t => t * headDiskH);
-              screwHeadRidgeOffsets.forEach((offset) => {
-                const ridge = new THREE.Mesh(screwHeadRidgeGeo, screwHeadMat);
-                ridge.userData.isHoleMarker = true;
-                ridge.isHardwareMarker = true;
-                ridge.position.copy(backSurfacePos.clone().add(axisNorm.clone().multiplyScalar(-faceSign * offset)));
-                ridge.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisNorm.clone().normalize());
-                if (modelRoot !== v.scene) {
-                  ridge.scale.set(1, 1, 1);
-                  ridge.scale[_ta] = 1 / scaleFactor;
-                }
-                modelRoot.add(ridge);
-                holeMarkersRef.current.push(ridge);
+              const hexHeadGeo = new THREE.ExtrudeGeometry(hexShape, {
+                depth: hexHeadH,
+                bevelEnabled: false,
+                curveSegments: 32,
               });
+              hexHeadGeo.translate(0, 0, -hexHeadH / 2);
+
+              const hexHeadMesh = new THREE.Mesh(hexHeadGeo, flushNutMat);
+              hexHeadMesh.userData.isHoleMarker = true;
+              hexHeadMesh.isHardwareMarker = true;
+              hexHeadMesh.position.copy(flushNutHeadPos);
+              hexHeadMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisVec.clone().normalize());
+              if (modelRoot !== v.scene) {
+                hexHeadMesh.scale.set(1, 1, 1);
+                hexHeadMesh.scale[_ta] = 1 / scaleFactor;
+              }
+              modelRoot.add(hexHeadMesh);
+              holeMarkersRef.current.push(hexHeadMesh);
+            } else if (type === 1) {
+              // Flush stud follows the same resize/color semantics as other hardware types.
+              const resizeReportEntry =
+                (hardwareResizeReport && typeof hardwareResizeReport === 'object')
+                  ? (hardwareResizeReport[String(holeId)] || hardwareResizeReport[String(hole.id)] || null)
+                  : null;
+              const reportAction = String(resizeReportEntry?.action || '').toLowerCase();
+              const reportDirection = String(resizeReportEntry?.direction || '').toLowerCase();
+
+              const studFitMm = resolveStudFitMm(item);
+              const reportTargetDiaMm = Number(resizeReportEntry?.target_dia_mm);
+              const effectiveFitMm = Number.isFinite(reportTargetDiaMm) && reportTargetDiaMm > 0
+                ? reportTargetDiaMm
+                : studFitMm;
+              const targetFitR = effectiveFitMm ? (effectiveFitMm / 2) : Math.max(0.35, toolingDiaMm ? toolingDiaMm / 2 : holeR * 0.9);
+
+              const isConfiguredPreview = Boolean(modelUrlOverride);
+              const backendDecisionKnown = reportAction === 'resized' || reportAction === 'unchanged';
+              const heuristicNeedsReduction = holeR > (targetFitR + 0.05);
+              const reportNeedsReduction = reportAction === 'resized' && reportDirection === 'reduced';
+              const needsReduction = isConfiguredPreview
+                ? (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction)
+                : (backendDecisionKnown ? reportNeedsReduction : heuristicNeedsReduction);
+
+              const studColor = needsReduction ? 0xDC2626 : panelHex;
+              const seamOverlap = Math.max(0.015, 0.03 / Math.max(scaleFactor, 1e-6));
+              const studCoreR = Math.max(0.35, targetFitR + seamOverlap);
+              const studThreadR = Math.max(studCoreR + 0.06, studCoreR * 1.08);
+              const studH = lengthMm || Math.max(origT * 2.0, 4.0);
+              const flushHeadR = baseWidthMm
+                ? Math.max(studThreadR * 1.08, baseWidthMm / 2)
+                : Math.max(studThreadR * 1.18, studThreadR + 0.35);
+              const flushHeadH = Math.max(0.35, Math.min(1.0, flushHeadR * 0.2));
+
+              if (!shouldUsePhysicalNutResize) {
+                addHoleAdjustDiscs(studCoreR, flushHeadR, {
+                  applyFront: true,
+                  applyBack: false,
+                  includeTail: false,
+                  visibleOuterROverride: Math.max(studCoreR + 0.08, studCoreR * 1.12),
+                  useMaxAllowedLimit: false,
+                });
+                addFrontHoleReducerSleeve(studCoreR, {
+                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, origT * 0.1)),
+                  hardwareOuterR: flushHeadR,
+                });
+              }
+
+              const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
+              const selectedSurfaceContact = baseCenter.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+              );
+              const oppositeSurfaceContact = baseCenter.clone().add(
+                axisNorm.clone().multiplyScalar(-faceSign * (origT * 0.5 - contactInset))
+              );
+              const studBodyCenter = selectedSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(faceSign * (studH * 0.5 - contactInset))
+              );
+              const flushHeadPos = oppositeSurfaceContact.clone().add(
+                axisNorm.clone().multiplyScalar(-faceSign * (flushHeadH * 0.5 - contactInset))
+              );
+
+              const studBodyMat = getMarkerMat(
+                `hw_stud_body_${studColor}_${needsReduction ? 'reduced' : 'native'}`,
+                () => needsReduction
+                  ? createReducedHardwareMaterial()
+                  : new THREE.MeshStandardMaterial({
+                    color: studColor,
+                    metalness: 0.34,
+                    roughness: 0.58,
+                    side: THREE.DoubleSide,
+                  })
+              );
+
+              const studHeadMat = getMarkerMat(
+                `hw_stud_head_${studColor}_${needsReduction ? 'reduced' : 'native'}`,
+                () => needsReduction
+                  ? createReducedHardwareMaterial()
+                  : new THREE.MeshStandardMaterial({
+                    color: studColor,
+                    metalness: 0.22,
+                    roughness: 0.64,
+                    side: THREE.DoubleSide,
+                  })
+              );
+
+              // Threaded shank on selected side.
+              addMesh(
+                new THREE.CylinderGeometry(studCoreR, studCoreR * 0.985, studH, 56),
+                studBodyMat,
+                studBodyCenter,
+                axisVec
+              );
+
+              // Flush clinch head on opposite side.
+              addMesh(
+                new THREE.CylinderGeometry(flushHeadR, flushHeadR * 0.985, flushHeadH, 56),
+                studHeadMat,
+                flushHeadPos,
+                axisVec
+              );
+
+              // Add thread ridges along shank for realistic stud structure.
+              const threadPitch = Math.max(0.45, Math.min(1.15, studThreadR * 0.42));
+              const ridgeH = Math.max(0.08, Math.min(0.2, threadPitch * 0.42));
+              const ridgeCount = Math.max(4, Math.min(36, Math.floor(studH / threadPitch)));
+              for (let i = 0; i < ridgeCount; i++) {
+                const axialOffset = (-studH * 0.5) + (threadPitch * 0.5) + (i * threadPitch);
+                if (Math.abs(axialOffset) > ((studH * 0.5) - (ridgeH * 0.5))) continue;
+                const ridgePos = studBodyCenter.clone().add(axisNorm.clone().multiplyScalar(faceSign * axialOffset));
+                addMesh(
+                  makeRing(studCoreR * 0.99, studThreadR, ridgeH),
+                  studBodyMat,
+                  ridgePos,
+                  axisVec
+                );
+              }
             }
           });
         }

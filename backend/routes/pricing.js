@@ -9,7 +9,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const previewJobs = new Map();
 const previewResultCache = new Map();
-const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v10-standoff-resize-preview-report';
+const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v11-flush-stud-resize-preview-report';
 const PREVIEW_RESULT_TTL_MS = 8 * 60 * 1000;
 const PREVIEW_RESULT_CACHE_MAX = 256;
 
@@ -471,7 +471,7 @@ router.post('/configure-preview', async (req, res) => {
         const hasTaps = Object.keys(previewConfig.selectedTaps || {}).length > 0;
         const hasHardwareResizing = Object.values(previewConfig.selectedHardware || {}).some((hw) => {
             const t = Number(hw?.typeId);
-            return t === 2 || t === 3 || t === 4;
+            return t === 1 || t === 2 || t === 3 || t === 4;
         });
         if (!hasCountersinks && !hasTaps && !hasHardwareResizing) {
             return res.json({ success: true, skipped: true, cached: true, previewPath: null, hardwareResizeReport: {} });

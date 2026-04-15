@@ -201,6 +201,38 @@ def resolve_standoff_target_diameter_mm(item_data):
     return None
 
 
+def resolve_stud_target_diameter_mm(item_data):
+    if not isinstance(item_data, dict):
+        return None
+
+    # Flush stud fit is primarily driven by shank diameter.
+    shank_mm = parse_inches_to_mm(item_data.get('shank'))
+    if shank_mm is not None and shank_mm > 0:
+        return shank_mm
+
+    # Tooling diameter is typically aligned with stud insertion hole.
+    tooling_mm = parse_inches_to_mm(item_data.get('tooling_diameter'))
+    if tooling_mm is not None and tooling_mm > 0:
+        return tooling_mm
+
+    # Secondary fit sources.
+    minor_mm = parse_inches_to_mm(item_data.get('minor_dia'))
+    if minor_mm is not None and minor_mm > 0:
+        return minor_mm
+
+    major_mm = parse_inches_to_mm(item_data.get('major_dia'))
+    if major_mm is not None and major_mm > 0:
+        return major_mm
+
+    # Last fallback from thread notation.
+    size_spec = item_data.get('size_spec') or item_data.get('name')
+    major_in = parse_size_spec_major_diameter_in(size_spec)
+    if major_in is not None and major_in > 0:
+        return major_in * 25.4
+
+    return None
+
+
 def hole_diameter_mm(hole_data):
     """Extract hole diameter in mm from supported payload keys."""
     if not isinstance(hole_data, dict):
@@ -332,7 +364,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
         batched_resize_plugs = []
         batched_resize_pilots = []
 
-        # 1.5 Resize holes for hardware requiring bore fit (standoffs + nuts):
+        # 1.5 Resize holes for hardware requiring bore fit (flush studs + standoffs + nuts):
         # shrink oversized bores or enlarge undersized bores.
         if selected_hardware and isinstance(selected_hardware, dict):
             for hw_id, hw_info in selected_hardware.items():
@@ -353,7 +385,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                     continue
 
                 hw_type_int = int(hw_type)
-                if hw_type_int not in (2, 3, 4):
+                if hw_type_int not in (1, 2, 3, 4):
                     continue
 
                 hole_data = hw_info.get('hole') or {}
@@ -374,8 +406,10 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
 
                 if hw_type_int in (3, 4):
                     target_dia_mm = resolve_nut_target_diameter_mm(item_data)
-                else:
+                elif hw_type_int == 2:
                     target_dia_mm = resolve_standoff_target_diameter_mm(item_data)
+                else:
+                    target_dia_mm = resolve_stud_target_diameter_mm(item_data)
 
                 if target_dia_mm is None or target_dia_mm <= 0:
                     print(f"[CAD-KERNEL] Skip hardware resize {hw_id}: missing target bore diameter")
