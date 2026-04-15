@@ -292,6 +292,7 @@ const Orders = () => {
                                                 ? (previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null)
                                                 : (previewItem.item.configured_file_path ? '/' + previewItem.item.configured_file_path : null)
                                         }}
+                                        tempPath={previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null}
                                         configuration={previewItem.mode === 'configured' ? parseConfig(previewItem.item.configuration_json) : {}}
                                     />
                                 </div>

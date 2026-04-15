@@ -4,7 +4,17 @@ import StepModelViewer from './StepModelViewer';
 const noop = () => {};
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const BACKEND_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+const BACKEND_URL = (() => {
+  const explicit = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+  if (explicit) return explicit;
+
+  const fromApiBase = String(API_BASE_URL || '');
+  if (/^https?:\/\//i.test(fromApiBase)) {
+    return fromApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  }
+
+  return '';
+})();
 
 const toVector3Array = (value) => {
   if (Array.isArray(value) && value.length >= 3) {
@@ -117,8 +127,9 @@ const sanitizeStepPath = (value) => {
   return raw.replace(/^\/+/, '');
 };
 
-const inferSourceStepPath = (file, selectedFile, configuration) => {
+const inferSourceStepPath = (file, selectedFile, configuration, tempPath) => {
   const candidates = [
+    tempPath,
     configuration?.tempPath,
     file?.tempPath,
     file?.path,
@@ -199,6 +210,7 @@ const ProjectViewer = ({
   configuration = {},
   onDimensionsExtracted = null,
   isPreview = false,
+  tempPath = null,
 }) => {
   const selectedFile = useMemo(() => normalizeViewerFile(file), [file]);
   const selectedTaps = useMemo(() => normalizeHoleAssignments(configuration.selectedTaps || {}), [configuration.selectedTaps]);
@@ -292,8 +304,8 @@ const ProjectViewer = ({
   );
 
   const sourceStepPath = useMemo(
-    () => inferSourceStepPath(file, selectedFile, configuration),
-    [file, selectedFile, configuration]
+    () => inferSourceStepPath(file, selectedFile, configuration, tempPath),
+    [file, selectedFile, configuration, tempPath]
   );
 
   const sourceIsConfigured = useMemo(() => isConfiguredStepPath(sourceStepPath), [sourceStepPath]);

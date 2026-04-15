@@ -489,21 +489,6 @@ const StepModelViewer = ({
         const hasForcedFinishColor = Boolean(finishColorStr)
           && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback);
 
-        const holeById = new Map((detectedHoles || []).map((h) => [String(h.id), h]));
-        const tapRangeTol = 0.0015;
-        const isTapCompatibleHole = (holeId) => {
-          const hole = holeById.get(String(holeId));
-          if (!hole) return false;
-          const diaMm = Number(hole.diameter_mm)
-            || (Number(hole.diameter_in) ? Number(hole.diameter_in) * 25.4 : 0)
-            || (Number(hole.diameterInches) ? Number(hole.diameterInches) * 25.4 : 0);
-          const diaIn = Number(hole.diameter_in)
-            || Number(hole.diameterInches)
-            || (diaMm > 0 ? diaMm / 25.4 : null);
-          if (!Number.isFinite(diaIn) || diaIn <= 0) return false;
-          return (tapOptions || []).some((tap) => isTapOptionCompatible(diaIn, tap, tapRangeTol));
-        };
-
         v.scene.traverse(obj => {
           if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
 
@@ -544,12 +529,10 @@ const StepModelViewer = ({
             const nativeHoleId = obj.userData.nativeHoleId;
             const isNativeHole = Boolean(obj.userData.isNativeHole) && nativeHoleId !== undefined && nativeHoleId !== null;
             const isTapped = isNativeHole && Boolean(selectedTaps[nativeHoleId]);
-            const isActive = isNativeHole && activeTapHole?.id === nativeHoleId;
-            const isTapCompatible = isNativeHole && isTappingActive && !isTapped && !isActive && isTapCompatibleHole(nativeHoleId);
+            const isNotTappedTapHole = isNativeHole && isTappingActive && !isTapped;
 
             if (isTapped) { fm.color.set(0x2563eb); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
-            else if (isActive) { fm.color.set(0xf59e0b); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
-            else if (isTapCompatible) { fm.color.set(0x16a34a); fm.emissive.set(0x0a3d1e); fm.emissiveIntensity = 0.28; }
+            else if (isNotTappedTapHole) { fm.color.set(0xef4444); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             else if (hasForcedFinishColor) {
               fm.color.set(finishColorStr);
               if (!isFinishPowderCoating) {
@@ -600,7 +583,7 @@ const StepModelViewer = ({
       } catch (err) { console.warn('Style application error:', err); }
     };
     apply();
-  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps, modelUrlOverride, detectedHoles, tapOptions, isTappingActive]);
+  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps, modelUrlOverride, detectedHoles, isTappingActive]);
 
   // --- Live Finish Color Updates ---
   useEffect(() => {
@@ -727,16 +710,14 @@ const StepModelViewer = ({
 
           detectedHoles.forEach(hole => {
             const diaImm = hole.diameter_mm || (hole.diameter_in ? hole.diameter_in * 25.4 : (hole.diameterInches ? hole.diameterInches * 25.4 : 2.54));
-            const diaIn = hole.diameter_in || (hole.diameterInches || diaImm / 25.4);
             const mmDia = diaImm; if (mmDia > 200) return;
-            const tapRangeTol = 0.0015;
-            const isConfigured = tapOptions.some(tap => isTapOptionCompatible(diaIn, tap, tapRangeTol));
-            const isTapped = !!selectedTaps[hole.id]; const isActive = activeTapHole?.id === hole.id;
-            const baseColor = isTapped ? 0x2563eb : (isConfigured ? 0x16a34a : 0xef4444);
-            const mat = getMarkerMat(`tap_${baseColor}_${isActive}_${isTapped}`, () => new THREE.MeshPhongMaterial({
+            const isTapped = !!selectedTaps[hole.id];
+            const isConfigured = false;
+            const baseColor = isTapped ? 0x2563eb : 0xef4444;
+            const mat = getMarkerMat(`tap_${baseColor}_${isTapped}`, () => new THREE.MeshPhongMaterial({
               color: baseColor,
-              emissive: isActive ? 0xffffff : baseColor,
-              emissiveIntensity: isActive ? 1.6 : (isTapped ? 0.95 : (isConfigured ? 0.58 : 0.38)),
+              emissive: baseColor,
+              emissiveIntensity: isTapped ? 0.95 : 0.42,
               shininess: 85,
               side: THREE.DoubleSide
             }));

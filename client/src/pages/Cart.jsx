@@ -73,6 +73,7 @@ const Cart = () => {
                   <div className="cart-preview-wrap">
                     <ProjectViewer
                       file={item.file}
+                      tempPath={item.tempPath || item.configuration?.tempPath || null}
                       configuration={item.configuration}
                       isPreview={true}
                     />
