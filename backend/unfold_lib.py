@@ -100,6 +100,196 @@ def _get_line_hash(p1_list, p2_list, tol=0.1):
     p2 = (round(p2_list[0]/tol)*tol, round(p2_list[1]/tol)*tol, round(p2_list[2]/tol)*tol)
     return tuple(sorted([p1, p2]))
 
+
+def _basis_from_normal(normal_vec):
+    n = _normalize(np.asarray(normal_vec, dtype=float))
+    ref = np.array([1.0, 0.0, 0.0]) if abs(float(n[0])) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = _normalize(np.cross(n, ref))
+    v = _normalize(np.cross(n, u))
+    return n, u, v
+
+
+def _detect_holes_from_planar_loops(fc_shape):
+    """
+    Fallback hole detector for models where holes are not represented as
+    cylindrical faces (e.g. conical/countersunk-only or non-analytic exports).
+    """
+    candidates = []
+
+    for fi, face in enumerate(fc_shape.Faces):
+        if face.Surface.TypeId != "Part::GeomPlane":
+            continue
+
+        try:
+            n_obj = face.normalAt(0, 0)
+            normal = np.array([float(n_obj.x), float(n_obj.y), float(n_obj.z)], dtype=float)
+        except Exception:
+            try:
+                n_obj = face.Surface.Axis
+                normal = np.array([float(n_obj.x), float(n_obj.y), float(n_obj.z)], dtype=float)
+            except Exception:
+                continue
+
+        if np.linalg.norm(normal) < 1e-9:
+            continue
+
+        normal, u_vec, v_vec = _basis_from_normal(normal)
+
+        outer_hash = None
+        try:
+            outer_hash = face.OuterWire.hashCode()
+        except Exception:
+            outer_hash = None
+
+        for wire in face.Wires:
+            try:
+                if outer_hash is not None and wire.hashCode() == outer_hash:
+                    continue
+            except Exception:
+                pass
+
+            wire_points = []
+            for edge in wire.Edges:
+                try:
+                    pts = edge.discretize(Number=32)
+                except Exception:
+                    pts = [v.Point for v in edge.Vertexes]
+
+                if not pts or len(pts) < 2:
+                    continue
+
+                edge_pts = [
+                    np.array([float(p.x), float(p.y), float(p.z)], dtype=float)
+                    for p in pts
+                ]
+
+                if wire_points:
+                    if np.linalg.norm(edge_pts[0] - wire_points[-1]) <= 1e-6:
+                        wire_points.extend(edge_pts[1:])
+                    else:
+                        wire_points.extend(edge_pts)
+                else:
+                    wire_points.extend(edge_pts)
+
+            if len(wire_points) < 4:
+                continue
+
+            if np.linalg.norm(wire_points[0] - wire_points[-1]) > 1e-5:
+                wire_points.append(wire_points[0].copy())
+
+            pts3 = np.asarray(wire_points, dtype=float)
+            if pts3.shape[0] < 4:
+                continue
+
+            local = pts3 - pts3[0]
+            x = local @ u_vec
+            y = local @ v_vec
+            pts2 = np.column_stack((x, y))
+
+            seg = pts2[1:] - pts2[:-1]
+            perimeter = float(np.sum(np.linalg.norm(seg, axis=1)))
+            if perimeter < 1e-6:
+                continue
+
+            area = 0.5 * abs(float(np.sum(
+                pts2[:-1, 0] * pts2[1:, 1] - pts2[1:, 0] * pts2[:-1, 1]
+            )))
+            if area < 1e-6:
+                continue
+
+            roundness = (4.0 * math.pi * area) / (perimeter * perimeter + 1e-9)
+            diameter_mm = 2.0 * math.sqrt(area / math.pi)
+
+            # Keep near-circular inner loops that look like drilled/punched holes.
+            if diameter_mm < 1.0:
+                continue
+            if roundness < 0.80:
+                continue
+
+            center = np.mean(pts3[:-1], axis=0)
+            candidates.append({
+                "face_index": fi,
+                "face_id": f"face_{fi}",
+                "diameter_mm": float(diameter_mm),
+                "center": center,
+                "axis": normal,
+            })
+
+    if not candidates:
+        return []
+
+    used = set()
+    holes = []
+
+    for i, c1 in enumerate(candidates):
+        if i in used:
+            continue
+
+        best_j = None
+        best_score = None
+        for j in range(i + 1, len(candidates)):
+            if j in used:
+                continue
+            c2 = candidates[j]
+
+            max_d = max(c1["diameter_mm"], c2["diameter_mm"], 1e-9)
+            if abs(c1["diameter_mm"] - c2["diameter_mm"]) / max_d > 0.08:
+                continue
+
+            dot_n = float(np.dot(c1["axis"], c2["axis"]))
+            if dot_n > -0.85:
+                continue
+
+            delta = c2["center"] - c1["center"]
+            axial = abs(float(np.dot(delta, c1["axis"])))
+            radial_vec = delta - np.dot(delta, c1["axis"]) * c1["axis"]
+            radial = float(np.linalg.norm(radial_vec))
+
+            if axial < 0.15:
+                continue
+            if radial > max(0.4, c1["diameter_mm"] * 0.2):
+                continue
+
+            score = radial + abs(c1["diameter_mm"] - c2["diameter_mm"])
+            if best_score is None or score < best_score:
+                best_score = score
+                best_j = j
+
+        if best_j is not None:
+            used.add(i)
+            used.add(best_j)
+            c2 = candidates[best_j]
+
+            pos = (c1["center"] + c2["center"]) * 0.5
+            axis = _normalize(c1["axis"] - c2["axis"])
+            if np.linalg.norm(axis) < 1e-9:
+                axis = _normalize(c1["axis"])
+            depth_mm = float(np.linalg.norm(c2["center"] - c1["center"]))
+            diameter_mm = min(c1["diameter_mm"], c2["diameter_mm"])
+            face_id = c1["face_id"]
+        else:
+            used.add(i)
+            pos = c1["center"]
+            axis = _normalize(c1["axis"])
+            depth_mm = max(0.5, c1["diameter_mm"] * 0.3)
+            diameter_mm = c1["diameter_mm"]
+            face_id = c1["face_id"]
+
+        holes.append({
+            "id": f"hole_{len(holes) + 1}",
+            "face_id": face_id,
+            "diameter_mm": round(float(diameter_mm), 4),
+            "diameter_in": round(float(diameter_mm) / 25.4, 6),
+            "position": [round(float(v), 4) for v in pos],
+            "axis": [round(float(v), 4) for v in axis],
+            "depth_mm": round(float(depth_mm), 4),
+        })
+
+    holes.sort(key=lambda h: h["diameter_mm"])
+    for idx, h in enumerate(holes):
+        h["id"] = f"hole_{idx + 1}"
+    return holes
+
 def detect_holes_fc(fc_shape):
     """
     Detect holes using FreeCAD native classification.
@@ -284,7 +474,11 @@ def detect_holes_fc(fc_shape):
 
     for idx, h in enumerate(final):
         h["id"] = f"hole_{idx+1}"
-    return final
+    if final:
+        return final
+
+    # Fallback for non-cylindrical hole topology exports.
+    return _detect_holes_from_planar_loops(fc_shape)
 
 def get_projections(fc_shape):
     """Generate orthographic projections."""
