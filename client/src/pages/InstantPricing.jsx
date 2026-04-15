@@ -1471,34 +1471,6 @@ const InstantPricing = () => {
                     </div>
                   )}
 
-                  {/* --- Tap Legend Overlay --- */}
-                  {isTappingActive && viewMode === '3d' && (
-                    <div style={{
-                      position: 'absolute', top: 16, right: 16, zIndex: 50,
-                      background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)',
-                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 8
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Tap Legend</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563eb', boxShadow: '0 0 8px #2563eb80' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Tapped</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e80' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Compatible</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b80' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Active</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef444480' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Incompatible</span>
-                      </div>
-                    </div>
-                  )}
-
                   {currentIsStep && viewMode === '3d' ? (
                     <StepModelViewer
                       selectedFile={selectedFile}

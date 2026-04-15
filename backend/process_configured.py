@@ -336,29 +336,47 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
         # 1. Perform Tapping Cuts
         if selected_taps:
             for tap_id, tap_info in selected_taps.items():
-                if not tap_info: continue 
-                hole_data = tap_info.get('hole')
-                if not hole_data: continue
-                
-                pos = hole_data.get('position')
-                diameter = hole_data.get('diameterInches', 0) * 25.4 
-                height = 200 # Extra length for through-hole
-                
-                if pos:
-                    # Robust parsing for [x,y,z] OR {x,y,z}
-                    if isinstance(pos, dict):
-                        px, py, pz = pos.get('x', 0), pos.get('y', 0), pos.get('z', 0)
-                    elif isinstance(pos, (list, tuple)) and len(pos) >= 3:
-                        px, py, pz = pos[0], pos[1], pos[2]
-                    else:
-                        px, py, pz = 0, 0, 0
-                    
-                    print(f"[CAD-KERNEL] CUTTING HOLE: id={tap_id}, x={px:.2f}, y={py:.2f}, z={pz:.2f}, dia={diameter:.2f}mm")
-                    
-                    # Create cutting tool shape at the exact DESIGN coordinates
-                    tool = cq.Workplane("XY").workplane(offset=pz - (height/2)).center(px, py).circle(diameter/2).extrude(height).val()
-                    # Apply cut directly to the shape
-                    model = cq.Workplane(model.val().cut(tool))
+                if not tap_info:
+                    continue
+
+                hole_data = tap_info.get('hole') or {}
+                hole_pos = parse_vector3(hole_data.get('position'))
+                if hole_pos is None:
+                    print(f"[CAD-KERNEL] Skip tap {tap_id}: missing hole position")
+                    continue
+
+                hole_axis = normalize_vector3(parse_vector3(hole_data.get('axis')), fallback=(0.0, 0.0, 1.0))
+
+                target_dia_mm = hole_diameter_mm(hole_data)
+                if target_dia_mm is None or target_dia_mm <= 0:
+                    # Fallback for legacy tap payloads
+                    target_dia_mm = parse_inches_to_mm(hole_data.get('diameterInches'))
+                if target_dia_mm is None or target_dia_mm <= 0:
+                    print(f"[CAD-KERNEL] Skip tap {tap_id}: missing hole diameter")
+                    continue
+
+                hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
+                if hole_depth_mm is None:
+                    hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
+                if hole_depth_mm is None:
+                    hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
+                local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+
+                tap_cut_depth = max(local_thickness + 0.08, 0.7)
+                tap_radius = max((target_dia_mm / 2.0) - 0.002, 0.01)
+
+                print(
+                    f"[CAD-KERNEL] CUTTING TAP HOLE: id={tap_id}, "
+                    f"pos=({hole_pos[0]:.2f},{hole_pos[1]:.2f},{hole_pos[2]:.2f}), "
+                    f"axis=({hole_axis[0]:.3f},{hole_axis[1]:.3f},{hole_axis[2]:.3f}), "
+                    f"dia={target_dia_mm:.3f}mm, depth={tap_cut_depth:.3f}mm"
+                )
+
+                try:
+                    tool = make_axis_cylinder(hole_pos, hole_axis, tap_radius, tap_cut_depth)
+                    model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
+                except Exception as tap_cut_err:
+                    print(f"[CAD-KERNEL] Failed tap cut {tap_id}: {tap_cut_err}")
 
         hardware_resize_report = {}
         batched_resize_plugs = []

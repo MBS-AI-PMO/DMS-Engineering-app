@@ -9,7 +9,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const previewJobs = new Map();
 const previewResultCache = new Map();
-const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v11-flush-stud-resize-preview-report';
+const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v12-tap-axis-aware-cut';
 const PREVIEW_RESULT_TTL_MS = 8 * 60 * 1000;
 const PREVIEW_RESULT_CACHE_MAX = 256;
 

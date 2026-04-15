@@ -92,6 +92,68 @@ const parseSizeSpecMajorIn = (sizeSpec) => {
   return null;
 };
 
+const parseTapRangeIn = (value) => {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value > 2 ? (value / 25.4) : value;
+  }
+
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+
+  const hasMmUnit = raw.includes('mm');
+  const cleaned = raw
+    .replace(/inches|inch|in|mm|"/g, '')
+    .trim();
+  if (!cleaned) return null;
+
+  let parsed = null;
+  if (cleaned.includes('/')) {
+    const [nRaw, dRaw] = cleaned.split('/', 2);
+    const n = Number(nRaw);
+    const d = Number(dRaw);
+    if (Number.isFinite(n) && Number.isFinite(d) && d !== 0) {
+      parsed = n / d;
+    }
+  }
+  if (parsed === null) {
+    const n = Number(cleaned);
+    if (Number.isFinite(n)) parsed = n;
+  }
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  if (hasMmUnit || parsed > 2) return parsed / 25.4;
+  return parsed;
+};
+
+const isTapOptionCompatible = (diaIn, tapOption, toleranceIn = 0.0015) => {
+  if (!Number.isFinite(diaIn) || diaIn <= 0 || !tapOption) return false;
+
+  const minRaw = tapOption.min_diameter ?? tapOption.minDiameter ?? tapOption.min;
+  const maxRaw = tapOption.max_diameter ?? tapOption.maxDiameter ?? tapOption.max;
+  const singleRaw = tapOption.diameter ?? tapOption.size ?? null;
+
+  let minIn = parseTapRangeIn(minRaw);
+  let maxIn = parseTapRangeIn(maxRaw);
+
+  if (!Number.isFinite(minIn) && !Number.isFinite(maxIn)) {
+    const singleIn = parseTapRangeIn(singleRaw);
+    if (!Number.isFinite(singleIn)) return false;
+    minIn = singleIn;
+    maxIn = singleIn;
+  } else if (!Number.isFinite(minIn)) {
+    minIn = maxIn;
+  } else if (!Number.isFinite(maxIn)) {
+    maxIn = minIn;
+  }
+
+  const low = Math.min(minIn, maxIn) - toleranceIn;
+  const high = Math.max(minIn, maxIn) + toleranceIn;
+  return diaIn >= low && diaIn <= high;
+};
+
 const resolveNutBoreMm = (item) => {
   const minorDiaIn = item?.minor_dia ? Number(item.minor_dia) : null;
   if (Number.isFinite(minorDiaIn) && minorDiaIn > 0) return minorDiaIn * 25.4;
@@ -318,8 +380,8 @@ const StepModelViewer = ({
                 if (m.color && !obj.userData.origColor) {
                   obj.userData.origColor = { r: m.color.r, g: m.color.g, b: m.color.b };
                 }
-                if (useConfiguredPreviewShading) m.color.setHex(PREVIEW_MATTE_HEX);
-                else if (shouldForceFinishColor) m.color.setHex(finishHex);
+                if (shouldForceFinishColor) m.color.setHex(finishHex);
+                else if (useConfiguredPreviewShading) m.color.setHex(PREVIEW_MATTE_HEX);
               });
             }
           });
@@ -425,8 +487,22 @@ const StepModelViewer = ({
           ? activeFinishColor
           : (activeFinishColor?.color || activeFinishColor?.hex || '');
         const hasForcedFinishColor = Boolean(finishColorStr)
-          && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback)
-          && !useConfiguredPreviewShading;
+          && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback);
+
+        const holeById = new Map((detectedHoles || []).map((h) => [String(h.id), h]));
+        const tapRangeTol = 0.0015;
+        const isTapCompatibleHole = (holeId) => {
+          const hole = holeById.get(String(holeId));
+          if (!hole) return false;
+          const diaMm = Number(hole.diameter_mm)
+            || (Number(hole.diameter_in) ? Number(hole.diameter_in) * 25.4 : 0)
+            || (Number(hole.diameterInches) ? Number(hole.diameterInches) * 25.4 : 0);
+          const diaIn = Number(hole.diameter_in)
+            || Number(hole.diameterInches)
+            || (diaMm > 0 ? diaMm / 25.4 : null);
+          if (!Number.isFinite(diaIn) || diaIn <= 0) return false;
+          return (tapOptions || []).some((tap) => isTapOptionCompatible(diaIn, tap, tapRangeTol));
+        };
 
         v.scene.traverse(obj => {
           if (!obj.isMesh || obj.userData.isHoleMarker || obj.isHardwareMarker) return;
@@ -465,24 +541,29 @@ const StepModelViewer = ({
             const fm = Array.isArray(obj.material) ? obj.material[idx] : obj.material;
             if (!obj.userData.origColor) obj.userData.origColor = { r: fm.color.r, g: fm.color.g, b: fm.color.b };
 
-            const isTapped = obj.userData.isNativeHole && selectedTaps[obj.userData.nativeHoleId];
-            const isActive = obj.userData.isNativeHole && activeTapHole?.id === obj.userData.nativeHoleId;
+            const nativeHoleId = obj.userData.nativeHoleId;
+            const isNativeHole = Boolean(obj.userData.isNativeHole) && nativeHoleId !== undefined && nativeHoleId !== null;
+            const isTapped = isNativeHole && Boolean(selectedTaps[nativeHoleId]);
+            const isActive = isNativeHole && activeTapHole?.id === nativeHoleId;
+            const isTapCompatible = isNativeHole && isTappingActive && !isTapped && !isActive && isTapCompatibleHole(nativeHoleId);
 
             if (isTapped) { fm.color.set(0x2563eb); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
             else if (isActive) { fm.color.set(0xf59e0b); fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
+            else if (isTapCompatible) { fm.color.set(0x16a34a); fm.emissive.set(0x0a3d1e); fm.emissiveIntensity = 0.28; }
+            else if (hasForcedFinishColor) {
+              fm.color.set(finishColorStr);
+              if (!isFinishPowderCoating) {
+                fm.emissive.set(finishColorStr);
+                fm.emissiveIntensity = useConfiguredPreviewShading ? 0.03 : 0.08;
+              }
+              else { fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
+            }
             else if (useConfiguredPreviewShading) {
               fm.color.setHex(PREVIEW_MATTE_HEX);
               fm.emissive.set(0x000000);
               fm.emissiveIntensity = 0;
             }
-            else if (hasForcedFinishColor) {
-              fm.color.set(finishColorStr);
-              if (!isFinishPowderCoating && !useConfiguredPreviewShading) {
-                fm.emissive.set(finishColorStr);
-                fm.emissiveIntensity = 0.08;
-              }
-              else { fm.emissive.set(0x000000); fm.emissiveIntensity = 0; }
-            } else {
+            else {
               const oc = obj.userData.origColor;
               fm.color.setRGB(oc.r, oc.g, oc.b);
               if (useConfiguredPreviewShading) {
@@ -491,13 +572,17 @@ const StepModelViewer = ({
               fm.emissive.set(0x000000); fm.emissiveIntensity = 0;
             }
 
-            if (!useConfiguredPreviewShading && activeFinishColor && isFinishPowderCoating) {
+            if (activeFinishColor && isFinishPowderCoating && hasForcedFinishColor) {
               const gloss = activeFinishColor.gloss ?? 35;
               const isWrinkled = !!(activeFinishColor.is_wrinkled || activeFinishColor.name?.toUpperCase().includes('WRINKLED'));
               fm.roughness = isWrinkled ? 0.68 : Math.max(0.32, 0.9 - (gloss / 100));
               fm.metalness = isWrinkled ? 0.15 : 0.1;
               fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
               fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
+            } else if (hasForcedFinishColor) {
+              fm.roughness = useConfiguredPreviewShading ? 0.58 : 0.65;
+              fm.metalness = useConfiguredPreviewShading ? 0.12 : 0.05;
+              fm.normalMap = null;
             } else {
               fm.roughness = useConfiguredPreviewShading ? 0.92 : 0.65;
               fm.metalness = useConfiguredPreviewShading ? 0.03 : 0.05;
@@ -515,7 +600,7 @@ const StepModelViewer = ({
       } catch (err) { console.warn('Style application error:', err); }
     };
     apply();
-  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps, modelUrlOverride]);
+  }, [activeFinishColor, isFinishPowderCoating, modelLoadCount, activeTapHole, isAnodizingModalOpen, isModelFadedManually, selectedTaps, modelUrlOverride, detectedHoles, tapOptions, isTappingActive]);
 
   // --- Live Finish Color Updates ---
   useEffect(() => {
@@ -525,8 +610,7 @@ const StepModelViewer = ({
     const finishHex = colorStr ? parseInt(colorStr.replace('#', '0x')) : null;
     const useConfiguredPreviewShading = Boolean(modelUrlOverride);
     const shouldForceFinishColor = finishHex !== null
-      && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback)
-      && !useConfiguredPreviewShading;
+      && !(activeFinishColor && typeof activeFinishColor === 'object' && activeFinishColor.isBaseMaterialFallback);
 
     const viewer = v.GetViewer();
     if (!viewer) return;
@@ -535,10 +619,10 @@ const StepModelViewer = ({
       if (obj.isMesh && !obj.userData.isHoleMarker && !obj.isHardwareMarker) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(m => {
-          if (useConfiguredPreviewShading) {
-            m.color.setHex(PREVIEW_MATTE_HEX);
-          } else if (shouldForceFinishColor) {
+          if (shouldForceFinishColor) {
             m.color.setHex(finishHex);
+          } else if (useConfiguredPreviewShading) {
+            m.color.setHex(PREVIEW_MATTE_HEX);
           } else if (obj.userData.origColor) {
             m.color.setRGB(obj.userData.origColor.r, obj.userData.origColor.g, obj.userData.origColor.b);
           }
@@ -631,23 +715,44 @@ const StepModelViewer = ({
         // --- Tapping ---
         const hasTapsAssigned = Object.keys(selectedTaps).length > 0;
         if (isTappingActive || hasTapsAssigned) {
+          const selectedThicknessMm = Number.parseFloat(selectedThickness);
+          const selectedThicknessHintMm = Number.isFinite(selectedThicknessMm) && selectedThicknessMm > 0
+            ? (selectedThicknessMm * 25.4)
+            : null;
+          const dimensionsThicknessMm = Number(dimensions?.mm?.t);
+          const dimensionThicknessHintMm = Number.isFinite(dimensionsThicknessMm) && dimensionsThicknessMm > 0
+            ? dimensionsThicknessMm
+            : null;
+          const thicknessHintMm = selectedThicknessHintMm || dimensionThicknessHintMm || null;
+
           detectedHoles.forEach(hole => {
             const diaImm = hole.diameter_mm || (hole.diameter_in ? hole.diameter_in * 25.4 : (hole.diameterInches ? hole.diameterInches * 25.4 : 2.54));
             const diaIn = hole.diameter_in || (hole.diameterInches || diaImm / 25.4);
             const mmDia = diaImm; if (mmDia > 200) return;
-            const tapRangeTol = 0.00025;
-            const isConfigured = tapOptions.some(tap => diaIn >= ((parseFloat(tap.min_diameter) || 0) - tapRangeTol) && diaIn <= ((parseFloat(tap.max_diameter) || 0) + tapRangeTol));
+            const tapRangeTol = 0.0015;
+            const isConfigured = tapOptions.some(tap => isTapOptionCompatible(diaIn, tap, tapRangeTol));
             const isTapped = !!selectedTaps[hole.id]; const isActive = activeTapHole?.id === hole.id;
-            const baseColor = isTapped ? 0x2563eb : (isConfigured ? 0x22c55e : 0xef4444);
+            const baseColor = isTapped ? 0x2563eb : (isConfigured ? 0x16a34a : 0xef4444);
             const mat = getMarkerMat(`tap_${baseColor}_${isActive}_${isTapped}`, () => new THREE.MeshPhongMaterial({
               color: baseColor,
               emissive: isActive ? 0xffffff : baseColor,
-              emissiveIntensity: isActive ? 1.6 : (isTapped ? 0.95 : 0.35),
-              shininess: 100,
+              emissiveIntensity: isActive ? 1.6 : (isTapped ? 0.95 : (isConfigured ? 0.58 : 0.38)),
+              shininess: 85,
               side: THREE.DoubleSide
             }));
-            const markerRadius = (mmDia / 2) - (0.1 / scaleFactor);
-            const geo = new THREE.CylinderGeometry(Math.max(markerRadius, 0.4), Math.max(markerRadius, 0.4), origT, 64, 1, true);
+
+            const depthRawMm = Number(hole.depthMm ?? hole.depth_mm ?? 0);
+            let markerHeightMm = Number.isFinite(depthRawMm) && depthRawMm > 0
+              ? depthRawMm
+              : (thicknessHintMm || origT);
+            if (Number.isFinite(thicknessHintMm) && thicknessHintMm > 0) {
+              markerHeightMm = Math.min(markerHeightMm, Math.max(0.8, thicknessHintMm * 1.15));
+            }
+            markerHeightMm = Math.max(0.8, markerHeightMm);
+
+            const markerInsetMm = Math.min(0.14, Math.max(0.04, mmDia * 0.045));
+            const markerRadius = Math.max(0.28, (mmDia / 2) - markerInsetMm);
+            const geo = new THREE.CylinderGeometry(markerRadius, markerRadius, markerHeightMm, 64, 1, true);
             const m = addMesh(geo, mat, new THREE.Vector3(...hole.position), hole.axis ? new THREE.Vector3(...hole.axis) : hwThicknessVec);
             m.userData.hole = { ...hole, isConfigured };
           });

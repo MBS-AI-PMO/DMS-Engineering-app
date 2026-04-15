@@ -181,6 +181,19 @@ const isPowderStyle = (configuration, activeFinishColor) => {
   });
 };
 
+const normalizeServiceOptions = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const ProjectViewer = ({
   file,
   configuration = {},
@@ -214,6 +227,51 @@ const ProjectViewer = ({
     }
     return String(configuration.selectedThickness);
   }, [configuration?.selectedThickness]);
+
+  const selectedServices = useMemo(
+    () => (Array.isArray(configuration?.additionalServices) ? configuration.additionalServices : []),
+    [configuration?.additionalServices]
+  );
+
+  const tapService = useMemo(
+    () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('tap')) || null,
+    [selectedServices]
+  );
+
+  const countersinkService = useMemo(
+    () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('countersink')) || null,
+    [selectedServices]
+  );
+
+  const hardwareService = useMemo(
+    () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('hardware')) || null,
+    [selectedServices]
+  );
+
+  const tapOptions = useMemo(
+    () => normalizeServiceOptions(tapService?.service_options),
+    [tapService?.service_options]
+  );
+
+  const csOptions = useMemo(
+    () => normalizeServiceOptions(countersinkService?.service_options),
+    [countersinkService?.service_options]
+  );
+
+  const isTappingActive = useMemo(
+    () => Boolean(tapService) || Object.keys(selectedTaps || {}).length > 0,
+    [tapService, selectedTaps]
+  );
+
+  const isCountersinkingActive = useMemo(
+    () => Boolean(countersinkService) || Object.keys(selectedCountersinks || {}).length > 0,
+    [countersinkService, selectedCountersinks]
+  );
+
+  const isHardwareActive = useMemo(
+    () => Boolean(hardwareService) || Object.keys(selectedHardware || {}).length > 0,
+    [hardwareService, selectedHardware]
+  );
 
   const isSupported = useMemo(() => isStepLikeFile(file) || isStepLikeFile(selectedFile), [file, selectedFile]);
   const selectedHardwareForPreview = useMemo(() => {
@@ -382,38 +440,40 @@ const ProjectViewer = ({
       }}
     >
       {isSupported && selectedFile ? (
-        <StepModelViewer
-          selectedFile={selectedFile}
-          modelUrlOverride={modelUrlOverride}
-          detectedHoles={detectedHoles}
-          selectedTaps={selectedTaps}
-          activeTapHole={null}
-          setActiveTapHole={noop}
-          isTappingActive={false}
-          tapOptions={[]}
-          selectedHardware={selectedHardware}
-          hardwareResizeReport={configuredHardwareResizeReport}
-          isHardwareActive={Object.keys(selectedHardware || {}).length > 0}
-          hwItemsByType={{}}
-          selectedCountersinks={selectedCountersinks}
-          showCountersinkMarkers={false}
-          countersinkMarkerStyle="camouflage"
-          csOptions={[]}
-          isCountersinkingActive={false}
-          activeFinishColor={activeFinishColor}
-          isFinishPowderCoating={isFinishPowderCoating}
-          isBendingActive={Boolean((configuration.detectedBends || []).length)}
-          detectedBends={configuration.detectedBends || []}
-          selectedThickness={selectedThickness}
-          isModelFadedManually={false}
-          isAnodizingModalOpen={false}
-          dimensions={configuration.dimensions || null}
-          allServices={configuration.additionalServices || []}
-          backendData={configuration.pricingTechnicalData || null}
-          onModelLoaded={noop}
-          onProgress={noop}
-          onDimensionsExtracted={handleDimensionsExtracted}
-        />
+        <div style={{ width: '100%', height: '100%', minHeight: 0 }}>
+          <StepModelViewer
+            selectedFile={selectedFile}
+            modelUrlOverride={modelUrlOverride}
+            detectedHoles={detectedHoles}
+            selectedTaps={selectedTaps}
+            activeTapHole={null}
+            setActiveTapHole={noop}
+            isTappingActive={isTappingActive}
+            tapOptions={tapOptions}
+            selectedHardware={selectedHardware}
+            hardwareResizeReport={configuredHardwareResizeReport}
+            isHardwareActive={isHardwareActive}
+            hwItemsByType={{}}
+            selectedCountersinks={selectedCountersinks}
+            showCountersinkMarkers={false}
+            countersinkMarkerStyle="camouflage"
+            csOptions={csOptions}
+            isCountersinkingActive={isCountersinkingActive}
+            activeFinishColor={activeFinishColor}
+            isFinishPowderCoating={isFinishPowderCoating}
+            isBendingActive={Boolean((configuration.detectedBends || []).length)}
+            detectedBends={configuration.detectedBends || []}
+            selectedThickness={selectedThickness}
+            isModelFadedManually={false}
+            isAnodizingModalOpen={false}
+            dimensions={configuration.dimensions || null}
+            allServices={selectedServices}
+            backendData={configuration.pricingTechnicalData || null}
+            onModelLoaded={noop}
+            onProgress={noop}
+            onDimensionsExtracted={handleDimensionsExtracted}
+          />
+        </div>
       ) : (
         <div
           style={{

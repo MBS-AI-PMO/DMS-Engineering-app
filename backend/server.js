@@ -140,6 +140,7 @@ app.get('/api/db-check', async (req, res) => {
 // Common Python Helper
 const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
 const PYTHON_BASE_URL = `http://localhost:${PYTHON_PORT}`;
+const DETECT_HOLES_ENGINE_VERSION = 'v2-planar-loop-fallback';
 const DETECT_HOLES_CACHE_TTL_MS = 8 * 60 * 1000;
 const DETECT_HOLES_CACHE_MAX = 256;
 const detectHolesCache = new Map();
@@ -248,7 +249,7 @@ app.post('/api/detect-holes-by-temp', async (req, res) => {
 
     try {
         const stat = fs.statSync(inputPath);
-        const cacheKey = `tmp:${path.basename(inputPath)}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
+        const cacheKey = `tmp:${DETECT_HOLES_ENGINE_VERSION}:${path.basename(inputPath)}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
         const cached = getCachedDetectHoles(cacheKey);
         if (cached) {
             return res.json({ success: true, cached: true, ...cached });
@@ -276,7 +277,7 @@ app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
         const hash = crypto.createHash('sha1').update(fileBuffer).digest('hex');
-        const cacheKey = `upload:${hash}`;
+        const cacheKey = `upload:${DETECT_HOLES_ENGINE_VERSION}:${hash}`;
         const data = await runDetectHolesWithCache({
             fileBuffer,
             filename: req.file.originalname || 'model.step',
