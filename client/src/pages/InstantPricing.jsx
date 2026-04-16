@@ -801,14 +801,14 @@ const InstantPricing = () => {
 
     const unfoldFileKey = selectedFile?.id || selectedFile?.tempPath || selectedFile?.file?.name || 'unknown';
 
-    const requestSeq = unfoldRequestSeqRef.current + 1;
-    unfoldRequestSeqRef.current = requestSeq;
-
     // If the same file is already unfolding, avoid abort/restart loops that produce nginx 499.
     if (unfoldAbortControllerRef.current && unfoldRequestFileKeyRef.current === unfoldFileKey) {
       setIsLoadingUnfold(true);
       return;
     }
+
+    const requestSeq = unfoldRequestSeqRef.current + 1;
+    unfoldRequestSeqRef.current = requestSeq;
 
     // Abort stale call only when switching to a different file.
     if (unfoldAbortControllerRef.current) unfoldAbortControllerRef.current.abort();

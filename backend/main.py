@@ -15,6 +15,7 @@ from socketserver import ThreadingMixIn  # Added for handling multiple requests
 import subprocess
 import shlex
 import math
+import shutil
 import numpy as np
 import threading
 import uuid
@@ -26,6 +27,8 @@ from unfold import unfold_step_file, detect_holes_in_step
 geometry_lock = threading.Lock()
 UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
 UNFOLD_JOB_TTL_SECONDS = 15 * 60
+GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
+FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
 unfold_jobs = {}
 unfold_jobs_lock = threading.Lock()
 
@@ -54,6 +57,35 @@ def _cleanup_unfold_jobs():
         stale_ids = [job_id for job_id, job in unfold_jobs.items() if job.get("updated_at", 0) < cutoff]
         for job_id in stale_ids:
             unfold_jobs.pop(job_id, None)
+
+
+def _resolve_freecad_executable():
+    """Resolve the best available FreeCAD command for unfold worker subprocesses."""
+    env_path = str(os.getenv("FREECAD_PATH", "")).strip()
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    candidates = []
+    if platform.system() == "Windows":
+        candidates.extend([
+            r"C:\Users\User\AppData\Local\Programs\FreeCAD 1.0\bin\freecadcmd.exe",
+        ])
+    else:
+        candidates.extend([
+            "/home/ec2-user/miniconda/envs/cadquery-env/bin/freecadcmd",
+            "/usr/local/bin/freecadcmd",
+            "/usr/bin/freecadcmd",
+        ])
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    which_path = shutil.which("freecadcmd")
+    if which_path:
+        return which_path
+
+    return env_path or candidates[-1]
 
 def _json_safe(obj):
     """Recursively convert NaNs, Infinites, and NumPy types for JSON compatibility."""
@@ -299,15 +331,9 @@ class CORSHandler(BaseHTTPRequestHandler):
 
     def unfold_with_lib_subprocess(self, filepath, profile="full", progress_callback=None):
         """Calls unfold_lib.py using the specialized FreeCAD interpreter and merges with legacy metadata."""
-        
-        # 2. Make the fallback path OS-aware so it doesn't crash on Linux if the .env fails
-        if platform.system() == "Windows":
-            default_freecad = r"C:\Users\User\AppData\Local\Programs\FreeCAD 1.0\bin\freecadcmd.exe"
-        else:
-            default_freecad = "/usr/bin/freecadcmd"
 
-        freecad_path = os.getenv("FREECAD_PATH", default_freecad)
-        
+        freecad_path = _resolve_freecad_executable()
+
         # If FREECAD_PATH points to the cmd/exe, we likely want the python.exe in the same folder for subprocess
         if freecad_path.endswith("freecadcmd.exe"):
             freecad_python = freecad_path.replace("freecadcmd.exe", "python.exe")
@@ -320,6 +346,7 @@ class CORSHandler(BaseHTTPRequestHandler):
 
         cmd = [freecad_python, script_path, filepath, f"--profile={profile}"]
         print(f"[Python-API] Executing robust unfold pass...")
+        print(f"[Python-API] CAD worker binary: {freecad_python}")
 
         def _report_progress(percent, stage):
             if not progress_callback:
@@ -343,8 +370,18 @@ class CORSHandler(BaseHTTPRequestHandler):
 
         try:
             # Pass 1: Get professional flat pattern, bend tree, silhouettes, and holes
-            # Apply global lock to protect server RAM during heavy FreeCAD run
-            with geometry_lock:
+            # Apply global lock to protect server RAM during heavy FreeCAD run.
+            # Do not wait forever: if lock is blocked too long, fail clearly.
+            lock_wait_started = time.time()
+            while not geometry_lock.acquire(timeout=1):
+                waited = int(time.time() - lock_wait_started)
+                _report_progress(2, f"Queued: waiting for CAD worker ({waited}s)")
+                if waited >= GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS:
+                    raise TimeoutError(
+                        f"Timed out waiting for CAD worker lock after {GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS}s"
+                    )
+
+            try:
                 print(f"[Python-API] Lock acquired for model processing...")
                 _report_progress(4, "Starting FreeCAD worker")
                 proc = subprocess.Popen(
@@ -378,12 +415,31 @@ class CORSHandler(BaseHTTPRequestHandler):
                 stdout_thread.start()
                 stderr_thread.start()
 
-                return_code = proc.wait(timeout=120)
+                timed_out = False
+                return_code = 1
+                try:
+                    return_code = proc.wait(timeout=FREECAD_WORKER_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+
                 stdout_thread.join(timeout=2)
                 stderr_thread.join(timeout=2)
 
                 stdout_text = "".join(stdout_chunks).strip()
                 stderr_text = "".join(stderr_chunks).strip()
+
+                if timed_out:
+                    raise RuntimeError(
+                        f"FreeCAD worker timed out after {FREECAD_WORKER_TIMEOUT_SECONDS}s"
+                    )
 
                 if return_code != 0:
                     raise subprocess.CalledProcessError(
@@ -399,6 +455,8 @@ class CORSHandler(BaseHTTPRequestHandler):
                 result_line = stdout_text.splitlines()[-1]
                 result = json.loads(result_line)
                 _report_progress(100, "Completed")
+            finally:
+                geometry_lock.release()
 
             # All metadata (silhouettes, holes, faceMeshes) is now integrated 
             # into the primary Pass 1 from unfold_lib.py. 
