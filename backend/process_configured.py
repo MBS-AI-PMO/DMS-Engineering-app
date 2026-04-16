@@ -253,16 +253,57 @@ def hole_diameter_mm(hole_data):
 
 def make_axis_cylinder(origin, axis, radius, height):
     """Create a cylinder centered at origin and aligned to axis."""
-    plane = cq.Plane(origin=cq.Vector(*origin), normal=cq.Vector(*axis))
     safe_radius = max(float(radius), 0.01)
     safe_height = max(float(height), 0.1)
-    return (
-        cq.Workplane(plane)
-        .workplane(offset=-(safe_height * 0.5))
-        .circle(safe_radius)
-        .extrude(safe_height)
-        .val()
-    )
+
+    try:
+        plane = cq.Plane(origin=cq.Vector(*origin), normal=cq.Vector(*axis))
+        return (
+            cq.Workplane(plane)
+            .workplane(offset=-(safe_height * 0.5))
+            .circle(safe_radius)
+            .extrude(safe_height)
+            .val()
+        )
+    except Exception as workplane_err:
+        # Live environments with incompatible multimethod builds can fail inside Workplane API calls
+        # (for example: "multidispatch object has no attribute signature").
+        # Fall back to OCP primitive construction so preview hole resizing still works.
+        msg = str(workplane_err).lower()
+        if ('multidispatch' not in msg) and ('signature' not in msg):
+            raise
+
+        from OCP.gp import gp_Ax2, gp_Pnt, gp_Dir
+        from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
+
+        ox, oy, oz = origin
+        ax, ay, az = axis
+        half = safe_height * 0.5
+        base = gp_Pnt(float(ox - ax * half), float(oy - ay * half), float(oz - az * half))
+        direction = gp_Dir(float(ax), float(ay), float(az))
+        ax2 = gp_Ax2(base, direction)
+        shape = BRepPrimAPI_MakeCylinder(ax2, safe_radius, safe_height).Shape()
+        return cq.Shape.cast(shape)
+
+
+def _shape_of(model_obj):
+    return model_obj.val() if hasattr(model_obj, 'val') else model_obj
+
+
+def _apply_cut(model_obj, tool_shape, preview_mode, clean_each_step):
+    base = _shape_of(model_obj)
+    result = base.cut(tool_shape)
+    if preview_mode:
+        return result
+    return maybe_clean(cq.Workplane(result), clean_each_step)
+
+
+def _apply_fuse(model_obj, tool_shape, preview_mode, clean_each_step):
+    base = _shape_of(model_obj)
+    result = base.fuse(tool_shape)
+    if preview_mode:
+        return result
+    return maybe_clean(cq.Workplane(result), clean_each_step)
 
 
 def parse_vector3(value):
@@ -374,7 +415,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
 
                 try:
                     tool = make_axis_cylinder(hole_pos, hole_axis, tap_radius, tap_cut_depth)
-                    model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
+                    model = _apply_cut(model, tool, preview_mode, clean_each_step)
                 except Exception as tap_cut_err:
                     print(f"[CAD-KERNEL] Failed tap cut {tap_id}: {tap_cut_err}")
 
@@ -478,8 +519,8 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                             batched_resize_plugs.append(plug)
                             batched_resize_pilots.append(pilot)
                         else:
-                            model = maybe_clean(cq.Workplane(model.val().fuse(plug)), clean_each_step)
-                            model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
+                            model = _apply_fuse(model, plug, preview_mode, clean_each_step)
+                            model = _apply_cut(model, pilot, preview_mode, clean_each_step)
                         direction = "reduced"
                     else:
                         # Hole is too small (or unknown): open it directly to target.
@@ -488,7 +529,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                         if preview_mode:
                             batched_resize_pilots.append(pilot)
                         else:
-                            model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
+                            model = _apply_cut(model, pilot, preview_mode, clean_each_step)
                         direction = "enlarged"
 
                     print(
@@ -516,10 +557,10 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                 try:
                     if batched_resize_plugs:
                         plug_shape = batched_resize_plugs[0] if len(batched_resize_plugs) == 1 else cq.Compound.makeCompound(batched_resize_plugs)
-                        model = maybe_clean(cq.Workplane(model.val().fuse(plug_shape)), clean_each_step)
+                        model = _apply_fuse(model, plug_shape, preview_mode, clean_each_step)
                     if batched_resize_pilots:
                         pilot_shape = batched_resize_pilots[0] if len(batched_resize_pilots) == 1 else cq.Compound.makeCompound(batched_resize_pilots)
-                        model = maybe_clean(cq.Workplane(model.val().cut(pilot_shape)), clean_each_step)
+                        model = _apply_cut(model, pilot_shape, preview_mode, clean_each_step)
                 except Exception as batch_resize_err:
                     print(f"[CAD-KERNEL] Failed batched hardware resize pass: {batch_resize_err}")
         
@@ -590,12 +631,12 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                         resize_depth = max(local_thickness + fill_overrun, 0.6)
                         plug_radius = original_hole_r + 0.02
                         plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
-                        model = maybe_clean(cq.Workplane(model.val().fuse(plug)), clean_each_step)
+                        model = _apply_fuse(model, plug, preview_mode, clean_each_step)
 
                         target_hole_radius = max(minor_r - 0.002, 0.01)
                         pilot_depth = max(local_thickness + 0.08, 0.7)
                         pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_radius, pilot_depth)
-                        model = maybe_clean(cq.Workplane(model.val().cut(pilot)), clean_each_step)
+                        model = _apply_cut(model, pilot, preview_mode, clean_each_step)
 
                         print(
                             f"[CAD-KERNEL] RESIZED HOLE FOR COUNTERSINK: id={cs_id}, "
