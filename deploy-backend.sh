@@ -128,6 +128,73 @@ ensure_env_default() {
   fi
 }
 
+upsert_env_value() {
+  local key="$1"
+  local value="$2"
+  local env_file="$BACKEND_DIR/.env"
+
+  mkdir -p "$BACKEND_DIR"
+  touch "$env_file"
+
+  if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$env_file"; then
+    sed -i -E "s|^[[:space:]]*${key}[[:space:]]*=.*$|${key}=${value}|" "$env_file"
+  else
+    printf "\n%s=%s\n" "$key" "$value" >> "$env_file"
+  fi
+}
+
+ensure_env_minimum() {
+  local key="$1"
+  local min_value="$2"
+  local preferred_value="$3"
+
+  local current
+  current="$(read_env_value "$key" "")"
+
+  if [ -z "$current" ]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Set ${key}=${preferred_value} (was missing)"
+    return 0
+  fi
+
+  if ! [[ "$current" =~ ^[0-9]+$ ]]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Reset ${key} to ${preferred_value} (invalid numeric value: $current)"
+    return 0
+  fi
+
+  if [ "$current" -lt "$min_value" ]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Raised ${key} from ${current} to ${preferred_value} (minimum required: ${min_value})"
+  fi
+}
+
+ensure_env_maximum() {
+  local key="$1"
+  local max_value="$2"
+  local preferred_value="$3"
+
+  local current
+  current="$(read_env_value "$key" "")"
+
+  if [ -z "$current" ]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Set ${key}=${preferred_value} (was missing)"
+    return 0
+  fi
+
+  if ! [[ "$current" =~ ^[0-9]+$ ]]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Reset ${key} to ${preferred_value} (invalid numeric value: $current)"
+    return 0
+  fi
+
+  if [ "$current" -gt "$max_value" ]; then
+    upsert_env_value "$key" "$preferred_value"
+    print_warn "Lowered ${key} from ${current} to ${preferred_value} (safe maximum: ${max_value})"
+  fi
+}
+
 copy_payload_without_protected_items() {
   local src="$1"
 
@@ -514,16 +581,42 @@ mkdir -p "$BACKEND_DIR/uploads/hardware"
 print_ok "uploads/hardware exists"
 
 print_step "Ensuring CAD runtime timeout defaults in .env"
-ensure_env_default "FREECAD_WORKER_TIMEOUT_SECONDS" "420"
-ensure_env_default "GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS" "300"
-ensure_env_default "MAX_PARALLEL_FREECAD_WORKERS" "1"
-ensure_env_default "CAD_JOB_QUEUE_LIMIT" "64"
-ensure_env_default "UNFOLD_RESULT_CACHE_TTL_SECONDS" "1800"
-ensure_env_default "UNFOLD_RESULT_CACHE_MAX" "128"
+TOTAL_MEM_MB="$(awk '/MemTotal:/ { printf "%d", $2/1024 }' /proc/meminfo 2>/dev/null || echo 0)"
+RECOMMENDED_PARALLEL_WORKERS="1"
+if [ "$TOTAL_MEM_MB" -ge 24576 ]; then
+  RECOMMENDED_PARALLEL_WORKERS="3"
+elif [ "$TOTAL_MEM_MB" -ge 14336 ]; then
+  RECOMMENDED_PARALLEL_WORKERS="2"
+fi
+
+ensure_env_minimum "FREECAD_WORKER_TIMEOUT_SECONDS" "420" "600"
+ensure_env_minimum "GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS" "300" "480"
+ensure_env_default "MAX_PARALLEL_FREECAD_WORKERS" "$RECOMMENDED_PARALLEL_WORKERS"
+if [ "${ALLOW_CAD_WORKER_OVERSUBSCRIBE:-0}" != "1" ]; then
+  ensure_env_maximum "MAX_PARALLEL_FREECAD_WORKERS" "$RECOMMENDED_PARALLEL_WORKERS" "$RECOMMENDED_PARALLEL_WORKERS"
+fi
+ensure_env_minimum "CAD_JOB_QUEUE_LIMIT" "16" "64"
+ensure_env_minimum "UNFOLD_RESULT_CACHE_TTL_SECONDS" "900" "1800"
+ensure_env_minimum "UNFOLD_RESULT_CACHE_MAX" "64" "128"
 ensure_env_default "ENABLE_LEGACY_UNFOLD_FALLBACK" "0"
-ensure_env_default "PYTHON_REQUEST_TIMEOUT_MS" "240000"
-ensure_env_default "PYTHON_SYNC_UNFOLD_TIMEOUT_MS" "900000"
-ensure_env_default "PYTHON_STATUS_TIMEOUT_MS" "120000"
+ensure_env_minimum "PYTHON_REQUEST_TIMEOUT_MS" "180000" "300000"
+ensure_env_minimum "PYTHON_SYNC_UNFOLD_TIMEOUT_MS" "600000" "900000"
+ensure_env_minimum "PYTHON_STATUS_TIMEOUT_MS" "60000" "120000"
+
+CURRENT_CORS_ORIGINS="$(read_env_value "CORS_ORIGINS" "")"
+CURRENT_PUBLIC_IP="$(read_env_value "PUBLIC_IP" "")"
+if [ -z "$CURRENT_CORS_ORIGINS" ] && [ -z "$CURRENT_PUBLIC_IP" ]; then
+  print_warn "CORS_ORIGINS and PUBLIC_IP are empty; set CORS_ORIGINS to your frontend domain(s) for browser access"
+fi
+
+print_ok "Effective CAD runtime tuning:"
+echo "  FREECAD_WORKER_TIMEOUT_SECONDS=$(read_env_value "FREECAD_WORKER_TIMEOUT_SECONDS" "")"
+echo "  GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS=$(read_env_value "GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS" "")"
+echo "  MAX_PARALLEL_FREECAD_WORKERS=$(read_env_value "MAX_PARALLEL_FREECAD_WORKERS" "")"
+echo "  CAD_JOB_QUEUE_LIMIT=$(read_env_value "CAD_JOB_QUEUE_LIMIT" "")"
+echo "  PYTHON_REQUEST_TIMEOUT_MS=$(read_env_value "PYTHON_REQUEST_TIMEOUT_MS" "")"
+echo "  PYTHON_SYNC_UNFOLD_TIMEOUT_MS=$(read_env_value "PYTHON_SYNC_UNFOLD_TIMEOUT_MS" "")"
+echo "  PYTHON_STATUS_TIMEOUT_MS=$(read_env_value "PYTHON_STATUS_TIMEOUT_MS" "")"
 print_ok "CAD runtime defaults ensured"
 
 if ! grep -q "FREECAD_WORKER_TIMEOUT_SECONDS" "$BACKEND_DIR/main.py"; then

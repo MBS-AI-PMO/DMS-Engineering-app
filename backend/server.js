@@ -31,9 +31,25 @@ const legalRoutes = require('./routes/legal');
 const app = express();
 const port = process.env.PORT || 5000;
 
-// FIX 1: Allow your public IP in CORS so the frontend can talk to the backend
+const DEFAULT_CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+const parseEnvOrigins = (value) => String(value || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+const publicIpOrigin = process.env.PUBLIC_IP ? `http://${process.env.PUBLIC_IP}` : '';
+const configuredOrigins = new Set([
+    ...DEFAULT_CORS_ORIGINS,
+    ...parseEnvOrigins(process.env.CORS_ORIGINS),
+    ...parseEnvOrigins(publicIpOrigin),
+]);
+const allowAllCors = ['1', 'true', 'yes', 'on'].includes(String(process.env.CORS_ALLOW_ALL || '').trim().toLowerCase());
+
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '18.117.111.36'}`],
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (allowAllCors || configuredOrigins.has(origin)) return callback(null, true);
+        return callback(null, false);
+    },
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
