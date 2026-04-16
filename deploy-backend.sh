@@ -590,6 +590,7 @@ elif [ "$TOTAL_MEM_MB" -ge 14336 ]; then
 fi
 
 ensure_env_minimum "FREECAD_WORKER_TIMEOUT_SECONDS" "420" "600"
+ensure_env_minimum "FREECAD_KILL_GRACE_SECONDS" "4" "8"
 ensure_env_minimum "GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS" "300" "480"
 ensure_env_default "MAX_PARALLEL_FREECAD_WORKERS" "$RECOMMENDED_PARALLEL_WORKERS"
 if [ "${ALLOW_CAD_WORKER_OVERSUBSCRIBE:-0}" != "1" ]; then
@@ -611,6 +612,7 @@ fi
 
 print_ok "Effective CAD runtime tuning:"
 echo "  FREECAD_WORKER_TIMEOUT_SECONDS=$(read_env_value "FREECAD_WORKER_TIMEOUT_SECONDS" "")"
+echo "  FREECAD_KILL_GRACE_SECONDS=$(read_env_value "FREECAD_KILL_GRACE_SECONDS" "")"
 echo "  GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS=$(read_env_value "GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS" "")"
 echo "  MAX_PARALLEL_FREECAD_WORKERS=$(read_env_value "MAX_PARALLEL_FREECAD_WORKERS" "")"
 echo "  CAD_JOB_QUEUE_LIMIT=$(read_env_value "CAD_JOB_QUEUE_LIMIT" "")"

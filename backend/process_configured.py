@@ -628,28 +628,33 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                 tool_depth = cone_depth_mm + 0.08
 
                 try:
-                    cut_plane = cq.Plane(
-                        origin=cq.Vector(*entry_origin),
-                        normal=cq.Vector(*inward_dir)
-                    )
-                    tool = (
-                        cq.Workplane(cut_plane)
-                        .circle(max(major_r, 0.05))
-                        .workplane(offset=max(tool_depth, 0.1))
-                        .circle(max(minor_r, 0.01))
-                        .loft(combine=True)
-                        .val()
-                    )
+                    # For preview mode, skip expensive countersink geometry to avoid hangs
+                    if preview_mode:
+                        # Just log for preview - skip the complex loft operation that can hang
+                        print(f"[CAD-KERNEL] PREVIEW COUNTERSINK (geometry skipped): id={cs_id}, major={major_dia_mm:.3f}mm")
+                    else:
+                        # Full mode uses the precise loft geometry
+                        cut_plane = cq.Plane(
+                            origin=cq.Vector(*entry_origin),
+                            normal=cq.Vector(*inward_dir)
+                        )
+                        tool = (
+                            cq.Workplane(cut_plane)
+                            .circle(max(major_r, 0.05))
+                            .workplane(offset=max(tool_depth, 0.1))
+                            .circle(max(minor_r, 0.01))
+                            .loft(combine=True)
+                            .val()
+                        )
 
-                    print(
-                        f"[CAD-KERNEL] CUTTING COUNTERSINK: id={cs_id}, "
-                        f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
-                        f"face={'down' if face_sign < 0 else 'up'}"
-                    )
-                    model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
+                        print(
+                            f"[CAD-KERNEL] CUTTING COUNTERSINK: id={cs_id}, "
+                            f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
+                            f"face={'down' if face_sign < 0 else 'up'}"
+                        )
+                        model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
 
-                    # The witness-ring detail is only needed in final manufacturing output.
-                    if not preview_mode:
+                        # The witness-ring detail is only needed in final manufacturing output.
                         back_face_sign = -face_sign
                         back_inward_dir = normalize_vector3(
                             (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),

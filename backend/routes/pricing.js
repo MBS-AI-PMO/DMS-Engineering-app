@@ -54,16 +54,32 @@ const safeReadJson = (filePath) => {
     }
 };
 
-const runPythonScript = (pythonPath, scriptName, args, cwd) => {
+const runPythonScript = (pythonPath, scriptName, args, cwd, timeoutMs = 600000) => {
     return new Promise((resolve, reject) => {
         const py = spawn(pythonPath, [scriptName, ...args], { cwd });
         let stdout = '';
         let stderr = '';
+        let timedOut = false;
+
+        const timeout = setTimeout(() => {
+            timedOut = true;
+            try {
+                py.kill('SIGKILL');
+            } catch (e) {
+                // ignore
+            }
+            reject(new Error(`Python process timeout after ${timeoutMs}ms (${scriptName})`));
+        }, timeoutMs);
 
         py.stdout.on('data', (data) => { stdout += data.toString(); });
         py.stderr.on('data', (data) => { stderr += data.toString(); });
-        py.on('error', (err) => reject(err));
+        py.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+        });
         py.on('close', (code) => {
+            clearTimeout(timeout);
+            if (timedOut) return;
             if (code === 0) return resolve({ stdout, stderr });
             const msg = (stderr || stdout || `Python process exited with code ${code}`).trim();
             reject(new Error(msg));
@@ -539,7 +555,8 @@ router.post('/configure-preview', async (req, res) => {
                         pythonPath,
                         'process_configured.py',
                         [inputPath, outputPath, configPath, '--mode=preview', `--report-json=${reportPath}`],
-                        backendRoot
+                        backendRoot,
+                        60000  // 60-second timeout for preview generation
                     );
                 } finally {
                     try { if (fs.existsSync(configPath)) fs.unlinkSync(configPath); } catch (e) { /* ignore */ }

@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const db = require('./db');
-require('dotenv').config();
+require('dotenv').config({ override: true });
 
 // Import routes
 const authRoutes = require('./routes/auth');

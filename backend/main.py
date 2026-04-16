@@ -67,7 +67,20 @@ def _get_unfold_job(job_id):
 def _cleanup_unfold_jobs():
     cutoff = time.time() - UNFOLD_JOB_TTL_SECONDS
     cache_cutoff = time.time() - UNFOLD_RESULT_CACHE_TTL_SECONDS
+    stale_running_cutoff = time.time() - FREECAD_WORKER_TIMEOUT_SECONDS - 30
     with unfold_jobs_lock:
+        # Mark running jobs as failed if they've been running longer than the
+        # worker timeout + 30s grace.  This prevents zombie "running" jobs from
+        # blocking cache-key reuse forever.
+        for job_id, job in unfold_jobs.items():
+            if job.get("status") == "running" and job.get("started_at", job.get("created_at", 0)) < stale_running_cutoff:
+                job["status"] = "failed"
+                job["error"] = "Job exceeded worker timeout and was marked as failed"
+                job["stage"] = "Failed (timeout)"
+                job["percent"] = 100.0
+                job["updated_at"] = time.time()
+                print(f"[Python-API] Cleanup: marked stale running job {job_id} as failed")
+
         stale_ids = [
             job_id
             for job_id, job in unfold_jobs.items()
@@ -165,6 +178,92 @@ def _resolve_freecad_executable():
 
     return env_path or candidates[-1]
 
+
+def _collect_descendant_pids(pid):
+    """Recursively collect all descendant PIDs of a process (Linux only)."""
+    descendants = []
+    try:
+        result = subprocess.run(
+            ["pgrep", "-P", str(pid)], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.strip().split():
+            if line.isdigit():
+                child_pid = int(line)
+                descendants.append(child_pid)
+                descendants.extend(_collect_descendant_pids(child_pid))
+    except Exception:
+        pass
+    return descendants
+
+
+def _terminate_worker_process(proc, reason="shutdown"):
+    if proc is None:
+        return
+
+    try:
+        if proc.poll() is not None:
+            return
+    except Exception:
+        return
+
+    pid = getattr(proc, 'pid', None)
+    print(f"[Python-API] Terminating CAD worker (reason={reason}) pid={pid}")
+
+    # Collect all descendant PIDs before killing — FreeCAD AppImage spawns
+    # nested children (bash AppRun -> freecadcmd -> freecad) that can escape
+    # process-group kills and survive as zombies.
+    child_pids = []
+    if pid and platform.system() != "Windows":
+        child_pids = _collect_descendant_pids(pid)
+        if child_pids:
+            print(f"[Python-API] Found {len(child_pids)} descendant PIDs: {child_pids}")
+
+    # Phase 1: SIGTERM (graceful)
+    try:
+        if platform.system() == "Windows":
+            proc.terminate()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+        proc.wait(timeout=FREECAD_KILL_GRACE_SECONDS)
+        # Even if the main process exited, kill any surviving descendants
+        for cpid in child_pids:
+            try:
+                os.kill(cpid, signal.SIGKILL)
+            except OSError:
+                pass
+        return
+    except Exception:
+        pass
+
+    # Phase 2: SIGKILL (forced) — process group + all known descendants
+    try:
+        if platform.system() == "Windows":
+            proc.kill()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                proc.kill()
+    except Exception:
+        pass
+
+    # Force-kill every descendant individually (catches AppImage children
+    # that escaped the process group)
+    for cpid in child_pids:
+        try:
+            os.kill(cpid, signal.SIGKILL)
+            print(f"[Python-API] Force-killed descendant pid={cpid}")
+        except OSError:
+            pass
+
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
 def _json_safe(obj):
     """Recursively convert NaNs, Infinites, and NumPy types for JSON compatibility."""
     if isinstance(obj, float):
@@ -217,6 +316,13 @@ class CORSHandler(BaseHTTPRequestHandler):
                     "queueLimit": CAD_JOB_QUEUE_LIMIT,
                     "parallelWorkers": MAX_PARALLEL_FREECAD_WORKERS,
                     "cacheItems": cache_items,
+                },
+                "runtime": {
+                    "freecadPath": _resolve_freecad_executable(),
+                    "workerTimeoutSeconds": FREECAD_WORKER_TIMEOUT_SECONDS,
+                    "workerKillGraceSeconds": FREECAD_KILL_GRACE_SECONDS,
+                    "lockWaitTimeoutSeconds": GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS,
+                    "legacyFallbackEnabled": ENABLE_LEGACY_UNFOLD_FALLBACK,
                 },
             })
         elif parsed.path == "/unfold-job/status":
@@ -330,7 +436,16 @@ class CORSHandler(BaseHTTPRequestHandler):
                 active_job_id = unfold_job_keys.get(cache_key)
                 active_job = unfold_jobs.get(active_job_id) if active_job_id else None
                 if active_job and active_job.get("status") in ("queued", "running"):
-                    reused_job_id = active_job_id
+                    # Don't reuse a job that has been running longer than the
+                    # worker timeout — it's almost certainly hung.
+                    job_age = time.time() - active_job.get("started_at", active_job.get("created_at", 0))
+                    if job_age < FREECAD_WORKER_TIMEOUT_SECONDS:
+                        reused_job_id = active_job_id
+                    else:
+                        # Stale running job — discard the reference so a fresh
+                        # job will be created below.
+                        unfold_job_keys.pop(cache_key, None)
+                        print(f"[Python-API] Skipping reuse of stale job {active_job_id} (running {int(job_age)}s)")
                 elif active_job_id and active_job_id not in unfold_jobs:
                     unfold_job_keys.pop(cache_key, None)
 
@@ -524,7 +639,10 @@ class CORSHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self._set_cors()
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _send_error(self, code, message):
         self._send_json(code, {"error": message})
@@ -544,7 +662,14 @@ class CORSHandler(BaseHTTPRequestHandler):
 
         script_path = os.getenv("UNFOLD_LIB_PATH", os.path.join(os.path.dirname(__file__), "unfold_lib.py"))
 
-        cmd = [freecad_python, script_path, filepath, f"--profile={profile}"]
+        # Use -c with exec() to run the script — running freecadcmd with a
+        # script file directly causes FreeCAD to initialize GUI workbenches
+        # which hangs on headless servers.  The -c flag keeps it in pure
+        # console mode.
+        cmd = [
+            freecad_python, "-c",
+            f"import sys; sys.argv = ['unfold_lib.py']; exec(compile(open({repr(script_path)}).read(), {repr(script_path)}, 'exec'), {{'__name__': '__main__', '__file__': {repr(script_path)}}})",
+        ]
         print(f"[Python-API] Executing robust unfold pass...")
         print(f"[Python-API] CAD worker binary: {freecad_python}")
 
@@ -584,12 +709,23 @@ class CORSHandler(BaseHTTPRequestHandler):
             try:
                 print(f"[Python-API] CAD slot acquired for model processing...")
                 _report_progress(4, "Starting FreeCAD worker")
+                # Force headless mode — prevent FreeCAD from attempting GUI
+                # which hangs on servers without a display.
+                # Pass filepath and profile via env vars instead of CLI args,
+                # because FreeCAD intercepts unknown CLI args and hangs.
+                env = os.environ.copy()
+                env.pop("DISPLAY", None)
+                env["QT_QPA_PLATFORM"] = "offscreen"
+                env["UNFOLD_INPUT_FILE"] = filepath
+                env["UNFOLD_PROFILE"] = profile
                 proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
+                    start_new_session=(platform.system() != "Windows"),
+                    env=env,
                 )
 
                 stdout_chunks = []
@@ -621,14 +757,7 @@ class CORSHandler(BaseHTTPRequestHandler):
                     return_code = proc.wait(timeout=FREECAD_WORKER_TIMEOUT_SECONDS)
                 except subprocess.TimeoutExpired:
                     timed_out = True
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                    try:
-                        proc.wait(timeout=5)
-                    except Exception:
-                        pass
+                    _terminate_worker_process(proc, reason="timeout")
 
                 stdout_thread.join(timeout=2)
                 stderr_thread.join(timeout=2)

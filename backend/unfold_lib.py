@@ -15,8 +15,14 @@ def setup_paths():
     interp_dir = os.path.dirname(sys.executable)
     if interp_dir not in sys.path:
         sys.path.append(interp_dir)
-    
+
     lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "lib_unfold"))
+    # CRITICAL: Remove the script's own directory from sys.path to prevent
+    # the legacy backend/unfold.py from shadowing lib_unfold/unfold.py.
+    script_dir = os.path.abspath(os.path.dirname(__file__))
+    while script_dir in sys.path:
+        sys.path.remove(script_dir)
+    # Insert lib_unfold at the front so `from unfold import ...` finds the right module.
     if lib_path not in sys.path:
         sys.path.insert(0, lib_path)
 
@@ -27,11 +33,45 @@ from FreeCAD import Matrix, Vector, Rotation
 import Part
 import networkx as nx
 
+# Stub out GUI modules before importing unfold.py — the library does
+# `import FreeCADGui`, `import Draft`, `import importDXF`, `import importSVG`
+# at module level which hang on headless servers.
+# Only the math/geometry functions are needed here, not the GUI parts.
+import types
+
+_gui_stub = types.ModuleType("FreeCADGui")
+_gui_stub.getMainWindow = lambda: None
+_gui_stub.ActiveDocument = None
+_gui_stub.Selection = type("Sel", (), {
+    "getCompleteSelection": staticmethod(lambda: []),
+    "clearSelection": staticmethod(lambda: None),
+    "addSelectionGate": staticmethod(lambda *a, **k: None),
+    "addObserver": staticmethod(lambda *a: None),
+    "removeSelectionGate": staticmethod(lambda: None),
+    "removeObserver": staticmethod(lambda *a: None),
+    "ResolveMode": type("RM", (), {"NoResolve": 0})(),
+})()
+_gui_stub.UiLoader = lambda: None
+_gui_stub.Control = type("Ctrl", (), {"closeDialog": staticmethod(lambda: None)})()
+sys.modules["FreeCADGui"] = _gui_stub
+FreeCAD.Gui = _gui_stub
+
+# Draft stub — only makeSketch is used in unfold math path
+_draft_stub = types.ModuleType("Draft")
+_draft_stub.makeSketch = lambda *a, **k: None
+sys.modules["Draft"] = _draft_stub
+
+for _mod_name in ("importDXF", "importSVG"):
+    if _mod_name not in sys.modules:
+        _stub = types.ModuleType(_mod_name)
+        _stub.export = lambda *a, **k: None
+        sys.modules[_mod_name] = _stub
+
 # Import from the library
 from unfold import (
-    build_graph_of_tangent_faces, 
-    EstimateThickness, 
-    BendAllowanceCalculator, 
+    build_graph_of_tangent_faces,
+    EstimateThickness,
+    BendAllowanceCalculator,
     unroll_cylinder,
     compute_unbend_transform,
     BendDirection
@@ -931,9 +971,15 @@ def unfold_with_lib(filepath, profile="full"):
     })
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        cli_profile = "full"
+    # Accept input file and profile from env vars (preferred — avoids FreeCAD
+    # intercepting CLI args) or fall back to positional args for manual use.
+    input_file = os.environ.get("UNFOLD_INPUT_FILE") or (sys.argv[1] if len(sys.argv) > 1 else None)
+    cli_profile = os.environ.get("UNFOLD_PROFILE") or "full"
+    if not input_file:
+        print(json.dumps({"error": "No input file specified"}))
+        sys.exit(1)
+    if len(sys.argv) > 2 and not os.environ.get("UNFOLD_INPUT_FILE"):
         for arg in sys.argv[2:]:
-            if arg.startswith("--profile="):
+            if arg.startswith("--profile=") or arg.startswith("profile="):
                 cli_profile = arg.split("=", 1)[1].strip() or "full"
-        print(json.dumps(unfold_with_lib(sys.argv[1], profile=cli_profile)))
+    print(json.dumps(unfold_with_lib(input_file, profile=cli_profile)))
