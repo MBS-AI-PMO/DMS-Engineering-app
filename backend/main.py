@@ -12,10 +12,12 @@ import tempfile
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn  # Added for handling multiple requests
+from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import shlex
 import math
 import shutil
+import hashlib
 import numpy as np
 import threading
 import uuid
@@ -23,14 +25,22 @@ import time
 from urllib.parse import urlparse, parse_qs
 from unfold import unfold_step_file, detect_holes_in_step
 
-# Global lock to prevent Out-Of-Memory by serializing heavy geometry tasks
-geometry_lock = threading.Lock()
 UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
 UNFOLD_JOB_TTL_SECONDS = 15 * 60
+UNFOLD_RESULT_CACHE_TTL_SECONDS = int(os.getenv("UNFOLD_RESULT_CACHE_TTL_SECONDS", "1800"))
+UNFOLD_RESULT_CACHE_MAX = max(1, int(os.getenv("UNFOLD_RESULT_CACHE_MAX", "128")))
 GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
 FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
+MAX_PARALLEL_FREECAD_WORKERS = max(1, int(os.getenv("MAX_PARALLEL_FREECAD_WORKERS", "1")))
+CAD_JOB_QUEUE_LIMIT = max(1, int(os.getenv("CAD_JOB_QUEUE_LIMIT", "64")))
+ENABLE_LEGACY_UNFOLD_FALLBACK = str(os.getenv("ENABLE_LEGACY_UNFOLD_FALLBACK", "0")).strip().lower() in ("1", "true", "yes", "on")
+
+geometry_slots = threading.BoundedSemaphore(MAX_PARALLEL_FREECAD_WORKERS)
+cad_job_pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL_FREECAD_WORKERS, thread_name_prefix="cad-job")
 unfold_jobs = {}
 unfold_jobs_lock = threading.Lock()
+unfold_job_keys = {}
+unfold_result_cache = {}
 
 
 def _set_unfold_job(job_id, **fields):
@@ -53,10 +63,75 @@ def _get_unfold_job(job_id):
 
 def _cleanup_unfold_jobs():
     cutoff = time.time() - UNFOLD_JOB_TTL_SECONDS
+    cache_cutoff = time.time() - UNFOLD_RESULT_CACHE_TTL_SECONDS
     with unfold_jobs_lock:
-        stale_ids = [job_id for job_id, job in unfold_jobs.items() if job.get("updated_at", 0) < cutoff]
+        stale_ids = [
+            job_id
+            for job_id, job in unfold_jobs.items()
+            if job.get("status") in ("completed", "failed") and job.get("updated_at", 0) < cutoff
+        ]
         for job_id in stale_ids:
             unfold_jobs.pop(job_id, None)
+
+        stale_key_refs = [cache_key for cache_key, job_id in unfold_job_keys.items() if job_id not in unfold_jobs]
+        for cache_key in stale_key_refs:
+            unfold_job_keys.pop(cache_key, None)
+
+        stale_cache_keys = [
+            cache_key
+            for cache_key, entry in unfold_result_cache.items()
+            if entry.get("saved_at", 0) < cache_cutoff
+        ]
+        for cache_key in stale_cache_keys:
+            unfold_result_cache.pop(cache_key, None)
+
+        if len(unfold_result_cache) > UNFOLD_RESULT_CACHE_MAX:
+            sorted_items = sorted(unfold_result_cache.items(), key=lambda kv: kv[1].get("saved_at", 0), reverse=True)
+            unfold_result_cache.clear()
+            for cache_key, entry in sorted_items[:UNFOLD_RESULT_CACHE_MAX]:
+                unfold_result_cache[cache_key] = entry
+
+
+def _pending_jobs_count_locked():
+    return sum(1 for job in unfold_jobs.values() if job.get("status") in ("queued", "running"))
+
+
+def _queue_position_locked(job_id):
+    job = unfold_jobs.get(job_id)
+    if not job or job.get("status") != "queued":
+        return 0
+
+    created_at = job.get("created_at", 0)
+    ahead = 0
+    for other_id, other in unfold_jobs.items():
+        if other_id == job_id:
+            continue
+        if other.get("status") != "queued":
+            continue
+        if other.get("created_at", 0) <= created_at:
+            ahead += 1
+    return ahead
+
+
+def _cache_unfold_result(cache_key, result):
+    if not cache_key:
+        return
+
+    with unfold_jobs_lock:
+        unfold_result_cache[cache_key] = {
+            "result": result,
+            "saved_at": time.time(),
+        }
+
+
+def _get_cached_unfold_result(cache_key):
+    if not cache_key:
+        return None
+
+    _cleanup_unfold_jobs()
+    with unfold_jobs_lock:
+        entry = unfold_result_cache.get(cache_key)
+        return entry.get("result") if entry else None
 
 
 def _resolve_freecad_executable():
@@ -126,7 +201,21 @@ class CORSHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            self._send_json(200, {"status": "ok", "engine": "FreeCAD/CadQuery"})
+            _cleanup_unfold_jobs()
+            with unfold_jobs_lock:
+                pending_jobs = _pending_jobs_count_locked()
+                cache_items = len(unfold_result_cache)
+
+            self._send_json(200, {
+                "status": "ok",
+                "engine": "FreeCAD/CadQuery",
+                "queue": {
+                    "pendingJobs": pending_jobs,
+                    "queueLimit": CAD_JOB_QUEUE_LIMIT,
+                    "parallelWorkers": MAX_PARALLEL_FREECAD_WORKERS,
+                    "cacheItems": cache_items,
+                },
+            })
         elif parsed.path == "/unfold-job/status":
             self._handle_unfold_job_status(parsed)
         else:
@@ -161,7 +250,7 @@ class CORSHandler(BaseHTTPRequestHandler):
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type:
             self._send_error(400, "Expected multipart/form-data")
-            return None, None
+            return None, None, None
 
         try:
             boundary = content_type.split("boundary=")[1].strip()
@@ -171,23 +260,25 @@ class CORSHandler(BaseHTTPRequestHandler):
             file_content, filename = self._parse_multipart(body, boundary)
             if file_content is None:
                 self._send_error(400, "No file found in upload")
-                return None, None
+                return None, None, None
 
             ext = os.path.splitext(filename)[1].lower() if filename else ".step"
             if ext not in (".step", ".stp"):
                 self._send_error(400, f"Unsupported file type: {ext}")
-                return None, None
+                return None, None, None
+
+            file_hash = hashlib.sha1(file_content).hexdigest()
 
             with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                 tmp.write(file_content)
-                return tmp.name, filename
+                return tmp.name, filename, file_hash
         except Exception as e:
             traceback.print_exc()
             self._send_error(500, f"Server error: {str(e)}")
-            return None, None
+            return None, None, None
 
     def _process_step_file(self, processor, wrap):
-        tmp_path, _filename = self._save_uploaded_step_file()
+        tmp_path, _filename, _file_hash = self._save_uploaded_step_file()
         if not tmp_path:
             return
 
@@ -203,8 +294,63 @@ class CORSHandler(BaseHTTPRequestHandler):
                 os.unlink(tmp_path)
 
     def _start_unfold_job(self):
-        tmp_path, _filename = self._save_uploaded_step_file()
+        tmp_path, _filename, file_hash = self._save_uploaded_step_file()
         if not tmp_path:
+            return
+
+        _cleanup_unfold_jobs()
+        cache_key = f"fast2d:{file_hash}" if file_hash else ""
+
+        cached_result = _get_cached_unfold_result(cache_key)
+        if cached_result is not None:
+            job_id = uuid.uuid4().hex
+            _set_unfold_job(
+                job_id,
+                status="completed",
+                percent=100.0,
+                stage="Completed (cache)",
+                result=cached_result,
+                error=None,
+                cacheKey=cache_key,
+                queuePosition=0,
+            )
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            self._send_json(200, {"success": True, "jobId": job_id, "cached": True, "queuePosition": 0})
+            return
+
+        reused_job_id = None
+        queue_full = False
+
+        with unfold_jobs_lock:
+            if cache_key:
+                active_job_id = unfold_job_keys.get(cache_key)
+                active_job = unfold_jobs.get(active_job_id) if active_job_id else None
+                if active_job and active_job.get("status") in ("queued", "running"):
+                    reused_job_id = active_job_id
+                elif active_job_id and active_job_id not in unfold_jobs:
+                    unfold_job_keys.pop(cache_key, None)
+
+            if _pending_jobs_count_locked() >= CAD_JOB_QUEUE_LIMIT:
+                queue_full = True
+
+        if reused_job_id:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            with unfold_jobs_lock:
+                queue_position = _queue_position_locked(reused_job_id)
+            self._send_json(200, {
+                "success": True,
+                "jobId": reused_job_id,
+                "reused": True,
+                "queuePosition": queue_position,
+            })
+            return
+
+        if queue_full:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            self._send_error(429, f"CAD queue is full ({CAD_JOB_QUEUE_LIMIT} pending jobs). Please retry shortly.")
             return
 
         job_id = uuid.uuid4().hex
@@ -215,32 +361,63 @@ class CORSHandler(BaseHTTPRequestHandler):
             stage="Queued",
             result=None,
             error=None,
+            cacheKey=cache_key,
         )
 
-        worker = threading.Thread(
-            target=self._run_unfold_job,
-            args=(job_id, tmp_path),
-            daemon=True,
-        )
-        worker.start()
-        self._send_json(200, {"success": True, "jobId": job_id})
+        with unfold_jobs_lock:
+            if cache_key:
+                unfold_job_keys[cache_key] = job_id
+            queue_position = _queue_position_locked(job_id)
 
-    def _run_unfold_job(self, job_id, tmp_path):
+        _set_unfold_job(job_id, queuePosition=queue_position)
+
+        try:
+            cad_job_pool.submit(self._run_unfold_job, job_id, tmp_path, cache_key)
+        except Exception as e:
+            traceback.print_exc()
+            _set_unfold_job(
+                job_id,
+                status="failed",
+                percent=100.0,
+                stage="Failed",
+                error=f"Failed to enqueue unfold job: {str(e)}",
+                queuePosition=0,
+            )
+            with unfold_jobs_lock:
+                if cache_key and unfold_job_keys.get(cache_key) == job_id:
+                    unfold_job_keys.pop(cache_key, None)
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            self._send_error(500, "Failed to enqueue unfold job")
+            return
+
+        self._send_json(200, {"success": True, "jobId": job_id, "queuePosition": queue_position})
+
+    def _run_unfold_job(self, job_id, tmp_path, cache_key):
         def on_progress(percent, stage):
             _set_unfold_job(
                 job_id,
                 status="running",
                 percent=max(0.0, min(100.0, float(percent))),
                 stage=str(stage or "Processing"),
+                queuePosition=0,
             )
 
         try:
-            on_progress(2, "Preparing CAD engine")
+            _set_unfold_job(
+                job_id,
+                status="running",
+                percent=2.0,
+                stage="Preparing CAD engine",
+                queuePosition=0,
+                started_at=time.time(),
+            )
             result = self.unfold_with_lib_subprocess(
                 tmp_path,
                 profile="fast2d",
                 progress_callback=on_progress,
             )
+            _cache_unfold_result(cache_key, result)
             _set_unfold_job(
                 job_id,
                 status="completed",
@@ -248,6 +425,9 @@ class CORSHandler(BaseHTTPRequestHandler):
                 stage="Completed",
                 result=result,
                 error=None,
+                cacheKey=cache_key,
+                queuePosition=0,
+                completed_at=time.time(),
             )
         except Exception as e:
             traceback.print_exc()
@@ -257,8 +437,14 @@ class CORSHandler(BaseHTTPRequestHandler):
                 percent=100.0,
                 stage="Failed",
                 error=str(e),
+                cacheKey=cache_key,
+                queuePosition=0,
+                completed_at=time.time(),
             )
         finally:
+            with unfold_jobs_lock:
+                if cache_key and unfold_job_keys.get(cache_key) == job_id:
+                    unfold_job_keys.pop(cache_key, None)
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
@@ -282,6 +468,17 @@ class CORSHandler(BaseHTTPRequestHandler):
             "percent": job.get("percent", 0.0),
             "stage": job.get("stage", "Queued"),
         }
+
+        with unfold_jobs_lock:
+            queue_position = _queue_position_locked(job_id)
+            pending_jobs = _pending_jobs_count_locked()
+
+        payload["queuePosition"] = queue_position
+        payload["pendingJobs"] = pending_jobs
+
+        if payload["status"] == "queued" and queue_position > 0:
+            payload["stage"] = f"Queued ({queue_position} ahead)"
+
         if job.get("status") == "completed":
             payload["result"] = job.get("result")
         if job.get("status") == "failed":
@@ -370,19 +567,19 @@ class CORSHandler(BaseHTTPRequestHandler):
 
         try:
             # Pass 1: Get professional flat pattern, bend tree, silhouettes, and holes
-            # Apply global lock to protect server RAM during heavy FreeCAD run.
-            # Do not wait forever: if lock is blocked too long, fail clearly.
+            # Apply bounded slot control for heavy FreeCAD runs.
+            # Do not wait forever: if all slots are blocked too long, fail clearly.
             lock_wait_started = time.time()
-            while not geometry_lock.acquire(timeout=1):
+            while not geometry_slots.acquire(timeout=1):
                 waited = int(time.time() - lock_wait_started)
-                _report_progress(2, f"Queued: waiting for CAD worker ({waited}s)")
+                _report_progress(2, f"Queued: waiting for CAD slot ({waited}s)")
                 if waited >= GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS:
                     raise TimeoutError(
-                        f"Timed out waiting for CAD worker lock after {GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS}s"
+                        f"Timed out waiting for CAD slot after {GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS}s"
                     )
 
             try:
-                print(f"[Python-API] Lock acquired for model processing...")
+                print(f"[Python-API] CAD slot acquired for model processing...")
                 _report_progress(4, "Starting FreeCAD worker")
                 proc = subprocess.Popen(
                     cmd,
@@ -456,7 +653,7 @@ class CORSHandler(BaseHTTPRequestHandler):
                 result = json.loads(result_line)
                 _report_progress(100, "Completed")
             finally:
-                geometry_lock.release()
+                geometry_slots.release()
 
             # All metadata (silhouettes, holes, faceMeshes) is now integrated 
             # into the primary Pass 1 from unfold_lib.py. 
@@ -466,14 +663,18 @@ class CORSHandler(BaseHTTPRequestHandler):
             print(f"[Python-API] Robust unfold failed (Exit {e.returncode}). Output:")
             print(f"STDOUT: {e.stdout}")
             print(f"STDERR: {e.stderr}")
-            print(f"[Python-API] Falling back to legacy engine...")
-            _report_progress(92, "Using fallback CAD engine")
-            return unfold_step_file(filepath)
+            if ENABLE_LEGACY_UNFOLD_FALLBACK:
+                print(f"[Python-API] Falling back to legacy engine...")
+                _report_progress(92, "Using fallback CAD engine")
+                return unfold_step_file(filepath)
+            raise RuntimeError(f"FreeCAD unfold subprocess failed (exit {e.returncode})")
         except Exception as e:
             print(f"[Python-API] Merge pass unexpected error: {str(e)}")
             traceback.print_exc()
-            _report_progress(92, "Using fallback CAD engine")
-            return unfold_step_file(filepath)
+            if ENABLE_LEGACY_UNFOLD_FALLBACK:
+                _report_progress(92, "Using fallback CAD engine")
+                return unfold_step_file(filepath)
+            raise
 
     def log_message(self, format, *args):
         # Cleaner logging for PM2 logs

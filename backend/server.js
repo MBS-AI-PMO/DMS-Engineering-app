@@ -140,6 +140,14 @@ app.get('/api/db-check', async (req, res) => {
 // Common Python Helper
 const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
 const PYTHON_BASE_URL = `http://localhost:${PYTHON_PORT}`;
+const parsePositiveInt = (value, fallback) => {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? Math.floor(num) : fallback;
+};
+const PYTHON_REQUEST_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_REQUEST_TIMEOUT_MS, 240_000);
+const PYTHON_SYNC_UNFOLD_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_SYNC_UNFOLD_TIMEOUT_MS, 900_000);
+const PYTHON_STATUS_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_STATUS_TIMEOUT_MS, 120_000);
+const getPythonTimeoutMs = (subpath) => (subpath === '/unfold' ? PYTHON_SYNC_UNFOLD_TIMEOUT_MS : PYTHON_REQUEST_TIMEOUT_MS);
 const DETECT_HOLES_ENGINE_VERSION = 'v2-planar-loop-fallback';
 const DETECT_HOLES_CACHE_TTL_MS = 8 * 60 * 1000;
 const DETECT_HOLES_CACHE_MAX = 256;
@@ -149,7 +157,7 @@ const callPython = async (subpath, formData) => {
     const pyRes = await fetch(`${PYTHON_BASE_URL}${subpath}`, {
         method: 'POST',
         body: formData,
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(getPythonTimeoutMs(subpath)),
     });
     if (!pyRes.ok) {
         const errText = await pyRes.text().catch(() => '');
@@ -161,7 +169,7 @@ const callPython = async (subpath, formData) => {
 const callPythonGet = async (subpath) => {
     const pyRes = await fetch(`${PYTHON_BASE_URL}${subpath}`, {
         method: 'GET',
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(PYTHON_STATUS_TIMEOUT_MS),
     });
     if (!pyRes.ok) {
         const errText = await pyRes.text().catch(() => '');

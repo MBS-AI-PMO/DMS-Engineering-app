@@ -848,7 +848,10 @@ const InstantPricing = () => {
         if (Number.isFinite(pct)) {
           setUnfoldProgress(Math.max(0, Math.min(100, pct)));
         }
-        if (statusData?.stage) {
+        const queueAhead = Number(statusData?.queuePosition);
+        if (statusData?.status === 'queued' && Number.isFinite(queueAhead) && queueAhead > 0) {
+          setUnfoldStage(`Queued (${queueAhead} ahead)`);
+        } else if (statusData?.stage) {
           setUnfoldStage(String(statusData.stage));
         }
 
@@ -861,7 +864,8 @@ const InstantPricing = () => {
           throw new Error(statusData?.error || 'Unfold failed');
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const pollDelayMs = statusData?.status === 'queued' ? 1200 : 800;
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
       }
 
       if (!d) throw new Error('Unfold returned empty result');

@@ -3,21 +3,13 @@ import { Link } from 'react-router-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 
-const HERO_BASE = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/INDO-MIM_Automotive_Sector_.jpg";
-const HERO_SRC = `${HERO_BASE}/1600px-INDO-MIM_Automotive_Sector_.jpg`;
-const HERO_SRCSET = [
-    `${HERO_BASE}/800px-INDO-MIM_Automotive_Sector_.jpg 800w`,
-    `${HERO_BASE}/1200px-INDO-MIM_Automotive_Sector_.jpg 1200w`,
-    `${HERO_BASE}/1600px-INDO-MIM_Automotive_Sector_.jpg 1600w`,
-    `${HERO_BASE}/2000px-INDO-MIM_Automotive_Sector_.jpg 2000w`,
-].join(', ');
+const HERO_SRC = '/assets/metals-hero.avif';
 
 const Hero = () => {
     return (
         <section className="hero-section" style={{ backgroundColor: '#0b0b0f', position: 'relative', overflow: 'hidden' }}>
             <img
                 src={HERO_SRC}
-                srcSet={HERO_SRCSET}
                 sizes="100vw"
                 alt=""
                 aria-hidden="true"
