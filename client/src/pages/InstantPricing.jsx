@@ -835,10 +835,18 @@ const InstantPricing = () => {
 
       let d = null;
       for (;;) {
-        const statusResponse = await fetch(`${BACKEND_URL}/api/unfold-job/${encodeURIComponent(jobId)}`, {
+        const statusResponse = await fetch(`${BACKEND_URL}/api/unfold-job/${encodeURIComponent(jobId)}?ts=${Date.now()}`, {
           method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          },
           signal: controller.signal
         });
+        if (statusResponse.status === 304) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
         if (!statusResponse.ok) {
           throw new Error(`Unfold status failed (${statusResponse.status})`);
         }

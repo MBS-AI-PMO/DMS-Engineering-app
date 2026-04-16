@@ -31,6 +31,9 @@ const legalRoutes = require('./routes/legal');
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Async CAD job polling must always return fresh JSON; avoid 304/ETag responses.
+app.set('etag', false);
+
 const DEFAULT_CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
 const parseEnvOrigins = (value) => String(value || '')
     .split(',')
@@ -107,6 +110,12 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const setNoStore = (res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+};
 
 // FIX 2: Added a root health check so http://IP:5000/health actually works
 app.get('/health', (req, res) => {
@@ -346,6 +355,7 @@ app.post('/api/unfold', upload.single('file'), async (req, res) => {
 
 // --- Async Unfold Job (Progress + Result Polling) ---
 app.post('/api/unfold-job/start', upload.single('file'), async (req, res) => {
+    setNoStore(res);
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
 
     const filename = (req.file.originalname || '').toLowerCase();
@@ -372,6 +382,7 @@ app.post('/api/unfold-job/start', upload.single('file'), async (req, res) => {
 });
 
 app.get('/api/unfold-job/:jobId', async (req, res) => {
+    setNoStore(res);
     const jobId = String(req.params.jobId || '').trim();
     if (!jobId) {
         return res.status(400).json({ success: false, error: 'jobId is required' });
