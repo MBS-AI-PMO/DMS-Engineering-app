@@ -560,7 +560,7 @@ const InstantPricing = () => {
   // ── STEP Hole Detection for Tapping & Hardware ───────
   useEffect(() => {
     if (!hasHoleDependentService || !selectedFile || !isStepFile(selectedFile.file.name)) return;
-    if (stepHolesDetectedRef.current || isDetectingHoles || detectHolesAbortRef.current) return;
+    if (stepHolesDetectedRef.current || isDetectingHoles || detectHolesAbortRef.current || isLoadingUnfold) return;
 
     const detect = async () => {
       detectHolesAbortRef.current = new AbortController();
@@ -628,7 +628,7 @@ const InstantPricing = () => {
         try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       }
     };
-  }, [hasHoleDependentService, selectedFile, dimensions?.mm?.t]);
+  }, [hasHoleDependentService, selectedFile, dimensions?.mm?.t, isLoadingUnfold]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {

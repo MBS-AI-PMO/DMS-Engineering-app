@@ -2,8 +2,9 @@ import os
 import platform
 from dotenv import load_dotenv
 
-# 1. Load environment variables BEFORE doing anything else
-load_dotenv()
+# 1. Load environment variables BEFORE doing anything else.
+# override=True ensures .env edits take effect even if PM2 has stale inherited vars.
+load_dotenv(override=True)
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["OCP_NO_DISPLAY"] = "1"
@@ -22,6 +23,7 @@ import numpy as np
 import threading
 import uuid
 import time
+import signal
 from urllib.parse import urlparse, parse_qs
 from unfold import unfold_step_file, detect_holes_in_step
 
@@ -31,6 +33,7 @@ UNFOLD_RESULT_CACHE_TTL_SECONDS = int(os.getenv("UNFOLD_RESULT_CACHE_TTL_SECONDS
 UNFOLD_RESULT_CACHE_MAX = max(1, int(os.getenv("UNFOLD_RESULT_CACHE_MAX", "128")))
 GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
 FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
+FREECAD_KILL_GRACE_SECONDS = max(1, int(os.getenv("FREECAD_KILL_GRACE_SECONDS", "8")))
 MAX_PARALLEL_FREECAD_WORKERS = max(1, int(os.getenv("MAX_PARALLEL_FREECAD_WORKERS", "1")))
 CAD_JOB_QUEUE_LIMIT = max(1, int(os.getenv("CAD_JOB_QUEUE_LIMIT", "64")))
 ENABLE_LEGACY_UNFOLD_FALLBACK = str(os.getenv("ENABLE_LEGACY_UNFOLD_FALLBACK", "0")).strip().lower() in ("1", "true", "yes", "on")
