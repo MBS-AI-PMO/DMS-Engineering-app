@@ -62,4 +62,56 @@ const optimizeImage = async (filePath) => {
     }
 };
 
-module.exports = { optimizeImage };
+/**
+ * Hero optimizer for homepage banners.
+ * Produces AVIF/WebP/JPEG variants from one upload, strips metadata,
+ * and keeps large visual quality while reducing transfer size.
+ */
+const optimizeHeroImage = async (filePath) => {
+    try {
+        const ext = path.extname(filePath);
+        const dirname = path.dirname(filePath);
+        const basename = path.basename(filePath, ext);
+
+        const avifPath = path.join(dirname, `${basename}.avif`);
+        const webpPath = path.join(dirname, `${basename}.webp`);
+        const jpgPath = path.join(dirname, `${basename}.jpg`);
+
+        const pipeline = sharp(filePath).rotate();
+
+        await pipeline
+            .clone()
+            .resize(2200, null, { withoutEnlargement: true, fit: 'inside' })
+            .avif({ quality: 50, effort: 9, chromaSubsampling: '4:2:0' })
+            .toFile(avifPath);
+
+        await pipeline
+            .clone()
+            .resize(2200, null, { withoutEnlargement: true, fit: 'inside' })
+            .webp({ quality: 78, effort: 6, smartSubsample: true })
+            .toFile(webpPath);
+
+        await pipeline
+            .clone()
+            .resize(2200, null, { withoutEnlargement: true, fit: 'inside' })
+            .jpeg({ quality: 82, mozjpeg: true, progressive: true, chromaSubsampling: '4:2:0' })
+            .toFile(jpgPath);
+
+        if (fs.existsSync(filePath) && filePath !== avifPath && filePath !== webpPath && filePath !== jpgPath) {
+            fs.unlinkSync(filePath);
+        }
+
+        return {
+            avif: `${basename}.avif`,
+            webp: `${basename}.webp`,
+            jpg: `${basename}.jpg`,
+        };
+    } catch (err) {
+        console.error('Hero image optimization failed:', err);
+        return {
+            src: path.basename(filePath),
+        };
+    }
+};
+
+module.exports = { optimizeImage, optimizeHeroImage };

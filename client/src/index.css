@@ -1150,6 +1150,9 @@ body {
 
 .hero-actions {
     margin-top: 10px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
 }
 
 .btn-hero-primary {
@@ -1164,7 +1167,9 @@ body {
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 12px;
+    margin-inline: auto;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     box-shadow: 0 10px 30px rgba(227, 27, 35, 0.4);
 }
@@ -1206,6 +1211,22 @@ body {
 
     .hero-section {
         height: 100vh;
+    }
+
+    .hero-section .hero-actions {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+
+    .hero-section .btn-hero-primary {
+        min-width: min(90vw, 340px);
+        padding: 20px 28px;
+        font-size: clamp(1.28rem, 5.2vw, 1.46rem);
+        justify-content: center;
+        text-align: center;
+        gap: 10px;
+        line-height: 1;
     }
 
     .hero-footer {
@@ -3317,6 +3338,10 @@ body {
     font-family: 'Montserrat', sans-serif;
 }
 
+.main-footer .container {
+    padding-bottom: 16px;
+}
+
 .footer-glow {
     position: absolute;
     top: -150px;
@@ -3563,7 +3588,13 @@ body {
 
 @media (max-width: 768px) {
     .main-footer {
-        padding-top: 60px;
+        padding-top: 64px;
+    }
+
+    .main-footer .container {
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-bottom: 22px;
     }
 
     .footer-grid {
@@ -7140,6 +7171,10 @@ body.dark-mode .sidebar-link.active {
     text-align: center;
 }
 
+.guidelines-mobile-select {
+    display: none;
+}
+
 @media (max-width: 1024px) {
     .guidelines-hero {
         padding: 40px 0;
@@ -7245,6 +7280,131 @@ body.dark-mode .sidebar-link.active {
     .dropdown-item.active {
         background: rgba(59, 130, 246, 0.15);
         color: #fff;
+    }
+}
+
+@media (max-width: 768px) {
+    .guidelines-page .container {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .guidelines-mobile-select {
+        justify-content: center;
+        text-align: center;
+        gap: 10px;
+        padding: 14px 16px !important;
+    }
+
+    .guidelines-mobile-select .selected-category-text {
+        margin-left: 0;
+        text-align: center;
+        font-size: 0.98rem !important;
+    }
+
+    .guidelines-content {
+        padding: 24px 18px;
+        text-align: center;
+    }
+
+    .guidelines-detail,
+    .guidelines-tables,
+    .requirements-section,
+    .guideline-table-wrapper {
+        width: 100%;
+    }
+
+    .guidelines-detail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .detail-header {
+        text-align: center;
+    }
+
+    .detail-header h2 {
+        font-size: 1.65rem;
+        line-height: 1.12;
+        text-wrap: balance;
+    }
+
+    .info-banner {
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 8px;
+        padding: 14px 16px;
+    }
+
+    .detail-body {
+        text-align: center;
+    }
+
+    .intro-text {
+        font-size: 1rem;
+        margin-bottom: 28px;
+        text-align: center;
+        max-width: 100%;
+    }
+
+    .requirements-section h3 {
+        font-size: 1.25rem;
+        text-align: center;
+        margin-bottom: 18px;
+    }
+
+    .requirements-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-bottom: 36px;
+    }
+
+    .requirement-item {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 8px;
+        padding: 14px 12px;
+    }
+
+    .requirement-item span {
+        display: block;
+        max-width: 100%;
+    }
+
+    .guideline-table-wrapper {
+        padding: 18px 14px;
+        margin-bottom: 28px;
+    }
+
+    .guideline-material-title {
+        font-size: 1.35rem;
+        text-align: center;
+        margin-bottom: 14px;
+    }
+
+    .guideline-table th,
+    .guideline-table td {
+        padding: 12px 10px;
+        text-align: center !important;
+        font-size: 0.9rem;
+    }
+
+    .guideline-table {
+        margin: 0 auto;
+    }
+
+    .guidelines-dropdown-menu .dropdown-item {
+        text-align: center;
+    }
+
+    .table-responsive {
+        border-radius: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 }
 
