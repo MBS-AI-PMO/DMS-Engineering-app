@@ -246,6 +246,7 @@ const StepModelViewer = ({
   allServices = [],
   backendData = null,
   onModelLoaded = () => { },
+  onModelLoadFailed = () => { },
   onProgress = () => { },
   onDimensionsExtracted = () => { },
 }) => {
@@ -408,6 +409,11 @@ const StepModelViewer = ({
           setTimeout(() => {
             try { viewer.FitToWindow(); viewer.Render(); } catch { console.debug('FitToWindow skipped'); }
           }, 200);
+        },
+        onModelLoadFailed: () => {
+          clearInterval(progressTimer);
+          onProgress(100);
+          onModelLoadFailed();
         }
       });
 
@@ -450,6 +456,8 @@ const StepModelViewer = ({
       };
     } catch (e) {
       clearInterval(progressTimer);
+      onProgress(100);
+      onModelLoadFailed();
       console.error("StepViewer error:", e);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

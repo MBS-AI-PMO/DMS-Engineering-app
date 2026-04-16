@@ -67,6 +67,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // Serve temporary CAD assets for cart persistence établissement
 app.use('/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
+// Also expose temp uploads behind /api for production proxies that only forward /api to backend.
+app.use('/api/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);

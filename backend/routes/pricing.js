@@ -513,7 +513,8 @@ router.post('/configure-preview', async (req, res) => {
 
         const outputFileName = `preview_${cacheHash}.step`;
         const outputPath = path.join(previewDir, outputFileName);
-        const relativeOutputPath = `temp_uploads/configured_preview/${outputFileName}`;
+        // Use /api-prefixed path so production reverse proxies route preview STEP downloads to backend.
+        const relativeOutputPath = `api/temp_uploads/configured_preview/${outputFileName}`;
         const reportFileName = `report_${cacheHash}.json`;
         const reportPath = path.join(previewDir, reportFileName);
 

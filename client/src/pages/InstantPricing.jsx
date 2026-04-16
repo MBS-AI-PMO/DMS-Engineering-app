@@ -971,7 +971,10 @@ const InstantPricing = () => {
         }
 
         const relativePath = String(data.previewPath).replace(/^\/+/, '');
-        const resolved = BACKEND_URL ? `${BACKEND_URL}/${relativePath}` : `/${relativePath}`;
+        const apiRoutedPath = relativePath.startsWith('temp_uploads/')
+          ? `api/${relativePath}`
+          : relativePath;
+        const resolved = BACKEND_URL ? `${BACKEND_URL}/${apiRoutedPath}` : `/${apiRoutedPath}`;
         setConfiguredPreviewUrl(resolved);
       } catch (err) {
         if (err?.name === 'AbortError') return;
