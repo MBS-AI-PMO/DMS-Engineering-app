@@ -184,9 +184,17 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
         root_point = np.array([float(root_center.x), float(root_center.y), float(root_center.z)], dtype=float)
 
         thickness_mm = float(thickness) if thickness and float(thickness) > 0 else 0.0
-        # Keep threshold low enough to capture small square bosses (e.g., ~4x4 to ~6x6 mm)
-        # while still filtering tiny numerical sliver faces.
-        min_face_area = max(0.5, (thickness_mm * thickness_mm * 0.15) if thickness_mm > 0 else 0.5)
+        # Keep threshold low enough for small boss tops while filtering tiny numeric slivers.
+        # Root-area scaling avoids over-filtering on large plates; thickness scaling avoids noise
+        # on very thin parts.
+        root_area = max(1.0, float(root_face.Area))
+        min_face_area = max(
+            0.1,
+            min(
+                root_area * 0.0002,
+                (thickness_mm * thickness_mm * 0.08) if thickness_mm > 0 else 0.6,
+            ),
+        )
 
         raised_faces = 0
         raised_same_orientation = 0
@@ -194,8 +202,10 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
         parallel_faces = 0
         max_offset = 0.0
 
-        tol_root = max(0.18, thickness_mm * 0.18) if thickness_mm > 0 else 0.40
-        tol_skin = max(0.25, thickness_mm * 0.25) if thickness_mm > 0 else 0.80
+        # Tightened tolerances to detect low-height emboss/boss geometry (sub-mm to ~1 mm)
+        # that should still lock laser process selection.
+        tol_root = max(0.08, thickness_mm * 0.08) if thickness_mm > 0 else 0.25
+        tol_skin = max(0.12, thickness_mm * 0.12) if thickness_mm > 0 else 0.45
 
         for fi, face in enumerate(fc_shape.Faces):
             if fi == root_idx:
@@ -214,7 +224,7 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
             face_normal = _normalize(np.array([float(fn.x), float(fn.y), float(fn.z)], dtype=float))
             alignment = float(np.dot(face_normal, root_normal))
             parallelity = abs(alignment)
-            if parallelity < 0.985:
+            if parallelity < 0.97:
                 continue
 
             parallel_faces += 1
@@ -239,10 +249,10 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
                         raised_faces += 1
                         raised_opposite_orientation += 1
             else:
-                if alignment > 0 and offset > 0.8:
+                if alignment > 0 and offset > 0.45:
                     raised_faces += 1
                     raised_same_orientation += 1
-                elif alignment < 0 and offset > 1.2:
+                elif alignment < 0 and offset > 0.65:
                     raised_faces += 1
                     raised_opposite_orientation += 1
 

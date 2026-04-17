@@ -203,7 +203,24 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
 
     // Check for both camelCase and snake_case backend names
     const bendPts = data.bendEdges || data.bend_edges || [];
-    const cutPts = data.cutEdges || data.cut_edges || [];
+    let cutPts = data.cutEdges || data.cut_edges || [];
+
+    // Derive a clean 2D boundary from the flattened mesh to suppress internal
+    // face seam lines while preserving true contour/hole edges in display.
+    if (flatVertices.length > 0) {
+      try {
+        const indexedGeometry = mergeVertices(unfoldedGeometry, 0.001);
+        indexedGeometry.computeVertexNormals();
+        const boundaryGeometry = new THREE.EdgesGeometry(indexedGeometry, 1);
+        const boundaryAttr = boundaryGeometry.getAttribute('position');
+        const boundaryPts = boundaryAttr ? Array.from(boundaryAttr.array) : [];
+        if (boundaryPts.length >= 6) {
+          cutPts = boundaryPts;
+        }
+      } catch {
+        // Keep backend-provided cut points if boundary extraction fails.
+      }
+    }
 
     // Technical projection layers
     const topEdges = data.topEdges || [];
