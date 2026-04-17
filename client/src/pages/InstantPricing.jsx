@@ -855,38 +855,56 @@ const InstantPricing = () => {
   }, [selectedFile]);
 
   // ── STEP Hole Detection (pierce count + tapping/hardware) ───────
+  // Split into two effects so that backendData arriving (from handleUnfold)
+  // can't race against an in-flight /api/detect-holes fetch. Each effect has
+  // the minimum deps needed so cleanup never aborts a live request unless
+  // the file itself actually changed.
+  const detectHolesContextRef = useRef({ thicknessMm: 0 });
+  detectHolesContextRef.current.thicknessMm = parseFloat(displayDimensions?.mm?.t) || 0;
+
+  // 1) When the backend (via handleUnfold) returns detectedHoles, adopt them.
   useEffect(() => {
     if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
-
     const backendHoles = Array.isArray(backendData?.detectedHoles) ? backendData.detectedHoles : [];
-    if (backendHoles.length > 0) {
-      const depthIn = displayDimensions?.mm?.t ? parseFloat(displayDimensions.mm.t) / 25.4 : 2 / 25.4;
-      const mappedFromBackend = backendHoles.map((h, idx) => ({
-        id: idx,
-        diameterInches: h.diameter_in,
-        diameter_mm: h.diameter_mm,
-        depthMm: h.depth_mm || 0,
-        depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
-        position: h.position,
-        axis: h.axis,
-        parent_face_id: h.face_id,
-      }));
-      setDetectedHoles(mappedFromBackend);
-      stepHolesDetectedRef.current = true;
-      holeDetectionAttemptedRef.current = true;
-      return;
+    if (backendHoles.length === 0) return;
+    const tMm = detectHolesContextRef.current.thicknessMm;
+    const depthIn = tMm > 0 ? tMm / 25.4 : 2 / 25.4;
+    const mapped = backendHoles.map((h, idx) => ({
+      id: idx,
+      diameterInches: h.diameter_in,
+      diameter_mm: h.diameter_mm,
+      depthMm: h.depth_mm || 0,
+      depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
+      position: h.position,
+      axis: h.axis,
+      parent_face_id: h.face_id,
+    }));
+    setDetectedHoles(mapped);
+    stepHolesDetectedRef.current = true;
+    holeDetectionAttemptedRef.current = true;
+    // If a fallback detect() is still in-flight, cancel it — we have real data.
+    if (detectHolesAbortRef.current) {
+      try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
+      detectHolesAbortRef.current = null;
     }
+  }, [selectedFile, backendData?.detectedHoles]);
 
-    if (stepHolesDetectedRef.current || detectHolesAbortRef.current || isLoadingUnfold || holeDetectionAttemptedRef.current) return;
+  // 2) Fire the direct /api/detect-holes fetch once per file. Depends ONLY on
+  // selectedFile so no other state change can abort the in-flight request.
+  useEffect(() => {
+    if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
+    if (stepHolesDetectedRef.current || holeDetectionAttemptedRef.current || detectHolesAbortRef.current) return;
 
-    const detect = async () => {
-      holeDetectionAttemptedRef.current = true;
-      detectHolesAbortRef.current = new AbortController();
-      const showDetectingOverlay = hasHoleDependentService;
-      if (showDetectingOverlay) setIsDetectingHoles(true);
-      const timeoutId = setTimeout(() => {
-        try { detectHolesAbortRef.current?.abort(); } catch { /* noop */ }
-      }, 20000);
+    const controller = new AbortController();
+    detectHolesAbortRef.current = controller;
+    holeDetectionAttemptedRef.current = true;
+    setIsDetectingHoles(true);
+
+    const timeoutId = setTimeout(() => {
+      try { controller.abort(); } catch { /* noop */ }
+    }, 30000);
+
+    (async () => {
       try {
         let r;
         if (selectedFile?.tempPath) {
@@ -894,7 +912,7 @@ const InstantPricing = () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tempPath: selectedFile.tempPath }),
-            signal: detectHolesAbortRef.current.signal,
+            signal: controller.signal,
           });
         } else {
           const fd = new FormData();
@@ -902,14 +920,17 @@ const InstantPricing = () => {
           r = await fetch(`${BACKEND_URL}/api/detect-holes`, {
             method: 'POST',
             body: fd,
-            signal: detectHolesAbortRef.current.signal,
+            signal: controller.signal,
           });
         }
 
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
         const d = await r.json();
-        const depthIn = displayDimensions?.mm?.t ? parseFloat(displayDimensions.mm.t) / 25.4 : 2 / 25.4;
-        const mappedHoles = (d.holes || []).map((h, idx) => ({
+        // If backendData already populated detectedHoles, it wins — bail.
+        if (stepHolesDetectedRef.current) return;
+        const tMm = detectHolesContextRef.current.thicknessMm;
+        const depthIn = tMm > 0 ? tMm / 25.4 : 2 / 25.4;
+        const mapped = (d.holes || []).map((h, idx) => ({
           id: idx,
           diameterInches: h.diameter_in,
           diameter_mm: h.diameter_mm,
@@ -917,40 +938,32 @@ const InstantPricing = () => {
           depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
           position: h.position,
           axis: h.axis,
-          parent_face_id: h.face_id, // PRESERVE FACE ASSOCIATION
+          parent_face_id: h.face_id,
         }));
-
-        setDetectedHoles(prev => {
-          if (prev.length === mappedHoles.length && prev.every((p, i) =>
-            p.diameterInches === mappedHoles[i].diameterInches &&
-            p.depthMm === mappedHoles[i].depthMm &&
-            p.position?.[0] === mappedHoles[i].position?.[0] &&
-            p.position?.[1] === mappedHoles[i].position?.[1] &&
-            p.position?.[2] === mappedHoles[i].position?.[2]
-          )) {
-            return prev;
-          }
-          return mappedHoles;
-        });
-
+        setDetectedHoles(mapped);
         stepHolesDetectedRef.current = true;
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('Could not detect holes:', err.message);
-        stepHolesDetectedRef.current = true;
       } finally {
         clearTimeout(timeoutId);
-        if (showDetectingOverlay) setIsDetectingHoles(false);
+        setIsDetectingHoles(false);
+        if (detectHolesAbortRef.current === controller) {
+          detectHolesAbortRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      // File changed — abort the fetch and free the slot so the next file
+      // can fire its own detection cleanly.
+      clearTimeout(timeoutId);
+      try { controller.abort(); } catch { /* noop */ }
+      if (detectHolesAbortRef.current === controller) {
         detectHolesAbortRef.current = null;
       }
     };
-    detect();
-    return () => {
-      if (detectHolesAbortRef.current) {
-        try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
-      }
-    };
-  }, [selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, backendData?.detectedHoles, hasHoleDependentService]);
+  }, [selectedFile]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {
