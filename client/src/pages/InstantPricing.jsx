@@ -41,6 +41,37 @@ const isStepFile = (filename) => {
   return name.endsWith('.step') || name.endsWith('.stp');
 };
 
+const toFiniteNumber = (value) => {
+  const num = Number.parseFloat(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const sumSegmentLengths = (flatEdgePoints = []) => {
+  if (!Array.isArray(flatEdgePoints) || flatEdgePoints.length < 6) return 0;
+  let total = 0;
+  for (let i = 0; i + 5 < flatEdgePoints.length; i += 6) {
+    const x1 = toFiniteNumber(flatEdgePoints[i]);
+    const y1 = toFiniteNumber(flatEdgePoints[i + 1]);
+    const z1 = toFiniteNumber(flatEdgePoints[i + 2]);
+    const x2 = toFiniteNumber(flatEdgePoints[i + 3]);
+    const y2 = toFiniteNumber(flatEdgePoints[i + 4]);
+    const z2 = toFiniteNumber(flatEdgePoints[i + 5]);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dz = z2 - z1;
+    total += Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  return total;
+};
+
+const getProcessFlags = (serviceTitle = '') => {
+  const normalized = String(serviceTitle || '').toLowerCase();
+  return {
+    isLaser: normalized.includes('laser'),
+    isCnc: normalized.includes('cnc')
+  };
+};
+
 // ─── Child Components ─────────────────────────────────────
 const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
@@ -145,6 +176,144 @@ const InstantPricing = () => {
     return t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
   }, [selectedMetal, selectedThickness]);
 
+  const selectedThicknessInches = useMemo(() => {
+    return selectedThicknessMM > 0 ? selectedThicknessMM / 25.4 : 0;
+  }, [selectedThicknessMM]);
+
+  const modelThicknessFrom2dMm = useMemo(() => {
+    if (!currentIsStep) return 0;
+    return toFiniteNumber(backendData?.thickness);
+  }, [currentIsStep, backendData?.thickness]);
+
+  const modelThicknessFrom3dMm = useMemo(() => {
+    return toFiniteNumber(dimensions?.mm?.t);
+  }, [dimensions?.mm?.t]);
+
+  const resolvedModelThicknessMm = useMemo(() => {
+    if (modelThicknessFrom2dMm > 0) return modelThicknessFrom2dMm;
+    if (modelThicknessFrom3dMm > 0) return modelThicknessFrom3dMm;
+    if (selectedThicknessMM > 0) return selectedThicknessMM;
+    return 0;
+  }, [modelThicknessFrom2dMm, modelThicknessFrom3dMm, selectedThicknessMM]);
+
+  const dimensionSourceLabel = useMemo(() => {
+    const flatW = toFiniteNumber(backendData?.bbox?.width);
+    const flatH = toFiniteNumber(backendData?.bbox?.height);
+    if (currentIsStep && flatW > 0 && flatH > 0) return '2D flat pattern';
+    return '3D bounding box';
+  }, [currentIsStep, backendData?.bbox?.width, backendData?.bbox?.height]);
+
+  const thicknessSourceLabel = useMemo(() => {
+    if (modelThicknessFrom2dMm > 0) return '2D flat pattern';
+    if (modelThicknessFrom3dMm > 0) return '3D model';
+    if (selectedThicknessMM > 0) return 'Selected stock';
+    return 'Unknown';
+  }, [modelThicknessFrom2dMm, modelThicknessFrom3dMm, selectedThicknessMM]);
+
+  const selectedThicknessDisplay = useMemo(() => {
+    if (!selectedThickness) return null;
+    if (selectedThicknessMM > 0) {
+      return `${selectedThicknessMM.toFixed(3)} mm (${(selectedThicknessMM / 25.4).toFixed(3)} in)`;
+    }
+    return String(selectedThickness);
+  }, [selectedThickness, selectedThicknessMM]);
+
+  const displayDimensions = useMemo(() => {
+    const flatWidthMm = currentIsStep ? toFiniteNumber(backendData?.bbox?.width) : 0;
+    const flatHeightMm = currentIsStep ? toFiniteNumber(backendData?.bbox?.height) : 0;
+    const hasFlatSize = flatWidthMm > 0 && flatHeightMm > 0;
+
+    const modelLenMm = toFiniteNumber(dimensions?.mm?.l);
+    const modelWidMm = toFiniteNumber(dimensions?.mm?.w);
+
+    const lengthMm = hasFlatSize ? Math.max(flatWidthMm, flatHeightMm) : modelLenMm;
+    const widthMm = hasFlatSize ? Math.min(flatWidthMm, flatHeightMm) : modelWidMm;
+    const thicknessMm = resolvedModelThicknessMm;
+    const volumeMm3 = toFiniteNumber(dimensions?.mm?.volume);
+
+    if (!(lengthMm > 0) || !(widthMm > 0)) return null;
+
+    return {
+      mm: {
+        l: lengthMm.toFixed(2),
+        w: widthMm.toFixed(2),
+        t: thicknessMm > 0 ? thicknessMm.toFixed(3) : '0.000',
+        volume: volumeMm3.toFixed(2)
+      },
+      inches: {
+        l: (lengthMm / 25.4).toFixed(3),
+        w: (widthMm / 25.4).toFixed(3),
+        t: thicknessMm > 0 ? (thicknessMm / 25.4).toFixed(3) : '0.000',
+        volume: (volumeMm3 / 16387).toFixed(3)
+      }
+    };
+  }, [
+    currentIsStep,
+    backendData?.bbox?.width,
+    backendData?.bbox?.height,
+    dimensions?.mm?.l,
+    dimensions?.mm?.w,
+    dimensions?.mm?.volume,
+    resolvedModelThicknessMm
+  ]);
+
+  const perimeterMm = useMemo(() => {
+    const direct = toFiniteNumber(backendData?.totalPerimeter);
+    if (direct > 0) return direct;
+
+    const dxfPerimeter = toFiniteNumber(dxfTechData?.totalPerimeter);
+    if (dxfPerimeter > 0) return dxfPerimeter;
+
+    const edgePerimeter = sumSegmentLengths(backendData?.cutEdges);
+    if (edgePerimeter > 0) return edgePerimeter;
+
+    const l = toFiniteNumber(displayDimensions?.mm?.l);
+    const w = toFiniteNumber(displayDimensions?.mm?.w);
+    return l > 0 && w > 0 ? ((l + w) * 2) : 0;
+  }, [backendData?.totalPerimeter, backendData?.cutEdges, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
+
+  const pierceCount = useMemo(() => {
+    const direct = Number.parseInt(backendData?.pierceCount, 10);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const dxfCount = Number.parseInt(dxfTechData?.pierceCount, 10);
+    if (Number.isFinite(dxfCount) && dxfCount > 0) return dxfCount;
+
+    return Math.max(1, detectedHoles.length || 1);
+  }, [backendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length]);
+
+  const pricingTechnicalData = useMemo(() => {
+    return {
+      totalPerimeter: perimeterMm,
+      pierceCount,
+      bends: Array.isArray(backendData?.bends) ? backendData.bends : []
+    };
+  }, [perimeterMm, pierceCount, backendData?.bends]);
+
+  const measurementMetrics = useMemo(() => {
+    const lengthMm = toFiniteNumber(displayDimensions?.mm?.l);
+    const widthMm = toFiniteNumber(displayDimensions?.mm?.w);
+    const thicknessMm = toFiniteNumber(displayDimensions?.mm?.t);
+    const areaMm2 = lengthMm * widthMm;
+    const diagonalMm = Math.sqrt((lengthMm * lengthMm) + (widthMm * widthMm));
+
+    return {
+      lengthMm,
+      widthMm,
+      thicknessMm,
+      areaMm2,
+      diagonalMm,
+      perimeterMm,
+      pierceCount
+    };
+  }, [displayDimensions?.mm?.l, displayDimensions?.mm?.w, displayDimensions?.mm?.t, perimeterMm, pierceCount]);
+
+  const pricingThicknessInches = useMemo(() => {
+    if (selectedThicknessInches > 0) return selectedThicknessInches;
+    const fallbackThicknessMm = toFiniteNumber(displayDimensions?.mm?.t);
+    return fallbackThicknessMm > 0 ? (fallbackThicknessMm / 25.4) : 0;
+  }, [selectedThicknessInches, displayDimensions?.mm?.t]);
+
   const bendList = useMemo(() => {
     const list = [];
     if (!bendTree) return list;
@@ -155,6 +324,89 @@ const InstantPricing = () => {
     flatten(bendTree);
     return list;
   }, [bendTree]);
+
+  const bendCountTotal = useMemo(() => {
+    const fromTree = bendList.length;
+    const fromBackend = Array.isArray(backendData?.bends) ? backendData.bends.length : 0;
+    return Math.max(fromTree, fromBackend);
+  }, [bendList.length, backendData?.bends]);
+
+  const isLaserBlockedByBends = bendCountTotal > 0;
+
+  const modelComplexityFactors = useMemo(() => {
+    const areaMm2 = measurementMetrics.areaMm2;
+    const thicknessMm = measurementMetrics.thicknessMm;
+    const minSpan = Math.max(1, Math.min(measurementMetrics.lengthMm || 0, measurementMetrics.widthMm || 0));
+    const thicknessRatio = thicknessMm > 0 ? (thicknessMm / minSpan) : 0;
+    const pierceDensity = areaMm2 > 0 ? ((pierceCount * 10000) / areaMm2) : 0; // per 100 cm²
+    const perimeterComplexity = areaMm2 > 0 ? (perimeterMm / Math.sqrt(areaMm2)) : 0;
+    const has2dProfile = currentIsDxf || (currentIsStep && dimensionSourceLabel === '2D flat pattern');
+
+    return [
+      {
+        id: 'bends',
+        label: 'Bend Features',
+        value: `${bendCountTotal}`,
+        status: bendCountTotal > 0 ? 'fail' : 'pass',
+        impact: bendCountTotal > 0 ? 'Locks Laser' : 'Laser OK',
+        reason: bendCountTotal > 0
+          ? `Detected ${bendCountTotal} bend(s); formed geometry is not laser-cuttable.`
+          : 'No bends detected.'
+      },
+      {
+        id: 'thickness-ratio',
+        label: 'Thickness Ratio (T/min span)',
+        value: thicknessRatio > 0 ? `${(thicknessRatio * 100).toFixed(2)}%` : 'N/A',
+        status: thicknessRatio > 0.18 ? 'warn' : 'pass',
+        impact: thicknessRatio > 0.18 ? 'Complex Setup Risk' : 'Normal',
+        reason: thicknessRatio > 0.18
+          ? 'High thickness-to-span ratio often indicates complex machining or fixturing.'
+          : 'Thickness ratio is within a typical flat-part range.'
+      },
+      {
+        id: 'pierce-density',
+        label: 'Pierce Density',
+        value: `${pierceDensity.toFixed(2)} / 100 cm²`,
+        status: pierceDensity > 8 ? 'warn' : 'pass',
+        impact: pierceDensity > 8 ? 'Feature Dense' : 'Normal',
+        reason: pierceDensity > 8
+          ? 'High feature density can increase cycle complexity and setup requirements.'
+          : 'Feature density is within typical production ranges.'
+      },
+      {
+        id: 'edge-complexity',
+        label: 'Edge Complexity',
+        value: perimeterComplexity > 0 ? perimeterComplexity.toFixed(2) : 'N/A',
+        status: perimeterComplexity > 9 ? 'warn' : 'pass',
+        impact: perimeterComplexity > 9 ? 'Complex Profile' : 'Normal',
+        reason: perimeterComplexity > 9
+          ? 'High perimeter-to-area complexity indicates detailed contouring.'
+          : 'Contour complexity is suitable for standard profiling.'
+      },
+      {
+        id: 'profile-availability',
+        label: '2D Profile Availability',
+        value: has2dProfile ? 'Available' : 'Limited',
+        status: has2dProfile ? 'pass' : 'warn',
+        impact: has2dProfile ? 'Reliable Flat Sizing' : 'Using 3D Fallback',
+        reason: has2dProfile
+          ? 'Flat profile data is available for accurate process suitability checks.'
+          : 'Flat profile data not available; sizing relies on 3D fallback dimensions.'
+      }
+    ];
+  }, [
+    measurementMetrics.areaMm2,
+    measurementMetrics.thicknessMm,
+    measurementMetrics.lengthMm,
+    measurementMetrics.widthMm,
+    pierceCount,
+    perimeterMm,
+    currentIsDxf,
+    currentIsStep,
+    dimensionSourceLabel,
+    bendCountTotal
+  ]);
+
   const bendService = useMemo(
     () => allServices.find(s => s.title?.toLowerCase().includes('bend')) || null,
     [allServices]
@@ -173,7 +425,7 @@ const InstantPricing = () => {
 
   useEffect(() => {
     if (!bendService) return;
-    const bendCount = bendList?.length || 0;
+    const bendCount = bendCountTotal;
     const hasBendingServiceSelected = selectedAdditionalServices.some(s => s.id === bendService.id);
 
     if (bendCount > 0 && !hasBendingServiceSelected) {
@@ -185,9 +437,23 @@ const InstantPricing = () => {
       setSelectedAdditionalServices(prev => prev.filter(s => s.id !== bendService.id));
       setSelectedBends({});
     }
-  }, [bendService, bendList, selectedAdditionalServices]);
+  }, [bendService, bendCountTotal, selectedAdditionalServices]);
+
+  useEffect(() => {
+    if (!selectedProductionService) return;
+    const { isLaser } = getProcessFlags(selectedProductionService.title);
+    if (!isLaser || !isLaserBlockedByBends) return;
+
+    setSelectedProductionService(null);
+    setSelectedCategory(null);
+    setSelectedMetal(null);
+    setSelectedThickness(null);
+    setConfigStep(0);
+    toast(`Detected ${bendCountTotal} bend(s). Laser cutting is locked for bent models.`, 'error');
+  }, [selectedProductionService, isLaserBlockedByBends, bendCountTotal, toast]);
 
   const stepHolesDetectedRef = useRef(false);
+  const holeDetectionAttemptedRef = useRef(false);
   const qty1PriceRef = useRef(null);
   const detectHolesAbortRef = useRef(null);
   const TAP_RANGE_TOLERANCE = 0.00025;
@@ -310,7 +576,9 @@ const InstantPricing = () => {
     const finishColor = activeFinishColor
       ? (activeFinishColor?.color || activeFinishColor?.hex || (typeof activeFinishColor === 'string' ? activeFinishColor : null))
       : null;
-    const mmThickness = dimensions?.mm?.t || selectedThickness || null;
+    const mmThickness = resolvedModelThicknessMm > 0
+      ? Number(resolvedModelThicknessMm.toFixed(4))
+      : (selectedThicknessMM > 0 ? Number(selectedThicknessMM.toFixed(4)) : null);
 
     return {
       tempPath: selectedFile.tempPath,
@@ -323,7 +591,7 @@ const InstantPricing = () => {
         anodizingColor: finishColor ? { color: finishColor } : null,
       }
     };
-  }, [selectedFile?.tempPath, currentIsStep, hasConfiguredCuts, selectedTaps, selectedHardwareForPreview, selectedCountersinks, dimensions?.mm?.t, selectedThickness, activeFinishColor]);
+  }, [selectedFile?.tempPath, currentIsStep, hasConfiguredCuts, selectedTaps, selectedHardwareForPreview, selectedCountersinks, resolvedModelThicknessMm, selectedThicknessMM, activeFinishColor]);
 
   const tapOptions = useMemo(() => {
     const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
@@ -339,33 +607,12 @@ const InstantPricing = () => {
     return csSvc?.service_options || [];
   }, [allServices]);
 
-  const handleHoleClick = useCallback((hole) => {
-    if (isTappingActive) setActiveTapHole(hole);
-    if (isHardwareActive) setActiveHwHole(hole);
-    if (isCountersinkingActive) setActiveCSHole(hole);
-  }, [isTappingActive, isHardwareActive, isCountersinkingActive]);
   const handleProceedToReview = () => {
-    if (!selectedFile || !selectedMetal || !dimensions) return;
+    if (!selectedFile || !selectedMetal || !displayDimensions) return;
     if (!priceEstimate?.breakdown) {
       toast('Pricing is not ready yet. Please wait a moment and try again.', 'error');
       return;
     }
-
-    const fallbackPerimeterMm = ((parseFloat(dimensions?.inches?.l) || 0) + (parseFloat(dimensions?.inches?.w) || 0)) * 2 * 25.4;
-    const fallbackPierceCount = Math.max(1, detectedHoles.length || 1);
-    const pricingTechnicalData = backendData ? {
-      totalPerimeter: backendData.totalPerimeter || fallbackPerimeterMm,
-      pierceCount: backendData.pierceCount || fallbackPierceCount,
-      bends: backendData.bends || []
-    } : dxfTechData ? {
-      totalPerimeter: dxfTechData.totalPerimeter || fallbackPerimeterMm,
-      pierceCount: dxfTechData.pierceCount || fallbackPierceCount,
-      bends: []
-    } : {
-      totalPerimeter: fallbackPerimeterMm,
-      pierceCount: fallbackPierceCount,
-      bends: []
-    };
 
     // Backend breakdown is the source of truth for per-unit prices at current quantity.
     const unitBasePrice = parseFloat(priceEstimate.breakdown?.unit_total || 0);
@@ -378,8 +625,11 @@ const InstantPricing = () => {
     const config = {
       productionService: selectedProductionService,
       metal: selectedMetal,
-      thickness: dimensions.mm.t,
+      thickness: displayDimensions.mm.t,
       selectedThickness: selectedThickness, // Store string value for Laser établissements
+      selectedThicknessDisplay,
+      modelDimensionSource: dimensionSourceLabel,
+      modelThicknessSource: thicknessSourceLabel,
       anodizingColor: activeFinishColor,
       selectedTaps,
       selectedHardware,
@@ -390,7 +640,7 @@ const InstantPricing = () => {
       detectedHoles,
       detectedBends,
       additionalServices: selectedAdditionalServices,
-      dimensions: dimensions,
+      dimensions: displayDimensions,
       dxfSvg: dxfSvg,
       selectedFinishColors,
       pricingTechnicalData,
@@ -554,6 +804,7 @@ const InstantPricing = () => {
     setStepModelProgress(0);
     setIsStepModelLoading(false);
     stepHolesDetectedRef.current = false;
+    holeDetectionAttemptedRef.current = false;
     qty1PriceRef.current = null;
   }, [selectedFile]);
 
@@ -586,7 +837,7 @@ const InstantPricing = () => {
 
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
         const d = await r.json();
-        const depthIn = dimensions?.mm?.t ? parseFloat(dimensions.mm.t) / 25.4 : 2 / 25.4;
+        const depthIn = displayDimensions?.mm?.t ? parseFloat(displayDimensions.mm.t) / 25.4 : 2 / 25.4;
         const mappedHoles = (d.holes || []).map((h, idx) => ({
           id: idx,
           diameterInches: h.diameter_in,
@@ -628,7 +879,7 @@ const InstantPricing = () => {
         try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       }
     };
-  }, [hasHoleDependentService, selectedFile, dimensions?.mm?.t, isLoadingUnfold]);
+  }, [hasHoleDependentService, selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, isDetectingHoles]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {
@@ -651,7 +902,7 @@ const InstantPricing = () => {
   // ── Real-Time Price Calculation ───────────────────────
   useEffect(() => {
     // Guard: Need dimensions and at least one selection
-    if (!dimensions || (!selectedMetal && !selectedProductionService)) {
+    if (!displayDimensions || (!selectedMetal && !selectedProductionService)) {
       setPriceEstimate(null);
       return;
     }
@@ -659,23 +910,14 @@ const InstantPricing = () => {
     const getEstimate = async () => {
       setIsCalculatingPrice(true);
       try {
-        // Normalize thickness to inches for backend pricing (sheet_cost_rates use inches)
-        const thicknessInInches = (() => {
-          if (!selectedThickness || !selectedMetal) return selectedThickness;
-          const tObj = (selectedMetal.quick_look?.thicknesses || []).find(th => String(th.value) === String(selectedThickness));
-          if (!tObj) return selectedThickness;
-          return tObj.metric === 'mm' ? (parseFloat(tObj.value) / 25.4).toString() : tObj.value;
-        })();
-
-        const fallbackPerimeterMm = ((parseFloat(dimensions?.inches?.l) || 0) + (parseFloat(dimensions?.inches?.w) || 0)) * 2 * 25.4;
-        const fallbackPierceCount = Math.max(1, detectedHoles.length || 1);
+        const thicknessValueIn = pricingThicknessInches > 0 ? pricingThicknessInches.toFixed(6) : null;
 
         const payload = {
           metal_id: selectedMetal?.id || null,
           service_id: selectedProductionService?.id || null,
-          thickness_value: thicknessInInches,
-          length_in: dimensions.inches.l,
-          height_in: dimensions.inches.w,
+          thickness_value: thicknessValueIn,
+          length_in: displayDimensions.inches.l,
+          height_in: displayDimensions.inches.w,
           quantity: quantity,
           additional_services: selectedAdditionalServices.map(s => {
             const opt = selectedFinishColors[s.id];
@@ -693,19 +935,7 @@ const InstantPricing = () => {
             name: cs.name,
             price: cs.price || 0
           })),
-          technical_data: backendData ? {
-            totalPerimeter: backendData.totalPerimeter || fallbackPerimeterMm,
-            pierceCount: backendData.pierceCount || fallbackPierceCount,
-            bends: backendData.bends || []
-          } : dxfTechData ? {
-            totalPerimeter: dxfTechData.totalPerimeter,
-            pierceCount: dxfTechData.pierceCount,
-            bends: []
-          } : {
-            totalPerimeter: fallbackPerimeterMm,
-            pierceCount: fallbackPierceCount,
-            bends: []
-          }
+          technical_data: pricingTechnicalData
         };
         const res = await calculatePrice(payload);
         if (res.success) {
@@ -733,7 +963,7 @@ const InstantPricing = () => {
     return () => clearTimeout(timeoutId);
     // toast/isCNC are derived — including them triggers unnecessary recalcs on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMetal, selectedProductionService, selectedThickness, selectedAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, dimensions, quantity, backendData, dxfTechData]);
+  }, [selectedMetal, selectedProductionService, selectedAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData]);
 
   // ── Dimension Validation Helper ────────────────────────
 
@@ -1337,7 +1567,7 @@ const InstantPricing = () => {
                       csOptions={csOptions}
                       hwItemsByType={hwItemsByType}
                       allServices={allServices}
-                      dimensions={dimensions}
+                      dimensions={displayDimensions || dimensions}
                       onDimensionsExtracted={setDimensions}
                       onProgress={handleStepViewerProgress}
                       onModelLoaded={handleStepViewerLoaded}
@@ -1404,7 +1634,11 @@ const InstantPricing = () => {
               <div className="ip-right-panel">
                 <PricingSidebar
                   selectedFile={selectedFile}
-                  dimensions={dimensions}
+                  dimensions={displayDimensions || dimensions}
+                  unit={unit}
+                  measurementMetrics={measurementMetrics}
+                  dimensionSourceLabel={dimensionSourceLabel}
+                  thicknessSourceLabel={thicknessSourceLabel}
                   selectedProductionService={selectedProductionService}
                   setSelectedProductionService={setSelectedProductionService}
                   selectedCategory={selectedCategory}
@@ -1412,6 +1646,7 @@ const InstantPricing = () => {
                   selectedMetal={selectedMetal}
                   setSelectedMetal={setSelectedMetal}
                   selectedThickness={selectedThickness}
+                  selectedThicknessDisplay={selectedThicknessDisplay}
                   selectedThicknessMM={selectedThicknessMM}
                   setSelectedThickness={setSelectedThickness}
                   quantity={quantity}
@@ -1510,7 +1745,7 @@ const InstantPricing = () => {
                       countersinkMarkerStyle="camouflage"
                       csOptions={csOptions}
                       isCountersinkingActive={isCountersinkingActive}
-                      dimensions={dimensions}
+                      dimensions={displayDimensions || dimensions}
                       allServices={allServices}
                       backendData={backendData}
                       onProgress={handleStepViewerProgress}
@@ -1570,7 +1805,7 @@ const InstantPricing = () => {
                     </div>
                   )}
                 </div>
-                {dimensions && (
+                {displayDimensions && (
                   <div className="ip-qf-dims">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>{unit === 'mm' ? 'Metric' : 'Imperial'} Dims</span>
@@ -1587,9 +1822,33 @@ const InstantPricing = () => {
                       ].map(item => (
                         <div key={item.key} style={{ background: item.bg, border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
                           <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
-                          <div style={{ fontSize: '14px', fontWeight: 900, color: item.color, fontFamily: 'monospace', lineHeight: 1.2 }}>{unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 900, color: item.color, fontFamily: 'monospace', lineHeight: 1.2 }}>{unit === 'mm' ? displayDimensions.mm[item.key] : displayDimensions.inches[item.key]}</div>
                         </div>
                       ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 6 }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Area</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>
+                          {unit === 'mm' ? (measurementMetrics.areaMm2 / 100).toFixed(2) : (measurementMetrics.areaMm2 / (25.4 * 25.4)).toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'cm²' : 'in²'}</div>
+                      </div>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Perimeter</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>
+                          {unit === 'mm' ? measurementMetrics.perimeterMm.toFixed(2) : (measurementMetrics.perimeterMm / 25.4).toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'mm' : 'in'}</div>
+                      </div>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pierces</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>{measurementMetrics.pierceCount}</div>
+                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>count</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>
+                      Size source: {dimensionSourceLabel} | Thickness source: {thicknessSourceLabel}
                     </div>
                   </div>
                 )}
@@ -1629,7 +1888,7 @@ const InstantPricing = () => {
                       <div className="ip-step-summary">
                         <div className="label"><Layers size={10} /> THICKNESS</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="value">{selectedThickness}mm</span>
+                          <span className="value">{selectedThicknessDisplay || selectedThickness}</span>
                           <button className="change-btn" onClick={() => { setConfigStep(3); }}>CHANGE</button>
                         </div>
                       </div>
@@ -1687,14 +1946,15 @@ const InstantPricing = () => {
                         {allServices.filter(s => s.is_production).map(svc => {
                           const isActive = selectedProductionService?.id === svc.id;
                           const cfg = svc.config || {};
-                          const dim = dimensions?.mm || null;
+                          const dim = displayDimensions?.mm || null;
                           const dL = dim ? parseFloat(dim.l) : 0;
                           const dW = dim ? parseFloat(dim.w) : 0;
                           const dT = dim ? parseFloat(dim.t) : 0;
+                          const hasThickness = dT > 0;
                           const isTooLarge = dim && ((cfg.max_x && dL > cfg.max_x) || (cfg.max_y && dW > cfg.max_y));
                           const isTooSmall = dim && ((cfg.min_x && dL < cfg.min_x) || (cfg.min_y && dW < cfg.min_y));
-                          const isTooThick = dim && cfg.max_z && dT > cfg.max_z;
-                          const isTooThin = dim && cfg.min_z && dT < cfg.min_z;
+                          const isTooThick = dim && hasThickness && cfg.max_z && dT > cfg.max_z;
+                          const isTooThin = dim && hasThickness && cfg.min_z && dT < cfg.min_z;
                           const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
                           const lockReason = isTooThick
                             ? `Part thickness ${dT.toFixed(3)}mm exceeds max ${parseFloat(cfg.max_z).toFixed(3)}mm`
@@ -1811,14 +2071,15 @@ const InstantPricing = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {(allMetals || []).filter(m => m.category_id === selectedCategory?.id).map(met => {
                           const isActive = selectedMetal?.id === met.id;
-                          const dim = dimensions?.mm || { l: 0, w: 0, t: 0 };
+                          const dim = displayDimensions?.mm || { l: 0, w: 0, t: 0 };
                           const mL = parseFloat(dim.l) || 0;
                           const mW = parseFloat(dim.w) || 0;
                           const mT = parseFloat(dim.t) || 0;
+                          const hasThickness = mT > 0;
                           const isTooLarge = (met.max_x && mL > met.max_x) || (met.max_y && mW > met.max_y);
                           const isTooSmall = (met.min_x && mL < met.min_x) || (met.min_y && mW < met.min_y);
-                          const isTooThick = met.max_z && mT > met.max_z;
-                          const isTooThin = met.min_z && mT < met.min_z;
+                          const isTooThick = hasThickness && met.max_z && mT > met.max_z;
+                          const isTooThin = hasThickness && met.min_z && mT < met.min_z;
                           const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
                           const lockReason = isTooThick
                             ? `Part thickness ${mT.toFixed(3)}mm exceeds max ${parseFloat(met.max_z).toFixed(3)}mm`
@@ -1876,7 +2137,7 @@ const InstantPricing = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
                         {(selectedMetal?.quick_look?.thicknesses || []).map(t => {
                           const tMM = t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
-                          const modelTMM = parseFloat(dimensions?.mm?.t || 0);
+                          const modelTMM = resolvedModelThicknessMm;
                           const isMatch = modelTMM > 0 && Math.abs(tMM - modelTMM) < 0.15;
                           const isActive = selectedThickness === t.value;
                           return (
@@ -1984,7 +2245,7 @@ const InstantPricing = () => {
                             const lockReason = isBendUnsupported
                               ? `${selectedMetal?.name} is typically not bendable`
                               : isThicknessLocked
-                                ? `Not available for ${selectedThickness}mm thickness`
+                                ? `Not available for ${selectedThicknessDisplay || selectedThickness || 'selected'} thickness`
                                 : isNoBends
                                   ? 'No bends detected in uploaded model'
                                   : '';
@@ -2159,14 +2420,14 @@ const InstantPricing = () => {
                         { label: 'Production Method', value: selectedProductionService?.title, step: 0 },
                         { label: 'Category', value: selectedCategory?.name, step: 1 },
                         { label: 'Material', value: selectedMetal?.name, step: 2 },
-                        { label: 'Thickness', value: selectedThickness ? `${selectedThickness}"` : null, step: 3 },
+                        { label: 'Thickness', value: selectedThickness ? (selectedThicknessDisplay || String(selectedThickness)) : null, step: 3 },
                         { label: 'Additional Services', value: configStep >= 4 ? `${selectedAdditionalServices.length} selected` : null, step: 4 },
                       ].map((item, i, arr) => {
                         const active = configStep === item.step;
                         const displayValue = item.step === 0 && selectedProductionService?.title ? selectedProductionService.title
                           : item.step === 1 && selectedCategory?.name ? selectedCategory.name
                             : item.step === 2 && selectedMetal?.name ? selectedMetal.name
-                              : item.step === 3 && selectedThickness ? `${selectedThickness}"`
+                              : item.step === 3 && selectedThickness ? (selectedThicknessDisplay || String(selectedThickness))
                                 : item.step === 4 && configStep >= 4 ? `${selectedAdditionalServices.length} selected`
                                   : null;
                         return (

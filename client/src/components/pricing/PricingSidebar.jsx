@@ -1,13 +1,17 @@
 import React from 'react';
 import {
-  Info, FileText, Shield, Box, Layers, ChevronRight, Loader2, TrendingDown, Grid
+  Info, FileText, ChevronRight, Loader2, TrendingDown
 } from 'lucide-react';
 
 const PricingSidebar = ({
   selectedFile,
   dimensions,
   unit,
+  measurementMetrics,
+  dimensionSourceLabel,
+  thicknessSourceLabel,
   selectedThickness,
+  selectedThicknessDisplay,
   selectedThicknessMM,
   isCalculatingPrice,
   priceEstimate,
@@ -17,6 +21,24 @@ const PricingSidebar = ({
   isQuoteFlowActive
 }) => {
   if (!selectedFile) return null;
+
+  const activeUnit = unit === 'inch' ? 'inch' : 'mm';
+  const metrics = measurementMetrics || {};
+
+  const areaValue = activeUnit === 'mm'
+    ? (Number(metrics.areaMm2 || 0) / 100)
+    : (Number(metrics.areaMm2 || 0) / (25.4 * 25.4));
+  const areaUnitLabel = activeUnit === 'mm' ? 'cm²' : 'in²';
+
+  const perimeterValue = activeUnit === 'mm'
+    ? Number(metrics.perimeterMm || 0)
+    : (Number(metrics.perimeterMm || 0) / 25.4);
+  const perimeterUnitLabel = activeUnit === 'mm' ? 'mm' : 'in';
+
+  const diagonalValue = activeUnit === 'mm'
+    ? Number(metrics.diagonalMm || 0)
+    : (Number(metrics.diagonalMm || 0) / 25.4);
+  const diagonalUnitLabel = activeUnit === 'mm' ? 'mm' : 'in';
 
   return (
     <aside className="ip-sidebar" style={{
@@ -83,9 +105,9 @@ const PricingSidebar = ({
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                     <span style={{ fontSize: '15px', fontWeight: 900, color: item.color, fontFamily: 'monospace' }}>
-                      {parseFloat(unit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]).toFixed(3)}
+                      {parseFloat(activeUnit === 'mm' ? dimensions.mm[item.key] : dimensions.inches[item.key]).toFixed(3)}
                     </span>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{unit}</span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{activeUnit}</span>
                   </div>
                 </div>
               ))}
@@ -93,13 +115,17 @@ const PricingSidebar = ({
 
             {selectedThickness && !isQuoteFlowActive && (
               <div style={{ marginTop: 6, background: '#fdf4ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: '#a855f7', textTransform: 'uppercase' }}>New Selection (NT)</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-                  <span style={{ fontSize: '14px', fontWeight: 900, color: '#a855f7', fontFamily: 'monospace' }}>
-                    {parseFloat(unit === 'mm' ? (selectedThicknessMM || 0) : selectedThickness).toFixed(3)}
-                  </span>
-                  <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{unit}</span>
+                <div style={{ fontSize: '10px', fontWeight: 800, color: '#a855f7', textTransform: 'uppercase' }}>Selected Stock</div>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#7e22ce', fontFamily: 'monospace' }}>
+                  {selectedThicknessDisplay || `${Number(selectedThicknessMM || 0).toFixed(3)} mm`}
                 </div>
+              </div>
+            )}
+
+            {!isQuoteFlowActive && (
+              <div style={{ marginTop: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: '#475569' }}>Size source: {dimensionSourceLabel || 'Model'}</div>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: '#475569', marginTop: 2 }}>Thickness source: {thicknessSourceLabel || 'Model'}</div>
               </div>
             )}
           </div>
@@ -113,18 +139,45 @@ const PricingSidebar = ({
                   <span style={{ fontSize: '10px', fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Volume</span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                     <span style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>
-                      {parseFloat(unit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume).toFixed(3)}
+                      {parseFloat(activeUnit === 'mm' ? dimensions.mm.volume : dimensions.inches.volume).toFixed(3)}
                     </span>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'mm³' : 'in³'}</span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{activeUnit === 'mm' ? 'mm³' : 'in³'}</span>
                   </div>
                 </div>
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '10px', fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Footprint</span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                     <span style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>
-                      {parseFloat(unit === 'mm' ? (parseFloat(dimensions.mm.l) * parseFloat(dimensions.mm.w) / 100) : (parseFloat(dimensions.inches.l) * parseFloat(dimensions.inches.w))).toFixed(3)}
+                      {parseFloat(areaValue).toFixed(3)}
                     </span>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'cm²' : 'in²'}</span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{areaUnitLabel}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Perimeter</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>
+                      {parseFloat(perimeterValue).toFixed(3)}
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{perimeterUnitLabel}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Diagonal</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>
+                      {parseFloat(diagonalValue).toFixed(3)}
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{diagonalUnitLabel}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Pierces</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>
+                      {Number(metrics.pierceCount || 0)}
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>count</span>
                   </div>
                 </div>
               </div>

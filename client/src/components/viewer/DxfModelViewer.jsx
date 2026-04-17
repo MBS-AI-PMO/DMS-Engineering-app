@@ -105,8 +105,8 @@ const DxfModelViewer = ({
 
         const w = maxX - minX, h = maxY - minY;
         const dims = {
-          mm: { l: toMm(w).toFixed(2), w: toMm(h).toFixed(2), t: '2.00', volume: '0' },
-          inches: { l: (toMm(w) / 25.4).toFixed(3), w: (toMm(h) / 25.4).toFixed(3), t: '0.078', volume: '0' },
+          mm: { l: toMm(w).toFixed(2), w: toMm(h).toFixed(2), t: '0.000', volume: '0' },
+          inches: { l: (toMm(w) / 25.4).toFixed(3), w: (toMm(h) / 25.4).toFixed(3), t: '0.000', volume: '0' },
           isNativeInches: isInch
         };
         onDimensionsExtracted(dims);
@@ -184,7 +184,7 @@ const DxfModelViewer = ({
 
   // --- Three.js DXF 3D View ---
   useEffect(() => {
-    if (!selectedFile || viewMode !== '3d' || !dxfSvg || !containerRef.current) return;
+    if (!selectedFile?.id || viewMode !== '3d' || !dxfSvg || !containerRef.current) return;
     const el = containerRef.current;
     let reqId;
 
@@ -255,15 +255,14 @@ const DxfModelViewer = ({
       }
       metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
 
-      const isWrinkled = !!(activeFinishColor?.is_wrinkled || activeFinishColor?.name?.toUpperCase().includes('WRINKLED'));
       const extrudeMat = new THREE.MeshStandardMaterial({
-        color: activeFinishColor ? new THREE.Color(activeFinishColor.color) : 0xcecece,
-        roughness: isFinishPowderCoating ? (isWrinkled ? 0.68 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6,
-        metalness: isWrinkled ? 0.15 : 0.05,
-        emissive: (activeFinishColor && !isFinishPowderCoating) ? new THREE.Color(activeFinishColor.color) : 0x000000,
-        emissiveIntensity: (activeFinishColor && !isFinishPowderCoating) ? 0.15 : 0,
-        normalMap: isWrinkled ? wrinkleNormal.current : null,
-        normalScale: isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0)
+        color: 0xcecece,
+        roughness: 0.6,
+        metalness: 0.05,
+        emissive: 0x000000,
+        emissiveIntensity: 0,
+        normalMap: null,
+        normalScale: new THREE.Vector2(0, 0)
       });
       extrudeMatRef.current = extrudeMat;
 
