@@ -853,9 +853,9 @@ const InstantPricing = () => {
     qty1PriceRef.current = null;
   }, [selectedFile]);
 
-  // ── STEP Hole Detection for Tapping & Hardware ───────
+  // ── STEP Hole Detection (pierce count + tapping/hardware) ───────
   useEffect(() => {
-    if (!hasHoleDependentService || !selectedFile || !isStepFile(selectedFile.file.name)) return;
+    if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
 
     const backendHoles = Array.isArray(backendData?.detectedHoles) ? backendData.detectedHoles : [];
     if (backendHoles.length > 0) {
@@ -881,7 +881,8 @@ const InstantPricing = () => {
     const detect = async () => {
       holeDetectionAttemptedRef.current = true;
       detectHolesAbortRef.current = new AbortController();
-      setIsDetectingHoles(true);
+      const showDetectingOverlay = hasHoleDependentService;
+      if (showDetectingOverlay) setIsDetectingHoles(true);
       const timeoutId = setTimeout(() => {
         try { detectHolesAbortRef.current?.abort(); } catch { /* noop */ }
       }, 20000);
@@ -938,7 +939,7 @@ const InstantPricing = () => {
         stepHolesDetectedRef.current = true;
       } finally {
         clearTimeout(timeoutId);
-        setIsDetectingHoles(false);
+        if (showDetectingOverlay) setIsDetectingHoles(false);
         detectHolesAbortRef.current = null;
       }
     };
@@ -948,7 +949,7 @@ const InstantPricing = () => {
         try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       }
     };
-  }, [hasHoleDependentService, selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, backendData?.detectedHoles]);
+  }, [selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, backendData?.detectedHoles, hasHoleDependentService]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {
