@@ -198,34 +198,21 @@ const validateMetalBounds = ({ metal, metalConfig, lengthIn, heightIn, thickness
     const minZ = inToMm(metalConfig?.min_z ?? metal?.min_z);
     const maxZ = inToMm(metalConfig?.max_z ?? metal?.max_z);
 
-    if (maxX !== null && lengthMm > maxX) {
+    if (maxX !== null && maxX > 0 && lengthMm > maxX) {
         return `Part length ${lengthMm.toFixed(3)} mm exceeds max ${maxX.toFixed(3)} mm for ${metal.name}.`;
     }
     if (minX !== null && minX > 0 && lengthMm < minX) {
         return `Part length ${lengthMm.toFixed(3)} mm is below min ${minX.toFixed(3)} mm for ${metal.name}.`;
     }
-    if (maxY !== null && heightMm > maxY) {
+    if (maxY !== null && maxY > 0 && heightMm > maxY) {
         return `Part width ${heightMm.toFixed(3)} mm exceeds max ${maxY.toFixed(3)} mm for ${metal.name}.`;
     }
     if (minY !== null && minY > 0 && heightMm < minY) {
         return `Part width ${heightMm.toFixed(3)} mm is below min ${minY.toFixed(3)} mm for ${metal.name}.`;
     }
-    if (maxZ !== null && thicknessMm > maxZ) {
-        return `Part thickness ${thicknessMm.toFixed(3)} mm exceeds max ${maxZ.toFixed(3)} mm for ${metal.name}.`;
-    }
-    if (minZ !== null && minZ > 0 && thicknessMm < minZ) {
-        return `Part thickness ${thicknessMm.toFixed(3)} mm is below min ${minZ.toFixed(3)} mm for ${metal.name}.`;
-    }
-
-    const cfgThicknesses = Array.isArray(metalConfig?.available_thicknesses)
-        ? metalConfig.available_thicknesses.map(toFiniteNumber).filter((v) => v !== null && v > 0)
-        : [];
-    if (cfgThicknesses.length > 0) {
-        const nearest = findClosest(cfgThicknesses, thicknessMm);
-        if (nearest && nearest.delta > 0.05) {
-            return `Thickness ${thicknessMm.toFixed(3)} mm is not configured for ${metal.name}. Closest allowed is ${nearest.value.toFixed(3)} mm.`;
-        }
-    }
+    // Thickness validation skipped — user selects from available_thicknesses
+    // dropdown.  dimensions.mm.t is the model's physical thickness which can
+    // differ from stock thickness on bent/formed parts.
 
     return null;
 };

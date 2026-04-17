@@ -61,38 +61,23 @@ const validateMetalBounds = ({ metalName, metalConfig, lengthIn, widthIn, thickn
     const minZ = inToMm(metalConfig?.min_z);
     const maxZ = inToMm(metalConfig?.max_z);
 
-    if (maxX !== null && lengthMm > maxX) {
+    if (maxX !== null && maxX > 0 && lengthMm > maxX) {
         return `Part length ${lengthMm.toFixed(3)} mm exceeds max ${maxX.toFixed(3)} mm for ${metalName}.`;
     }
     if (minX !== null && minX > 0 && lengthMm < minX) {
         return `Part length ${lengthMm.toFixed(3)} mm is below min ${minX.toFixed(3)} mm for ${metalName}.`;
     }
-    if (maxY !== null && widthMm > maxY) {
+    if (maxY !== null && maxY > 0 && widthMm > maxY) {
         return `Part width ${widthMm.toFixed(3)} mm exceeds max ${maxY.toFixed(3)} mm for ${metalName}.`;
     }
     if (minY !== null && minY > 0 && widthMm < minY) {
         return `Part width ${widthMm.toFixed(3)} mm is below min ${minY.toFixed(3)} mm for ${metalName}.`;
     }
-    if (maxZ !== null && thicknessMm > maxZ) {
-        return `Part thickness ${thicknessMm.toFixed(3)} mm exceeds max ${maxZ.toFixed(3)} mm for ${metalName}.`;
-    }
-    if (minZ !== null && minZ > 0 && thicknessMm < minZ) {
-        return `Part thickness ${thicknessMm.toFixed(3)} mm is below min ${minZ.toFixed(3)} mm for ${metalName}.`;
-    }
-
-    const cfgThicknesses = Array.isArray(metalConfig?.available_thicknesses)
-        ? metalConfig.available_thicknesses.map(toFiniteNumber).filter((v) => v !== null && v > 0)
-        : [];
-    if (cfgThicknesses.length > 0) {
-        const nearest = cfgThicknesses.reduce((acc, current) => {
-            const delta = Math.abs(current - thicknessMm);
-            if (!acc || delta < acc.delta) return { value: current, delta };
-            return acc;
-        }, null);
-        if (nearest && nearest.delta > 0.05) {
-            return `Thickness ${thicknessMm.toFixed(3)} mm is not configured for ${metalName}. Closest allowed is ${nearest.value.toFixed(3)} mm.`;
-        }
-    }
+    // Thickness validation is not needed here — the user selects from a
+    // dropdown of available_thicknesses in the UI.  The dimensions.mm.t
+    // value is the model's physical thickness which can differ from stock
+    // thickness (e.g. bent/formed parts), so comparing it against the
+    // allowed list produces false rejections.
 
     return null;
 };
