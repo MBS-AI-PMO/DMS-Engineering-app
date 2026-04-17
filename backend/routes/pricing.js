@@ -495,13 +495,68 @@ router.delete('/admin/laser-rates/:id', authenticate, requireAdmin, async (req, 
 
 // ── Sheet Cost Rates Admin CRUD ───────────────────────────
 
+const parseSheetCostRatePayload = (body = {}) => {
+    const family = typeof body.family === 'string' ? body.family.trim() : '';
+    if (!family) {
+        return { error: 'family is required' };
+    }
+
+    const hasThicknessPoint = body.thickness != null && String(body.thickness).trim() !== '';
+    let minThick;
+    let maxThick;
+
+    if (hasThicknessPoint) {
+        const thickness = parseFloat(body.thickness);
+        if (!Number.isFinite(thickness) || thickness <= 0) {
+            return { error: 'thickness must be a positive number' };
+        }
+        minThick = thickness;
+        maxThick = thickness;
+    } else {
+        minThick = parseFloat(body.min_thick);
+        maxThick = parseFloat(body.max_thick);
+        if (!Number.isFinite(minThick) || !Number.isFinite(maxThick) || minThick <= 0 || maxThick <= 0) {
+            return { error: 'thickness is required' };
+        }
+        if (maxThick < minThick) {
+            return { error: 'max_thick must be greater than or equal to min_thick' };
+        }
+    }
+
+    // Column name is legacy; value now represents cost for a 5x10 sheet.
+    const sheetCost = parseFloat(body.sheet_cost_5x10 ?? body.sheet_cost_4x8);
+    if (!Number.isFinite(sheetCost) || sheetCost < 0) {
+        return { error: 'sheet_cost_5x10 must be a valid non-negative number' };
+    }
+
+    let gauge = null;
+    if (body.ga != null && String(body.ga).trim() !== '') {
+        gauge = parseInt(body.ga, 10);
+        if (!Number.isFinite(gauge)) {
+            return { error: 'ga must be an integer' };
+        }
+    }
+
+    return {
+        family,
+        minThick,
+        maxThick,
+        gauge,
+        sheetCost,
+    };
+};
+
 /**
  * GET /api/admin/pricing/sheet-cost-rates
  */
 router.get('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT * FROM sheet_cost_rates ORDER BY family, min_thick ASC'
+            `SELECT *,
+                    COALESCE(max_thick, min_thick) AS thickness,
+                    sheet_cost_4x8 AS sheet_cost_5x10
+             FROM sheet_cost_rates
+             ORDER BY family, COALESCE(max_thick, min_thick) ASC`
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -514,17 +569,25 @@ router.get('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, re
  * POST /api/admin/pricing/sheet-cost-rates
  */
 router.post('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, res) => {
-    const { family, min_thick, max_thick, ga, sheet_cost_4x8 } = req.body;
-    if (!family || min_thick == null || max_thick == null || sheet_cost_4x8 == null) {
-        return res.status(400).json({ success: false, error: 'family, min_thick, max_thick, and sheet_cost_4x8 are required' });
+    const parsed = parseSheetCostRatePayload(req.body || {});
+    if (parsed.error) {
+        return res.status(400).json({ success: false, error: parsed.error });
     }
+
     try {
         const result = await db.query(
             `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8)
              VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [family, parseFloat(min_thick), parseFloat(max_thick), ga ? parseInt(ga) : null, parseFloat(sheet_cost_4x8)]
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.sheetCost]
         );
-        res.json({ success: true, data: result.rows[0] });
+        res.json({
+            success: true,
+            data: {
+                ...result.rows[0],
+                thickness: result.rows[0].max_thick,
+                sheet_cost_5x10: result.rows[0].sheet_cost_4x8,
+            }
+        });
     } catch (err) {
         console.error('Error creating sheet cost rate:', err);
         res.status(500).json({ success: false, error: 'Failed to create sheet cost rate' });
@@ -536,16 +599,27 @@ router.post('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, r
  */
 router.put('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const { family, min_thick, max_thick, ga, sheet_cost_4x8 } = req.body;
+    const parsed = parseSheetCostRatePayload(req.body || {});
+    if (parsed.error) {
+        return res.status(400).json({ success: false, error: parsed.error });
+    }
+
     try {
         const result = await db.query(
             `UPDATE sheet_cost_rates
              SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, updated_at = NOW()
              WHERE id = $6 RETURNING *`,
-            [family, parseFloat(min_thick), parseFloat(max_thick), ga ? parseInt(ga) : null, parseFloat(sheet_cost_4x8), id]
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.sheetCost, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Rate not found' });
-        res.json({ success: true, data: result.rows[0] });
+        res.json({
+            success: true,
+            data: {
+                ...result.rows[0],
+                thickness: result.rows[0].max_thick,
+                sheet_cost_5x10: result.rows[0].sheet_cost_4x8,
+            }
+        });
     } catch (err) {
         console.error('Error updating sheet cost rate:', err);
         res.status(500).json({ success: false, error: 'Failed to update sheet cost rate' });
@@ -717,9 +791,9 @@ router.post('/configure-preview', async (req, res) => {
  * Pricing engine based on CSV formulas:
  *
  * MATERIAL COST  — Sheet nesting formula (sheet metal material.csv)
- *   material_cost = sheet_cost_4x8 / parts_per_sheet
+ *   material_cost = sheet_cost_5x10 / parts_per_sheet
  *   parts_per_sheet = floor(usable_L / buffered_L) × floor(usable_W / buffered_W)
- *   Sheet = 96×48 in (4×8). Buffers: edge=0.125, part=0.0625, kerf=0.01
+ *   Sheet = 120x60 in (5x10). Buffers: edge=0.125, part=0.0625, kerf=0.01
  *
  * LASER CUTTING  — Time-based formula (laser.csv)
  *   runtime_h = (perimeter_mm / cut_rate_mm_s / 3600) + (pierce_count × pierce_time_s / 3600)
@@ -811,26 +885,52 @@ router.post('/calculate', async (req, res) => {
 
         // ── MATERIAL COST (Sheet Nesting Formula) ─────────────────────────────
         // Source: sheet metal material.csv
-        // Cost = sheet_cost_4x8 / parts_per_sheet (per unit)
-        // Lookup: sheet_cost_rates WHERE family matches AND min_thick < thickness AND max_thick >= thickness
+        // Cost = sheet_cost_5x10 / parts_per_sheet (per unit)
+        // Lookup priority:
+        // 1) exact/range match in selected family
+        // 2) closest thickness in selected family
+        // 3) generic fallback family
         let material_cost = 0;
 
         const EDGE_BUFFER = 0.125;   // inches – distance from sheet edge to parts
         const PART_BUFFER = 0.0625;  // inches – gap between parts
         const KERF_WIDTH = 0.01;    // inches – laser kerf
-        const SHEET_L = 96;      // inches – 8 ft (long side of 4×8 sheet)
-        const SHEET_W = 48;      // inches – 4 ft (short side of 4×8 sheet)
+        const SHEET_L = 120;      // inches – 10 ft (long side of 5x10 sheet)
+        const SHEET_W = 60;       // inches – 5 ft (short side of 5x10 sheet)
 
         if (metal && thickness_value && parseFloat(length_in) > 0 && parseFloat(height_in) > 0) {
             const thickNum = parseFloat(thickness_value);
             const family = metal.material_family || 'generic';
 
-            const sheetRes = await db.query(
+            let sheetRes = await db.query(
                 `SELECT sheet_cost_4x8 FROM sheet_cost_rates
-                 WHERE family = $1 AND min_thick < $2 AND max_thick >= $3
-                 ORDER BY min_thick ASC LIMIT 1`,
-                [family, thickNum - 0.001, thickNum]
+                 WHERE family = $1 AND min_thick <= $2 AND max_thick >= $2
+                 ORDER BY max_thick ASC, min_thick ASC
+                 LIMIT 1`,
+                [family, thickNum]
             );
+
+            if (sheetRes.rows.length === 0) {
+                sheetRes = await db.query(
+                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                     WHERE family = $1
+                     ORDER BY ABS(COALESCE(max_thick, min_thick) - $2) ASC,
+                              COALESCE(max_thick, min_thick) ASC
+                     LIMIT 1`,
+                    [family, thickNum]
+                );
+            }
+
+            if (sheetRes.rows.length === 0 && family !== 'generic') {
+                sheetRes = await db.query(
+                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                     WHERE family = 'generic'
+                     ORDER BY ABS(COALESCE(max_thick, min_thick) - $1) ASC,
+                              COALESCE(max_thick, min_thick) ASC
+                     LIMIT 1`,
+                    [thickNum]
+                );
+            }
 
             if (sheetRes.rows.length > 0) {
                 const sheetCost = parseFloat(sheetRes.rows[0].sheet_cost_4x8);
