@@ -128,7 +128,12 @@ def _get_edge_points(edge, n=5):
     if curve_type == "Part::GeomLine":
         sample_n = 2
     elif curve_type in ("Part::GeomCircle", "Part::GeomArcOfCircle", "Part::GeomEllipse", "Part::GeomArcOfEllipse"):
-        sample_n = 24
+        try:
+            # Adaptive sampling for smoother holes/arcs in 2D without exploding point count.
+            edge_len = float(edge.Length)
+            sample_n = max(24, min(96, int(edge_len / 1.5)))
+        except Exception:
+            sample_n = 24
     else:
         sample_n = max(n, 24)
     pts = edge.discretize(Number=sample_n)
@@ -179,9 +184,9 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
         root_point = np.array([float(root_center.x), float(root_center.y), float(root_center.z)], dtype=float)
 
         thickness_mm = float(thickness) if thickness and float(thickness) > 0 else 0.0
-        root_area = max(1.0, float(root_face.Area))
-        # Keep threshold low enough to catch small bosses/embosses while filtering numeric noise.
-        min_face_area = max(0.35, root_area * 0.0005)
+        # Keep threshold low enough to capture small square bosses (e.g., ~4x4 to ~6x6 mm)
+        # while still filtering tiny numerical sliver faces.
+        min_face_area = max(0.5, (thickness_mm * thickness_mm * 0.15) if thickness_mm > 0 else 0.5)
 
         raised_faces = 0
         raised_same_orientation = 0
@@ -921,6 +926,8 @@ def unfold_with_lib(filepath, profile="full"):
     flat_vertices = []
     cut_edges_2d = []
     bend_edges_2d = []
+    cut_seg_counts = {}
+    cut_seg_points = {}
     emit_progress(70, "Building bend hierarchy")
     
     def build_frontend_tree(node_id, parent_id=None, accumulated_m=None):
@@ -953,7 +960,11 @@ def unfold_with_lib(filepath, profile="full"):
         for e in flat_face.Edges:
             pts = _get_edge_points(e)
             for i in range(len(pts) - 1):
-                cut_edges_2d.extend(pts[i] + pts[i + 1])
+                p1, p2 = pts[i], pts[i + 1]
+                seg_hash = _get_line_hash(p1, p2, tol=0.05)
+                cut_seg_counts[seg_hash] = cut_seg_counts.get(seg_hash, 0) + 1
+                if seg_hash not in cut_seg_points:
+                    cut_seg_points[seg_hash] = p1 + p2
 
         # Bend Lines
         if "bend_line" in node_data:
@@ -1018,6 +1029,12 @@ def unfold_with_lib(filepath, profile="full"):
         return tree_node
 
     root_node = build_frontend_tree(root_idx)
+
+    # Keep only boundary segments in the flat cut profile.
+    # Shared segments are internal seams between unfolded faces and should not be shown as cut lines.
+    for seg_hash, count in cut_seg_counts.items():
+        if count == 1:
+            cut_edges_2d.extend(cut_seg_points[seg_hash])
 
     face_meshes = {}
     if include_face_meshes:
