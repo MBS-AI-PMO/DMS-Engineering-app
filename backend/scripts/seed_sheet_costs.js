@@ -3,7 +3,7 @@ const db = require('../db');
 /**
  * Seed placeholder sheet cost rates for all metal categories.
  *
- * Costs are approximate US supplier prices per 4×8 sheet (96"×48") as of 2024.
+ * Costs are approximate US supplier prices per 5x10 sheet (120"x60") as of 2024.
  * They are PLACEHOLDERS only — replace with your actual supplier quotes
  * via the Sheet Costs admin page once you have real data.
  *
@@ -25,8 +25,14 @@ const COSTS = {
         { ga: 14, min: 0.057, max: 0.075, cost: 42.00  },  // ~0.064"
         { ga: 12, min: 0.075, max: 0.093, cost: 52.00  },  // ~0.081"
         { ga: 10, min: 0.093, max: 0.120, cost: 65.00  },  // ~0.102"
-        { ga:  7, min: 0.120, max: 0.200, cost: 85.00  },  // ~0.125–0.190"
-        { ga: null, min: 0.200, max: 99,  cost: 125.00 },  // plate
+        { ga:  7, min: 0.120, max: 0.200, cost: 85.00  },
+        { ga:  6, min: 0.200, max: 0.240, cost: 100.00 },
+        { ga:  5, min: 0.240, max: 0.290, cost: 118.00 },
+        { ga:  4, min: 0.290, max: 0.350, cost: 137.00 },
+        { ga:  3, min: 0.350, max: 0.420, cost: 158.00 },
+        { ga:  2, min: 0.420, max: 0.500, cost: 182.00 },
+        { ga:  1, min: 0.500, max: 0.600, cost: 210.00 },
+        { ga: null, min: 0.600, max: 99,  cost: 245.00 },  // plate
     ],
     'Steel': [
         { ga: 22, min: 0.000, max: 0.033, cost: 25.00  },  // ~0.030"
@@ -35,9 +41,14 @@ const COSTS = {
         { ga: 16, min: 0.052, max: 0.068, cost: 45.00  },  // ~0.060"
         { ga: 14, min: 0.068, max: 0.090, cost: 55.00  },  // ~0.075"
         { ga: 11, min: 0.090, max: 0.130, cost: 68.00  },  // ~0.120"
-        { ga:  7, min: 0.130, max: 0.190, cost: 85.00  },  // ~0.179"
-        { ga: null, min: 0.190, max: 0.260, cost: 108.00 },
-        { ga: null, min: 0.260, max: 99,   cost: 148.00 },
+        { ga:  7, min: 0.130, max: 0.190, cost: 85.00  },
+        { ga:  6, min: 0.190, max: 0.230, cost: 100.30 },
+        { ga:  5, min: 0.230, max: 0.280, cost: 116.45 },
+        { ga:  4, min: 0.280, max: 0.340, cost: 134.30 },
+        { ga:  3, min: 0.340, max: 0.410, cost: 154.70 },
+        { ga:  2, min: 0.410, max: 0.490, cost: 178.50 },
+        { ga:  1, min: 0.490, max: 0.590, cost: 204.00 },
+        { ga: null, min: 0.590, max: 99,   cost: 238.00 },
     ],
     'Stainless Steel': [
         { ga: 22, min: 0.000, max: 0.033, cost: 55.00  },
@@ -47,8 +58,13 @@ const COSTS = {
         { ga: 14, min: 0.068, max: 0.090, cost: 115.00 },
         { ga: 11, min: 0.090, max: 0.130, cost: 140.00 },
         { ga:  7, min: 0.130, max: 0.190, cost: 170.00 },
-        { ga: null, min: 0.190, max: 0.260, cost: 215.00 },
-        { ga: null, min: 0.260, max: 99,   cost: 285.00 },
+        { ga:  6, min: 0.190, max: 0.230, cost: 200.60 },
+        { ga:  5, min: 0.230, max: 0.280, cost: 232.90 },
+        { ga:  4, min: 0.280, max: 0.340, cost: 268.60 },
+        { ga:  3, min: 0.340, max: 0.410, cost: 309.40 },
+        { ga:  2, min: 0.410, max: 0.490, cost: 357.00 },
+        { ga:  1, min: 0.490, max: 0.590, cost: 408.00 },
+        { ga: null, min: 0.590, max: 99,   cost: 476.00 },
     ],
     'Brass': [
         { ga: 22, min: 0.000, max: 0.033, cost: 60.00  },
@@ -56,8 +72,15 @@ const COSTS = {
         { ga: 18, min: 0.045, max: 0.060, cost: 88.00  },
         { ga: 16, min: 0.060, max: 0.090, cost: 110.00 },
         { ga: 12, min: 0.090, max: 0.130, cost: 138.00 },
-        { ga: null, min: 0.130, max: 0.190, cost: 172.00 },
-        { ga: null, min: 0.190, max: 99,   cost: 225.00 },
+        { ga: 10, min: 0.130, max: 0.160, cost: 162.00 },
+        { ga:  7, min: 0.160, max: 0.200, cost: 190.00 },
+        { ga:  6, min: 0.200, max: 0.240, cost: 224.00 },
+        { ga:  5, min: 0.240, max: 0.290, cost: 260.00 },
+        { ga:  4, min: 0.290, max: 0.350, cost: 302.00 },
+        { ga:  3, min: 0.350, max: 0.420, cost: 350.00 },
+        { ga:  2, min: 0.420, max: 0.500, cost: 406.00 },
+        { ga:  1, min: 0.500, max: 0.600, cost: 468.00 },
+        { ga: null, min: 0.600, max: 99,   cost: 540.00 },
     ],
     'Copper': [
         { ga: 22, min: 0.000, max: 0.033, cost: 70.00  },
@@ -65,8 +88,15 @@ const COSTS = {
         { ga: 18, min: 0.045, max: 0.060, cost: 105.00 },
         { ga: 16, min: 0.060, max: 0.090, cost: 130.00 },
         { ga: 12, min: 0.090, max: 0.130, cost: 162.00 },
-        { ga: null, min: 0.130, max: 0.190, cost: 202.00 },
-        { ga: null, min: 0.190, max: 99,   cost: 265.00 },
+        { ga: 10, min: 0.130, max: 0.160, cost: 188.00 },
+        { ga:  7, min: 0.160, max: 0.200, cost: 220.00 },
+        { ga:  6, min: 0.200, max: 0.240, cost: 260.00 },
+        { ga:  5, min: 0.240, max: 0.290, cost: 302.00 },
+        { ga:  4, min: 0.290, max: 0.350, cost: 350.00 },
+        { ga:  3, min: 0.350, max: 0.420, cost: 406.00 },
+        { ga:  2, min: 0.420, max: 0.500, cost: 472.00 },
+        { ga:  1, min: 0.500, max: 0.600, cost: 545.00 },
+        { ga: null, min: 0.600, max: 99,   cost: 630.00 },
     ],
     'Titanium': [
         { ga: 22, min: 0.000, max: 0.033, cost: 120.00 },
@@ -74,8 +104,15 @@ const COSTS = {
         { ga: 18, min: 0.045, max: 0.060, cost: 178.00 },
         { ga: 16, min: 0.060, max: 0.090, cost: 218.00 },
         { ga: 12, min: 0.090, max: 0.130, cost: 268.00 },
-        { ga: null, min: 0.130, max: 0.190, cost: 328.00 },
-        { ga: null, min: 0.190, max: 99,   cost: 425.00 },
+        { ga: 10, min: 0.130, max: 0.160, cost: 312.00 },
+        { ga:  7, min: 0.160, max: 0.200, cost: 360.00 },
+        { ga:  6, min: 0.200, max: 0.240, cost: 425.00 },
+        { ga:  5, min: 0.240, max: 0.290, cost: 495.00 },
+        { ga:  4, min: 0.290, max: 0.350, cost: 575.00 },
+        { ga:  3, min: 0.350, max: 0.420, cost: 665.00 },
+        { ga:  2, min: 0.420, max: 0.500, cost: 770.00 },
+        { ga:  1, min: 0.500, max: 0.600, cost: 890.00 },
+        { ga: null, min: 0.600, max: 99,   cost: 1025.00 },
     ],
 };
 

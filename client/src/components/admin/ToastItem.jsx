@@ -49,31 +49,39 @@ export default function ToastItem({ toast, onDismiss }) {
         <motion.div
             layout
             className={`admin-toast-item toast-${toast.type}`}
-            initial={{ opacity: 0, x: 60, scale: 0.94 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 40, scale: 0.92, transition: { duration: 0.18 } }}
-            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            initial={{ opacity: 0, y: 14, x: 32, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, x: 24, scale: 0.95, transition: { duration: 0.2 } }}
+            transition={{ type: 'spring', stiffness: 340, damping: 28 }}
             whileHover={{ scale: 1.015 }}
             role="status"
             aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
         >
+            <div className="toast-ambient-glow" aria-hidden="true" />
+
             <div className="toast-content">
                 <span className={`toast-icon-wrapper icon-${toast.type}`}>
+                    <span className="toast-icon-ring" aria-hidden="true" />
                     {meta.icon}
                 </span>
+
                 <div className="toast-text-container">
                     <div className="toast-head-row">
                         <span className="toast-title">{resolvedTitle}</span>
+                        <button className="toast-close-btn" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">
+                            <X size={15} />
+                        </button>
+                    </div>
+
+                    <span className="toast-message">{resolvedBody}</span>
+
+                    <div className="toast-foot-row">
                         <span className={`toast-type-pill pill-${toast.type}`}>{meta.label}</span>
                     </div>
-                    <span className="toast-message">{resolvedBody}</span>
                 </div>
-                <button className="toast-close-btn" onClick={() => onDismiss(toast.id)}>
-                    <X size={15} />
-                </button>
             </div>
 
-            <div className="toast-progress-container">
+            <div className="toast-progress-track">
                 <motion.div
                     className="toast-progress-bar"
                     style={{ width: `${progress}%` }}
