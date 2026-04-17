@@ -737,6 +737,37 @@
   vertical-align: middle;
 }
 
+@keyframes adminShimmerPulse {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.admin-dashboard .skeleton,
+.admin-dashboard .skeleton-box,
+.admin-dashboard .skeleton-text,
+.admin-dashboard .skeleton-card,
+.admin-page .skeleton,
+.admin-page .skeleton-box,
+.admin-page .skeleton-text,
+.admin-page .skeleton-card,
+.admin-page-wrapper .skeleton,
+.admin-page-wrapper .skeleton-box,
+.admin-page-wrapper .skeleton-text,
+.admin-page-wrapper .skeleton-card,
+.edit-guideline-page .skeleton,
+.edit-guideline-page .skeleton-box {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%) !important;
+  background-size: 200% 100% !important;
+  animation: adminShimmerPulse 1.3s linear infinite !important;
+}
+
 .animate-spin {
   animation: spin 1s linear infinite;
 }

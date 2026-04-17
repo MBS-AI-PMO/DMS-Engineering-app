@@ -352,7 +352,31 @@ export default function SheetCostRatesAdmin() {
             {/* ── Table ── */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 {loading ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
+                    <div style={{ padding: '16px 18px' }}>
+                        {[...Array(6)].map((_, i) => (
+                            <div
+                                key={`sheet-skel-${i}`}
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1.1fr 0.8fr 0.9fr 0.9fr 1fr 0.8fr',
+                                    gap: 14,
+                                    alignItems: 'center',
+                                    padding: '14px 6px',
+                                    borderBottom: i < 5 ? '1px solid #f8fafc' : 'none',
+                                }}
+                            >
+                                <div className="skeleton-box" style={{ width: '68%', height: 24, borderRadius: 999 }} />
+                                <div className="skeleton-box" style={{ width: '44%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '52%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '52%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '62%', height: 16 }} />
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : rates.length === 0 ? (
                     <div style={{ padding: '70px', textAlign: 'center', color: '#94a3b8' }}>
                         <Package size={36} color="#e2e8f0" style={{ marginBottom: 14 }} />

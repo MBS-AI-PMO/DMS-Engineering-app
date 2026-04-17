@@ -102,9 +102,41 @@ export default function ServiceMetalsConfig() {
 
     if (loading) {
         return (
-            <div className="admin-loading-state">
-                <Loader2 className="animate-spin" size={32} />
-                <p>Loading configuration...</p>
+            <div className="admin-page">
+                <div className="admin-page-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div className="skeleton-box" style={{ width: 40, height: 40, borderRadius: 10 }} />
+                        <div>
+                            <div className="skeleton-box" style={{ width: 290, height: 30, marginBottom: 8 }} />
+                            <div className="skeleton-box" style={{ width: 220, height: 14 }} />
+                        </div>
+                    </div>
+                    <div className="skeleton-box" style={{ width: 160, height: 40, borderRadius: 10 }} />
+                </div>
+
+                <div className="admin-card" style={{ padding: '24px' }}>
+                    <div className="admin-section-header" style={{ marginBottom: '20px' }}>
+                        <div className="skeleton-box" style={{ width: 220, height: 20, marginBottom: 8 }} />
+                        <div className="skeleton-box" style={{ width: 420, height: 13 }} />
+                    </div>
+
+                    <div className="service-metals-page-grid">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={`svc-metal-skel-${i}`} className="service-assignment-item" style={{ borderColor: '#f1f5f9' }}>
+                                <div className="assignment-item-header">
+                                    <div className="assignment-item-main">
+                                        <div className="skeleton-box" style={{ width: 18, height: 18, borderRadius: 6 }} />
+                                        <div className="assignment-item-info" style={{ gap: 8 }}>
+                                            <div className="skeleton-box" style={{ width: 140, height: 14 }} />
+                                            <div className="skeleton-box" style={{ width: 112, height: 12 }} />
+                                        </div>
+                                    </div>
+                                    <div className="skeleton-box" style={{ width: 86, height: 28, borderRadius: 8 }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         );
     }
