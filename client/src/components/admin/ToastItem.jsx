@@ -42,42 +42,43 @@ export default function ToastItem({ toast, onDismiss }) {
     const title = isObjectMessage ? toast.message.title : null;
     const body = isObjectMessage ? toast.message.message : toast.message;
     const meta = typeMeta[toast.type] || typeMeta.info;
-    const resolvedTitle = title || meta.label;
-    const resolvedBody = typeof body === 'string' ? body : String(body || '');
+    const hasCustomTitle = typeof title === 'string' && title.trim().length > 0;
+    const primaryText = hasCustomTitle
+        ? title.trim()
+        : (typeof body === 'string' ? body : String(body || ''));
+    const secondaryText = hasCustomTitle
+        ? (typeof body === 'string' ? body : String(body || ''))
+        : '';
 
     return (
         <motion.div
             layout
             className={`admin-toast-item toast-${toast.type}`}
-            initial={{ opacity: 0, y: 14, x: 32, scale: 0.96 }}
+            initial={{ opacity: 0, y: 10, x: 22, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, x: 24, scale: 0.95, transition: { duration: 0.2 } }}
-            transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-            whileHover={{ scale: 1.015 }}
+            exit={{ opacity: 0, y: -8, x: 16, scale: 0.97, transition: { duration: 0.18 } }}
+            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+            whileHover={{ scale: 1.01 }}
             role="status"
             aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
         >
-            <div className="toast-ambient-glow" aria-hidden="true" />
-
             <div className="toast-content">
                 <span className={`toast-icon-wrapper icon-${toast.type}`}>
-                    <span className="toast-icon-ring" aria-hidden="true" />
                     {meta.icon}
                 </span>
 
                 <div className="toast-text-container">
                     <div className="toast-head-row">
-                        <span className="toast-title">{resolvedTitle}</span>
+                        <div className="toast-head-main">
+                            <span className="toast-title">{primaryText}</span>
+                            {hasCustomTitle && <span className={`toast-type-pill pill-${toast.type}`}>{meta.label}</span>}
+                        </div>
                         <button className="toast-close-btn" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">
                             <X size={15} />
                         </button>
                     </div>
 
-                    <span className="toast-message">{resolvedBody}</span>
-
-                    <div className="toast-foot-row">
-                        <span className={`toast-type-pill pill-${toast.type}`}>{meta.label}</span>
-                    </div>
+                    {secondaryText ? <span className="toast-message">{secondaryText}</span> : null}
                 </div>
             </div>
 
