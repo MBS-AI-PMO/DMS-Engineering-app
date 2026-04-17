@@ -308,11 +308,12 @@ const InstantPricing = () => {
     };
   }, [displayDimensions?.mm?.l, displayDimensions?.mm?.w, displayDimensions?.mm?.t, perimeterMm, pierceCount]);
 
+  // Pricing uses the user-selected stock thickness only — never the model's
+  // measured thickness, since the latter rarely matches an allowed stock size
+  // (e.g. 7.372 mm has no matching 6061 sheet; 8.0 mm / .313" does).
   const pricingThicknessInches = useMemo(() => {
-    if (selectedThicknessInches > 0) return selectedThicknessInches;
-    const fallbackThicknessMm = toFiniteNumber(displayDimensions?.mm?.t);
-    return fallbackThicknessMm > 0 ? (fallbackThicknessMm / 25.4) : 0;
-  }, [selectedThicknessInches, displayDimensions?.mm?.t]);
+    return selectedThicknessInches > 0 ? selectedThicknessInches : 0;
+  }, [selectedThicknessInches]);
 
   const bendList = useMemo(() => {
     const list = [];
@@ -977,6 +978,40 @@ const InstantPricing = () => {
       return;
     }
 
+    // A metal without a selected stock thickness can't be priced — skip the
+    // call rather than sending the model's measured thickness (which rarely
+    // matches any allowed stock and would 400 with "not configured").
+    if (selectedMetal && !(pricingThicknessInches > 0)) {
+      setPriceEstimate(null);
+      setIsCalculatingPrice(false);
+      return;
+    }
+
+    // Preemptive metal-bounds check: lock silently instead of letting the
+    // backend 400 and spam the console. metal_configs.min_x/max_x/... are inches.
+    if (selectedMetal) {
+      const mL = parseFloat(displayDimensions.mm.l) || 0;
+      const mW = parseFloat(displayDimensions.mm.w) || 0;
+      const mT = parseFloat(displayDimensions.mm.t) || 0;
+      const inToMm = (v) => (v ? parseFloat(v) * 25.4 : null);
+      const maxXmm = inToMm(selectedMetal.max_x);
+      const maxYmm = inToMm(selectedMetal.max_y);
+      const minXmm = inToMm(selectedMetal.min_x);
+      const minYmm = inToMm(selectedMetal.min_y);
+      const maxZmm = inToMm(selectedMetal.max_z);
+      const minZmm = inToMm(selectedMetal.min_z);
+      const outOfBounds =
+        (maxXmm && mL > maxXmm) || (maxYmm && mW > maxYmm) ||
+        (minXmm && mL < minXmm) || (minYmm && mW < minYmm) ||
+        (mT > 0 && maxZmm && mT > maxZmm) ||
+        (mT > 0 && minZmm && mT < minZmm);
+      if (outOfBounds) {
+        setPriceEstimate(null);
+        setIsCalculatingPrice(false);
+        return;
+      }
+    }
+
     const getEstimate = async () => {
       setIsCalculatingPrice(true);
       try {
@@ -1022,7 +1057,12 @@ const InstantPricing = () => {
           setPriceEstimate(null);
         }
       } catch (err) {
-        console.error('Price calculation failed:', err);
+        // Bounds mismatches are surfaced as card-level locks — swallow silently.
+        const msg = String(err?.message || '');
+        const isBoundsError = /exceeds max|is below min/i.test(msg);
+        if (!isBoundsError) {
+          console.error('Price calculation failed:', err);
+        }
         setPriceEstimate(null);
       } finally {
         setIsCalculatingPrice(false);
@@ -2243,15 +2283,22 @@ const InstantPricing = () => {
                           const mW = parseFloat(dim.w) || 0;
                           const mT = parseFloat(dim.t) || 0;
                           const hasThickness = mT > 0;
-                          const isTooLarge = (met.max_x && mL > met.max_x) || (met.max_y && mW > met.max_y);
-                          const isTooSmall = (met.min_x && mL < met.min_x) || (met.min_y && mW < met.min_y);
-                          const isTooThick = hasThickness && met.max_z && mT > met.max_z;
-                          const isTooThin = hasThickness && met.min_z && mT < met.min_z;
+                          // metal bounds (min_x/max_x/...) are stored in inches — convert to mm for comparison
+                          const maxXmm = met.max_x ? parseFloat(met.max_x) * 25.4 : null;
+                          const maxYmm = met.max_y ? parseFloat(met.max_y) * 25.4 : null;
+                          const minXmm = met.min_x ? parseFloat(met.min_x) * 25.4 : null;
+                          const minYmm = met.min_y ? parseFloat(met.min_y) * 25.4 : null;
+                          const maxZmm = met.max_z ? parseFloat(met.max_z) * 25.4 : null;
+                          const minZmm = met.min_z ? parseFloat(met.min_z) * 25.4 : null;
+                          const isTooLarge = (maxXmm && mL > maxXmm) || (maxYmm && mW > maxYmm);
+                          const isTooSmall = (minXmm && mL < minXmm) || (minYmm && mW < minYmm);
+                          const isTooThick = hasThickness && maxZmm && mT > maxZmm;
+                          const isTooThin = hasThickness && minZmm && mT < minZmm;
                           const lockReasons = [];
-                          if (isTooThick) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm exceeds max ${parseFloat(met.max_z).toFixed(3)} mm.`);
-                          if (isTooThin) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm is below min ${parseFloat(met.min_z).toFixed(3)} mm.`);
-                          if (isTooLarge) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm exceeds material max ${parseFloat(met.max_x || 0).toFixed(3)} × ${parseFloat(met.max_y || 0).toFixed(3)} mm.`);
-                          if (isTooSmall) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm is below material minimum ${parseFloat(met.min_x || 0).toFixed(3)} × ${parseFloat(met.min_y || 0).toFixed(3)} mm.`);
+                          if (isTooThick) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm exceeds max ${maxZmm.toFixed(3)} mm.`);
+                          if (isTooThin) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm is below min ${minZmm.toFixed(3)} mm.`);
+                          if (isTooLarge) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm exceeds material max ${(maxXmm || 0).toFixed(3)} × ${(maxYmm || 0).toFixed(3)} mm.`);
+                          if (isTooSmall) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm is below material minimum ${(minXmm || 0).toFixed(3)} × ${(minYmm || 0).toFixed(3)} mm.`);
                           const isLocked = lockReasons.length > 0;
 
                           return (

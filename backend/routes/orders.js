@@ -53,12 +53,13 @@ const validateMetalBounds = ({ metalName, metalConfig, lengthIn, widthIn, thickn
     const widthMm = inToMm(widthIn);
     const thicknessMm = inToMm(thicknessIn);
 
-    const minX = toFiniteNumber(metalConfig?.min_x);
-    const maxX = toFiniteNumber(metalConfig?.max_x);
-    const minY = toFiniteNumber(metalConfig?.min_y);
-    const maxY = toFiniteNumber(metalConfig?.max_y);
-    const minZ = toFiniteNumber(metalConfig?.min_z);
-    const maxZ = toFiniteNumber(metalConfig?.max_z);
+    // metal_configs bounds are stored in inches; convert to mm for comparison
+    const minX = inToMm(metalConfig?.min_x);
+    const maxX = inToMm(metalConfig?.max_x);
+    const minY = inToMm(metalConfig?.min_y);
+    const maxY = inToMm(metalConfig?.max_y);
+    const minZ = inToMm(metalConfig?.min_z);
+    const maxZ = inToMm(metalConfig?.max_z);
 
     if (maxX !== null && lengthMm > maxX) {
         return `Part length ${lengthMm.toFixed(3)} mm exceeds max ${maxX.toFixed(3)} mm for ${metalName}.`;
