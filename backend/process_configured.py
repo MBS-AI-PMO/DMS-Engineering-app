@@ -286,6 +286,48 @@ def make_axis_cylinder(origin, axis, radius, height):
         return cq.Shape.cast(shape)
 
 
+def make_axis_cone(origin, axis, radius_start, radius_end, height):
+    """Create a cone/frustum starting at origin and extending along axis."""
+    safe_radius_start = max(float(radius_start), 0.01)
+    safe_radius_end = max(float(radius_end), 0.01)
+    safe_height = max(float(height), 0.1)
+
+    if abs(safe_radius_start - safe_radius_end) < 1e-6:
+        # make_axis_cylinder expects center-origin; shift forward by half height.
+        center_origin = (
+            float(origin[0]) + float(axis[0]) * (safe_height * 0.5),
+            float(origin[1]) + float(axis[1]) * (safe_height * 0.5),
+            float(origin[2]) + float(axis[2]) * (safe_height * 0.5),
+        )
+        return make_axis_cylinder(center_origin, axis, safe_radius_start, safe_height)
+
+    try:
+        plane = cq.Plane(origin=cq.Vector(*origin), normal=cq.Vector(*axis))
+        return (
+            cq.Workplane(plane)
+            .circle(safe_radius_start)
+            .workplane(offset=safe_height)
+            .circle(safe_radius_end)
+            .loft(combine=True)
+            .val()
+        )
+    except Exception as workplane_err:
+        msg = str(workplane_err).lower()
+        if ('multidispatch' not in msg) and ('signature' not in msg):
+            raise
+
+        from OCP.gp import gp_Ax2, gp_Pnt, gp_Dir
+        from OCP.BRepPrimAPI import BRepPrimAPI_MakeCone
+
+        ox, oy, oz = origin
+        ax, ay, az = axis
+        base = gp_Pnt(float(ox), float(oy), float(oz))
+        direction = gp_Dir(float(ax), float(ay), float(az))
+        ax2 = gp_Ax2(base, direction)
+        shape = BRepPrimAPI_MakeCone(ax2, safe_radius_start, safe_radius_end, safe_height).Shape()
+        return cq.Shape.cast(shape)
+
+
 def _shape_of(model_obj):
     return model_obj.val() if hasattr(model_obj, 'val') else model_obj
 
@@ -669,31 +711,60 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                 tool_depth = cone_depth_mm + 0.08
 
                 try:
-                    # For preview mode, skip expensive countersink geometry to avoid hangs
                     if preview_mode:
-                        # Just log for preview - skip the complex loft operation that can hang
-                        print(f"[CAD-KERNEL] PREVIEW COUNTERSINK (geometry skipped): id={cs_id}, major={major_dia_mm:.3f}mm")
+                        # Use a lightweight cone/frustum cutter so preview reflects countersinks.
+                        try:
+                            preview_tool = make_axis_cone(
+                                entry_origin,
+                                inward_dir,
+                                max(major_r, 0.05),
+                                max(minor_r, 0.01),
+                                max(tool_depth, 0.1)
+                            )
+                            model = _apply_cut(model, preview_tool, preview_mode, clean_each_step)
+                            print(
+                                f"[CAD-KERNEL] PREVIEW COUNTERSINK CUT: id={cs_id}, "
+                                f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm"
+                            )
+                        except Exception as preview_cut_err:
+                            print(f"[CAD-KERNEL] Preview cone cut failed for countersink {cs_id}: {preview_cut_err}")
+                            # Fallback: cylindrical recess so preview still shows a visible cut.
+                            fallback_tool = make_axis_cylinder(
+                                entry_origin,
+                                inward_dir,
+                                max(major_r, 0.05),
+                                max(tool_depth, 0.1)
+                            )
+                            model = _apply_cut(model, fallback_tool, preview_mode, clean_each_step)
+                            print(
+                                f"[CAD-KERNEL] PREVIEW COUNTERSINK CYLINDER CUT: id={cs_id}, "
+                                f"major={major_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm"
+                            )
                     else:
-                        # Full mode uses the precise loft geometry
-                        cut_plane = cq.Plane(
-                            origin=cq.Vector(*entry_origin),
-                            normal=cq.Vector(*inward_dir)
-                        )
-                        tool = (
-                            cq.Workplane(cut_plane)
-                            .circle(max(major_r, 0.05))
-                            .workplane(offset=max(tool_depth, 0.1))
-                            .circle(max(minor_r, 0.01))
-                            .loft(combine=True)
-                            .val()
-                        )
+                        # Full mode: robust frustum cut, with fallback for runtime kernel differences.
+                        try:
+                            tool = make_axis_cone(
+                                entry_origin,
+                                inward_dir,
+                                max(major_r, 0.05),
+                                max(minor_r, 0.01),
+                                max(tool_depth, 0.1)
+                            )
+                        except Exception as full_cone_err:
+                            print(f"[CAD-KERNEL] Full cone tool failed for countersink {cs_id}: {full_cone_err}")
+                            tool = make_axis_cylinder(
+                                entry_origin,
+                                inward_dir,
+                                max(major_r, 0.05),
+                                max(tool_depth, 0.1)
+                            )
 
                         print(
                             f"[CAD-KERNEL] CUTTING COUNTERSINK: id={cs_id}, "
                             f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
                             f"face={'down' if face_sign < 0 else 'up'}"
                         )
-                        model = maybe_clean(cq.Workplane(model.val().cut(tool)), clean_each_step)
+                        model = _apply_cut(model, tool, preview_mode, clean_each_step)
 
                         # The witness-ring detail is only needed in final manufacturing output.
                         back_face_sign = -face_sign
@@ -728,7 +799,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                                 .extrude(max(witness_depth, 0.02))
                                 .val()
                             )
-                            model = maybe_clean(cq.Workplane(model.val().cut(witness_tool)), clean_each_step)
+                            model = _apply_cut(model, witness_tool, preview_mode, clean_each_step)
                 except Exception as cut_err:
                     print(f"[CAD-KERNEL] Failed countersink cut {cs_id}: {cut_err}")
 

@@ -157,6 +157,121 @@ const compactPreviewConfig = (configuration = {}) => {
     };
 };
 
+const toFiniteNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+};
+
+const INCH_TO_MM = 25.4;
+const inToMm = (value) => {
+    const num = toFiniteNumber(value);
+    return num === null ? null : num * INCH_TO_MM;
+};
+
+const findClosest = (values, target) => {
+    if (!Array.isArray(values) || values.length === 0) return null;
+    let closest = values[0];
+    let minDelta = Math.abs(values[0] - target);
+    for (let i = 1; i < values.length; i++) {
+        const delta = Math.abs(values[i] - target);
+        if (delta < minDelta) {
+            minDelta = delta;
+            closest = values[i];
+        }
+    }
+    return { value: closest, delta: minDelta };
+};
+
+const validateMetalBounds = ({ metal, metalConfig, lengthIn, heightIn, thicknessIn }) => {
+    if (!metal) return null;
+    if (!(lengthIn > 0) || !(heightIn > 0) || !(thicknessIn > 0)) return null;
+
+    const lengthMm = inToMm(lengthIn);
+    const heightMm = inToMm(heightIn);
+    const thicknessMm = inToMm(thicknessIn);
+
+    const minX = toFiniteNumber(metalConfig?.min_x ?? metal?.min_x);
+    const maxX = toFiniteNumber(metalConfig?.max_x ?? metal?.max_x);
+    const minY = toFiniteNumber(metalConfig?.min_y ?? metal?.min_y);
+    const maxY = toFiniteNumber(metalConfig?.max_y ?? metal?.max_y);
+    const minZ = toFiniteNumber(metalConfig?.min_z ?? metal?.min_z);
+    const maxZ = toFiniteNumber(metalConfig?.max_z ?? metal?.max_z);
+
+    if (maxX !== null && lengthMm > maxX) {
+        return `Part length ${lengthMm.toFixed(3)} mm exceeds max ${maxX.toFixed(3)} mm for ${metal.name}.`;
+    }
+    if (minX !== null && minX > 0 && lengthMm < minX) {
+        return `Part length ${lengthMm.toFixed(3)} mm is below min ${minX.toFixed(3)} mm for ${metal.name}.`;
+    }
+    if (maxY !== null && heightMm > maxY) {
+        return `Part width ${heightMm.toFixed(3)} mm exceeds max ${maxY.toFixed(3)} mm for ${metal.name}.`;
+    }
+    if (minY !== null && minY > 0 && heightMm < minY) {
+        return `Part width ${heightMm.toFixed(3)} mm is below min ${minY.toFixed(3)} mm for ${metal.name}.`;
+    }
+    if (maxZ !== null && thicknessMm > maxZ) {
+        return `Part thickness ${thicknessMm.toFixed(3)} mm exceeds max ${maxZ.toFixed(3)} mm for ${metal.name}.`;
+    }
+    if (minZ !== null && minZ > 0 && thicknessMm < minZ) {
+        return `Part thickness ${thicknessMm.toFixed(3)} mm is below min ${minZ.toFixed(3)} mm for ${metal.name}.`;
+    }
+
+    const cfgThicknesses = Array.isArray(metalConfig?.available_thicknesses)
+        ? metalConfig.available_thicknesses.map(toFiniteNumber).filter((v) => v !== null && v > 0)
+        : [];
+    if (cfgThicknesses.length > 0) {
+        const nearest = findClosest(cfgThicknesses, thicknessMm);
+        if (nearest && nearest.delta > 0.05) {
+            return `Thickness ${thicknessMm.toFixed(3)} mm is not configured for ${metal.name}. Closest allowed is ${nearest.value.toFixed(3)} mm.`;
+        }
+    }
+
+    return null;
+};
+
+const normalizeServiceDimension = (inchesValue, unit) => {
+    return unit === 'mm' ? inToMm(inchesValue) : inchesValue;
+};
+
+const validateServiceBounds = ({ service, lengthIn, heightIn, thicknessIn }) => {
+    if (!service) return null;
+    if (!(lengthIn > 0) || !(heightIn > 0) || !(thicknessIn > 0)) return null;
+
+    const unit = String(service.dimensions_unit || 'in').toLowerCase() === 'mm' ? 'mm' : 'in';
+    const lengthVal = normalizeServiceDimension(lengthIn, unit);
+    const heightVal = normalizeServiceDimension(heightIn, unit);
+    const thickVal = normalizeServiceDimension(thicknessIn, unit);
+
+    const minL = toFiniteNumber(service.min_length);
+    const maxL = toFiniteNumber(service.max_length);
+    const minW = toFiniteNumber(service.min_width);
+    const maxW = toFiniteNumber(service.max_width);
+    const minH = toFiniteNumber(service.min_height);
+    const maxH = toFiniteNumber(service.max_height);
+    const unitLabel = unit === 'mm' ? 'mm' : 'in';
+
+    if (maxL !== null && maxL > 0 && lengthVal > maxL) {
+        return `Part length ${lengthVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxL.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minL !== null && minL > 0 && lengthVal < minL) {
+        return `Part length ${lengthVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minL.toFixed(3)} ${unitLabel}.`;
+    }
+    if (maxW !== null && maxW > 0 && heightVal > maxW) {
+        return `Part width ${heightVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxW.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minW !== null && minW > 0 && heightVal < minW) {
+        return `Part width ${heightVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minW.toFixed(3)} ${unitLabel}.`;
+    }
+    if (maxH !== null && maxH > 0 && thickVal > maxH) {
+        return `Part thickness ${thickVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxH.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minH !== null && minH > 0 && thickVal < minH) {
+        return `Part thickness ${thickVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minH.toFixed(3)} ${unitLabel}.`;
+    }
+
+    return null;
+};
+
 // ── Admin Routes ─────────────────────────────────────────
 
 /**
@@ -642,9 +757,12 @@ router.post('/calculate', async (req, res) => {
 
     try {
         const qty = parseInt(quantity) || 1;
+        const lengthInNum = toFiniteNumber(length_in);
+        const heightInNum = toFiniteNumber(height_in);
+        const thicknessInNum = toFiniteNumber(thickness_value);
 
         // 1. Fetch Metal (with category/family for sheet cost lookup) and Primary Service
-        const [metalRes, serviceRes] = await Promise.all([
+        const [metalRes, serviceRes, metalConfigRes] = await Promise.all([
             metal_id
                 ? db.query(`
                     SELECT m.*, mc.name AS material_family
@@ -655,11 +773,41 @@ router.post('/calculate', async (req, res) => {
                 : Promise.resolve({ rows: [] }),
             service_id
                 ? db.query('SELECT * FROM services WHERE id = $1', [service_id])
+                : Promise.resolve({ rows: [] }),
+            metal_id
+                ? db.query(`
+                    SELECT min_x, max_x, min_y, max_y, min_z, max_z,
+                           COALESCE(available_thicknesses, '[]'::jsonb) AS available_thicknesses
+                    FROM metal_configs
+                    WHERE metal_id = $1
+                  `, [metal_id])
                 : Promise.resolve({ rows: [] })
         ]);
 
         const metal = metalRes.rows[0] || null;
         const mainService = serviceRes.rows[0] || null;
+        const metalConfig = metalConfigRes.rows[0] || null;
+
+        const metalValidationError = validateMetalBounds({
+            metal,
+            metalConfig,
+            lengthIn: lengthInNum,
+            heightIn: heightInNum,
+            thicknessIn: thicknessInNum,
+        });
+        if (metalValidationError) {
+            return res.status(400).json({ success: false, error: metalValidationError });
+        }
+
+        const serviceValidationError = validateServiceBounds({
+            service: mainService,
+            lengthIn: lengthInNum,
+            heightIn: heightInNum,
+            thicknessIn: thicknessInNum,
+        });
+        if (serviceValidationError) {
+            return res.status(400).json({ success: false, error: serviceValidationError });
+        }
 
         // ── MATERIAL COST (Sheet Nesting Formula) ─────────────────────────────
         // Source: sheet metal material.csv
