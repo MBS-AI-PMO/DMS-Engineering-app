@@ -149,6 +149,127 @@ def _basis_from_normal(normal_vec):
     return n, u, v
 
 
+def _empty_non_flat_features():
+    return {
+        "hasRaisedFeatures": False,
+        "raisedFeatureFaceCount": 0,
+        "parallelPlanarFaceCount": 0,
+        "maxOffsetMm": 0.0,
+        "reasons": [],
+    }
+
+
+def _detect_non_flat_features(fc_shape, root_idx, thickness):
+    """
+    Detect raised planar features (boss/emboss-like geometry) on otherwise flat sheet parts.
+    Returns conservative metadata used by the frontend to lock laser-cut process selection.
+    """
+    result = _empty_non_flat_features()
+    try:
+        if root_idx is None or root_idx < 0 or root_idx >= len(fc_shape.Faces):
+            return result
+
+        root_face = fc_shape.Faces[root_idx]
+        if root_face.Surface.TypeId != "Part::GeomPlane":
+            return result
+
+        root_n = root_face.normalAt(0, 0)
+        root_normal = _normalize(np.array([float(root_n.x), float(root_n.y), float(root_n.z)], dtype=float))
+        root_center = root_face.CenterOfMass
+        root_point = np.array([float(root_center.x), float(root_center.y), float(root_center.z)], dtype=float)
+
+        thickness_mm = float(thickness) if thickness and float(thickness) > 0 else 0.0
+        root_area = max(1.0, float(root_face.Area))
+        # Keep threshold low enough to catch small bosses/embosses while filtering numeric noise.
+        min_face_area = max(0.35, root_area * 0.0005)
+
+        raised_faces = 0
+        raised_same_orientation = 0
+        raised_opposite_orientation = 0
+        parallel_faces = 0
+        max_offset = 0.0
+
+        tol_root = max(0.18, thickness_mm * 0.18) if thickness_mm > 0 else 0.40
+        tol_skin = max(0.25, thickness_mm * 0.25) if thickness_mm > 0 else 0.80
+
+        for fi, face in enumerate(fc_shape.Faces):
+            if fi == root_idx:
+                continue
+            if face.Surface.TypeId != "Part::GeomPlane":
+                continue
+
+            try:
+                face_area = float(face.Area)
+            except Exception:
+                face_area = 0.0
+            if face_area < min_face_area:
+                continue
+
+            fn = face.normalAt(0, 0)
+            face_normal = _normalize(np.array([float(fn.x), float(fn.y), float(fn.z)], dtype=float))
+            alignment = float(np.dot(face_normal, root_normal))
+            parallelity = abs(alignment)
+            if parallelity < 0.985:
+                continue
+
+            parallel_faces += 1
+            center = face.CenterOfMass
+            center_np = np.array([float(center.x), float(center.y), float(center.z)], dtype=float)
+            signed_offset = float(np.dot(center_np - root_point, root_normal))
+            offset = abs(signed_offset)
+            max_offset = max(max_offset, offset)
+
+            if thickness_mm > 0:
+                near_root_plane = offset <= tol_root
+                near_opposite_skin = abs(offset - thickness_mm) <= tol_skin
+
+                if alignment > 0:
+                    # Same normal direction as root but offset away from root plane => raised boss/emboss-like feature.
+                    if not near_root_plane:
+                        raised_faces += 1
+                        raised_same_orientation += 1
+                else:
+                    # Opposite-direction faces should generally sit on the opposite skin plane.
+                    if not near_opposite_skin:
+                        raised_faces += 1
+                        raised_opposite_orientation += 1
+            else:
+                if alignment > 0 and offset > 0.8:
+                    raised_faces += 1
+                    raised_same_orientation += 1
+                elif alignment < 0 and offset > 1.2:
+                    raised_faces += 1
+                    raised_opposite_orientation += 1
+
+        result["parallelPlanarFaceCount"] = int(parallel_faces)
+        result["raisedFeatureFaceCount"] = int(raised_faces)
+        result["maxOffsetMm"] = round(float(max_offset), 4)
+        result["hasRaisedFeatures"] = raised_faces > 0
+
+        if raised_faces > 0:
+            if thickness_mm > 0:
+                result["reasons"].append(
+                    f"Detected {raised_faces} raised planar face(s) beyond expected sheet skins for thickness {thickness_mm:.3f} mm."
+                )
+            else:
+                result["reasons"].append(
+                    f"Detected {raised_faces} raised planar face(s) offset from the base planar skin."
+                )
+            if raised_same_orientation > 0:
+                result["reasons"].append(
+                    f"{raised_same_orientation} face(s) share root-plane orientation but are offset, indicating boss/emboss geometry."
+                )
+            if raised_opposite_orientation > 0:
+                result["reasons"].append(
+                    f"{raised_opposite_orientation} opposite-orientation face(s) are outside expected opposite-skin offset."
+                )
+
+        return result
+    except Exception as ex:
+        result["reasons"].append(f"Non-flat feature analysis warning: {ex}")
+        return result
+
+
 def _detect_holes_from_planar_loops(fc_shape):
     """
     Fallback hole detector for models where holes are not represented as
@@ -622,6 +743,8 @@ def unfold_with_lib(filepath, profile="full"):
 
     if not include_unfold:
         thickness = 2.0
+        root_idx = None
+        non_flat_features = _empty_non_flat_features()
         if estimate_thickness:
             emit_progress(28, "Estimating sheet thickness")
             try:
@@ -637,6 +760,9 @@ def unfold_with_lib(filepath, profile="full"):
                 # Keep robust fallback thickness for downstream UI flows.
                 thickness = 2.0
 
+        if root_idx is not None:
+            non_flat_features = _detect_non_flat_features(fc_shape, root_idx, thickness)
+
         holes_data = []
         if include_holes:
             emit_progress(58 if estimate_thickness else 42, "Detecting holes")
@@ -649,6 +775,7 @@ def unfold_with_lib(filepath, profile="full"):
             "cutEdges": [],
             "bendEdges": [],
             "thickness": round(float(thickness), 4),
+            "nonFlatFeatures": non_flat_features,
             "bendTree": None,
             "faceMeshes": {},
             "bends": [],
@@ -781,6 +908,8 @@ def unfold_with_lib(filepath, profile="full"):
     root_face = fc_shape.Faces[chosen_root]
     root_normal = root_face.normalAt(0,0)
     root_center = root_face.CenterOfMass
+
+    non_flat_features = _detect_non_flat_features(fc_shape, chosen_root, thickness)
     
     # 1. Move to origin
     global_align_m.move(root_center * -1.0)
@@ -957,6 +1086,7 @@ def unfold_with_lib(filepath, profile="full"):
         "cutEdges": cut_edges_2d,
         "bendEdges": bend_edges_2d,
         "thickness": round(float(thickness), 4),
+        "nonFlatFeatures": non_flat_features,
         "bendTree": root_node,
         "faceMeshes": face_meshes,
         "bends": bends_data,

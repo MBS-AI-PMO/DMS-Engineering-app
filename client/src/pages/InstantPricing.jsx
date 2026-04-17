@@ -331,7 +331,31 @@ const InstantPricing = () => {
     return Math.max(fromTree, fromBackend);
   }, [bendList.length, backendData?.bends]);
 
+  const nonFlatFeatureInfo = useMemo(() => {
+    const raw = backendData?.nonFlatFeatures;
+    if (!raw || typeof raw !== 'object') {
+      return {
+        hasRaisedFeatures: false,
+        raisedFeatureFaceCount: 0,
+        maxOffsetMm: 0,
+        primaryReason: ''
+      };
+    }
+
+    const raisedCount = Number.parseInt(raw?.raisedFeatureFaceCount, 10);
+    const maxOffsetMm = toFiniteNumber(raw?.maxOffsetMm);
+    const reasons = Array.isArray(raw?.reasons) ? raw.reasons.filter(Boolean) : [];
+
+    return {
+      hasRaisedFeatures: Boolean(raw?.hasRaisedFeatures),
+      raisedFeatureFaceCount: Number.isFinite(raisedCount) ? raisedCount : 0,
+      maxOffsetMm,
+      primaryReason: reasons[0] || ''
+    };
+  }, [backendData?.nonFlatFeatures]);
+
   const isLaserBlockedByBends = bendCountTotal > 0;
+  const isLaserBlockedByNonFlatFeatures = currentIsStep && nonFlatFeatureInfo.hasRaisedFeatures;
 
   const modelComplexityFactors = useMemo(() => {
     const areaMm2 = measurementMetrics.areaMm2;
@@ -341,6 +365,8 @@ const InstantPricing = () => {
     const pierceDensity = areaMm2 > 0 ? ((pierceCount * 10000) / areaMm2) : 0; // per 100 cm²
     const perimeterComplexity = areaMm2 > 0 ? (perimeterMm / Math.sqrt(areaMm2)) : 0;
     const has2dProfile = currentIsDxf || (currentIsStep && dimensionSourceLabel === '2D flat pattern');
+    const raisedCount = nonFlatFeatureInfo.raisedFeatureFaceCount;
+    const raisedOffset = nonFlatFeatureInfo.maxOffsetMm;
 
     return [
       {
@@ -352,6 +378,16 @@ const InstantPricing = () => {
         reason: bendCountTotal > 0
           ? `Detected ${bendCountTotal} bend(s); formed geometry is not laser-cuttable.`
           : 'No bends detected.'
+      },
+      {
+        id: 'raised-features',
+        label: 'Raised 3D Features',
+        value: `${raisedCount}`,
+        status: isLaserBlockedByNonFlatFeatures ? 'fail' : 'pass',
+        impact: isLaserBlockedByNonFlatFeatures ? 'Locks Laser' : 'Laser OK',
+        reason: isLaserBlockedByNonFlatFeatures
+          ? (nonFlatFeatureInfo.primaryReason || `Detected raised 3D bosses/features (max offset ${raisedOffset.toFixed(3)} mm).`)
+          : 'No raised bosses/emboss features detected.'
       },
       {
         id: 'thickness-ratio',
@@ -404,7 +440,11 @@ const InstantPricing = () => {
     currentIsDxf,
     currentIsStep,
     dimensionSourceLabel,
-    bendCountTotal
+    bendCountTotal,
+    isLaserBlockedByNonFlatFeatures,
+    nonFlatFeatureInfo.raisedFeatureFaceCount,
+    nonFlatFeatureInfo.maxOffsetMm,
+    nonFlatFeatureInfo.primaryReason
   ]);
 
   const bendService = useMemo(
@@ -442,15 +482,20 @@ const InstantPricing = () => {
   useEffect(() => {
     if (!selectedProductionService) return;
     const { isLaser } = getProcessFlags(selectedProductionService.title);
-    if (!isLaser || !isLaserBlockedByBends) return;
+    if (!isLaser || (!isLaserBlockedByBends && !isLaserBlockedByNonFlatFeatures)) return;
 
     setSelectedProductionService(null);
     setSelectedCategory(null);
     setSelectedMetal(null);
     setSelectedThickness(null);
     setConfigStep(0);
-    toast(`Detected ${bendCountTotal} bend(s). Laser cutting is locked for bent models.`, 'error');
-  }, [selectedProductionService, isLaserBlockedByBends, bendCountTotal, toast]);
+    if (isLaserBlockedByBends) {
+      toast(`Detected ${bendCountTotal} bend(s). Laser cutting is locked for bent models.`, 'error');
+      return;
+    }
+    const raisedCount = nonFlatFeatureInfo.raisedFeatureFaceCount;
+    toast(`Detected raised 3D features (${raisedCount}). Laser cutting is limited to flat 2D profiles.`, 'error');
+  }, [selectedProductionService, isLaserBlockedByBends, isLaserBlockedByNonFlatFeatures, bendCountTotal, nonFlatFeatureInfo.raisedFeatureFaceCount, toast]);
 
   const stepHolesDetectedRef = useRef(false);
   const holeDetectionAttemptedRef = useRef(false);
@@ -811,11 +856,35 @@ const InstantPricing = () => {
   // ── STEP Hole Detection for Tapping & Hardware ───────
   useEffect(() => {
     if (!hasHoleDependentService || !selectedFile || !isStepFile(selectedFile.file.name)) return;
-    if (stepHolesDetectedRef.current || isDetectingHoles || detectHolesAbortRef.current || isLoadingUnfold) return;
+
+    const backendHoles = Array.isArray(backendData?.detectedHoles) ? backendData.detectedHoles : [];
+    if (backendHoles.length > 0) {
+      const depthIn = displayDimensions?.mm?.t ? parseFloat(displayDimensions.mm.t) / 25.4 : 2 / 25.4;
+      const mappedFromBackend = backendHoles.map((h, idx) => ({
+        id: idx,
+        diameterInches: h.diameter_in,
+        diameter_mm: h.diameter_mm,
+        depthMm: h.depth_mm || 0,
+        depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
+        position: h.position,
+        axis: h.axis,
+        parent_face_id: h.face_id,
+      }));
+      setDetectedHoles(mappedFromBackend);
+      stepHolesDetectedRef.current = true;
+      holeDetectionAttemptedRef.current = true;
+      return;
+    }
+
+    if (stepHolesDetectedRef.current || detectHolesAbortRef.current || isLoadingUnfold || holeDetectionAttemptedRef.current) return;
 
     const detect = async () => {
+      holeDetectionAttemptedRef.current = true;
       detectHolesAbortRef.current = new AbortController();
       setIsDetectingHoles(true);
+      const timeoutId = setTimeout(() => {
+        try { detectHolesAbortRef.current?.abort(); } catch { /* noop */ }
+      }, 20000);
       try {
         let r;
         if (selectedFile?.tempPath) {
@@ -866,9 +935,9 @@ const InstantPricing = () => {
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('Could not detect holes:', err.message);
-        // Allow retry after transient network/server failures.
-        stepHolesDetectedRef.current = false;
+        stepHolesDetectedRef.current = true;
       } finally {
+        clearTimeout(timeoutId);
         setIsDetectingHoles(false);
         detectHolesAbortRef.current = null;
       }
@@ -879,7 +948,7 @@ const InstantPricing = () => {
         try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       }
     };
-  }, [hasHoleDependentService, selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, isDetectingHoles]);
+  }, [hasHoleDependentService, selectedFile, displayDimensions?.mm?.t, isLoadingUnfold, backendData?.detectedHoles]);
 
   // Open one sub-service modal (closes all others first)
   const openSubModal = (kind, svc) => {
@@ -1113,6 +1182,57 @@ const InstantPricing = () => {
         setUnfoldStage('Completed');
         setBendTree(d.bendTree);
         setBackendData(d); // Keep backendData for other compatibility
+
+        const unfoldDepthIn = toFiniteNumber(d?.thickness) > 0 ? (toFiniteNumber(d.thickness) / 25.4) : (2 / 25.4);
+        const unfoldHoles = Array.isArray(d?.detectedHoles) ? d.detectedHoles : [];
+        if (unfoldHoles.length > 0) {
+          const mappedHoles = unfoldHoles.map((h, idx) => ({
+            id: idx,
+            diameterInches: h.diameter_in,
+            diameter_mm: h.diameter_mm,
+            depthMm: h.depth_mm || 0,
+            depthInches: h.depth_mm ? h.depth_mm / 25.4 : unfoldDepthIn,
+            position: h.position,
+            axis: h.axis,
+            parent_face_id: h.face_id,
+          }));
+          setDetectedHoles(mappedHoles);
+          stepHolesDetectedRef.current = true;
+          holeDetectionAttemptedRef.current = true;
+        }
+
+        // Cache-safe verification: if queued/cached unfold result says "no raised features",
+        // run one direct unfold call (non job-cache path) before method gating.
+        if (isStepFile(selectedFile.file.name) && !d?.nonFlatFeatures?.hasRaisedFeatures) {
+          try {
+            const verifyFd = new FormData();
+            verifyFd.append('file', selectedFile.file);
+            const verifyRes = await fetch(`${BACKEND_URL}/api/unfold`, {
+              method: 'POST',
+              body: verifyFd,
+              signal: controller.signal,
+            });
+
+            if (verifyRes.ok) {
+              const verifyData = await verifyRes.json();
+              if (
+                requestSeq === unfoldRequestSeqRef.current
+                && verifyData?.success
+                && verifyData?.nonFlatFeatures
+                && verifyData.nonFlatFeatures.hasRaisedFeatures
+              ) {
+                setBackendData((prev) => ({
+                  ...(prev || d),
+                  nonFlatFeatures: verifyData.nonFlatFeatures,
+                }));
+              }
+            }
+          } catch (verifyErr) {
+            if (verifyErr?.name !== 'AbortError') {
+              console.warn('Non-flat verification fallback failed:', verifyErr);
+            }
+          }
+        }
 
         // Initialize selectedBends with default values (90 degrees)
         const initial = {};
@@ -1942,9 +2062,33 @@ const InstantPricing = () => {
                         </div>
                       </div>
 
+                      <div style={{ marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#f8fafc', padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, color: '#1e293b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Model Process Factors</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {modelComplexityFactors.map((factor) => {
+                            const palette = factor.status === 'fail'
+                              ? { bg: '#fff1f2', border: '#fecdd3', text: '#be123c' }
+                              : factor.status === 'warn'
+                                ? { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c' }
+                                : { bg: '#ecfdf5', border: '#bbf7d0', text: '#166534' };
+                            return (
+                              <div key={factor.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 0.8fr', gap: 8, alignItems: 'center', background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 8, padding: '8px 10px' }}>
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#334155' }}>{factor.label}</div>
+                                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{factor.reason}</div>
+                                </div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', textAlign: 'right', fontFamily: 'monospace' }}>{factor.value}</div>
+                                <div style={{ fontSize: 10, fontWeight: 900, color: palette.text, textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{factor.impact}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {allServices.filter(s => s.is_production).map(svc => {
                           const isActive = selectedProductionService?.id === svc.id;
+                          const processFlags = getProcessFlags(svc.title);
                           const cfg = svc.config || {};
                           const dim = displayDimensions?.mm || null;
                           const dL = dim ? parseFloat(dim.l) : 0;
@@ -1955,16 +2099,23 @@ const InstantPricing = () => {
                           const isTooSmall = dim && ((cfg.min_x && dL < cfg.min_x) || (cfg.min_y && dW < cfg.min_y));
                           const isTooThick = dim && hasThickness && cfg.max_z && dT > cfg.max_z;
                           const isTooThin = dim && hasThickness && cfg.min_z && dT < cfg.min_z;
-                          const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
-                          const lockReason = isTooThick
-                            ? `Part thickness ${dT.toFixed(3)}mm exceeds max ${parseFloat(cfg.max_z).toFixed(3)}mm`
-                            : isTooThin
-                              ? `Part thickness ${dT.toFixed(3)}mm below min ${parseFloat(cfg.min_z).toFixed(3)}mm`
-                              : isTooLarge
-                                ? `Part (${dL.toFixed(3)}×${dW.toFixed(3)}mm) exceeds max size (${parseFloat(cfg.max_x).toFixed(3)}×${parseFloat(cfg.max_y).toFixed(3)}mm)`
-                                : isTooSmall
-                                  ? `Part (${dL.toFixed(3)}×${dW.toFixed(3)}mm) below minimum size (${parseFloat(cfg.min_x).toFixed(3)}×${parseFloat(cfg.min_y).toFixed(3)}mm)`
-                                  : '';
+                          const lockReasons = [];
+                          if (isTooThick) lockReasons.push(`Part thickness ${dT.toFixed(3)} mm exceeds max ${parseFloat(cfg.max_z).toFixed(3)} mm.`);
+                          if (isTooThin) lockReasons.push(`Part thickness ${dT.toFixed(3)} mm is below min ${parseFloat(cfg.min_z).toFixed(3)} mm.`);
+                          if (isTooLarge) lockReasons.push(`Part size ${dL.toFixed(3)} × ${dW.toFixed(3)} mm exceeds process max ${parseFloat(cfg.max_x).toFixed(3)} × ${parseFloat(cfg.max_y).toFixed(3)} mm.`);
+                          if (isTooSmall) lockReasons.push(`Part size ${dL.toFixed(3)} × ${dW.toFixed(3)} mm is below process minimum ${parseFloat(cfg.min_x).toFixed(3)} × ${parseFloat(cfg.min_y).toFixed(3)} mm.`);
+                          if (processFlags.isLaser && isLaserBlockedByBends) {
+                            lockReasons.push(`Detected ${bendCountTotal} bend(s). Laser cutting cannot produce formed bends.`);
+                          }
+                          if (processFlags.isLaser && isLaserBlockedByNonFlatFeatures) {
+                            const raisedCount = nonFlatFeatureInfo.raisedFeatureFaceCount;
+                            const maxOffset = nonFlatFeatureInfo.maxOffsetMm;
+                            lockReasons.push(
+                              nonFlatFeatureInfo.primaryReason
+                                || `Detected raised 3D features (${raisedCount}, max offset ${maxOffset.toFixed(3)} mm). Laser cutting supports flat 2D profiles only.`
+                            );
+                          }
+                          const isLocked = lockReasons.length > 0;
                           return (
                             <div
                               key={svc.id}
@@ -1994,12 +2145,22 @@ const InstantPricing = () => {
                                         <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>Selected</span>
                                       </div>
                                     )}
+                                    {!isLocked && !isActive && processFlags.isCnc && (isLaserBlockedByBends || isLaserBlockedByNonFlatFeatures) && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#eff6ff', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
+                                        <Check size={11} color="#2563eb" strokeWidth={3} />
+                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase' }}>Recommended</span>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.4, marginBottom: isLocked && lockReason ? 8 : 12 }}>{svc.description || 'Precision production.'}</div>
-                                  {isLocked && lockReason && (
-                                    <div style={{ marginBottom: 10, fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      <AlertTriangle size={12} color="#dc2626" />
-                                      {lockReason}
+                                  <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.4, marginBottom: isLocked ? 8 : 12 }}>{svc.description || 'Precision production.'}</div>
+                                  {isLocked && (
+                                    <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                      {lockReasons.map((reason, reasonIdx) => (
+                                        <div key={reasonIdx} style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          <AlertTriangle size={12} color="#dc2626" />
+                                          {reason}
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
@@ -2053,6 +2214,11 @@ const InstantPricing = () => {
                                   {!isAvailable && <div className="ip-badge outline" style={{ fontSize: 9 }}>Not Available</div>}
                                 </div>
                                 <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>{metalCount} {metalCount === 1 ? 'ITEM' : 'ITEMS'}</div>
+                                {!isAvailable && (
+                                  <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: '#dc2626' }}>
+                                    Locked: no materials available in this category for the selected process.
+                                  </div>
+                                )}
                               </div>
                               {isAvailable && <ChevronRight size={18} color="#cbd5e1" />}
                             </div>
@@ -2080,13 +2246,12 @@ const InstantPricing = () => {
                           const isTooSmall = (met.min_x && mL < met.min_x) || (met.min_y && mW < met.min_y);
                           const isTooThick = hasThickness && met.max_z && mT > met.max_z;
                           const isTooThin = hasThickness && met.min_z && mT < met.min_z;
-                          const isLocked = !!(isTooLarge || isTooSmall || isTooThick || isTooThin);
-                          const lockReason = isTooThick
-                            ? `Part thickness ${mT.toFixed(3)}mm exceeds max ${parseFloat(met.max_z).toFixed(3)}mm`
-                            : isTooThin
-                              ? `Part thickness ${mT.toFixed(3)}mm below min ${parseFloat(met.min_z).toFixed(3)}mm`
-                              : isTooLarge ? 'Part exceeds max sheet size'
-                                : isTooSmall ? 'Part below minimum sheet size' : '';
+                          const lockReasons = [];
+                          if (isTooThick) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm exceeds max ${parseFloat(met.max_z).toFixed(3)} mm.`);
+                          if (isTooThin) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm is below min ${parseFloat(met.min_z).toFixed(3)} mm.`);
+                          if (isTooLarge) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm exceeds material max ${parseFloat(met.max_x || 0).toFixed(3)} × ${parseFloat(met.max_y || 0).toFixed(3)} mm.`);
+                          if (isTooSmall) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm is below material minimum ${parseFloat(met.min_x || 0).toFixed(3)} × ${parseFloat(met.min_y || 0).toFixed(3)} mm.`);
+                          const isLocked = lockReasons.length > 0;
 
                           return (
                             <div
@@ -2110,8 +2275,12 @@ const InstantPricing = () => {
                                       </div>
                                     )}
                                   </div>
-                                  {isLocked && lockReason && (
-                                    <div style={{ marginBottom: 8, fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '4px 8px', borderRadius: 5, border: '1px solid #fecaca' }}>{lockReason}</div>
+                                  {isLocked && (
+                                    <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                      {lockReasons.map((reason, reasonIdx) => (
+                                        <div key={reasonIdx} style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '4px 8px', borderRadius: 5, border: '1px solid #fecaca' }}>{reason}</div>
+                                      ))}
+                                    </div>
                                   )}
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     <div className="card-stat" style={{ color: '#10b981' }}>IN STOCK</div>
