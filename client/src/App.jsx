@@ -28,6 +28,7 @@ import FaqCategoriesList from './pages/admin/FaqCategoriesList';
 import ServicesList from './pages/admin/ServicesList';
 import ServiceEdit from './pages/admin/ServiceEdit';
 import ServiceDetail from './pages/ServiceDetail.jsx';
+import ServicesPage from './pages/ServicesPage.jsx';
 import AdminsList from './pages/admin/AdminsList';
 import EmailConfig from './pages/admin/EmailConfig';
 import SubscribersList from './pages/admin/SubscribersList';
@@ -91,6 +92,7 @@ function App() {
                 <Route path="/metals" element={<PublicShell><MetalsPage /></PublicShell>} />
                 <Route path="/guidelines" element={<PublicShell><Guidelines /></PublicShell>} />
                 <Route path="/service/:slug" element={<PublicShell><ServiceDetail /></PublicShell>} />
+                <Route path="/services" element={<PublicShell><ServicesPage /></PublicShell>} />
                 <Route path="/privacy-policy" element={<PublicShell><PrivacyPolicy /></PublicShell>} />
                 <Route path="/terms-of-service" element={<PublicShell><TermsOfService /></PublicShell>} />
 

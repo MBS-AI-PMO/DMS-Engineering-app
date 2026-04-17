@@ -133,7 +133,7 @@ const Hero = () => {
                     transition={{ duration: 0.5, delay: 0.4 }}
                 >
                     <Link to="/get-instant-pricing" className="btn-hero-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
-                        BUILD NOW <span className="btn-icon">🚀</span>
+                        BUILD NOW
                     </Link>
                 </motion.div>
             </div>

@@ -7,22 +7,14 @@ import traceback
 import time
 import numpy as np
 
-PROGRESS_PREFIX = "__PROGRESS__"
-
 # 1. Add FreeCAD and lib_unfold to path
 def setup_paths():
     # Detect bin directory of the current interpreter (which should be the FreeCAD one)
     interp_dir = os.path.dirname(sys.executable)
     if interp_dir not in sys.path:
         sys.path.append(interp_dir)
-
+    
     lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "lib_unfold"))
-    # CRITICAL: Remove the script's own directory from sys.path to prevent
-    # the legacy backend/unfold.py from shadowing lib_unfold/unfold.py.
-    script_dir = os.path.abspath(os.path.dirname(__file__))
-    while script_dir in sys.path:
-        sys.path.remove(script_dir)
-    # Insert lib_unfold at the front so `from unfold import ...` finds the right module.
     if lib_path not in sys.path:
         sys.path.insert(0, lib_path)
 
@@ -33,61 +25,15 @@ from FreeCAD import Matrix, Vector, Rotation
 import Part
 import networkx as nx
 
-# Stub out GUI modules before importing unfold.py — the library does
-# `import FreeCADGui`, `import Draft`, `import importDXF`, `import importSVG`
-# at module level which hang on headless servers.
-# Only the math/geometry functions are needed here, not the GUI parts.
-import types
-
-_gui_stub = types.ModuleType("FreeCADGui")
-_gui_stub.getMainWindow = lambda: None
-_gui_stub.ActiveDocument = None
-_gui_stub.Selection = type("Sel", (), {
-    "getCompleteSelection": staticmethod(lambda: []),
-    "clearSelection": staticmethod(lambda: None),
-    "addSelectionGate": staticmethod(lambda *a, **k: None),
-    "addObserver": staticmethod(lambda *a: None),
-    "removeSelectionGate": staticmethod(lambda: None),
-    "removeObserver": staticmethod(lambda *a: None),
-    "ResolveMode": type("RM", (), {"NoResolve": 0})(),
-})()
-_gui_stub.UiLoader = lambda: None
-_gui_stub.Control = type("Ctrl", (), {"closeDialog": staticmethod(lambda: None)})()
-sys.modules["FreeCADGui"] = _gui_stub
-FreeCAD.Gui = _gui_stub
-
-# Draft stub — only makeSketch is used in unfold math path
-_draft_stub = types.ModuleType("Draft")
-_draft_stub.makeSketch = lambda *a, **k: None
-sys.modules["Draft"] = _draft_stub
-
-for _mod_name in ("importDXF", "importSVG"):
-    if _mod_name not in sys.modules:
-        _stub = types.ModuleType(_mod_name)
-        _stub.export = lambda *a, **k: None
-        sys.modules[_mod_name] = _stub
-
 # Import from the library
 from unfold import (
-    build_graph_of_tangent_faces,
-    EstimateThickness,
-    BendAllowanceCalculator,
+    build_graph_of_tangent_faces, 
+    EstimateThickness, 
+    BendAllowanceCalculator, 
     unroll_cylinder,
     compute_unbend_transform,
     BendDirection
 )
-
-
-def emit_progress(percent, stage):
-    """Emit structured progress for parent processes that parse stderr."""
-    try:
-        pct = max(0.0, min(100.0, float(percent)))
-        payload = {"percent": round(pct, 2), "stage": str(stage or "Processing")}
-        sys.stderr.write(f"{PROGRESS_PREFIX}{json.dumps(payload)}\n")
-        sys.stderr.flush()
-    except Exception:
-        # Progress reporting must never interrupt geometry processing.
-        pass
 
 def _normalize(vec):
     length = np.linalg.norm(vec)
@@ -128,12 +74,7 @@ def _get_edge_points(edge, n=5):
     if curve_type == "Part::GeomLine":
         sample_n = 2
     elif curve_type in ("Part::GeomCircle", "Part::GeomArcOfCircle", "Part::GeomEllipse", "Part::GeomArcOfEllipse"):
-        try:
-            # Adaptive sampling for smoother holes/arcs in 2D without exploding point count.
-            edge_len = float(edge.Length)
-            sample_n = max(24, min(96, int(edge_len / 1.5)))
-        except Exception:
-            sample_n = 24
+        sample_n = 24
     else:
         sample_n = max(n, 24)
     pts = edge.discretize(Number=sample_n)
@@ -145,327 +86,6 @@ def _get_line_hash(p1_list, p2_list, tol=0.1):
     p2 = (round(p2_list[0]/tol)*tol, round(p2_list[1]/tol)*tol, round(p2_list[2]/tol)*tol)
     return tuple(sorted([p1, p2]))
 
-
-def _basis_from_normal(normal_vec):
-    n = _normalize(np.asarray(normal_vec, dtype=float))
-    ref = np.array([1.0, 0.0, 0.0]) if abs(float(n[0])) < 0.9 else np.array([0.0, 1.0, 0.0])
-    u = _normalize(np.cross(n, ref))
-    v = _normalize(np.cross(n, u))
-    return n, u, v
-
-
-def _empty_non_flat_features():
-    return {
-        "hasRaisedFeatures": False,
-        "raisedFeatureFaceCount": 0,
-        "parallelPlanarFaceCount": 0,
-        "maxOffsetMm": 0.0,
-        "reasons": [],
-    }
-
-
-def _detect_non_flat_features(fc_shape, root_idx, thickness):
-    """
-    Detect raised planar features (boss/emboss-like geometry) on otherwise flat sheet parts.
-    Returns conservative metadata used by the frontend to lock laser-cut process selection.
-    """
-    result = _empty_non_flat_features()
-    try:
-        if root_idx is None or root_idx < 0 or root_idx >= len(fc_shape.Faces):
-            return result
-
-        root_face = fc_shape.Faces[root_idx]
-        if root_face.Surface.TypeId != "Part::GeomPlane":
-            return result
-
-        root_n = root_face.normalAt(0, 0)
-        root_normal = _normalize(np.array([float(root_n.x), float(root_n.y), float(root_n.z)], dtype=float))
-        root_center = root_face.CenterOfMass
-        root_point = np.array([float(root_center.x), float(root_center.y), float(root_center.z)], dtype=float)
-
-        thickness_mm = float(thickness) if thickness and float(thickness) > 0 else 0.0
-        # Keep threshold low enough for small boss tops while filtering tiny numeric slivers.
-        # Root-area scaling avoids over-filtering on large plates; thickness scaling avoids noise
-        # on very thin parts.
-        root_area = max(1.0, float(root_face.Area))
-        min_face_area = max(
-            0.1,
-            min(
-                root_area * 0.0002,
-                (thickness_mm * thickness_mm * 0.08) if thickness_mm > 0 else 0.6,
-            ),
-        )
-
-        raised_faces = 0
-        raised_same_orientation = 0
-        raised_opposite_orientation = 0
-        parallel_faces = 0
-        max_offset = 0.0
-
-        # Tightened tolerances to detect low-height emboss/boss geometry (sub-mm to ~1 mm)
-        # that should still lock laser process selection.
-        tol_root = max(0.08, thickness_mm * 0.08) if thickness_mm > 0 else 0.25
-        tol_skin = max(0.12, thickness_mm * 0.12) if thickness_mm > 0 else 0.45
-
-        for fi, face in enumerate(fc_shape.Faces):
-            if fi == root_idx:
-                continue
-            if face.Surface.TypeId != "Part::GeomPlane":
-                continue
-
-            try:
-                face_area = float(face.Area)
-            except Exception:
-                face_area = 0.0
-            if face_area < min_face_area:
-                continue
-
-            fn = face.normalAt(0, 0)
-            face_normal = _normalize(np.array([float(fn.x), float(fn.y), float(fn.z)], dtype=float))
-            alignment = float(np.dot(face_normal, root_normal))
-            parallelity = abs(alignment)
-            if parallelity < 0.97:
-                continue
-
-            parallel_faces += 1
-            center = face.CenterOfMass
-            center_np = np.array([float(center.x), float(center.y), float(center.z)], dtype=float)
-            signed_offset = float(np.dot(center_np - root_point, root_normal))
-            offset = abs(signed_offset)
-            max_offset = max(max_offset, offset)
-
-            if thickness_mm > 0:
-                near_root_plane = offset <= tol_root
-                near_opposite_skin = abs(offset - thickness_mm) <= tol_skin
-
-                if alignment > 0:
-                    # Same normal direction as root but offset away from root plane => raised boss/emboss-like feature.
-                    if not near_root_plane:
-                        raised_faces += 1
-                        raised_same_orientation += 1
-                else:
-                    # Opposite-direction faces should generally sit on the opposite skin plane.
-                    if not near_opposite_skin:
-                        raised_faces += 1
-                        raised_opposite_orientation += 1
-            else:
-                if alignment > 0 and offset > 0.45:
-                    raised_faces += 1
-                    raised_same_orientation += 1
-                elif alignment < 0 and offset > 0.65:
-                    raised_faces += 1
-                    raised_opposite_orientation += 1
-
-        result["parallelPlanarFaceCount"] = int(parallel_faces)
-        result["raisedFeatureFaceCount"] = int(raised_faces)
-        result["maxOffsetMm"] = round(float(max_offset), 4)
-        result["hasRaisedFeatures"] = raised_faces > 0
-
-        if raised_faces > 0:
-            if thickness_mm > 0:
-                result["reasons"].append(
-                    f"Detected {raised_faces} raised planar face(s) beyond expected sheet skins for thickness {thickness_mm:.3f} mm."
-                )
-            else:
-                result["reasons"].append(
-                    f"Detected {raised_faces} raised planar face(s) offset from the base planar skin."
-                )
-            if raised_same_orientation > 0:
-                result["reasons"].append(
-                    f"{raised_same_orientation} face(s) share root-plane orientation but are offset, indicating boss/emboss geometry."
-                )
-            if raised_opposite_orientation > 0:
-                result["reasons"].append(
-                    f"{raised_opposite_orientation} opposite-orientation face(s) are outside expected opposite-skin offset."
-                )
-
-        return result
-    except Exception as ex:
-        result["reasons"].append(f"Non-flat feature analysis warning: {ex}")
-        return result
-
-
-def _detect_holes_from_planar_loops(fc_shape):
-    """
-    Fallback hole detector for models where holes are not represented as
-    cylindrical faces (e.g. conical/countersunk-only or non-analytic exports).
-    """
-    candidates = []
-
-    for fi, face in enumerate(fc_shape.Faces):
-        if face.Surface.TypeId != "Part::GeomPlane":
-            continue
-
-        try:
-            n_obj = face.normalAt(0, 0)
-            normal = np.array([float(n_obj.x), float(n_obj.y), float(n_obj.z)], dtype=float)
-        except Exception:
-            try:
-                n_obj = face.Surface.Axis
-                normal = np.array([float(n_obj.x), float(n_obj.y), float(n_obj.z)], dtype=float)
-            except Exception:
-                continue
-
-        if np.linalg.norm(normal) < 1e-9:
-            continue
-
-        normal, u_vec, v_vec = _basis_from_normal(normal)
-
-        outer_hash = None
-        try:
-            outer_hash = face.OuterWire.hashCode()
-        except Exception:
-            outer_hash = None
-
-        for wire in face.Wires:
-            try:
-                if outer_hash is not None and wire.hashCode() == outer_hash:
-                    continue
-            except Exception:
-                pass
-
-            wire_points = []
-            for edge in wire.Edges:
-                try:
-                    pts = edge.discretize(Number=32)
-                except Exception:
-                    pts = [v.Point for v in edge.Vertexes]
-
-                if not pts or len(pts) < 2:
-                    continue
-
-                edge_pts = [
-                    np.array([float(p.x), float(p.y), float(p.z)], dtype=float)
-                    for p in pts
-                ]
-
-                if wire_points:
-                    if np.linalg.norm(edge_pts[0] - wire_points[-1]) <= 1e-6:
-                        wire_points.extend(edge_pts[1:])
-                    else:
-                        wire_points.extend(edge_pts)
-                else:
-                    wire_points.extend(edge_pts)
-
-            if len(wire_points) < 4:
-                continue
-
-            if np.linalg.norm(wire_points[0] - wire_points[-1]) > 1e-5:
-                wire_points.append(wire_points[0].copy())
-
-            pts3 = np.asarray(wire_points, dtype=float)
-            if pts3.shape[0] < 4:
-                continue
-
-            local = pts3 - pts3[0]
-            x = local @ u_vec
-            y = local @ v_vec
-            pts2 = np.column_stack((x, y))
-
-            seg = pts2[1:] - pts2[:-1]
-            perimeter = float(np.sum(np.linalg.norm(seg, axis=1)))
-            if perimeter < 1e-6:
-                continue
-
-            area = 0.5 * abs(float(np.sum(
-                pts2[:-1, 0] * pts2[1:, 1] - pts2[1:, 0] * pts2[:-1, 1]
-            )))
-            if area < 1e-6:
-                continue
-
-            roundness = (4.0 * math.pi * area) / (perimeter * perimeter + 1e-9)
-            diameter_mm = 2.0 * math.sqrt(area / math.pi)
-
-            # Keep near-circular inner loops that look like drilled/punched holes.
-            if diameter_mm < 1.0:
-                continue
-            if roundness < 0.80:
-                continue
-
-            center = np.mean(pts3[:-1], axis=0)
-            candidates.append({
-                "face_index": fi,
-                "face_id": f"face_{fi}",
-                "diameter_mm": float(diameter_mm),
-                "center": center,
-                "axis": normal,
-            })
-
-    if not candidates:
-        return []
-
-    used = set()
-    holes = []
-
-    for i, c1 in enumerate(candidates):
-        if i in used:
-            continue
-
-        best_j = None
-        best_score = None
-        for j in range(i + 1, len(candidates)):
-            if j in used:
-                continue
-            c2 = candidates[j]
-
-            max_d = max(c1["diameter_mm"], c2["diameter_mm"], 1e-9)
-            if abs(c1["diameter_mm"] - c2["diameter_mm"]) / max_d > 0.08:
-                continue
-
-            dot_n = float(np.dot(c1["axis"], c2["axis"]))
-            if dot_n > -0.85:
-                continue
-
-            delta = c2["center"] - c1["center"]
-            axial = abs(float(np.dot(delta, c1["axis"])))
-            radial_vec = delta - np.dot(delta, c1["axis"]) * c1["axis"]
-            radial = float(np.linalg.norm(radial_vec))
-
-            if axial < 0.15:
-                continue
-            if radial > max(0.4, c1["diameter_mm"] * 0.2):
-                continue
-
-            score = radial + abs(c1["diameter_mm"] - c2["diameter_mm"])
-            if best_score is None or score < best_score:
-                best_score = score
-                best_j = j
-
-        if best_j is not None:
-            used.add(i)
-            used.add(best_j)
-            c2 = candidates[best_j]
-
-            pos = (c1["center"] + c2["center"]) * 0.5
-            axis = _normalize(c1["axis"] - c2["axis"])
-            if np.linalg.norm(axis) < 1e-9:
-                axis = _normalize(c1["axis"])
-            depth_mm = float(np.linalg.norm(c2["center"] - c1["center"]))
-            diameter_mm = min(c1["diameter_mm"], c2["diameter_mm"])
-            face_id = c1["face_id"]
-        else:
-            used.add(i)
-            pos = c1["center"]
-            axis = _normalize(c1["axis"])
-            depth_mm = max(0.5, c1["diameter_mm"] * 0.3)
-            diameter_mm = c1["diameter_mm"]
-            face_id = c1["face_id"]
-
-        holes.append({
-            "id": f"hole_{len(holes) + 1}",
-            "face_id": face_id,
-            "diameter_mm": round(float(diameter_mm), 4),
-            "diameter_in": round(float(diameter_mm) / 25.4, 6),
-            "position": [round(float(v), 4) for v in pos],
-            "axis": [round(float(v), 4) for v in axis],
-            "depth_mm": round(float(depth_mm), 4),
-        })
-
-    holes.sort(key=lambda h: h["diameter_mm"])
-    for idx, h in enumerate(holes):
-        h["id"] = f"hole_{idx + 1}"
-    return holes
-
 def detect_holes_fc(fc_shape):
     """
     Detect holes using FreeCAD native classification.
@@ -476,6 +96,11 @@ def detect_holes_fc(fc_shape):
     for i, face in enumerate(fc_shape.Faces):
         if face.Surface.TypeId == "Part::GeomCylinder":
             cyl = face.Surface
+            # In FreeCAD, Orientation strings are 'Forward' or 'Reversed'
+            # concave internal surfaces of holes are typically 'Reversed'
+            if face.Orientation == "Forward":
+                continue
+            
             radius = float(cyl.Radius)
             if radius < 0.5: continue # Skip fillets
             
@@ -524,73 +149,11 @@ def detect_holes_fc(fc_shape):
             cluster.append(c2)
         clusters.append(cluster)
 
-    def _basis_from_axis(axis_vec):
-        a = _normalize(axis_vec)
-        ref = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
-        u = _normalize(np.cross(a, ref))
-        v = _normalize(np.cross(a, u))
-        return a, u, v
-
-    def _angular_coverage(points, center, axis):
-        if len(points) < 3:
-            return 0.0
-        a, u, v = _basis_from_axis(axis)
-        angles = []
-        for p in points:
-            rel = p - center
-            radial = rel - np.dot(rel, a) * a
-            rlen = np.linalg.norm(radial)
-            if rlen < 1e-6:
-                continue
-            ang = math.atan2(np.dot(radial, v), np.dot(radial, u))
-            if ang < 0:
-                ang += 2.0 * math.pi
-            angles.append(ang)
-        if len(angles) < 3:
-            return 0.0
-        angles.sort()
-        max_gap = 0.0
-        for i in range(len(angles)):
-            nxt = angles[(i + 1) % len(angles)]
-            gap = nxt - angles[i] if i < len(angles) - 1 else (nxt + 2.0 * math.pi - angles[i])
-            if gap > max_gap:
-                max_gap = gap
-        return 2.0 * math.pi - max_gap
-
     for cluster in clusters:
         c1 = cluster[0]
         total_area = sum(c["area"] for c in cluster)
         depth = total_area / (2 * math.pi * c1["radius"])
         if depth < 0.5: continue
-
-        # Keep only near full cylinders so bend arcs / partial rolls are excluded.
-        cluster_points = []
-        for c in cluster:
-            f = fc_shape.Faces[c["fi"]]
-            for e in f.Edges:
-                pts = [v.Point for v in e.Vertexes]
-                if len(pts) < 2:
-                    try:
-                        pts = e.discretize(Number=8)
-                    except Exception:
-                        pts = [v.Point for v in e.Vertexes]
-                for p in pts:
-                    cluster_points.append(np.array([p.x, p.y, p.z]))
-        coverage = _angular_coverage(cluster_points, c1["center"], c1["axis"])
-        if coverage < math.radians(270.0):
-            continue
-
-        # Real holes usually connect to at least one non-cylindrical boundary face
-        # (planar or conical); this avoids promoting long standalone cylinders.
-        adj_non_cyl = set()
-        for c in cluster:
-            f = fc_shape.Faces[c["fi"]]
-            for e in f.Edges:
-                for nfi in e2f.get(e.hashCode(), []):
-                    if nfi != c["fi"] and fc_shape.Faces[nfi].Surface.TypeId != "Part::GeomCylinder":
-                        adj_non_cyl.add(nfi)
-        if len(adj_non_cyl) < 1:
-            continue
         
         # Diameter and position
         diam = c1["radius"] * 2.0
@@ -650,11 +213,7 @@ def detect_holes_fc(fc_shape):
 
     for idx, h in enumerate(final):
         h["id"] = f"hole_{idx+1}"
-    if final:
-        return final
-
-    # Fallback for non-cylindrical hole topology exports.
-    return _detect_holes_from_planar_loops(fc_shape)
+    return final
 
 def get_projections(fc_shape):
     """Generate orthographic projections."""
@@ -741,71 +300,14 @@ def get_projections(fc_shape):
 
     return views
 
-def unfold_with_lib(filepath, profile="full"):
-    profile_key = str(profile or "full").strip().lower()
-    include_unfold = profile_key in ("full", "fast2d", "2d", "unfold")
-    include_face_meshes = profile_key == "full"
-    include_projections = profile_key == "full"
-    include_holes = profile_key in ("full", "holes", "holes_fast")
-    estimate_thickness = profile_key != "holes_fast"
-
+def unfold_with_lib(filepath):
     t0 = time.time()
-    emit_progress(4, "Loading STEP model")
     # 1. Load STEP directly using FreeCAD Part
     fc_shape = Part.Shape()
     fc_shape.read(filepath)
     sys.stderr.write(f"[Profiling] Load STEP: {time.time() - t0:.3f}s\n")
-
-    if not include_unfold:
-        thickness = 2.0
-        root_idx = None
-        non_flat_features = _empty_non_flat_features()
-        if estimate_thickness:
-            emit_progress(28, "Estimating sheet thickness")
-            try:
-                planar_faces = [
-                    (i, float(face.Area))
-                    for i, face in enumerate(fc_shape.Faces)
-                    if face.Surface.TypeId == "Part::GeomPlane"
-                ]
-                if planar_faces:
-                    root_idx = max(planar_faces, key=lambda x: x[1])[0]
-                    thickness = float(EstimateThickness.using_best_method(fc_shape, root_idx))
-            except Exception:
-                # Keep robust fallback thickness for downstream UI flows.
-                thickness = 2.0
-
-        if root_idx is not None:
-            non_flat_features = _detect_non_flat_features(fc_shape, root_idx, thickness)
-
-        holes_data = []
-        if include_holes:
-            emit_progress(58 if estimate_thickness else 42, "Detecting holes")
-            holes_data = detect_holes_fc(fc_shape)
-
-        emit_progress(96, "Finalizing analysis")
-        return _json_safe({
-            "success": True,
-            "flatVertices": [],
-            "cutEdges": [],
-            "bendEdges": [],
-            "thickness": round(float(thickness), 4),
-            "nonFlatFeatures": non_flat_features,
-            "bendTree": None,
-            "faceMeshes": {},
-            "bends": [],
-            "bbox": {"width": 0.0, "height": 0.0},
-            "topEdges": [],
-            "frontEdges": [],
-            "sideEdges": [],
-            "topBendEdges": [],
-            "frontBendEdges": [],
-            "sideBendEdges": [],
-            "detectedHoles": holes_data,
-        })
     
     t_start = time.time()
-    emit_progress(12, "Scanning model faces")
     # Robust root face selection: Look for the largest pair of parallel faces (top/bottom)
     # to avoid picking a narrow edge face as the root.
     potential_roots = []
@@ -847,7 +349,6 @@ def unfold_with_lib(filepath, profile="full"):
     
     for root_idx in root_candidates[:5]:
         try:
-            emit_progress(20 + (root_candidates.index(root_idx) * 4), f"Evaluating unfold root {root_idx}")
             # Adjacency and Thickness
             print(f"[Debug] Testing root {root_idx} (area {fc_shape.Faces[root_idx].Area:.2f})", file=sys.stderr)
             root_face = fc_shape.Faces[root_idx]
@@ -857,10 +358,10 @@ def unfold_with_lib(filepath, profile="full"):
             print(f"[Debug] Graph built with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges", file=sys.stderr)
             thickness = EstimateThickness.using_best_method(fc_shape, root_idx)
             print(f"[Debug] Detected thickness: {thickness}", file=sys.stderr)
-            bac = BendAllowanceCalculator.from_single_value(0.44) # Standard K-factor
+            bac = BendAllowanceCalculator.from_single_value(0.44) # Standard K-factor   
             
             # Spanning Tree
-            spanning_tree = nx.minimum_spanning_tree(graph, weight="label")
+            spanning_tree = nx.minimum_spanning_tree(graph, weight="label") 
             dg = nx.DiGraph()
             for node in spanning_tree: dg.add_node(node)
             
@@ -879,7 +380,6 @@ def unfold_with_lib(filepath, profile="full"):
 
             # 3. Perform Unfolding traversal
             t_unfold_start = time.time()
-            emit_progress(38, "Unfolding bends")
             for u, v in dg.edges():
                 bend_face = fc_shape.Faces[v]
                 edge_idx = dg.get_edge_data(u, v)["label"]
@@ -904,7 +404,6 @@ def unfold_with_lib(filepath, profile="full"):
                 else:
                     dg.nodes[v]["unbend_transform"] = Matrix()
             sys.stderr.write(f"[Profiling] Unfold traversal: {time.time() - t_unfold_start:.3f}s\n")
-            emit_progress(62, "Generating flat pattern geometry")
             
             # If we reach here without exception, this root worked!
             chosen_root = root_idx
@@ -923,8 +422,6 @@ def unfold_with_lib(filepath, profile="full"):
     root_face = fc_shape.Faces[chosen_root]
     root_normal = root_face.normalAt(0,0)
     root_center = root_face.CenterOfMass
-
-    non_flat_features = _detect_non_flat_features(fc_shape, chosen_root, thickness)
     
     # 1. Move to origin
     global_align_m.move(root_center * -1.0)
@@ -936,9 +433,6 @@ def unfold_with_lib(filepath, profile="full"):
     flat_vertices = []
     cut_edges_2d = []
     bend_edges_2d = []
-    cut_seg_counts = {}
-    cut_seg_points = {}
-    emit_progress(70, "Building bend hierarchy")
     
     def build_frontend_tree(node_id, parent_id=None, accumulated_m=None):
         """O(n) traversal: accumulated_m is the product of unbend transforms from root to
@@ -970,11 +464,7 @@ def unfold_with_lib(filepath, profile="full"):
         for e in flat_face.Edges:
             pts = _get_edge_points(e)
             for i in range(len(pts) - 1):
-                p1, p2 = pts[i], pts[i + 1]
-                seg_hash = _get_line_hash(p1, p2, tol=0.05)
-                cut_seg_counts[seg_hash] = cut_seg_counts.get(seg_hash, 0) + 1
-                if seg_hash not in cut_seg_points:
-                    cut_seg_points[seg_hash] = p1 + p2
+                cut_edges_2d.extend(pts[i] + pts[i + 1])
 
         # Bend Lines
         if "bend_line" in node_data:
@@ -1040,27 +530,19 @@ def unfold_with_lib(filepath, profile="full"):
 
     root_node = build_frontend_tree(root_idx)
 
-    # Keep only boundary segments in the flat cut profile.
-    # Shared segments are internal seams between unfolded faces and should not be shown as cut lines.
-    for seg_hash, count in cut_seg_counts.items():
-        if count == 1:
-            cut_edges_2d.extend(cut_seg_points[seg_hash])
-
+    # Tessellate all faces for HierarchicalProjectViewer.
+    # deflection=5.0 provides a major reduction in triangle count for faster loading.
     face_meshes = {}
-    if include_face_meshes:
-        emit_progress(80, "Preparing 3D face meshes")
-        # Tessellate all faces for HierarchicalProjectViewer.
-        # deflection=5.0 provides a major reduction in triangle count for faster loading.
-        for i, face in enumerate(fc_shape.Faces):
-            try:
-                verts, tris = _tessellate_fc_face(face, deflection=5.0)
-                if verts.shape[0] > 0 and tris.shape[0] > 0:
-                    face_meshes[f"face_{i}"] = {
-                        "vertices": verts.flatten().tolist(),
-                        "indices": tris.flatten().tolist(),
-                    }
-            except Exception:
-                pass
+    for i, face in enumerate(fc_shape.Faces):
+        try:
+            verts, tris = _tessellate_fc_face(face, deflection=5.0)
+            if verts.shape[0] > 0 and tris.shape[0] > 0:
+                face_meshes[f"face_{i}"] = {
+                    "vertices": verts.flatten().tolist(),
+                    "indices": tris.flatten().tolist(),
+                }
+        except Exception:
+            pass
 
     # Calculate bounding box for 2D layout centering
     width, height = 0, 0
@@ -1086,26 +568,15 @@ def unfold_with_lib(filepath, profile="full"):
     traverse_bends(root_node)
 
     # 6. Technical views only — holes are detected separately by /api/detect-holes
-    views = {
-        "top": {"edges": [], "bend_edges": []},
-        "front": {"edges": [], "bend_edges": []},
-        "side": {"edges": [], "bend_edges": []},
-    }
-    if include_projections:
-        t_views = time.time()
-        emit_progress(88, "Generating orthographic projections")
-        views = get_projections(fc_shape)
-        sys.stderr.write(f"[Profiling] Projections: {time.time() - t_views:.3f}s\n")
+    t_views = time.time()
+    views = get_projections(fc_shape)
+    sys.stderr.write(f"[Profiling] Projections: {time.time() - t_views:.3f}s\n")
 
-    holes_data = []
-    if include_holes:
-        t_holes = time.time()
-        emit_progress(92, "Detecting holes")
-        holes_data = detect_holes_fc(fc_shape)
-        sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
+    t_holes = time.time()
+    holes_data = detect_holes_fc(fc_shape)
+    sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
     sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")
-    emit_progress(98, "Finalizing response")
 
     return _json_safe({
         "success": True,
@@ -1113,7 +584,6 @@ def unfold_with_lib(filepath, profile="full"):
         "cutEdges": cut_edges_2d,
         "bendEdges": bend_edges_2d,
         "thickness": round(float(thickness), 4),
-        "nonFlatFeatures": non_flat_features,
         "bendTree": root_node,
         "faceMeshes": face_meshes,
         "bends": bends_data,
@@ -1128,15 +598,5 @@ def unfold_with_lib(filepath, profile="full"):
     })
 
 if __name__ == "__main__":
-    # Accept input file and profile from env vars (preferred — avoids FreeCAD
-    # intercepting CLI args) or fall back to positional args for manual use.
-    input_file = os.environ.get("UNFOLD_INPUT_FILE") or (sys.argv[1] if len(sys.argv) > 1 else None)
-    cli_profile = os.environ.get("UNFOLD_PROFILE") or "full"
-    if not input_file:
-        print(json.dumps({"error": "No input file specified"}))
-        sys.exit(1)
-    if len(sys.argv) > 2 and not os.environ.get("UNFOLD_INPUT_FILE"):
-        for arg in sys.argv[2:]:
-            if arg.startswith("--profile=") or arg.startswith("profile="):
-                cli_profile = arg.split("=", 1)[1].strip() or "full"
-    print(json.dumps(unfold_with_lib(input_file, profile=cli_profile)))
+    if len(sys.argv) > 1:
+        print(json.dumps(unfold_with_lib(sys.argv[1])))

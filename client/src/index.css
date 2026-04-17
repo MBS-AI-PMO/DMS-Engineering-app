@@ -179,7 +179,7 @@ body {
     letter-spacing: 1px;
     transition: all 0.3s ease;
     position: relative;
-    padding: 0;
+    padding: 0 0 5px;
 }
 
 .nav-links li a:hover,
@@ -1180,6 +1180,50 @@ body {
     box-shadow: 0 15px 40px rgba(227, 27, 35, 0.6);
 }
 
+.hero-section .btn-hero-primary {
+    position: relative;
+    overflow: hidden;
+    border: none;
+    background: linear-gradient(135deg, #ff3239 0%, #d5131f 55%, #94060f 100%);
+    box-shadow:
+        0 14px 34px rgba(190, 12, 25, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition:
+        transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.35s ease,
+        filter 0.35s ease;
+}
+
+.hero-section .btn-hero-primary::before {
+    content: '';
+    position: absolute;
+    top: -140%;
+    left: -36%;
+    width: 56%;
+    height: 320%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0) 100%);
+    transform: rotate(24deg);
+    transition: left 0.6s ease;
+    pointer-events: none;
+}
+
+.hero-section .btn-hero-primary:hover {
+    transform: translateY(-4px) scale(1.02);
+    filter: brightness(1.05) saturate(1.08);
+    box-shadow:
+        0 20px 48px rgba(190, 12, 25, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+.hero-section .btn-hero-primary:hover::before {
+    left: 118%;
+}
+
+.hero-section .btn-hero-primary:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.88);
+    outline-offset: 3px;
+}
+
 .hero-footer {
     position: absolute;
     bottom: 200px;
@@ -1201,12 +1245,13 @@ body {
 
 @media (max-width: 768px) {
     .hero-title {
-        font-size: 2.8rem;
+        font-size: 3.8rem;
         letter-spacing: -1px;
+        line-height: 1.16;
     }
 
     .hero-subtitle {
-        font-size: 1.2rem;
+        font-size: 1.35rem;
     }
 
     .hero-section {
@@ -1220,13 +1265,14 @@ body {
     }
 
     .hero-section .btn-hero-primary {
-        min-width: min(90vw, 340px);
-        padding: 20px 28px;
-        font-size: clamp(1.28rem, 5.2vw, 1.46rem);
+        min-width: min(72vw, 280px);
+        padding: 14px 22px;
+        font-size: clamp(1rem, 4vw, 1.15rem);
         justify-content: center;
         text-align: center;
         gap: 10px;
         line-height: 1;
+        margin-inline: auto;
     }
 
     .hero-footer {
@@ -3270,7 +3316,7 @@ body {
 .faq-item-custom {
     background: #f5f5f5;
     border-radius: 12px;
-    padding: 30px 40px;
+    padding: 18px 20px;
     transition: all 0.3s ease;
     border: 1px solid transparent;
 }
@@ -3312,7 +3358,7 @@ body {
 }
 
 .faq-answer-row {
-    padding-left: 36px;
+    padding-left: 18px;
 }
 
 .faq-answer-text {
@@ -3650,10 +3696,10 @@ body {
 }
 
 .faq-question-row {
-    padding: 16px 24px;
+    padding: 12px 18px;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
     cursor: pointer;
     background: transparent;
     width: 100%;
@@ -3692,7 +3738,7 @@ body {
 }
 
 .faq-answer-row {
-    padding: 0 24px 16px 76px;
+    padding: 0 18px 12px 58px;
 }
 
 .faq-answer-text {
@@ -3700,6 +3746,17 @@ body {
     line-height: 1.6;
     color: #4b5563;
     margin: 0;
+}
+
+@media (max-width: 768px) {
+    .faq-question-row {
+        padding: 10px 14px;
+        gap: 12px;
+    }
+
+    .faq-answer-row {
+        padding: 0 14px 10px 44px;
+    }
 }
 
 /* CAPABILITIES SECTION */
