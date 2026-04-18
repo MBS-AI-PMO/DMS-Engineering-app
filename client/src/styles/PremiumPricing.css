@@ -159,6 +159,45 @@ body.qf-active {
   }
 }
 
+/* "How it works" stepper — desktop: 4 cards in a row with chevrons.
+   Mobile: 2×2 grid, chevrons hidden. */
+.ip-steps {
+  display: flex;
+  align-items: stretch;
+}
+.ip-step-card {
+  flex: 1;
+  min-width: 0;
+}
+.ip-step-arrow {
+  width: 20px;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .ip-steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .ip-step-arrow {
+    display: none !important;
+  }
+}
+
+/* File-format badges — fixed size on desktop, shrink/wrap on mobile so all
+   four fit inside the dropzone without clipping. */
+.file-icon-item {
+  padding: 12px 16px;
+}
+@media (max-width: 480px) {
+  .file-icon-item {
+    padding: 8px 12px;
+  }
+  .file-icon-item .small {
+    font-size: 11px;
+  }
+}
+
 .ip-file-card {
   display: flex;
   align-items: center;

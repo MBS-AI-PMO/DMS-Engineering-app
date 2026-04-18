@@ -1559,7 +1559,7 @@ const InstantPricing = () => {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '0 20px 48px' }}>
 
           {/* ── How it works ─────────────────────────── */}
-          <div style={{ width: '100%', maxWidth: 760, marginBottom: 28, display: 'flex', alignItems: 'stretch' }}>
+          <div className="ip-steps" style={{ width: '100%', maxWidth: 760, marginBottom: 28 }}>
             {[
               { num: '01', icon: <Upload size={18} />, label: 'Upload Your File', sub: 'DXF, DWG, STEP or STP' },
               { num: '02', icon: <Settings size={18} />, label: 'Configure Options', sub: 'Material, thickness & services' },
@@ -1567,7 +1567,7 @@ const InstantPricing = () => {
               { num: '04', icon: <Shield size={18} />, label: 'Place Your Order', sub: 'Secure checkout & fast delivery' },
             ].map((step, i, arr) => (
               <React.Fragment key={i}>
-                <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
+                <div className="ip-step-card" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
                   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
                     <div style={{ background: '#fff0f0', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>{step.icon}</div>
                   </div>
@@ -1576,7 +1576,7 @@ const InstantPricing = () => {
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{step.sub}</div>
                 </div>
                 {i < arr.length - 1 && (
-                  <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="ip-step-arrow" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <ChevronRight size={15} color="#cbd5e1" />
                   </div>
                 )}
@@ -1599,9 +1599,9 @@ const InstantPricing = () => {
               </div>
             ) : (
               <>
-                <div className="file-icons-row d-flex justify-content-center gap-3 mb-4">
+                <div className="file-icons-row d-flex flex-wrap justify-content-center gap-2 gap-sm-3 mb-4">
                   {['.dxf', '.dwg', '.step', '.stp'].map(ext => (
-                    <div key={ext} className="file-icon-item p-3 border rounded-3 bg-light"><span className="fw-bold small">{ext}</span></div>
+                    <div key={ext} className="file-icon-item border rounded-3 bg-light"><span className="fw-bold small">{ext}</span></div>
                   ))}
                 </div>
                 <h2 className="h3 fw-bold">Drop files here to get started</h2>
