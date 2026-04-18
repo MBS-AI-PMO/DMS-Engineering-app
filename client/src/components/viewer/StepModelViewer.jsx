@@ -1,56 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as OV from 'online-3d-viewer';
 import * as THREE from 'three';
-
-// Module-level cache — generated once per page session, never regenerated on remount.
-let __wrinkleNormalCache = null;
-const getWrinkleNormal = () => {
-  if (__wrinkleNormalCache) return __wrinkleNormalCache;
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const pointCount = 120;
-  const px = new Float32Array(pointCount);
-  const py = new Float32Array(pointCount);
-  for (let i = 0; i < pointCount; i++) { px[i] = Math.random() * size; py[i] = Math.random() * size; }
-  const heights = new Float32Array(size * size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let minDist = size * size;
-      for (let i = 0; i < pointCount; i++) {
-        const dx = x - px[i], dy = y - py[i];
-        const d = dx * dx + dy * dy;
-        if (d < minDist) minDist = d;
-      }
-      heights[y * size + x] = Math.min(1.0, Math.sqrt(minDist) / 20.0);
-    }
-  }
-  const imgData = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const idx = (y * size + x) * 4;
-      const hL = heights[y * size + (x - 1 + size) % size];
-      const hR = heights[y * size + (x + 1) % size];
-      const hU = heights[((y - 1 + size) % size) * size + x];
-      const hD = heights[((y + 1) % size) * size + x];
-      const nx = (hL - hR) * 1.5;
-      const ny = (hU - hD) * 1.5;
-      const nz = 0.6;
-      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      imgData.data[idx] = ((nx / len) * 0.5 + 0.5) * 255;
-      imgData.data[idx + 1] = ((ny / len) * 0.5 + 0.5) * 255;
-      imgData.data[idx + 2] = ((nz / len) * 0.5 + 0.5) * 255;
-      imgData.data[idx + 3] = 255;
-    }
-  }
-  ctx.putImageData(imgData, 0, 0);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(35, 35);
-  __wrinkleNormalCache = tex;
-  return tex;
-};
+import { getWrinkleNormalTexture as getWrinkleNormal, getWrinkleGrainTexture as getWrinkleGrain } from '../../utils/wrinkleThreeTextures';
 
 const SCREW_GAUGE_MAJOR_IN = {
   0: 0.060,
@@ -260,6 +211,7 @@ const StepModelViewer = ({
 
   // Procedural texture reference
   const wrinkleNormal = useRef(null);
+  const wrinkleGrain = useRef(null);
 
   // Persistent Material Cache to prevent memory leaks and redundant object creation
   const matCache = useRef(new Map());
@@ -294,6 +246,7 @@ const StepModelViewer = ({
   // --- Procedural Texture (module-cached, generated once per session) ---
   useEffect(() => {
     if (!wrinkleNormal.current) wrinkleNormal.current = getWrinkleNormal();
+    if (!wrinkleGrain.current) wrinkleGrain.current = getWrinkleGrain();
   }, []);
 
   // --- Core 3D Entry Effect ---
@@ -566,18 +519,24 @@ const StepModelViewer = ({
             if (activeFinishColor && isFinishPowderCoating && hasForcedFinishColor) {
               const gloss = activeFinishColor.gloss ?? 35;
               const isWrinkled = !!(activeFinishColor.is_wrinkled || activeFinishColor.name?.toUpperCase().includes('WRINKLED'));
-              fm.roughness = isWrinkled ? 0.68 : Math.max(0.32, 0.9 - (gloss / 100));
-              fm.metalness = isWrinkled ? 0.15 : 0.1;
+              // Wrinkle: moderately rough base, stronger bump, and a per-pixel
+              // grain map so peaks catch light while valleys stay matte —
+              // creates the visible speckle real wrinkle-coat shows.
+              fm.roughness = isWrinkled ? 0.55 : Math.max(0.32, 0.9 - (gloss / 100));
+              fm.metalness = isWrinkled ? 0.18 : 0.1;
               fm.normalMap = isWrinkled ? wrinkleNormal.current : null;
-              fm.normalScale = isWrinkled ? new THREE.Vector2(0.6, 0.6) : new THREE.Vector2(0, 0);
+              fm.normalScale = isWrinkled ? new THREE.Vector2(1.8, 1.8) : new THREE.Vector2(0, 0);
+              fm.roughnessMap = isWrinkled ? wrinkleGrain.current : null;
             } else if (hasForcedFinishColor) {
               fm.roughness = useConfiguredPreviewShading ? 0.58 : 0.65;
               fm.metalness = useConfiguredPreviewShading ? 0.12 : 0.05;
               fm.normalMap = null;
+              fm.roughnessMap = null;
             } else {
               fm.roughness = useConfiguredPreviewShading ? 0.92 : 0.65;
               fm.metalness = useConfiguredPreviewShading ? 0.03 : 0.05;
               fm.normalMap = null;
+              fm.roughnessMap = null;
             }
 
             const shouldFade = isModelFadedManually || (activeTapHole !== null && !isAnodizingModalOpen);

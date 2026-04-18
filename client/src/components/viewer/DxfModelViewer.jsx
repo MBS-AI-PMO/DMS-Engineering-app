@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { parseString, toSVG } from 'dxf';
+import { getWrinkleNormalTexture, getWrinkleGrainTexture } from '../../utils/wrinkleThreeTextures';
 
 // ─── DXF Technical Data Extractor ────────────────────────
 function calcDxfTechData(entities, isInch) {
@@ -68,6 +69,7 @@ const DxfModelViewer = ({
   const [dxfSvg, setDxfSvg] = useState(null);
   const [viewBoxData, setViewBoxData] = useState(null);
   const wrinkleNormal = useRef(null);
+  const wrinkleGrain = useRef(null);
 
   // --- Parse DXF ---
   useEffect(() => {
@@ -139,47 +141,10 @@ const DxfModelViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile?.id]);
 
-  // --- Procedural Texture Generation ---
+  // --- Wrinkle textures (shared cache across viewers) ---
   useEffect(() => {
-    if (wrinkleNormal.current) return;
-    const size = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const points = Array.from({ length: 1800 }, () => ({ x: Math.random() * size, y: Math.random() * size }));
-    const heights = new Float32Array(size * size);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        let minDist = size;
-        for (let p of points) {
-          const dx = x - p.x, dy = y - p.y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < minDist) minDist = d;
-        }
-        heights[y * size + x] = Math.min(1.0, minDist / 20.0);
-      }
-    }
-    const imgData = ctx.createImageData(size, size);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const idx = (y * size + x) * 4;
-        const hL = heights[y * size + (x - 1 + size) % size];
-        const hR = heights[y * size + (x + 1) % size];
-        const hU = heights[((y - 1 + size) % size) * size + x];
-        const hD = heights[((y + 1) % size) * size + x];
-        const nx = (hL - hR) * 1.5, ny = (hU - hD) * 1.5, nz = 0.6;
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        imgData.data[idx] = ((nx / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 1] = ((ny / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 2] = ((nz / len) * 0.5 + 0.5) * 255;
-        imgData.data[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(35, 35);
-    wrinkleNormal.current = tex;
+    if (!wrinkleNormal.current) wrinkleNormal.current = getWrinkleNormalTexture();
+    if (!wrinkleGrain.current) wrinkleGrain.current = getWrinkleGrainTexture();
   }, []);
 
   // --- Three.js DXF 3D View ---
@@ -308,10 +273,11 @@ const DxfModelViewer = ({
       mat.color.set(new THREE.Color(finishHex));
       mat.emissive.set(isFinishPowderCoating ? 0x000000 : new THREE.Color(finishHex));
       mat.emissiveIntensity = isFinishPowderCoating ? 0 : 0.15;
-      mat.roughness = isFinishPowderCoating ? (isWrinkled ? 0.68 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6;
-      mat.metalness = isWrinkled ? 0.15 : 0.05;
+      mat.roughness = isFinishPowderCoating ? (isWrinkled ? 0.55 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6;
+      mat.metalness = isWrinkled ? 0.18 : 0.05;
       mat.normalMap = isWrinkled ? wrinkleNormal.current : null;
-      mat.normalScale = isWrinkled ? new THREE.Vector2(3, 3) : new THREE.Vector2(0, 0);
+      mat.normalScale = isWrinkled ? new THREE.Vector2(1.8, 1.8) : new THREE.Vector2(0, 0);
+      mat.roughnessMap = isWrinkled ? wrinkleGrain.current : null;
     } else {
       mat.color.set(0xcecece);
       mat.emissive.set(0x000000);
@@ -320,6 +286,7 @@ const DxfModelViewer = ({
       mat.metalness = 0.05;
       mat.normalMap = null;
       mat.normalScale = new THREE.Vector2(0, 0);
+      mat.roughnessMap = null;
     }
 
     mat.needsUpdate = true;

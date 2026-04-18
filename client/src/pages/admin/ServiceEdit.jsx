@@ -9,6 +9,7 @@ import {
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
+import { wrinkleSwatchStyle } from '../../utils/wrinkleTexture';
 
 const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
@@ -554,10 +555,18 @@ export default function ServiceEdit() {
                                                     <label>Oven Length (in)</label>
                                                     <input type="number" value={service.pricing_config?.oven_length || 160} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
                                                 </div>
+                                                <div className="option-input-group">
+                                                    <label>Part Gap (in)</label>
+                                                    <input type="number" step="0.1" title="Horizontal gap between parts hanging side-by-side" value={service.pricing_config?.part_gap ?? 6} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_gap: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Rack Clearance (in)</label>
+                                                    <input type="number" step="0.1" title="Vertical clearance added above part thickness for hanging rack" value={service.pricing_config?.rack_clearance ?? 24} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, rack_clearance: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
                                             </div>
                                             <p className="admin-card-tip" style={{ marginTop: '12px' }}>
                                                 Formula: <code>cost/unit = (setup_time × shop_rate / 60 + batches × batch_cost) / qty</code>.
-                                                Parts per batch uses thickness + 24&Prime; rack clearance across both oven orientations.
+                                                Parts per batch = floor(oven_dim / (part_width + part_gap)) × floor(other_oven_dim / (thickness + rack_clearance)), taking the better of the two oven orientations.
                                             </p>
                                         </div>
                                     )}
@@ -596,7 +605,7 @@ export default function ServiceEdit() {
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
                                                 {(service.service_options || []).map((opt, idx) => (
                                                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#f8fafc', borderRadius: '14px', border: '1.5px solid #f1f5f9' }}>
-                                                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: opt.color || '#000000', flexShrink: 0, border: '3px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+                                                        <div style={{ ...wrinkleSwatchStyle(opt.color || '#000000', !!opt.is_wrinkled, 10), width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0, border: '3px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
                                                         <div style={{ flex: 1, minWidth: 0 }}>
                                                             <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.name || <span style={{ color: '#94a3b8' }}>Unnamed</span>}</div>
                                                             <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
@@ -808,6 +817,9 @@ export default function ServiceEdit() {
                                     </div>
 
                                     <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Thresholds (mm)</h4>
+                                    <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', lineHeight: '1.5' }}>
+                                        Only two thresholds are needed to split bends into three buckets. <strong>Small</strong> is implicit — any bend shorter than the Medium threshold falls into it, so no Small threshold is required. Hems (angle within 5&deg; of 180&deg;) are detected separately and override length classification.
+                                    </div>
                                     <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                         <div className="option-input-group">
                                             <label>Medium Bend Threshold (mm)</label>

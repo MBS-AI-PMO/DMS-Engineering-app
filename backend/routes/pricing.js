@@ -792,8 +792,8 @@ router.post('/configure-preview', async (req, res) => {
  *   cost_per_unit = (setup_fee / qty) + sum_of_bend_rates
  *
  * POWDER COATING — Batch-based oven utilisation (powder coating.csv)
- *   Scenario 1: floor(ovenW / (partW+6)) × floor(ovenL / (thickness+24))
- *   Scenario 2: floor(ovenL / (partW+6)) × floor(ovenW / (thickness+24))
+ *   Scenario 1: floor(ovenW / (partW+partGap)) × floor(ovenL / (thickness+rackClearance))
+ *   Scenario 2: floor(ovenL / (partW+partGap)) × floor(ovenW / (thickness+rackClearance))
  *   parts_per_batch = max(s1, s2)
  *   cost_per_unit = (setup_charge + num_batches × batch_cost) / qty
  *
@@ -1122,8 +1122,11 @@ router.post('/calculate', async (req, res) => {
                     const batchCost = parseFloat(cfg.batch_cost) || 150;
                     const setupCharge = (parseFloat(cfg.setup_time) || 15) * (parseFloat(cfg.shop_rate) || 38) / 60;
 
-                    const pW = (parseFloat(height_in) || 10) + 6;       // part width + 6" gap
-                    const pThick = (parseFloat(thickness_value) || 0.1) + 24; // thickness + 24" rack clearance
+                    const partGap = parseFloat(cfg.part_gap) || 6;           // inches — horizontal gap between parts
+                    const rackClearance = parseFloat(cfg.rack_clearance) || 24; // inches — vertical rack clearance above part
+
+                    const pW = (parseFloat(height_in) || 10) + partGap;              // part width + horizontal gap
+                    const pThick = (parseFloat(thickness_value) || 0.1) + rackClearance; // thickness + rack clearance
 
                     // Scenario 1: part width along oven width, parts hang along oven length
                     const s1 = Math.floor(ovenW / pW) * Math.floor(ovenL / pThick);

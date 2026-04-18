@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DMS Pricing System - Complete Workflow Report</title>
+<style>
+  @page { margin: 0.75in; size: A4; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; color: #1a1a1a; line-height: 1.65; padding: 40px 60px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 28px; color: #111; border-bottom: 3px solid #2563eb; padding-bottom: 10px; margin-bottom: 30px; }
+  h2 { font-size: 20px; color: #2563eb; margin: 35px 0 15px; border-left: 4px solid #2563eb; padding-left: 12px; }
+  h3 { font-size: 16px; color: #374151; margin: 20px 0 10px; }
+  p, li { font-size: 14px; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin-bottom: 5px; }
+  .formula-box { background: #f0f4ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px 20px; margin: 14px 0; font-family: 'Consolas', monospace; font-size: 13.5px; line-height: 1.8; }
+  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 12px 0; font-size: 13px; border-radius: 0 6px 6px 0; }
+  .table-wrap { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { background: #2563eb; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+  td { padding: 8px 14px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .flow-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin: 16px 0; }
+  .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+  .flow-num { background: #2563eb; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; margin-right: 12px; margin-top: 2px; }
+  .flow-text { flex: 1; }
+  .arrow { text-align: center; color: #94a3b8; font-size: 18px; margin: -4px 0; }
+  .section-divider { border: none; border-top: 1px solid #e5e7eb; margin: 30px 0; }
+  .cover-subtitle { color: #6b7280; font-size: 15px; margin-bottom: 6px; }
+  .highlight { color: #2563eb; font-weight: 600; }
+  @media print { body { padding: 0; } h2 { page-break-after: avoid; } .formula-box, .flow-box { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<h1>DMS Pricing System - Complete Workflow Report</h1>
+<p class="cover-subtitle">Document Management & Sheet Metal Fabrication Platform</p>
+<p class="cover-subtitle">Generated: April 17, 2026</p>
+
+<!-- ────────────────────────────────────────── -->
+<h2>1. Overview - How It All Connects</h2>
+
+<p>When a user uploads a 3D model (STEP) or 2D drawing (DXF), the system extracts geometric data and calculates a real-time price. The total per-unit cost is composed of four main components:</p>
+
+<div class="formula-box">
+<strong>Total Unit Price</strong> = (Material Cost + Production Cost + Additional Services Cost) x (1 + Markup%) - Quantity Discount
+</div>
+
+<div class="flow-box">
+  <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>File Upload</strong> - User uploads STEP or DXF file. Backend extracts dimensions (length, width, thickness), perimeter, pierce count, hole data, and bend information.</div></div>
+  <div class="arrow">&#8595;</div>
+  <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>User Configuration</strong> - User selects: Production Service (e.g. Laser Cutting), Metal (e.g. 6061 T6 Aluminum), Thickness (from available stock), and Additional Services (Bending, Powder Coating, Taps, Hardware).</div></div>
+  <div class="arrow">&#8595;</div>
+  <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>Pricing Calculation</strong> - Frontend sends all parameters to <code>POST /api/pricing/calculate</code>. Backend computes Material + Production + Additional Services costs.</div></div>
+  <div class="arrow">&#8595;</div>
+  <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Markup & Discounts</strong> - Global markup percentage (from Admin Settings) is applied. Quantity-based discount tiers are checked and applied.</div></div>
+  <div class="arrow">&#8595;</div>
+  <div class="flow-step"><div class="flow-num">5</div><div class="flow-text"><strong>Display</strong> - Final per-unit and total prices shown to user in real-time. Breakdown includes all cost components.</div></div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>2. Material / Sheet Cost</h2>
+
+<p>Material cost represents the raw metal consumed per part, calculated using a <strong>nesting model</strong> that determines how many parts fit on a standard sheet.</p>
+
+<h3>2.1 Standard Sheet Size</h3>
+<div class="table-wrap"><table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Sheet Length</td><td>120 inches (10 ft)</td></tr>
+  <tr><td>Sheet Width</td><td>60 inches (5 ft)</td></tr>
+  <tr><td>Edge Buffer</td><td>0.125 inches (distance from sheet edge)</td></tr>
+  <tr><td>Part Buffer</td><td>0.0625 inches (gap between parts)</td></tr>
+  <tr><td>Kerf Width</td><td>0.01 inches (laser cut width)</td></tr>
+</table></div>
+
+<h3>2.2 Nesting Formula</h3>
+<div class="formula-box">
+Usable Length = 120 - 2 x 0.125 + 0.0625 = <strong>119.8125"</strong><br>
+Usable Width = 60 - 2 x 0.125 + 0.0625 = <strong>59.8125"</strong><br><br>
+Buffered Part Length = Part Length + 0.0625 + 0.01<br>
+Buffered Part Width = Part Width + 0.0625 + 0.01<br><br>
+Parts Per Sheet = floor(Usable Length / Buffered Part Length) x floor(Usable Width / Buffered Part Width)<br><br>
+<strong>Material Cost Per Unit = Sheet Cost (5x10) / Parts Per Sheet</strong>
+</div>
+
+<h3>2.3 Sheet Cost Lookup</h3>
+<p>The system looks up the sheet cost from the <strong>sheet_cost_rates</strong> table using this priority:</p>
+<ol>
+  <li><strong>Exact match:</strong> Find a row where the metal's family matches AND the <code>thickness</code> value matches the selected stock thickness for that gauge.</li>
+  <li><strong>Closest thickness:</strong> If no exact match, find the closest thickness entry in the same family.</li>
+  <li><strong>Generic fallback:</strong> If no family match at all, use the "generic" family rates.</li>
+</ol>
+
+<div class="note">
+  <strong>Admin Configuration:</strong> Sheet cost rates are managed via Admin Panel. Each entry has: Material Family, Thickness (single value per gauge), Gauge (optional), and Sheet Cost for a 5x10 ft sheet.
+</div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>3. Laser Cutting Cost</h2>
+
+<p>Laser cutting cost is <strong>time-based</strong>, combining setup time (amortized over quantity) and per-part runtime calculated from perimeter and pierce count.</p>
+
+<h3>3.1 Core Formula</h3>
+<div class="formula-box">
+<strong>Laser Cost Per Unit</strong> = (Hourly Rate x Setup Hours / Quantity) + (Hourly Rate x Runtime Hours)<br><br>
+
+Where:<br>
+&nbsp;&nbsp;Runtime Hours = (Perimeter_mm / Cut Rate_mm/s) / 3600 + (Pierce Count x Pierce Time_s) / 3600
+</div>
+
+<h3>3.2 Parameters</h3>
+<div class="table-wrap"><table>
+  <tr><th>Parameter</th><th>Default Value</th><th>Source</th></tr>
+  <tr><td>Hourly Rate</td><td>$100/hr</td><td>Service pricing_config</td></tr>
+  <tr><td>Setup Hours (thickness <= 0.25")</td><td>0.30 hrs</td><td>Laser cut rates</td></tr>
+  <tr><td>Setup Hours (thickness > 0.25")</td><td>0.25 hrs</td><td>Laser cut rates</td></tr>
+  <tr><td>Cut Rate</td><td>Varies by material & thickness</td><td>laser_cut_rates table</td></tr>
+  <tr><td>Pierce Time</td><td>Varies by material & thickness</td><td>laser_cut_rates table</td></tr>
+  <tr><td>Fallback Cut Rate</td><td>120 mm/s</td><td>Service pricing_config</td></tr>
+  <tr><td>Fallback Pierce Time</td><td>0.35 seconds</td><td>Service pricing_config</td></tr>
+</table></div>
+
+<h3>3.3 Input Data (from model analysis)</h3>
+<ul>
+  <li><strong>Total Perimeter (mm)</strong> - Sum of all cut edge lengths from the flat pattern. For STEP files this comes from the unfolding engine; for DXF files from path analysis.</li>
+  <li><strong>Pierce Count</strong> - Number of separate cut starts. Equals the number of holes + 1 (for the outer profile). Minimum value is 1.</li>
+</ul>
+
+<div class="note">
+  <strong>Fallback:</strong> If perimeter data is unavailable, the system estimates it as: <code>(Length + Width) x 2 x 25.4</code> (envelope perimeter in mm).
+</div>
+
+<h3>3.4 Laser Rate Lookup</h3>
+<p>The system queries the <strong>laser_cut_rates</strong> table by:</p>
+<ol>
+  <li>Match by metal's material family AND closest thickness</li>
+  <li>If no family match, fall back to "generic" family</li>
+  <li>If no database match at all, use fallback defaults from service config</li>
+</ol>
+
+<div class="note">
+  <strong>Warning:</strong> If the selected thickness exceeds 0.376 inches, the system flags a warning that the material may exceed laser cutting capability.
+</div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>4. Bending Cost</h2>
+
+<p>Bending cost uses a <strong>labor-time model</strong> with per-bend runtime categorized by bend size, plus setup time based on unique bend configurations.</p>
+
+<h3>4.1 Core Formula</h3>
+<div class="formula-box">
+<strong>Bending Cost Per Unit</strong> = (Total Setup Cost / Quantity) + (Machine Time Per Unit x Labor Rate / 3600)<br><br>
+
+Where:<br>
+&nbsp;&nbsp;Total Setup Cost = Unique Feature Count x Setup Time Per Unique x Labor Rate<br>
+&nbsp;&nbsp;Machine Time Per Unit = Sum of runtime seconds for each bend
+</div>
+
+<h3>4.2 Bend Classification</h3>
+<p>Each bend detected from the 3D model is classified by its length:</p>
+<div class="table-wrap"><table>
+  <tr><th>Category</th><th>Condition</th><th>Default Runtime</th></tr>
+  <tr><td>Small Bend</td><td>Length &lt; 8 inches</td><td>15 seconds</td></tr>
+  <tr><td>Medium Bend</td><td>8" &le; Length &lt; 20"</td><td>15 seconds</td></tr>
+  <tr><td>Large Bend</td><td>Length &ge; 20 inches</td><td>20 seconds</td></tr>
+  <tr><td>Hem</td><td>Bend angle within 5 degrees of 180 degrees</td><td>20 seconds</td></tr>
+</table></div>
+
+<div class="note">
+  <strong>Why there is no "small bend threshold":</strong> Only two thresholds are needed to divide bends into three length buckets. "Small" is the implicit default — any bend shorter than the Medium Bend Threshold (8") falls into it. There is no minimum length below which a bend is rejected or priced differently, so no small threshold is required. Hems are identified by angle (≈180°) and override the length-based classification entirely.
+</div>
+
+<h3>4.3 Unique Feature Tracking</h3>
+<p>The system identifies <strong>unique bend configurations</strong> based on the combination of:</p>
+<ul>
+  <li>Bend radius</li>
+  <li>Bend angle</li>
+  <li>Bend type (hem vs standard — a hem is any bend within 5 degrees of 180)</li>
+</ul>
+<p>Each unique configuration requires its own tooling setup. Setup time = <strong>0.25 hours per unique feature</strong> (default).</p>
+
+<h3>4.4 Parameters</h3>
+<div class="table-wrap"><table>
+  <tr><th>Parameter</th><th>Default</th><th>Source</th></tr>
+  <tr><td>Labor Rate</td><td>$85/hr</td><td>Service pricing_config</td></tr>
+  <tr><td>Setup Time Per Unique</td><td>0.25 hours</td><td>Service pricing_config</td></tr>
+  <tr><td>Medium Bend Threshold</td><td>8 inches</td><td>Service pricing_config</td></tr>
+  <tr><td>Large Bend Threshold</td><td>20 inches</td><td>Service pricing_config</td></tr>
+</table></div>
+
+<h3>4.5 Example</h3>
+<div class="formula-box">
+Part with 4 bends: 2 small (6"), 1 medium (12"), 1 large (24")<br>
+Unique features: 3 (small, medium, large)<br>
+Quantity: 10<br><br>
+
+Setup Cost = 3 x 0.25 x 85 = $63.75<br>
+Machine Time = (2 x 15) + (1 x 15) + (1 x 20) = 65 seconds<br>
+Runtime Cost = 65 x 85 / 3600 = $1.535<br><br>
+
+<strong>Bend Cost Per Unit = ($63.75 / 10) + $1.535 = $7.91</strong>
+</div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>5. Powder Coating Cost</h2>
+
+<p>Powder coating uses an <strong>oven utilization model</strong> that calculates how many parts fit per oven batch, then divides the batch cost across all parts.</p>
+
+<h3>5.1 Core Formula</h3>
+<div class="formula-box">
+<strong>Powder Coating Cost Per Unit</strong> = (Setup Charge + Number of Batches x Batch Cost) / Quantity<br><br>
+
+Where:<br>
+&nbsp;&nbsp;Setup Charge = (Setup Time minutes / 60) x Shop Rate<br>
+&nbsp;&nbsp;Parts Per Batch = best of two hanging orientations<br>
+&nbsp;&nbsp;Number of Batches = ceil(Quantity / Parts Per Batch)
+</div>
+
+<h3>5.2 Oven Nesting (Two Orientations)</h3>
+<div class="formula-box">
+<strong>Orientation 1:</strong><br>
+&nbsp;&nbsp;Columns = floor(Oven Width / (Part Width + 6"))<br>
+&nbsp;&nbsp;Rows = floor(Oven Length / (Part Thickness + 24"))<br>
+&nbsp;&nbsp;S1 = Columns x Rows<br><br>
+
+<strong>Orientation 2:</strong><br>
+&nbsp;&nbsp;Columns = floor(Oven Length / (Part Width + 6"))<br>
+&nbsp;&nbsp;Rows = floor(Oven Width / (Part Thickness + 24"))<br>
+&nbsp;&nbsp;S2 = Columns x Rows<br><br>
+
+<strong>Parts Per Batch = MAX(S1, S2)</strong>
+</div>
+
+<div class="note">
+  <strong>Hanging Logic:</strong> Parts are hung on racks in the oven. The 6" gap is clearance between parts side-by-side. The 24" accounts for the rack/hook mechanism height plus the part's hanging dimension.
+</div>
+
+<h3>5.3 Parameters</h3>
+<div class="table-wrap"><table>
+  <tr><th>Parameter</th><th>Default</th><th>Source</th></tr>
+  <tr><td>Oven Width</td><td>90 inches</td><td>Service pricing_config</td></tr>
+  <tr><td>Oven Length</td><td>160 inches</td><td>Service pricing_config</td></tr>
+  <tr><td>Batch Cost</td><td>$150 per batch</td><td>Service pricing_config</td></tr>
+  <tr><td>Setup Time</td><td>15 minutes</td><td>Service pricing_config</td></tr>
+  <tr><td>Shop Rate</td><td>$38/hr</td><td>Service pricing_config</td></tr>
+  <tr><td>Part Gap (horizontal)</td><td>6 inches</td><td>Service pricing_config</td></tr>
+  <tr><td>Rack Clearance (vertical)</td><td>24 inches</td><td>Service pricing_config</td></tr>
+</table></div>
+
+<h3>5.4 Color / Finish Options</h3>
+<p>Powder coating colors are configured as <strong>service_options</strong> (JSONB array on the service record). Each option can have:</p>
+<ul>
+  <li>Name (e.g. "Matte Black", "Gloss White")</li>
+  <li>Color hex code (for UI display)</li>
+  <li>Price (surcharge - for non-powder finishes like anodizing)</li>
+</ul>
+<p>For powder coating specifically, the batch cost model already includes the coating cost. For other finish types (e.g. anodizing), the option's price is added as a direct surcharge per unit.</p>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>6. Additional Services (Taps, Hardware, Countersinks)</h2>
+
+<p>These are <strong>manually priced per hole</strong>. The user selects specific holes from the 3D model and assigns operations:</p>
+
+<div class="formula-box">
+<strong>Tap Cost</strong> = Sum of (price per tap x count) for each selected tap type<br>
+<strong>Hardware Cost</strong> = Sum of (price per insert x count) for each selected hardware type<br>
+<strong>Countersink Cost</strong> = Sum of (price per countersink x count) for each selected type
+</div>
+
+<p>Prices for each tap/hardware/countersink option are configured via admin as service options with fixed per-unit prices.</p>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>7. Global Markup</h2>
+
+<div class="formula-box">
+Unit Total (before markup) = Material Cost + Production Cost + Additional Services Cost<br><br>
+<strong>Unit Total (after markup) = Unit Total x (1 + General Markup% / 100)</strong>
+</div>
+
+<p>The <strong>General Markup</strong> percentage is stored in the <code>site_settings</code> table under the key <code>'general_markup'</code>. Default is <strong>10%</strong>. It is applied to all cost components uniformly.</p>
+
+<div class="note">
+  <strong>Admin Control:</strong> The markup percentage can be changed from the Admin Settings panel. It applies globally to all orders.
+</div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>8. Quantity Discounts</h2>
+
+<div class="formula-box">
+Discount Amount = Unit Total x (Discount Percent / 100)<br><br>
+<strong>Final Unit Price = MAX(0, Unit Total - Discount Amount)</strong><br>
+<strong>Total Order Price = Final Unit Price x Quantity</strong>
+</div>
+
+<h3>8.1 Tier Matching</h3>
+<p>Discount tiers are stored in the <strong>quantity_discounts</strong> table. Each tier has:</p>
+<ul>
+  <li><strong>quantities</strong> - A JSON array of quantity values (e.g. [50, 100])</li>
+  <li><strong>discount_percent</strong> - The discount to apply (e.g. 15%)</li>
+  <li><strong>is_active</strong> - Whether this tier is enabled</li>
+</ul>
+<p>The system sorts tiers by highest quantity first, then matches the first tier where the order quantity is found in (or exceeds) the tier's quantity list.</p>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>9. Admin Configuration Summary</h2>
+
+<p>All pricing parameters are configurable through the admin panel:</p>
+
+<div class="table-wrap"><table>
+  <tr><th>What to Configure</th><th>Where (Admin Panel)</th><th>Key Fields</th></tr>
+  <tr><td>Sheet Material Costs</td><td>Sheet Cost Rates</td><td>Material Family, Thickness, Gauge, Sheet Cost (5x10 ft)</td></tr>
+  <tr><td>Laser Cut Speeds</td><td>Laser Cut Rates</td><td>Material Family, Thickness, Cut Rate (mm/s), Pierce Time (s)</td></tr>
+  <tr><td>Laser Service Settings</td><td>Service Edit (Laser)</td><td>Hourly Rate, Setup Fee, Fallback Cut Rate, Fallback Pierce Time</td></tr>
+  <tr><td>Bending Settings</td><td>Service Edit (Bending)</td><td>Labor Rate, Setup Time Per Unique, Bend Thresholds, Runtime per Size</td></tr>
+  <tr><td>Powder Coating Settings</td><td>Service Edit (Powder Coat)</td><td>Batch Cost, Setup Time, Shop Rate, Oven Dimensions, Part Gap, Rack Clearance</td></tr>
+  <tr><td>Metal Configurations</td><td>Metal Config</td><td>Size Bounds (X/Y in inches), Available Thicknesses</td></tr>
+  <tr><td>Quantity Discounts</td><td>Discount Tiers</td><td>Quantities Array, Discount Percent, Active/Inactive</td></tr>
+  <tr><td>Global Markup</td><td>Site Settings</td><td>general_markup (percentage)</td></tr>
+  <tr><td>Finish Colors/Options</td><td>Service Options</td><td>Name, Color Hex, Price (surcharge)</td></tr>
+</table></div>
+
+<hr class="section-divider">
+
+<!-- ────────────────────────────────────────── -->
+<h2>10. Complete Pricing Example</h2>
+
+<p>A user uploads a sheet metal part with the following properties:</p>
+
+<div class="flow-box" style="background: #fff;">
+  <h3 style="margin-top: 0;">Given:</h3>
+  <ul>
+    <li>Part dimensions: 12" x 8" (flat pattern)</li>
+    <li>Metal: 6061 T6 Aluminum, 0.125" thick</li>
+    <li>Cut perimeter: 2,000 mm</li>
+    <li>Pierce count: 10 (9 holes + 1 outer profile)</li>
+    <li>3 bends: 2 small (5"), 1 medium (10")</li>
+    <li>Powder coating (Matte Black)</li>
+    <li>Quantity: 25</li>
+    <li>Sheet cost (5x10 ft): $280</li>
+    <li>Cut rate: 80 mm/s, Pierce time: 0.4s</li>
+    <li>General Markup: 10%</li>
+  </ul>
+</div>
+
+<div class="formula-box">
+<strong>Step 1: Material Cost</strong><br>
+Buffered Part: 12.0725" x 8.0725"<br>
+Parts per sheet: floor(119.8125 / 12.0725) x floor(59.8125 / 8.0725) = 9 x 7 = 63<br>
+Material Cost = $280 / 63 = <strong>$4.44</strong><br><br>
+
+<strong>Step 2: Laser Cutting Cost</strong><br>
+Runtime = (2000 / 80 / 3600) + (10 x 0.4 / 3600) = 0.00694 + 0.00111 = 0.00806 hrs<br>
+Setup = 0.30 hrs (thin material)<br>
+Laser Cost = ($100 x 0.30 / 25) + ($100 x 0.00806) = $1.20 + $0.81 = <strong>$2.01</strong><br><br>
+
+<strong>Step 3: Bending Cost</strong><br>
+Unique features: 2 (small, medium)<br>
+Setup = 2 x 0.25 x $85 = $42.50<br>
+Machine time = (2 x 15) + (1 x 15) = 45 seconds<br>
+Bend Cost = ($42.50 / 25) + (45 x $85 / 3600) = $1.70 + $1.0625 = <strong>$2.76</strong><br><br>
+
+<strong>Step 4: Powder Coating</strong><br>
+Setup = (15 / 60) x $38 = $9.50<br>
+S1 = floor(90 / 14) x floor(160 / 24.125) = 6 x 6 = 36 parts/batch<br>
+Batches = ceil(25 / 36) = 1<br>
+Coating Cost = ($9.50 + 1 x $150) / 25 = <strong>$6.38</strong><br><br>
+
+<strong>Step 5: Subtotal & Markup</strong><br>
+Subtotal = $4.44 + $2.01 + $2.76 + $6.38 = $15.59<br>
+After Markup = $15.59 x 1.10 = <strong>$17.15</strong><br><br>
+
+<strong>Step 6: Final Price</strong><br>
+Final Unit Price = $17.15 (assuming no quantity discount tier matched)<br>
+<strong>Total Order Price = $17.15 x 25 = $428.75</strong>
+</div>
+
+<hr class="section-divider">
+
+<p style="text-align: center; color: #9ca3af; font-size: 12px; margin-top: 40px;">
+  DMS Pricing System Report | Confidential | Generated April 17, 2026
+</p>
+
+</body>
+</html>

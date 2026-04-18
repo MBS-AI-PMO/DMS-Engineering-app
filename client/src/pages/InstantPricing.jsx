@@ -20,6 +20,7 @@ import DxfModelViewer from '../components/viewer/DxfModelViewer';
 import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
 import PricingSidebar from '../components/pricing/PricingSidebar';
+import { wrinkleSwatchStyle } from '../utils/wrinkleTexture';
 import '../styles/PremiumPricing.css';
 
 const BACKEND_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -3487,12 +3488,15 @@ const InstantPricing = () => {
                           return (
                             <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedFinishColors(p => ({ ...p, [svc.id]: opt })); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
                               <div className="position-relative">
-                                <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ backgroundColor: opt.color, width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
+                                <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ ...wrinkleSwatchStyle(opt.color, !!opt.is_wrinkled, 18), width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
                                 {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}
                               </div>
                               <div className="text-center">
                                 <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{(opt.name || '').toUpperCase()}</span>
                                 <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{(opt.color || '').toUpperCase()}</span>
+                                {opt.is_wrinkled && (
+                                  <span className="d-inline-block mt-2 fw-bold" style={{ fontSize: '0.6rem', letterSpacing: '0.14em', padding: '3px 10px', borderRadius: '999px', background: '#1e293b', color: '#f8fafc', textTransform: 'uppercase' }}>Wrinkle Finish</span>
+                                )}
                               </div>
                             </motion.button>
                           );
