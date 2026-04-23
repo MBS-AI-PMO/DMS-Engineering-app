@@ -200,6 +200,8 @@ const StepModelViewer = ({
   onModelLoadFailed = () => { },
   onProgress = () => { },
   onDimensionsExtracted = () => { },
+  viewMode = '3d',
+  setViewMode = () => {},
 }) => {
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
@@ -360,8 +362,14 @@ const StepModelViewer = ({
 
           setModelLoadCount(c => c + 1);
           setTimeout(() => {
-            try { viewer.FitToWindow(); viewer.Render(); } catch { console.debug('FitToWindow skipped'); }
-          }, 200);
+            try {
+              if (typeof viewer.Resize === 'function') viewer.Resize();
+              viewer.FitToWindow();
+              viewer.Render();
+            } catch (e) {
+              console.debug('Initial FitToWindow/Resize skipped', e);
+            }
+          }, 300);
         },
         onModelLoadFailed: () => {
           clearInterval(progressTimer);
@@ -385,7 +393,27 @@ const StepModelViewer = ({
 
       const resizeObserver = new ResizeObserver(() => {
         try {
-          try { viewer.FitToWindow(); viewer.Render(); } catch { console.debug('Resize FitToWindow skipped'); }
+          if (viewerInstance.current) {
+            const width = currentRef.clientWidth;
+            const height = currentRef.clientHeight;
+
+            // Standard Resize call
+            if (typeof viewerInstance.current.Resize === 'function') {
+              viewerInstance.current.Resize();
+            }
+
+            // Aggressive fallback: manually update internal three.js renderer if possible
+            const v = viewerInstance.current.GetViewer?.();
+            if (v && v.renderer && v.camera) {
+              v.renderer.setSize(width, height);
+              v.camera.aspect = width / height;
+              v.camera.updateProjectionMatrix();
+            }
+
+            setTimeout(() => {
+              try { viewerInstance.current.FitToWindow(); viewerInstance.current.Render(); } catch { console.debug('Resize FitToWindow skipped'); }
+            }, 50);
+          }
         } catch (e) {
           console.warn('Resize observer error:', e);
         }

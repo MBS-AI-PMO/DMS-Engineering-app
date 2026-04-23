@@ -231,6 +231,8 @@ const normalizeServiceOptions = (value) => {
   return [];
 };
 
+const VIEW_MODE_KEY = 'dms_model_view_mode';
+
 const ProjectViewer = ({
   file,
   configuration = {},
@@ -238,6 +240,20 @@ const ProjectViewer = ({
   isPreview = false,
   tempPath = null,
 }) => {
+    // Persistent view mode (3d/2d/top/front/side)
+    const [viewMode, setViewMode] = useState(() => {
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem(VIEW_MODE_KEY) || '3d';
+      }
+      return '3d';
+    });
+
+    // Save viewMode to localStorage on change
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(VIEW_MODE_KEY, viewMode);
+      }
+    }, [viewMode]);
   const selectedFile = useMemo(() => {
     const normalized = normalizeViewerFile(file);
     if (!normalized) return null;
@@ -490,6 +506,7 @@ const ProjectViewer = ({
     >
       {isSupported && selectedFile ? (
         <div style={{ width: '100%', height: '100%', minHeight: 0 }}>
+          {/* Pass viewMode and setViewMode to StepModelViewer */}
           <StepModelViewer
             selectedFile={selectedFile}
             modelUrlOverride={modelUrlOverride}
@@ -521,6 +538,8 @@ const ProjectViewer = ({
             onModelLoaded={noop}
             onProgress={noop}
             onDimensionsExtracted={handleDimensionsExtracted}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
           />
         </div>
       ) : (

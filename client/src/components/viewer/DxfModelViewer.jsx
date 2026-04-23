@@ -248,16 +248,28 @@ const DxfModelViewer = ({
 
       const animate = () => { reqId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
       animate();
+
+      const resizeObserver = new ResizeObserver(() => {
+        const width = el.clientWidth;
+        const height = el.clientHeight;
+        if (width && height) {
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height);
+        }
+      });
+      resizeObserver.observe(el);
+      return () => {
+        resizeObserver.disconnect();
+        cancelAnimationFrame(reqId);
+        controlsRef.current?.dispose();
+        rendererRef.current?.dispose();
+        extrudeMatRef.current = null;
+        if (el) el.innerHTML = '';
+      };
     };
 
     init();
-    return () => {
-      cancelAnimationFrame(reqId);
-      controlsRef.current?.dispose();
-      rendererRef.current?.dispose();
-      extrudeMatRef.current = null;
-      if (el) el.innerHTML = '';
-    };
   }, [selectedFile?.id, viewMode, dxfSvg, selectedThickness, viewBoxData?.isNativeInches]);
 
   // Live finish updates without rebuilding the whole DXF 3D scene.

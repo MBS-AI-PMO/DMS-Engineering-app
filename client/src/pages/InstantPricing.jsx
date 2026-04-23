@@ -1188,7 +1188,7 @@ const InstantPricing = () => {
       if (!jobId) throw new Error('Unfold job was not created');
 
       let d = null;
-      for (;;) {
+      for (; ;) {
         const statusResponse = await fetch(`${BACKEND_URL}/api/unfold-job/${encodeURIComponent(jobId)}?ts=${Date.now()}`, {
           method: 'GET',
           cache: 'no-store',
@@ -1453,13 +1453,13 @@ const InstantPricing = () => {
           .qf-preview-container { height: auto !important; overflow: visible !important; }
           html.qf-active, body.qf-active { overflow-y: auto !important; overflow-x: hidden !important; background: #f4f5f7 !important; }
           .ip-left-panel { width: 100% !important; min-width: unset !important; border-right: none !important; border-bottom: 1.5px solid #e8eaed; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; gap: 6px; overflow: visible !important; height: auto !important; }
-          .ip-center-panel { height: 55vw; min-height: 300px; max-height: 480px; flex-shrink: 0; overflow: hidden; }
+          .ip-center-panel { height: 110vw; min-height: 550px; max-height: 800px; flex-shrink: 0; overflow: hidden; }
           .ip-right-panel { width: 100% !important; min-width: unset !important; border-left: none !important; border-top: 1.5px solid #e8eaed; height: auto; overflow-y: visible; padding-bottom: 24px; }
           .ip-proceed-btn { margin-top: 16px; }
         }
         /* Mobile */
         @media (max-width: 640px) {
-          .ip-center-panel { height: 65vw; min-height: 240px; }
+          .ip-center-panel { height: 120vw; min-height: 500px; }
           .ip-toolbar { flex-wrap: wrap; gap: 4px; padding: 8px 10px; }
           .ip-right-panel { padding: 14px 12px 28px; }
           .ip-dim-row { padding: 8px 10px; }
@@ -1477,7 +1477,7 @@ const InstantPricing = () => {
         .ip-dim-icon { width:30px; height:30px; border-radius:7px; display:flex; align-items:center; justify-content:center; }
         .ip-section-title { font-size:10px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:#94a3b8; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
         .ip-section-title::after { content:''; flex:1; height:1px; background:#e8eaed; }
-        .ip-viewer-frame { flex:1; margin:0; border-radius:0; overflow:hidden; border:none; background:#ffffff; position:relative; }
+        .ip-viewer-frame { flex:1; margin:0; border-radius:0; overflow:hidden; border:none; background:#ffffff; position:relative; display: flex; flex-direction: column; }
         .ip-toolbar { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; background:#ffffff; border-bottom:1.5px solid #e8eaed; }
         .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e8f0; gap:2px; }
         .ip-pill-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; }
@@ -1494,12 +1494,12 @@ const InstantPricing = () => {
         .ip-qf-left { width:50%; min-width:400px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
         .ip-qf-mid { flex:1; background:#ffffff; border-right:1.5px solid #e8eaed; overflow-y:auto; padding:24px 20px; min-width:0; }
         .ip-qf-right { width: 340px; min-width: 340px; background: #ffffff; display: flex; flex-direction: column; padding: 12px; overflow: visible; box-sizing: border-box; }
-        .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; }
+        .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; display: flex; flex-direction: column; }
         .ip-qf-dims { padding:12px 14px; border-top:1.5px solid #e8eaed; background:#ffffff; flex-shrink:0; }
         .ip-back-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; color:#1e293b; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s; }
         .ip-back-btn:hover { border-color:#94a3b8; background:#f8fafc; }
         @media (max-width: 1024px) {
-          .ip-qf-left { width:100% !important; min-width:unset !important; border-right:none !important; border-bottom:1.5px solid #e8eaed; height:55vw; min-height:280px; max-height:400px; flex-shrink:0; }
+          .ip-qf-left { width:100% !important; min-width:unset !important; border-right:none !important; border-bottom:1.5px solid #e8eaed; height: 110vw; min-height: 550px; max-height: 800px; flex-shrink:0; display: flex; flex-direction: column; }
           .ip-qf-mid { border-right:none !important; border-bottom:1.5px solid #e8eaed; padding:16px 14px; }
           .ip-qf-right { width:100% !important; min-width:unset !important; padding-bottom:24px; }
         }
@@ -1542,6 +1542,17 @@ const InstantPricing = () => {
         .ip-right-panel, .ip-qf-mid, .ip-qf-right, .instant-pricing-container {
           scrollbar-width: thin;
           scrollbar-color: #e2e8f0 transparent;
+        }
+        canvas#viewer, .qf-main-canvas canvas, .ip-qf-viewer canvas, .ip-viewer-frame canvas {
+          width: 100% !important;
+          height: 100% !important;
+          display: block !important;
+        }
+        .qf-main-canvas > div, .ip-qf-viewer > div, .ip-viewer-frame > div {
+          height: 100% !important;
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
         }
       `}</style>
       {!isQuoteFlowActive && (
@@ -2031,44 +2042,44 @@ const InstantPricing = () => {
 
               <div className="ip-qf-mid" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
                 {/* ── wizard Selection Header ──────────────── */}
-                  <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                    {selectedProductionService && (
-                      <div className="ip-step-summary">
-                        <div className="label"><Zap size={10} /> METHOD</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="value">{selectedProductionService.title}</span>
-                          <button className="change-btn" onClick={() => { setConfigStep(0); setSelectedCategory(null); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
-                        </div>
+                <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                  {selectedProductionService && (
+                    <div className="ip-step-summary">
+                      <div className="label"><Zap size={10} /> METHOD</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="value">{selectedProductionService.title}</span>
+                        <button className="change-btn" onClick={() => { setConfigStep(0); setSelectedCategory(null); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
                       </div>
-                    )}
-                    {selectedCategory && (
-                      <div className="ip-step-summary">
-                        <div className="label"><Grid size={10} /> CATEGORY</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="value">{selectedCategory.name}</span>
-                          <button className="change-btn" onClick={() => { setConfigStep(1); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
-                        </div>
+                    </div>
+                  )}
+                  {selectedCategory && (
+                    <div className="ip-step-summary">
+                      <div className="label"><Grid size={10} /> CATEGORY</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="value">{selectedCategory.name}</span>
+                        <button className="change-btn" onClick={() => { setConfigStep(1); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
                       </div>
-                    )}
-                    {selectedMetal && (
-                      <div className="ip-step-summary">
-                        <div className="label"><Box size={10} /> METAL</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="value">{selectedMetal.name}</span>
-                          <button className="change-btn" onClick={() => { setConfigStep(2); setSelectedThickness(null); }}>CHANGE</button>
-                        </div>
+                    </div>
+                  )}
+                  {selectedMetal && (
+                    <div className="ip-step-summary">
+                      <div className="label"><Box size={10} /> METAL</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="value">{selectedMetal.name}</span>
+                        <button className="change-btn" onClick={() => { setConfigStep(2); setSelectedThickness(null); }}>CHANGE</button>
                       </div>
-                    )}
-                    {selectedThickness && (
-                      <div className="ip-step-summary">
-                        <div className="label"><Layers size={10} /> THICKNESS</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="value">{selectedThicknessDisplay || selectedThickness}</span>
-                          <button className="change-btn" onClick={() => { setConfigStep(3); }}>CHANGE</button>
-                        </div>
+                    </div>
+                  )}
+                  {selectedThickness && (
+                    <div className="ip-step-summary">
+                      <div className="label"><Layers size={10} /> THICKNESS</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="value">{selectedThicknessDisplay || selectedThickness}</span>
+                        <button className="change-btn" onClick={() => { setConfigStep(3); }}>CHANGE</button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                </div>
                 <div style={{ padding: '24px 20px', flex: 1, overflowY: 'auto' }}>
                   {/* ── Wizard Progress Stepper ── */}
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
@@ -2167,7 +2178,7 @@ const InstantPricing = () => {
                             const maxOffset = nonFlatFeatureInfo.maxOffsetMm;
                             lockReasons.push(
                               nonFlatFeatureInfo.primaryReason
-                                || `Detected raised 3D features (${raisedCount}, max offset ${maxOffset.toFixed(3)} mm). Laser cutting supports flat 2D profiles only.`
+                              || `Detected raised 3D features (${raisedCount}, max offset ${maxOffset.toFixed(3)} mm). Laser cutting supports flat 2D profiles only.`
                             );
                           }
                           const isLocked = lockReasons.length > 0;
