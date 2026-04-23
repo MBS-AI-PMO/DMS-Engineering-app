@@ -144,16 +144,16 @@ const MetalDetail = () => {
     if (loading) {
         return (
             <div className="metal-detail-page">
-                <div className="detail-container">
-
-                    {/* Hero Skeleton */}
-                    <div className="detail-hero skeleton-hero">
-                        <div className="skeleton-hero-content">
-                            <div className="skeleton" style={{ width: '180px', height: '12px', marginBottom: '24px', borderRadius: '4px', opacity: 0.3 }} />
-                            <div className="skeleton" style={{ width: '60%', height: '60px', marginBottom: '20px', borderRadius: '12px', opacity: 0.4 }} />
-                            <div className="skeleton" style={{ width: '40%', height: '20px', borderRadius: '6px', opacity: 0.2 }} />
-                        </div>
+                {/* Hero Skeleton */}
+                <div className="detail-hero skeleton-hero">
+                    <div className="detail-container skeleton-hero-content">
+                        <div className="skeleton" style={{ width: '180px', height: '12px', marginBottom: '24px', borderRadius: '4px', opacity: 0.3, margin: '0 auto 24px' }} />
+                        <div className="skeleton" style={{ width: '60%', height: '60px', marginBottom: '20px', borderRadius: '12px', opacity: 0.4, margin: '0 auto 20px' }} />
+                        <div className="skeleton" style={{ width: '40%', height: '20px', borderRadius: '6px', opacity: 0.2, margin: '0 auto' }} />
                     </div>
+                </div>
+
+                <div className="detail-container">
 
                     {/* Tabs strip */}
                     <div className="detail-tabs-wrapper" style={{ marginTop: '40px', marginBottom: '50px' }}>
