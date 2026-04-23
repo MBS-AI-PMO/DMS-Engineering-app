@@ -22,12 +22,27 @@ const CutSizesVisual = ({ sizes }) => {
     // Find the max dimensions across ALL metals or use a standard max
     const maxHeight = 56; // Standard max height (Box C)
 
-    // Display constants - increased for larger visual impact
-    const CONTAINER_HEIGHT = 200;
-    const MIN_DIM = 24;
+    const [containerHeight, setContainerHeight] = React.useState(200);
+
+    React.useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 500) {
+                setContainerHeight(130);
+            } else if (window.innerWidth < 768) {
+                setContainerHeight(160);
+            } else {
+                setContainerHeight(200);
+            }
+        };
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const MIN_DIM = 20;
 
     // Global scaling factor
-    const scale = (CONTAINER_HEIGHT - 20) / maxHeight;
+    const scale = (containerHeight - 20) / maxHeight;
 
     return (
         <div className="cut-sizes-visual">

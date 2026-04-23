@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Filter } from 'lucide-react';
 import { metalsData } from '../data/metalsData';
 import { servicesData } from '../data/servicesData';
+import metalHeroBg from '../assets/metals/metal-hero-bg.png';
 import laserSpecsSvg from '../assets/metals/laser-specs.svg';
 import CutSizesVisual from './CutSizesVisual';
 import Showcase from './Showcase';
@@ -145,14 +146,17 @@ const MetalDetail = () => {
             <div className="metal-detail-page">
                 <div className="detail-container">
 
-                    {/* Breadcrumb */}
-                    <div className="skeleton" style={{ width: '220px', height: '14px', marginBottom: '30px', borderRadius: '6px' }} />
-
-                    {/* Main title */}
-                    <div className="skeleton" style={{ width: '48%', height: '52px', marginBottom: '40px', borderRadius: '10px', margin: '0 auto 40px' }} />
+                    {/* Hero Skeleton */}
+                    <div className="detail-hero skeleton-hero">
+                        <div className="skeleton-hero-content">
+                            <div className="skeleton" style={{ width: '180px', height: '12px', marginBottom: '24px', borderRadius: '4px', opacity: 0.3 }} />
+                            <div className="skeleton" style={{ width: '60%', height: '60px', marginBottom: '20px', borderRadius: '12px', opacity: 0.4 }} />
+                            <div className="skeleton" style={{ width: '40%', height: '20px', borderRadius: '6px', opacity: 0.2 }} />
+                        </div>
+                    </div>
 
                     {/* Tabs strip */}
-                    <div className="detail-tabs-wrapper" style={{ marginBottom: '50px' }}>
+                    <div className="detail-tabs-wrapper" style={{ marginTop: '40px', marginBottom: '50px' }}>
                         <div className="detail-tabs" style={{ display: 'flex', gap: '10px', paddingBottom: '2px' }}>
                             <div className="skeleton" style={{ width: '120px', height: '42px', borderRadius: '8px' }} />
                             <div className="skeleton" style={{ width: '145px', height: '42px', borderRadius: '8px' }} />
@@ -270,12 +274,24 @@ const MetalDetail = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
         >
-            <div className="detail-container">
-                <nav className="detail-breadcrumb">
-                    <Link to="/">Home</Link> <span className="separator">/</span> <Link to="/">Metals</Link> <span className="separator">/</span> <span className="current">{metal.name}</span>
-                </nav>
+            <div className="detail-hero" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url(${metalHeroBg})` }}>
+                <div className="detail-container">
+                    <nav className="detail-breadcrumb centered">
+                        <Link to="/">Home</Link> <span className="separator">/</span> <Link to="/">Metals</Link> <span className="separator">/</span> <span className="current">{metal.name}</span>
+                    </nav>
 
-                <h1 className="detail-main-title">{unit === 'MM' ? metal.quickLook.thicknesses[selectedThicknessIndex]?.metric : metal.quickLook.thicknesses[selectedThicknessIndex]?.value} {metal.name}</h1>
+                    <h1 className="detail-hero-title">
+                        <span className="title-prefix">Precision Engineering</span>
+                        <span className="title-main">{metal.name}</span>
+                    </h1>
+
+                    <div className="hero-description centered">
+                        Ensure your CAD files are ready for perfect production with our comprehensive {metal.name} specifications.
+                    </div>
+                </div>
+            </div>
+
+            <div className="detail-container">
 
                 <div className="detail-tabs-wrapper">
                     <div className="detail-tabs">
@@ -1007,7 +1023,7 @@ const MetalDetail = () => {
                         </motion.div>
                     </AnimatePresence>
                 </div>
-            </div>
+            </div >
         </motion.div >
     );
 };
