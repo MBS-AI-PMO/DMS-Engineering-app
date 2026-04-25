@@ -1092,13 +1092,40 @@ router.post('/calculate', async (req, res) => {
                 main_service_cost = (totalSetupCost / qty) + machineCostPerUnit;
             }
 
-            // ── CNC MACHINING (dimension-based fallback) ──────────────────────
-            if (main_service_cost === 0 && isCNC) {
-                const base = parseFloat(config.base_setup) || 0;
-                const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
-                const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
-                const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
-                main_service_cost = base + w_cost + l_cost + t_cost;
+            // ── CNC MACHINING (Multi-Operation Formula) ──────────────────────
+            if (isCNC) {
+                let totalCncProductionCost = 0;
+                const operations = ['saw', 'lathe', 'mill', 'deburr', 'inspect'];
+
+                operations.forEach(op => {
+                    let setup = parseFloat(config[`cnc_${op}_setup`]) || 0;
+                    let runtime = parseFloat(config[`cnc_${op}_runtime`]) || 0;
+                    const rate = parseFloat(config[`cnc_${op}_rate`]) || 0;
+
+                    const setupUnit = config[`cnc_${op}_setup_unit`] || 'Hours';
+                    const runtimeUnit = config[`cnc_${op}_runtime_unit`] || 'Hours';
+
+                    if (setupUnit === 'Minutes') setup /= 60;
+                    else if (setupUnit === 'Seconds') setup /= 3600;
+
+                    if (runtimeUnit === 'Minutes') runtime /= 60;
+                    else if (runtimeUnit === 'Seconds') runtime /= 3600;
+
+                    // PRICE = (runtime * qty + setup) * shop_rate
+                    const opCostTotal = (runtime * qty + setup) * rate;
+
+                    if (qty > 0) {
+                        totalCncProductionCost += (opCostTotal / qty);
+                    }
+                });
+
+                if (totalCncProductionCost > 0) {
+                    console.log(`[Debug] CNC Production Cost Breakdown:`, {
+                        totalUnit: totalCncProductionCost,
+                        qty
+                    });
+                }
+                main_service_cost = totalCncProductionCost;
             }
 
             // ── GENERIC SERVICE FALLBACK ──────────────────────────────────────

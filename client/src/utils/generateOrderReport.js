@@ -98,9 +98,25 @@ export async function generateOrderReport(order, items) {
 
     let logoData = null;
     try {
-        logoData = await loadImageAsBase64('/logo.png');
+        // Attempt to fetch custom logo from settings
+        const settingsRes = await fetch('/api/settings');
+        const json = await settingsRes.json();
+        const settings = json.data || {};
+        const customLogo = settings.site_logo || settings.navbar_logo;
+
+        if (customLogo) {
+            logoData = await loadImageAsBase64(customLogo);
+        } else {
+            logoData = await loadImageAsBase64('/logo.png');
+        }
     } catch (e) {
         console.warn('Could not load logo for PDF watermark', e);
+        // Fallback attempt
+        try {
+            logoData = await loadImageAsBase64('/logo.png');
+        } catch (err) {
+            console.warn('Could not load fallback logo', err);
+        }
     }
 
     const drawWatermarks = () => {
