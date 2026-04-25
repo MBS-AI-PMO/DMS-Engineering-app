@@ -13,6 +13,11 @@ const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v12-tap-axis-aware-cut';
 const PREVIEW_RESULT_TTL_MS = 8 * 60 * 1000;
 const PREVIEW_RESULT_CACHE_MAX = 256;
 
+const toFiniteNumber = (val) => {
+    const n = parseFloat(val);
+    return isFinite(n) ? n : 0;
+};
+
 const cleanupPreviewResultCache = () => {
     const now = Date.now();
     for (const [key, entry] of previewResultCache.entries()) {
@@ -155,11 +160,6 @@ const compactPreviewConfig = (configuration = {}) => {
         dimensions: configuration.dimensions || null,
         anodizingColor: configuration.anodizingColor || null
     };
-};
-
-const toFiniteNumber = (value) => {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : null;
 };
 
 const INCH_TO_MM = 25.4;
@@ -511,11 +511,9 @@ const parseSheetCostRatePayload = (body = {}) => {
         }
     }
 
-    // Column name is legacy; value now represents cost for a 5x10 sheet.
-    const sheetCost = parseFloat(body.sheet_cost_5x10 ?? body.sheet_cost_4x8);
-    if (!Number.isFinite(sheetCost) || sheetCost < 0) {
-        return { error: 'sheet_cost_5x10 must be a valid non-negative number' };
-    }
+    // Support both sheet sizes. Use 0 as default if missing.
+    const cost4x8 = parseFloat(body.sheet_cost_4x8 || 0);
+    const cost5x10 = parseFloat(body.sheet_cost_5x10 || 0);
 
     let gauge = null;
     if (body.ga != null && String(body.ga).trim() !== '') {
@@ -530,7 +528,9 @@ const parseSheetCostRatePayload = (body = {}) => {
         minThick,
         maxThick,
         gauge,
-        sheetCost,
+        cost4x8,
+        cost5x10,
+        thickness: (minThick + maxThick) / 2
     };
 };
 
@@ -540,11 +540,8 @@ const parseSheetCostRatePayload = (body = {}) => {
 router.get('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT *,
-                    COALESCE(max_thick, min_thick) AS thickness,
-                    sheet_cost_4x8 AS sheet_cost_5x10
-             FROM sheet_cost_rates
-             ORDER BY family, COALESCE(max_thick, min_thick) ASC`
+            `SELECT * FROM sheet_cost_rates
+             ORDER BY family, COALESCE(max_thick, min_thick, thickness) ASC`
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -564,17 +561,13 @@ router.post('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, r
 
     try {
         const result = await db.query(
-            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8)
-             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.sheetCost]
+            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8, sheet_cost_5x10, thickness)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.cost5x10, parsed.thickness]
         );
         res.json({
             success: true,
-            data: {
-                ...result.rows[0],
-                thickness: result.rows[0].max_thick,
-                sheet_cost_5x10: result.rows[0].sheet_cost_4x8,
-            }
+            data: result.rows[0]
         });
     } catch (err) {
         console.error('Error creating sheet cost rate:', err);
@@ -595,18 +588,14 @@ router.put('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req
     try {
         const result = await db.query(
             `UPDATE sheet_cost_rates
-             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, updated_at = NOW()
-             WHERE id = $6 RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.sheetCost, id]
+             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, sheet_cost_5x10 = $6, thickness = $7, updated_at = NOW()
+             WHERE id = $8 RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.cost5x10, parsed.thickness, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Rate not found' });
         res.json({
             success: true,
-            data: {
-                ...result.rows[0],
-                thickness: result.rows[0].max_thick,
-                sheet_cost_5x10: result.rows[0].sheet_cost_4x8,
-            }
+            data: result.rows[0]
         });
     } catch (err) {
         console.error('Error updating sheet cost rate:', err);
@@ -849,6 +838,7 @@ router.post('/calculate', async (req, res) => {
         const metal = metalRes.rows[0] || null;
         const mainService = serviceRes.rows[0] || null;
         const metalConfig = metalConfigRes.rows[0] || null;
+        const config = mainService?.pricing_config || {};
 
         const metalValidationError = validateMetalBounds({
             metal,
@@ -857,9 +847,6 @@ router.post('/calculate', async (req, res) => {
             heightIn: heightInNum,
             thicknessIn: thicknessInNum,
         });
-        if (metalValidationError) {
-            return res.status(400).json({ success: false, error: metalValidationError });
-        }
 
         const serviceValidationError = validateServiceBounds({
             service: mainService,
@@ -867,9 +854,8 @@ router.post('/calculate', async (req, res) => {
             heightIn: heightInNum,
             thicknessIn: thicknessInNum,
         });
-        if (serviceValidationError) {
-            return res.status(400).json({ success: false, error: serviceValidationError });
-        }
+
+        const boundsWarning = metalValidationError || serviceValidationError;
 
         // ── MATERIAL COST (Sheet Nesting Formula) ─────────────────────────────
         // Source: sheet metal material.csv
@@ -879,20 +865,16 @@ router.post('/calculate', async (req, res) => {
         // 2) closest thickness in selected family
         // 3) generic fallback family
         let material_cost = 0;
-
-        const EDGE_BUFFER = 0.125;   // inches – distance from sheet edge to parts
-        const PART_BUFFER = 0.0625;  // inches – gap between parts
-        const KERF_WIDTH = 0.01;    // inches – laser kerf
-        const SHEET_L = 120;      // inches – 10 ft (long side of 5x10 sheet)
-        const SHEET_W = 60;       // inches – 5 ft (short side of 5x10 sheet)
+        let lead_days = 0;
+        let laser_warning = false;
 
         if (metal && thickness_value && parseFloat(length_in) > 0 && parseFloat(height_in) > 0) {
             const thickNum = parseFloat(thickness_value);
             const family = metal.material_family || 'generic';
 
             let sheetRes = await db.query(
-                `SELECT sheet_cost_4x8 FROM sheet_cost_rates
-                 WHERE family = $1 AND min_thick <= $2 AND max_thick >= $2
+                `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
+                 WHERE family = $1 AND min_thick < $2 - 0.001 AND max_thick >= $2
                  ORDER BY max_thick ASC, min_thick ASC
                  LIMIT 1`,
                 [family, thickNum]
@@ -900,7 +882,7 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length === 0) {
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                    `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
                      WHERE family = $1
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $2) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -911,7 +893,7 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length === 0 && family !== 'generic') {
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                    `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
                      WHERE family = 'generic'
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $1) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -921,53 +903,78 @@ router.post('/calculate', async (req, res) => {
             }
 
             if (sheetRes.rows.length > 0) {
-                const sheetCost = parseFloat(sheetRes.rows[0].sheet_cost_4x8);
-                const pL = parseFloat(length_in);
-                const pW = parseFloat(height_in);
+                const row = sheetRes.rows[0];
+                let active_sheet_cost = 0;
+                let active_L = 96;
+                let active_W = 48;
 
-                // Buffered part footprint
-                const buffL = pL + PART_BUFFER + KERF_WIDTH;
-                const buffW = pW + PART_BUFFER + KERF_WIDTH;
+                // Priority: 5x10 if cost > 0, else 4x8
+                if (parseFloat(row.sheet_cost_5x10) > 0) {
+                    active_sheet_cost = parseFloat(row.sheet_cost_5x10);
+                    active_L = 120;
+                    active_W = 60;
+                } else if (parseFloat(row.sheet_cost_4x8) > 0) {
+                    active_sheet_cost = parseFloat(row.sheet_cost_4x8);
+                    active_L = 96;
+                    active_W = 48;
+                }
 
-                // Usable sheet dimensions (subtract edge buffers, add one part_buffer back
-                // because the last part doesn't need a trailing gap)
-                const usableL = SHEET_L - 2 * EDGE_BUFFER + PART_BUFFER;
-                const usableW = SHEET_W - 2 * EDGE_BUFFER + PART_BUFFER;
+                if (active_sheet_cost > 0) {
+                    // Buffers from config or formula defaults
+                    const EDGE_BUFFER = parseFloat(config.edge_buffer) || 0.125;
+                    const PART_BUFFER = parseFloat(config.part_buffer) || 0.0625;
+                    const KERF_WIDTH = parseFloat(config.kerf_width) || 0.01;
 
-                const pps = Math.floor(usableL / buffL) * Math.floor(usableW / buffW);
-                if (pps > 0) {
-                    material_cost = sheetCost / pps;
+                    // Orientation-agnostic part dims
+                    const pL = Math.max(parseFloat(length_in), parseFloat(height_in));
+                    const pW = Math.min(parseFloat(length_in), parseFloat(height_in));
+
+                    const buffL = pL + PART_BUFFER + KERF_WIDTH;
+                    const buffW = pW + PART_BUFFER + KERF_WIDTH;
+
+                    // Usable sheet dimensions (subtract edge buffers, add one part_buffer back)
+                    const sL = Math.max(active_L, active_W);
+                    const sW = Math.min(active_L, active_W);
+
+                    const usableL = sL - 2 * EDGE_BUFFER + PART_BUFFER;
+                    const usableW = sW - 2 * EDGE_BUFFER + PART_BUFFER;
+
+                    const pps = Math.floor(usableL / buffL) * Math.floor(usableW / buffW);
+                    if (pps > 0) {
+                        material_cost = active_sheet_cost / pps;
+                    } else {
+                        material_cost = 0;
+                        laser_warning = true;
+                    }
                 }
             }
         }
 
         // ── MAIN SERVICE COST ──────────────────────────────────────────────────
         let main_service_cost = 0;
-        let laser_warning = false;
         const techData = req.body.technical_data || {};
 
         if (mainService) {
-            const config = mainService.pricing_config || {};
-            const isLaser = mainService.title.toLowerCase().includes('laser');
-            const isBending = mainService.title.toLowerCase().includes('bending');
+            const sTitle = (mainService.title || "").toLowerCase();
+            const isLaser = sTitle.includes('laser');
+            const isBending = sTitle.includes('bending');
             const isCNC = parseInt(mainService.id) === 2;
 
-            // ── LASER CUTTING (laser.csv) ─────────────────────────────────────
-            // runtime_h = (perimeter_mm / cut_rate_mm_s / 3600) + (pierces × pierce_time_s / 3600)
-            // setup_hrs = 0.3 default; 0.25 if thickness > 0.25 in  (from CSV conditional)
-            // cost/unit = (hourly_rate × setup_hrs / qty) + (hourly_rate × runtime_h)
+            // ── LASER CUTTING (Refined Formula) ───────────────────────────────
             if (isLaser && thickness_value) {
                 const thickNum = parseFloat(thickness_value);
                 const family = metal?.material_family || 'generic';
-                const hourly_rate = parseFloat(config.hourly_rate) || 100;
+                const hourly_rate = parseFloat(config.hourly_rate) || 0;
+                const daily_capacity = parseFloat(config.daily_capacity_hrs) || 0;
 
-                // Prefer closest available thickness for family/generic rates to avoid false zero-cost results.
+                // Lookup rates: thickness >= part_thickness
                 const laserRes = await db.query(
                     `SELECT cut_rate, pierce_time FROM laser_cut_rates
                      WHERE (material_family = $1 OR material_family = 'generic')
+                       AND thickness >= $2
                      ORDER BY CASE WHEN material_family = $1 THEN 0 ELSE 1 END,
-                              ABS(thickness - $2) ASC,
-                              thickness ASC
+                              thickness ASC,
+                              cut_rate DESC
                      LIMIT 1`,
                     [family, thickNum]
                 );
@@ -977,38 +984,62 @@ router.post('/calculate', async (req, res) => {
                     const cut_rate = parseFloat(rule.cut_rate);   // mm/s
                     const pierce_time = parseFloat(rule.pierce_time) || 0; // s
 
-                    // Setup time: 0.3 h thin material, 0.25 h thick material (CSV formula)
-                    const setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
+                    // 1. Setup Time: Formula defaults (0.3/0.25) or Config override
+                    let setup_hrs = parseFloat(config.laser_setup_time_hr);
+                    if (isNaN(setup_hrs) || setup_hrs === 0) {
+                        setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
+                    }
 
-                    // Use technical-data perimeter when available; otherwise approximate from part envelope.
+                    // 2. Cut Length (Perimeter + Etching)
                     const envelopePerimeterMm = ((parseFloat(length_in) || 0) + (parseFloat(height_in) || 0)) * 2 * 25.4;
                     const perimeter_mm = (parseFloat(techData.totalPerimeter) > 0)
                         ? parseFloat(techData.totalPerimeter)
                         : envelopePerimeterMm;
 
-                    // Minimum of one pierce. If backend/front-end provides holes count, prefer that.
-                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1));
+                    const etch_mm = (parseFloat(techData.etchLength) || 0) * 25.4;
+                    const total_cut_mm = perimeter_mm + etch_mm;
 
-                    // runtime per part (hours)
-                    const runtime_h = (perimeter_mm / cut_rate / 3600) + (pierces * pierce_time / 3600);
+                    // 3. Pierce Count
+                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1)) + 1;
 
-                    // Amortise one-time setup across qty; add per-part labour
-                    main_service_cost = (hourly_rate * setup_hrs / qty) + (hourly_rate * runtime_h);
+                    // 4. Runtime per part (hours)
+                    const runtime_h = (total_cut_mm / cut_rate / 3600) + (pierces * pierce_time / 3600);
+
+                    // 5. Total Cost
+                    const setup_cost = hourly_rate * setup_hrs;
+                    main_service_cost = (setup_cost / qty) + (hourly_rate * runtime_h);
+
+                    // 6. Lead Days
+                    if (daily_capacity > 0) {
+                        lead_days = Math.ceil((setup_hrs + runtime_h * qty) / daily_capacity);
+                    }
 
                     // Thickness warning (CSV: set_operation_name WARNING if > 0.376)
                     if (thickNum > 0.376) laser_warning = true;
                 } else {
-                    // Fallback when laser rate table has no matching rows.
-                    const fallbackCutRate = Math.max(1, parseFloat(config.cut_rate_mm_s || config.cut_rate || 120));
-                    const fallbackPierceTime = Math.max(0, parseFloat(config.pierce_time_s || config.pierce_time || 0.35));
-                    const setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
+                    // Fallback logic
+                    const fallbackCutRate = parseFloat(config.cut_rate_mm_s || config.cut_rate) || 0;
+                    const fallbackPierceTime = parseFloat(config.pierce_time_s || config.pierce_time) || 0;
+
+                    let setup_hrs = parseFloat(config.laser_setup_time_hr);
+                    if (isNaN(setup_hrs) || setup_hrs === 0) {
+                        setup_hrs = thickNum > 0.25 ? 0.25 : 0.3;
+                    }
+
                     const envelopePerimeterMm = ((parseFloat(length_in) || 0) + (parseFloat(height_in) || 0)) * 2 * 25.4;
                     const perimeter_mm = (parseFloat(techData.totalPerimeter) > 0)
                         ? parseFloat(techData.totalPerimeter)
                         : envelopePerimeterMm;
-                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1));
-                    const runtime_h = (perimeter_mm / fallbackCutRate / 3600) + (pierces * fallbackPierceTime / 3600);
+
+                    const pierces = Math.max(1, parseInt(techData.pierceCount || techData.holesCount || 1)) + 1;
+                    const runtime_h = (perimeter_mm / (fallbackCutRate || 1) / 3600) + (pierces * fallbackPierceTime / 3600);
+
                     main_service_cost = (hourly_rate * setup_hrs / qty) + (hourly_rate * runtime_h);
+
+                    const daily_capacity = parseFloat(config.daily_capacity_hrs) || 0;
+                    if (daily_capacity > 0) {
+                        lead_days = Math.ceil((setup_hrs + runtime_h * qty) / daily_capacity);
+                    }
 
                     if (thickNum > 0.376) laser_warning = true;
                 }
@@ -1016,65 +1047,54 @@ router.post('/calculate', async (req, res) => {
 
             // ── BENDING (bending.csv) ─────────────────────────────────────────
             // cost/unit = (setup_cost / qty) + machine_cost
-            // Setup Cost = Labor Rate * (Unique Bends + Unique Advanced Features) * Setup Time Per Feature
-            // Machine Cost = (SmallBends * RateS + MedBends * RateM + LargeBends * RateL) * Labor Rate / 3600
+            // Setup Cost = Labor Rate * (Unique Bends) * Setup Time Per Feature
+            // Machine Cost = (SmallBends * RateS + MedBends * RateM + LargeBends * RateL + Other * RateO)
             if (isBending && techData.bends && Array.isArray(techData.bends)) {
-                // Get config with defaults based on bending.csv
-                const laborRate = parseFloat(config.labor_rate) || 85;
-                const setupTimePerUnique = parseFloat(config.setup_time_per_unique) || 0.25; // hours
+                const laborRate = parseFloat(config.labor_rate) || 0;
+                const setupTimePerUnique = parseFloat(config.setup_time_per_unique) || 0;
 
-                const medThreshIn = parseFloat(config.med_bend_threshold) || 8;  // inches
-                const largeThreshIn = parseFloat(config.large_bend_threshold) || 20; // inches
+                const medThreshIn = parseFloat(config.med_bend_threshold) || 0;
+                const largeThreshIn = parseFloat(config.large_bend_threshold) || 0;
 
-                const runTimeSmall = parseFloat(config.run_time_small_sec) || 15; // seconds
-                const runTimeMed = parseFloat(config.run_time_med_sec) || 15;
-                const runTimeLarge = parseFloat(config.run_time_large_sec) || 20;
-                const otherTime = parseFloat(config.other_feature_run_time_sec) || 20;
+                const rateSmall = parseFloat(config.small_bend_rate) || 0;
+                const rateMed = parseFloat(config.med_bend_rate) || 0;
+                const rateLarge = parseFloat(config.large_bend_rate) || 0;
+                const rateOther = parseFloat(config.other_formed_feature_rate) || 0;
 
                 let machineCostPerUnit = 0;
                 const uniqueFeatures = new Set();
-                let smallCount = 0, medCount = 0, largeCount = 0, otherCount = 0;
 
                 techData.bends.forEach(bend => {
                     const lenMm = parseFloat(bend.length) || 0;
                     const lenIn = lenMm / 25.4;
-                    const radMm = parseFloat(bend.radius) || 0;
+                    const radMm = Math.round((parseFloat(bend.radius) || 0) * 10) / 10;
                     const ang = Math.round(parseFloat(bend.angle) || 0);
 
-                    // 1. Identify Unique Features (Rad + Angle + type)
-                    // Hems are ~180 degree bends
                     const isHem = Math.abs(ang - 180) < 5;
                     const type = isHem ? 'hem' : 'standard';
                     uniqueFeatures.add(`${radMm}_${ang}_${type}`);
 
-                    // 2. Count for Machine Cost
                     if (isHem) {
-                        otherCount += 1;
-                        machineCostPerUnit += otherTime;
+                        machineCostPerUnit += rateOther;
                     } else if (lenIn >= largeThreshIn) {
-                        largeCount += 1;
-                        machineCostPerUnit += runTimeLarge;
+                        machineCostPerUnit += rateLarge;
                     } else if (lenIn >= medThreshIn) {
-                        medCount += 1;
-                        machineCostPerUnit += runTimeMed;
+                        machineCostPerUnit += rateMed;
                     } else {
-                        smallCount += 1;
-                        machineCostPerUnit += runTimeSmall;
+                        machineCostPerUnit += rateSmall;
                     }
                 });
 
-                // Calculate Totals using Bending.csv logic
                 const totalUnique = uniqueFeatures.size;
-                const setupTimeHrs = totalUnique * setupTimePerUnique;
-                const totalSetupCost = setupTimeHrs * laborRate;
+                const totalSetupCost = totalUnique * setupTimePerUnique * laborRate;
 
-                // Final unit price for bending
-                main_service_cost = (totalSetupCost / qty) + (machineCostPerUnit * laborRate / 3600);
+                // Final unit price for bending (Setup amortized + direct machine dollar rates)
+                main_service_cost = (totalSetupCost / qty) + machineCostPerUnit;
             }
 
             // ── CNC MACHINING (dimension-based fallback) ──────────────────────
             if (main_service_cost === 0 && isCNC) {
-                const base = parseFloat(config.base_setup) || 25;
+                const base = parseFloat(config.base_setup) || 0;
                 const w_cost = (parseFloat(height_in) || 0) * (parseFloat(config.price_per_width) || 0);
                 const l_cost = (parseFloat(length_in) || 0) * (parseFloat(config.price_per_length) || 0);
                 const t_cost = (parseFloat(thickness_value) || 0) * (parseFloat(config.price_per_thickness) || 0);
@@ -1117,13 +1137,13 @@ router.post('/calculate', async (req, res) => {
                 // cost/unit = (setup_charge + num_batches × batch_cost) / qty
                 if (isPowder && s.pricing_config) {
                     const cfg = s.pricing_config;
-                    const ovenW = parseFloat(cfg.oven_width) || 90;
-                    const ovenL = parseFloat(cfg.oven_length) || 160;
-                    const batchCost = parseFloat(cfg.batch_cost) || 150;
-                    const setupCharge = (parseFloat(cfg.setup_time) || 15) * (parseFloat(cfg.shop_rate) || 38) / 60;
+                    const ovenW = parseFloat(cfg.oven_width) || 0;
+                    const ovenL = parseFloat(cfg.oven_length) || 0;
+                    const batchCost = parseFloat(cfg.batch_cost) || 0;
+                    const setupCharge = (parseFloat(cfg.setup_time) || 0) * (parseFloat(cfg.shop_rate) || 0) / 60;
 
-                    const partGap = parseFloat(cfg.part_gap) || 6;           // inches — horizontal gap between parts
-                    const rackClearance = parseFloat(cfg.rack_clearance) || 24; // inches — vertical rack clearance above part
+                    const partGap = parseFloat(cfg.part_gap) || 0;
+                    const rackClearance = parseFloat(cfg.rack_clearance) || 0;
 
                     const pW = (parseFloat(height_in) || 10) + partGap;              // part width + horizontal gap
                     const pThick = (parseFloat(thickness_value) || 0.1) + rackClearance; // thickness + rack clearance
@@ -1155,42 +1175,43 @@ router.post('/calculate', async (req, res) => {
                 // ── BENDING (as additional service) ──────────────────────────
                 if (sTitleLower.includes('bend') && techData && Array.isArray(techData.bends) && techData.bends.length > 0) {
                     const cfg = s.pricing_config || {};
-                    const laborRate = parseFloat(cfg.labor_rate) || 85;
-                    const setupTimePerUnique = parseFloat(cfg.setup_time_per_unique) || 0.25;
-                    const medThreshIn = parseFloat(cfg.med_bend_threshold) || 8;
-                    const largeThreshIn = parseFloat(cfg.large_bend_threshold) || 20;
-                    const runTimeSmall = parseFloat(cfg.run_time_small_sec) || 15;
-                    const runTimeMed = parseFloat(cfg.run_time_med_sec) || 15;
-                    const runTimeLarge = parseFloat(cfg.run_time_large_sec) || 20;
+                    const laborRate = parseFloat(cfg.labor_rate) || 0;
+                    const setupTimePerUnique = parseFloat(cfg.setup_time_per_unique) || 0;
+                    const medThreshIn = parseFloat(cfg.med_bend_threshold) || 0;
+                    const largeThreshIn = parseFloat(cfg.large_bend_threshold) || 0;
+
+                    const rateSmall = parseFloat(cfg.small_bend_rate) || 0;
+                    const rateMed = parseFloat(cfg.med_bend_rate) || 0;
+                    const rateLarge = parseFloat(cfg.large_bend_rate) || 0;
+                    const rateOther = parseFloat(cfg.other_formed_feature_rate) || 0;
 
                     let machineCostPerUnit = 0;
                     const uniqueFeatures = new Set();
+                    const bends = Array.isArray(techData.bends) ? techData.bends : [];
 
-                    techData.bends.forEach(bend => {
-                        const radMm = Math.round((bend.radius || 0) * 10) / 10;
-                        const ang = Math.round(bend.angle || 90);
+                    bends.forEach(bend => {
+                        const radMm = Math.round((parseFloat(bend.radius) || 0) * 10) / 10;
+                        const ang = Math.round(parseFloat(bend.angle) || 0);
                         const isHem = Math.abs(ang - 180) < 5;
                         const type = isHem ? 'HEM' : 'BEND';
-                        const lenIn = (bend.length || 0) / 25.4;
+                        const lenIn = (parseFloat(bend.length) || 0) / 25.4;
 
                         uniqueFeatures.add(`${radMm}_${ang}_${type}`);
 
                         if (isHem) {
-                            machineCostPerUnit += runTimeLarge; // Hem = Large rate
+                            machineCostPerUnit += rateOther;
                         } else if (lenIn >= largeThreshIn) {
-                            machineCostPerUnit += runTimeLarge;
+                            machineCostPerUnit += rateLarge;
                         } else if (lenIn >= medThreshIn) {
-                            machineCostPerUnit += runTimeMed;
+                            machineCostPerUnit += rateMed;
                         } else {
-                            machineCostPerUnit += runTimeSmall;
+                            machineCostPerUnit += rateSmall;
                         }
                     });
 
                     const totalUnique = uniqueFeatures.size;
-                    const setupTimeHrs = totalUnique * setupTimePerUnique;
-                    const totalSetupCost = setupTimeHrs * laborRate;
-
-                    sPrice = (totalSetupCost / qty) + (machineCostPerUnit * laborRate / 3600);
+                    const totalSetupCost = totalUnique * setupTimePerUnique * laborRate;
+                    sPrice = (totalSetupCost / qty) + machineCostPerUnit;
                 }
 
                 additional_cost += sPrice;
@@ -1222,28 +1243,97 @@ router.post('/calculate', async (req, res) => {
             service_breakdown.push({ name: 'Countersinking', price: csTotal });
         }
 
-        let unit_total = material_cost + main_service_cost + additional_cost;
+        // ── MARKUPS & FINAL TOTALS ──────────────────────────────────────────
+        const settingsRes = await db.query("SELECT key, value FROM site_settings WHERE key IN ('general_markup', 'inside_labor_markup', 'material_markup', 'overhead_markup', 'markup_enabled_services')");
+        const settings = {};
+        settingsRes.rows.forEach(r => {
+            if (r.key === 'markup_enabled_services') {
+                try {
+                    settings[r.key] = typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
+                } catch (e) { settings[r.key] = []; }
+            } else {
+                settings[r.key] = toFiniteNumber(r.value);
+            }
+        });
 
-        // ── GLOBAL MARKUP (general markup.csv) ───────────────────────────────
-        // Simple percentage applied to all pricing — configured in Contact/Settings admin.
-        const markupRes = await db.query("SELECT value FROM site_settings WHERE key = 'general_markup'");
-        const markupPercent = markupRes.rows.length > 0 ? parseFloat(markupRes.rows[0].value) : 10;
-        unit_total = unit_total * (1 + markupPercent / 100);
+        const genMU = settings.general_markup || 0;
+        const insMU = settings.inside_labor_markup || 0;
+        const matMU = settings.material_markup || 0;
+        const ovhMU = settings.overhead_markup || 0;
+        const markupServices = Array.isArray(settings.markup_enabled_services) ? settings.markup_enabled_services : [];
+
+        // Factors
+        const material_factor = 1 + matMU / 100;
+        const inside_factor = 1 + (genMU + insMU + ovhMU) / 100;
+
+        // Apply markup selectively to Main Service
+        const applyToMain = markupServices.includes(mainService?.title);
+        const main_mu_factor = applyToMain ? inside_factor : 1;
+
+        const material_marked_up = material_cost * material_factor;
+        const production_marked_up = main_service_cost * main_mu_factor;
+
+        const marked_service_breakdown = [];
+        let total_additional_marked_up = 0;
+        let total_sub_services_marked_up = 0;
+
+        // 1. Add Main Service (e.g. Laser Cutting)
+        if (production_marked_up > 0.001) {
+            marked_service_breakdown.push({
+                name: mainService?.title || 'Production',
+                price: production_marked_up
+            });
+        }
+
+        // 2. Add existing labor items (Bending, Tapping, Hardware, etc.)
+        for (const item of service_breakdown) {
+            const applyToSvc = markupServices.includes(item.name);
+            const svc_mu_factor = applyToSvc ? inside_factor : 1;
+            const price_mu = item.price * svc_mu_factor;
+
+            if (price_mu > 0.001) {
+                total_sub_services_marked_up += price_mu;
+                marked_service_breakdown.push({
+                    name: item.name,
+                    price: price_mu
+                });
+            }
+        }
+
+        // 3. Add Additional Services (e.g. Powder Coating)
+        for (const svc of additional_services) {
+            const applyToSvc = markupServices.includes(svc.service_title);
+            const svc_mu_factor = applyToSvc ? inside_factor : 1;
+            const price_mu = svc.price_raw * svc_mu_factor;
+
+            if (price_mu > 0.001) {
+                total_additional_marked_up += price_mu;
+                marked_service_breakdown.push({
+                    name: svc.service_title,
+                    price: price_mu
+                });
+            }
+        }
+
+        let unit_total = material_marked_up + production_marked_up + total_sub_services_marked_up + total_additional_marked_up;
 
         // ── QUANTITY DISCOUNTS ────────────────────────────────────────────────
         let discount_percent = 0;
         let applied_tier = null;
 
         const discountRes = await db.query(`
-            SELECT * FROM quantity_discounts
-            WHERE is_active = true
-            ORDER BY (quantities->>0)::int DESC
-        `);
+                SELECT * FROM quantity_discounts
+                WHERE is_active = true
+                ORDER BY (quantities->>0)::int DESC
+            `);
 
         if (discountRes.rows.length > 0) {
             const matchedTier = discountRes.rows.find(tier => {
                 const triggers = Array.isArray(tier.quantities) ? tier.quantities : [];
-                return triggers.some(q => parseInt(qty) >= parseInt(q));
+                return triggers.length > 0 && triggers.some(q => {
+                    const val = parseInt(q);
+                    return !isNaN(val) && parseInt(qty) >= val;
+                });
             });
             if (matchedTier) {
                 discount_percent = parseFloat(matchedTier.discount_percent);
@@ -1253,24 +1343,38 @@ router.post('/calculate', async (req, res) => {
 
         const unit_discount_amount = unit_total * (discount_percent / 100);
         const final_unit_price = Math.max(0, unit_total - unit_discount_amount);
-        const final_total = final_unit_price * qty;
+        const final_total = Number.isFinite(final_unit_price * qty) ? (final_unit_price * qty) : 0;
+
+        console.log('[Debug] Price Calculation:', {
+            material: material_marked_up,
+            production: production_marked_up,
+            sub_services: total_sub_services_marked_up,
+            additional: total_additional_marked_up,
+            unit_total,
+            final_unit_price,
+            qty,
+            final_total
+        });
 
         res.json({
             success: true,
             total_price: final_total,
+            lead_days: lead_days || 0,
             breakdown: {
-                material_cost,
-                production_cost: main_service_cost,
-                additional_services_cost: additional_cost,
-                service_breakdown,
+                material_cost: material_marked_up,
+                production_cost: production_marked_up,
+                additional_services_cost: total_additional_marked_up,
+                service_breakdown: marked_service_breakdown,
                 unit_total,
                 final_unit_price,
                 discount_percent,
                 discount_amount: unit_discount_amount * qty,
                 applied_tier,
-                warnings: laser_warning
-                    ? ['Part thickness exceeds 0.376 in. Please verify laser cutting capability.']
-                    : []
+                warnings: [
+                    ...(boundsWarning ? [boundsWarning] : []),
+                    ...(laser_warning ? ['Part dimensions or thickness exceed standard limits. Please verify capability.'] : []),
+                    ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : [])
+                ]
             }
         });
 

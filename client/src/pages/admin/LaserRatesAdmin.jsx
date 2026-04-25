@@ -30,19 +30,25 @@ function getRowWarnings(row) {
 
 export default function LaserRatesAdmin() {
     const toast = useToast();
-    const [rates, setRates]         = useState([]);
+    const [rates, setRates] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [loading, setLoading]     = useState(true);
-    const [saving, setSaving]       = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingRow, setEditingRow] = useState(null); // null = new
-    const [form, setForm]           = useState(EMPTY_FORM);
+    const [form, setForm] = useState(EMPTY_FORM);
 
     const load = useCallback(async () => {
         try {
             setLoading(true);
             const data = await fetchLaserRates();
-            setRates(data || []);
+            const sorted = (data || []).sort((a, b) => {
+                if (a.material_family !== b.material_family) {
+                    return a.material_family.localeCompare(b.material_family);
+                }
+                return parseFloat(a.thickness) - parseFloat(b.thickness);
+            });
+            setRates(sorted);
         } catch (err) {
             toast('Failed to load laser rates: ' + err.message, 'error');
         } finally {
@@ -53,7 +59,7 @@ export default function LaserRatesAdmin() {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        fetchCategories().then(data => setCategories(data || [])).catch(() => {});
+        fetchCategories().then(data => setCategories(data || [])).catch(() => { });
     }, []);
 
     const openNew = () => {
@@ -66,9 +72,9 @@ export default function LaserRatesAdmin() {
         setEditingRow(row);
         setForm({
             material_family: row.material_family,
-            thickness:       fmt(row.thickness, 6),
-            cut_rate:        fmt(row.cut_rate, 4),
-            pierce_time:     fmt(row.pierce_time, 4),
+            thickness: fmt(row.thickness, 6),
+            cut_rate: fmt(row.cut_rate, 4),
+            pierce_time: fmt(row.pierce_time, 4),
         });
         setModalOpen(true);
     };
@@ -159,9 +165,10 @@ export default function LaserRatesAdmin() {
                         <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Price Formula</span>
                     </div>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#94a3b8', lineHeight: 2 }}>
-                        <div><span style={{ color: '#38bdf8' }}>runtime</span> = perimeter_mm <span style={{ color: '#6366f1' }}>÷</span> cut_rate <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
+                        <div><span style={{ color: '#38bdf8' }}>total_cut</span> = perimeter_mm + <span style={{ color: '#6366f1' }}>etch_length_mm</span></div>
+                        <div><span style={{ color: '#38bdf8' }}>runtime</span> = total_cut <span style={{ color: '#6366f1' }}>÷</span> cut_rate <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
                         <div style={{ paddingLeft: 16, color: '#64748b' }}>+ pierce_count <span style={{ color: '#6366f1' }}>×</span> pierce_time <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
-                        <div style={{ marginTop: 4 }}><span style={{ color: '#38bdf8' }}>setup_hrs</span> = 0.3 h <span style={{ color: '#64748b' }}>(0.25 h if &gt; 0.25&Prime;)</span></div>
+                        <div style={{ marginTop: 4 }}><span style={{ color: '#38bdf8' }}>setup_hrs</span> = <span style={{ color: '#64748b' }}>[Value from Service Config]</span></div>
                         <div><span style={{ color: '#34d399' }}>cost/unit</span> = rate × <span style={{ color: '#f59e0b' }}>(setup_hrs÷qty + runtime)</span></div>
                     </div>
                 </div>

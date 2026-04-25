@@ -2308,22 +2308,52 @@ const InstantPricing = () => {
                           const mW = parseFloat(dim.w) || 0;
                           const mT = parseFloat(dim.t) || 0;
                           const hasThickness = mT > 0;
-                          // metal bounds (min_x/max_x/...) are stored in inches — convert to mm for comparison
-                          const maxXmm = met.max_x ? parseFloat(met.max_x) * 25.4 : null;
-                          const maxYmm = met.max_y ? parseFloat(met.max_y) * 25.4 : null;
-                          const minXmm = met.min_x ? parseFloat(met.min_x) * 25.4 : null;
-                          const minYmm = met.min_y ? parseFloat(met.min_y) * 25.4 : null;
+                          // Helper to parse "30" x 43" max" style strings from Admin
+                          const parseAdminSize = (str) => {
+                            if (!str) return null;
+                            const matches = str.match(/(\d*\.?\d+)/g);
+                            if (matches && matches.length >= 2) {
+                              return { x: parseFloat(matches[0]), y: parseFloat(matches[1]) };
+                            }
+                            return null;
+                          };
+
+                          const cutSizes = met.quick_look?.cutSizes || [];
+                          // Find the specific min/max for Instant Pricing from the Admin table
+                          const adminMax = cutSizes.find(s => s.size?.toLowerCase().includes('max') && s.action === 'Instant Pricing');
+                          const adminMin = cutSizes.find(s => s.size?.toLowerCase().includes('min') && s.action === 'Instant Pricing');
+
+                          const maxParsed = parseAdminSize(adminMax?.size);
+                          const minParsed = parseAdminSize(adminMin?.size);
+
+                          const maxXIn = maxParsed ? maxParsed.x : parseFloat(met.max_x || '30');
+                          const maxYIn = maxParsed ? maxParsed.y : parseFloat(met.max_y || '43');
+                          const minXIn = minParsed ? minParsed.x : parseFloat(met.min_x || '0');
+                          const minYIn = minParsed ? minParsed.y : parseFloat(met.min_y || '0');
+
+                          const maxXmm = maxXIn * 25.4;
+                          const maxYmm = maxYIn * 25.4;
+                          const minXmm = minXIn * 25.4;
+                          const minYmm = minYIn * 25.4;
                           const maxZmm = met.max_z ? parseFloat(met.max_z) * 25.4 : null;
                           const minZmm = met.min_z ? parseFloat(met.min_z) * 25.4 : null;
-                          const isTooLarge = (maxXmm && mL > maxXmm) || (maxYmm && mW > maxYmm);
-                          const isTooSmall = (minXmm && mL < minXmm) || (minYmm && mW < minYmm);
+
+                          // Check if part fits in either orientation
+                          const fitsNormal = (mL <= maxXmm && mW <= maxYmm);
+                          const fitsRotated = (mL <= maxYmm && mW <= maxXmm);
+                          const isTooLarge = !fitsNormal && !fitsRotated;
+
+                          // For minimums
+                          const isTooSmall = (mL < minXmm && mW < minXmm) || (mL < minYmm && mW < minYmm);
+
                           const isTooThick = hasThickness && maxZmm && mT > maxZmm;
                           const isTooThin = hasThickness && minZmm && mT < minZmm;
+
                           const lockReasons = [];
                           if (isTooThick) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm exceeds max ${maxZmm.toFixed(3)} mm.`);
                           if (isTooThin) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm is below min ${minZmm.toFixed(3)} mm.`);
-                          if (isTooLarge) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm exceeds material max ${(maxXmm || 0).toFixed(3)} × ${(maxYmm || 0).toFixed(3)} mm.`);
-                          if (isTooSmall) lockReasons.push(`Part size ${mL.toFixed(3)} × ${mW.toFixed(3)} mm is below material minimum ${(minXmm || 0).toFixed(3)} × ${(minYmm || 0).toFixed(3)} mm.`);
+                          if (isTooLarge) lockReasons.push(`Part size (${(mL / 25.4).toFixed(3)}" × ${(mW / 25.4).toFixed(3)}") exceeds material max (${maxXIn}" × ${maxYIn}").`);
+                          if (isTooSmall) lockReasons.push(`Part size is below material minimum (${minXIn}" × ${minYIn}").`);
                           const isLocked = lockReasons.length > 0;
 
                           return (
@@ -2357,8 +2387,8 @@ const InstantPricing = () => {
                                   )}
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     <div className="card-stat" style={{ color: '#10b981' }}>IN STOCK</div>
-                                    <div className="card-stat">MIN: {parseFloat(met.min_x || '25').toFixed(3)}" × {parseFloat(met.min_y || '0.375').toFixed(3)}"</div>
-                                    <div className="card-stat">MAX: {parseFloat(met.max_x || '30').toFixed(3)}" × {parseFloat(met.max_y || '43').toFixed(3)}"</div>
+                                    <div className="card-stat">MIN: {adminMin?.size || `${minXIn}" × ${minYIn}"`}</div>
+                                    <div className="card-stat">MAX: {adminMax?.size || `${maxXIn}" × ${maxYIn}"`}</div>
                                   </div>
                                 </div>
                                 {!isLocked && <ChevronRight size={20} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />}
@@ -2555,7 +2585,7 @@ const InstantPricing = () => {
                                           </span>
                                         </div>
                                       )}
-                                      {!isUnsupported && parseFloat(svc.base_price || 0) > 0 && (
+                                      {!isUnsupported && parseFloat(svc.base_price || 0) > 0 && !svcTitle.includes('powder') && !svcTitle.includes('coat') && (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>
                                           from ${parseFloat(svc.base_price).toFixed(2)}
                                         </span>
@@ -2720,7 +2750,7 @@ const InstantPricing = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
-                          <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>
+                          {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
                         </div>
                         {isCalculatingPrice
                           ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
@@ -2728,18 +2758,7 @@ const InstantPricing = () => {
                         }
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 12 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Fabrication Cost</div>
-                          <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>
-                        </div>
-                        {isCalculatingPrice
-                          ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
-                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(priceEstimate?.breakdown?.production_cost ?? 0).toFixed(2)}</span>
-                        }
-                      </div>
-
-                      {/* PER UNIT PRICING INFO */}
+                      {/* Unit Price (only if qty > 1) */}
                       {quantity > 1 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 8 }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Unit Price (Discounted)</span>
@@ -2774,7 +2793,7 @@ const InstantPricing = () => {
                         {isCalculatingPrice
                           ? <div className="skeleton-price" style={{ width: 130, height: 32, borderRadius: 6 }} />
                           : <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                            $ {priceEstimate?.total_price ? priceEstimate.total_price.toFixed(2) : '0.00'}
+                            $ {(parseFloat(priceEstimate?.total_price) || 0).toFixed(2)}
                           </div>
                         }
                       </div>
@@ -2984,6 +3003,11 @@ const InstantPricing = () => {
                                     </div>
                                     <div className="flex-grow-1">
                                       <strong className={`d-block fw-black mb-1 ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '15px' }}>{tap.name}</strong>
+                                      {isCalculatingPrice && (
+                                        <p className="ip-qf-subtitle" style={{ fontSize: '0.9rem', color: '#64748b', margin: '4px 0 0 0' }}>
+                                          Analysing part geometry...
+                                        </p>
+                                      )}
                                       <span className={`fw-bold d-block ${isChosen ? 'text-white opacity-80' : 'text-danger'}`} style={{ fontSize: '12px' }}>Requires {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
                                       <span className={`fw-black ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '13px' }}>+${tap.price || '0.00'}/HOLE</span>
                                     </div>

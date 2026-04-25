@@ -5,7 +5,7 @@ import { fetchSheetCostRates, createSheetCostRate, updateSheetCostRate, deleteSh
 import { useToast } from '../../context/ToastContext';
 
 const INCH_TO_MM = 25.4;
-const EMPTY_FORM = { family: '', thickness_in: '', thickness_mm: '', ga: '', sheet_cost_5x10: '' };
+const EMPTY_FORM = { family: '', thickness_in: '', thickness_mm: '', ga: '', sheet_cost_4x8: '', sheet_cost_5x10: '' };
 
 const INP = { width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontWeight: 600, fontSize: '0.9rem', background: 'white', color: '#1e293b', outline: 'none' };
 
@@ -29,14 +29,7 @@ function getThicknessIn(row) {
     return null;
 }
 
-function getSheetCost5x10(row) {
-    const candidates = [row?.sheet_cost_5x10, row?.sheet_cost_4x8];
-    for (const candidate of candidates) {
-        const n = parseNum(candidate);
-        if (n != null) return n;
-    }
-    return null;
-}
+
 
 function normalizeFamily(value) {
     return String(value || '').trim().toLowerCase();
@@ -45,13 +38,13 @@ function normalizeFamily(value) {
 export default function SheetCostRatesAdmin() {
     const MotionDiv = motion.div;
     const toast = useToast();
-    const [rates, setRates]           = useState([]);
+    const [rates, setRates] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [loading, setLoading]       = useState(true);
-    const [saving, setSaving]         = useState(false);
-    const [modalOpen, setModalOpen]   = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
     const [editingRow, setEditingRow] = useState(null);
-    const [form, setForm]             = useState(EMPTY_FORM);
+    const [form, setForm] = useState(EMPTY_FORM);
 
     const load = useCallback(async () => {
         try {
@@ -68,7 +61,7 @@ export default function SheetCostRatesAdmin() {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        fetchCategories().then(data => setCategories(data || [])).catch(() => {});
+        fetchCategories().then(data => setCategories(data || [])).catch(() => { });
     }, []);
 
     const openNew = () => { setEditingRow(null); setForm(EMPTY_FORM); setModalOpen(true); };
@@ -76,14 +69,14 @@ export default function SheetCostRatesAdmin() {
     const openEdit = (row) => {
         const thicknessIn = getThicknessIn(row);
         const thicknessMm = thicknessIn != null ? thicknessIn * INCH_TO_MM : null;
-        const sheetCost = getSheetCost5x10(row);
         setEditingRow(row);
         setForm({
-            family:         row.family || '',
-            thickness_in:   thicknessIn != null ? fmt(thicknessIn, 6) : '',
-            thickness_mm:   thicknessMm != null ? fmt(thicknessMm, 3) : '',
-            ga:             row.ga != null ? String(row.ga) : '',
-            sheet_cost_5x10: sheetCost != null ? fmt(sheetCost, 4) : '',
+            family: row.family || '',
+            thickness_in: thicknessIn != null ? fmt(thicknessIn, 6) : '',
+            thickness_mm: thicknessMm != null ? fmt(thicknessMm, 3) : '',
+            ga: row.ga != null ? String(row.ga) : '',
+            sheet_cost_4x8: row.sheet_cost_4x8 != null ? fmt(row.sheet_cost_4x8, 4) : '',
+            sheet_cost_5x10: row.sheet_cost_5x10 != null ? fmt(row.sheet_cost_5x10, 4) : '',
         });
         setModalOpen(true);
     };
@@ -112,19 +105,20 @@ export default function SheetCostRatesAdmin() {
         const thicknessIn = parseNum(form.thickness_in);
         const thicknessMm = parseNum(form.thickness_mm);
         const resolvedThicknessIn = thicknessIn != null ? thicknessIn : (thicknessMm != null ? (thicknessMm / INCH_TO_MM) : null);
-        const sheetCost5x10 = parseNum(form.sheet_cost_5x10);
+        const cost4x8 = parseNum(form.sheet_cost_4x8);
+        const cost5x10 = parseNum(form.sheet_cost_5x10);
         const parsedGauge = form.ga === '' ? null : parseInt(form.ga, 10);
 
-        if (!form.family || resolvedThicknessIn == null || sheetCost5x10 == null) {
-            toast('Family, thickness (in or mm), and sheet cost are required.', 'error');
+        if (!form.family || resolvedThicknessIn == null || (cost4x8 == null && cost5x10 == null)) {
+            toast('Family, thickness, and at least one sheet cost are required.', 'error');
             return;
         }
         if (resolvedThicknessIn <= 0) {
             toast('Thickness must be greater than zero.', 'error');
             return;
         }
-        if (sheetCost5x10 < 0) {
-            toast('Sheet cost cannot be negative.', 'error');
+        if ((cost4x8 != null && cost4x8 < 0) || (cost5x10 != null && cost5x10 < 0)) {
+            toast('Sheet costs cannot be negative.', 'error');
             return;
         }
         if (form.ga !== '' && !Number.isFinite(parsedGauge)) {
@@ -136,7 +130,8 @@ export default function SheetCostRatesAdmin() {
             family: form.family,
             thickness: resolvedThicknessIn,
             ga: parsedGauge,
-            sheet_cost_5x10: sheetCost5x10,
+            sheet_cost_4x8: cost4x8 || 0,
+            sheet_cost_5x10: cost5x10 || 0,
         };
 
         try {
@@ -387,9 +382,13 @@ export default function SheetCostRatesAdmin() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                {['Family', 'Gauge (GA)', 'Thickness (in)', 'Thickness (mm)', 'Sheet Cost 5x10 ($)', 'Actions'].map(h => (
-                                    <th key={h} style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>{h}</th>
-                                ))}
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Family</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Gauge (GA)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (in)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (mm)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 4x8 ($)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 5x10 ($)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -435,13 +434,17 @@ export default function SheetCostRatesAdmin() {
                                             })()}
                                         </td>
 
-                                        {/* Sheet cost */}
+                                        {/* Sheet cost 4x8 */}
                                         <td style={{ padding: '16px 24px' }}>
-                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '1rem' }}>
-                                                {(() => {
-                                                    const sheetCost = getSheetCost5x10(row);
-                                                    return sheetCost != null ? `$${sheetCost.toFixed(2)}` : 'N/A';
-                                                })()}
+                                            <span style={{ fontWeight: 700, color: '#64748b', fontSize: '0.95rem' }}>
+                                                {row.sheet_cost_4x8 != null && parseFloat(row.sheet_cost_4x8) > 0 ? `$${parseFloat(row.sheet_cost_4x8).toFixed(2)}` : '—'}
+                                            </span>
+                                        </td>
+
+                                        {/* Sheet cost 5x10 */}
+                                        <td style={{ padding: '16px 24px' }}>
+                                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
+                                                {row.sheet_cost_5x10 != null && parseFloat(row.sheet_cost_5x10) > 0 ? `$${parseFloat(row.sheet_cost_5x10).toFixed(2)}` : '—'}
                                             </span>
                                         </td>
 
@@ -532,11 +535,19 @@ export default function SheetCostRatesAdmin() {
                                     Enter thickness in either inches or mm. Both inputs stay synchronized.
                                 </div>
 
-                                {/* Sheet cost */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 5x10 ($)</label>
-                                    <input type="number" step="0.01" min="0" value={form.sheet_cost_5x10} onChange={e => setForm(f => ({ ...f, sheet_cost_5x10: e.target.value }))} placeholder="e.g. 90.00" style={{ ...INP, fontWeight: 700 }} />
-                                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: 4, display: 'block' }}>Price of one 5 ft x 10 ft (120 in x 60 in) sheet</span>
+                                {/* Sheet costs */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 4x8 ($)</label>
+                                        <input type="number" step="0.01" min="0" value={form.sheet_cost_4x8} onChange={e => setForm(f => ({ ...f, sheet_cost_4x8: e.target.value }))} placeholder="e.g. 60.00" style={INP} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 5x10 ($)</label>
+                                        <input type="number" step="0.01" min="0" value={form.sheet_cost_5x10} onChange={e => setForm(f => ({ ...f, sheet_cost_5x10: e.target.value }))} placeholder="e.g. 90.00" style={{ ...INP, fontWeight: 700 }} />
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
+                                    Prices for standard 4x8 (48"x96") and 5x10 (60"x120") sheets.
                                 </div>
                             </div>
 

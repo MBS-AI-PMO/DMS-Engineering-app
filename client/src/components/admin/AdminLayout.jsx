@@ -17,7 +17,7 @@ const navItems = [
     { to: '/admin/faq-categories', label: 'FAQ Categories', icon: FolderOpen },
     { to: '/admin/services', label: 'Services', icon: Wrench },
     { to: '/admin/pricing', label: 'Discounts', icon: DollarSign },
-    { to: '/admin/pricing-calculator', label: 'Price Calculator', icon: Calculator },
+    { to: '/admin/pricing-calculator', label: 'Markups', icon: Calculator },
     { to: '/admin/laser-rates', label: 'Laser Rates', icon: Zap },
     { to: '/admin/sheet-cost-rates', label: 'Sheet Costs', icon: Layers },
     { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
