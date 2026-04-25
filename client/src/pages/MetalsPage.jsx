@@ -5,6 +5,8 @@ import { ChevronRight, Filter, Search, ArrowRight, Shield, Zap, Award, AlertTria
 import { metalsData as staticMetalsData } from '../data/metalsData';
 import { fetchMetals, fetchCategories } from '../utils/api';
 
+import metalsPageHero from '../assets/metals/metals-page-hero.png';
+
 const MetalsPage = () => {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -89,39 +91,36 @@ const MetalsPage = () => {
 
     return (
         <div className="metals-page">
+            <style>{`
+                .metals-page .detail-hero {
+                    margin-bottom: 0 !important;
+                    border-bottom: none !important;
+                }
+                .metals-page .detail-hero::before {
+                    display: none !important;
+                }
+            `}</style>
+
             {/* Premium Hero Section */}
-            <section className="metals-hero-new">
-                <div className="metals-hero-bg">
-                    <img src="/assets/metals-hero.avif" alt="Metal textures" decoding="async" />
-                    <div className="metals-hero-overlay"></div>
+            <div className="detail-hero" style={{
+                backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85)), url(${metalsPageHero})`,
+                backgroundColor: 'transparent'
+            }}>
+                <div className="detail-container">
+                    <nav className="detail-breadcrumb centered">
+                        <Link to="/">Home</Link> <span className="separator">/</span> <span className="current">Metals</span>
+                    </nav>
+
+                    <h1 className="detail-hero-title">
+                        <span className="title-prefix">Precision Engineering</span>
+                        <span className="title-main">Material <span className="highlight" style={{ color: '#e31b23' }}>Catalog</span></span>
+                    </h1>
+
+                    <div className="hero-description centered">
+                        Explore 60+ premium metals with instant pricing and detailed engineering specifications. From aerospace-grade aluminum to high-strength steels.
+                    </div>
                 </div>
-                <div className="container">
-                    <motion.div
-                        className="metals-hero-content"
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8 }}
-                    >
-                        <div className="metals-badge">Engineering Excellence</div>
-                        <h1>Material Catalog</h1>
-                        <p>Explore 60+ premium metals with instant pricing and detailed engineering specifications. From aerospace-grade aluminum to high-strength steels.</p>
-                        <div className="metals-hero-stats">
-                            <div className="stat-item">
-                                <span className="stat-num">60+</span>
-                                <span className="stat-label">In-Stock Materials</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-num">24h</span>
-                                <span className="stat-label">Rapid Dispatch</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-num">0.005"</span>
-                                <span className="stat-label">Laser Precision</span>
-                            </div>
-                        </div>
-                    </motion.div>
-                </div>
-            </section>
+            </div>
 
             {/* Catalog Section */}
             <section className="catalog-section">
