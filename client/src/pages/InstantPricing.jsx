@@ -1548,11 +1548,25 @@ const InstantPricing = () => {
           height: 100% !important;
           display: block !important;
         }
-        .qf-main-canvas > div, .ip-qf-viewer > div, .ip-viewer-frame > div {
+        .qf-main-canvas > div:not(.ip-legend-card), .ip-qf-viewer > div:not(.ip-legend-card), .ip-viewer-frame > div:not(.ip-legend-card) {
           height: 100% !important;
           width: 100% !important;
           display: flex !important;
           flex-direction: column !important;
+        }
+        div.ip-legend-card {
+          position: absolute !important;
+          top: 24px !important;
+          left: 24px !important;
+          height: auto !important;
+          width: auto !important;
+          min-width: 180px !important;
+          max-width: 240px !important;
+          z-index: 9999 !important;
+          pointer-events: none !important;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
         }
       `}</style>
       {!isQuoteFlowActive && (
@@ -1709,23 +1723,7 @@ const InstantPricing = () => {
                   </div>
                 </div>
                 <div className="ip-viewer-frame qf-main-canvas">
-                  {showHardwareFitLegend && (
-                    <div style={{
-                      position: 'absolute', top: 14, left: 14, zIndex: 52,
-                      background: 'rgba(15, 23, 42, 0.82)', backdropFilter: 'blur(8px)',
-                      padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 260
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
-                        Red appears only when the original hole was larger than the required hardware bore.
-                      </div>
-                    </div>
-                  )}
+
 
                   {currentIsStep && viewMode === '3d' && (
                     <StepModelViewer
@@ -1813,6 +1811,22 @@ const InstantPricing = () => {
                       </div>
                     </div>
                   )}
+                  {showHardwareFitLegend && (
+                    <div className="ip-legend-card" style={{
+                      background: '#1e293b',
+                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>
+                        Red appears only when the original hole was larger than the required hardware bore.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1889,23 +1903,7 @@ const InstantPricing = () => {
                   </button>
                 </div>
                 <div className="ip-qf-viewer" style={{ position: 'relative' }}>
-                  {showHardwareFitLegend && (
-                    <div style={{
-                      position: 'absolute', top: 16, left: 16, zIndex: 51,
-                      background: 'rgba(15, 23, 42, 0.82)', backdropFilter: 'blur(8px)',
-                      padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 260
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.58)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 }}>
-                        Red appears only when the original hole was larger than the required hardware bore.
-                      </div>
-                    </div>
-                  )}
+
 
                   {currentIsStep && viewMode === '3d' ? (
                     <StepModelViewer
@@ -1987,6 +1985,22 @@ const InstantPricing = () => {
                       )}
                       <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
                         {globalOverlayTitle}
+                      </div>
+                    </div>
+                  )}
+                  {showHardwareFitLegend && (
+                    <div className="ip-legend-card" style={{
+                      background: '#1e293b',
+                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>
+                        Red appears only when the original hole was larger than the required hardware bore.
                       </div>
                     </div>
                   )}

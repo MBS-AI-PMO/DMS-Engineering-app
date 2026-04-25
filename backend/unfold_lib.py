@@ -478,6 +478,7 @@ def detect_holes_fc(fc_shape):
             cyl = face.Surface
             radius = float(cyl.Radius)
             if radius < 0.5: continue # Skip fillets
+            if radius > 15.0: continue # Large cylinders are collar/bore walls, not holes — planar-loop catches them
             
             axis = cyl.Axis
             center = cyl.Center
@@ -489,6 +490,11 @@ def detect_holes_fc(fc_shape):
                 "center": np.array([center.x, center.y, center.z]),
                 "area": float(face.Area)
             })
+
+    sys.stderr.write(
+        f"[Hole Detection] Found {len(cyl_faces)} cylindrical faces "
+        f"(radii: {[round(c['radius'],2) for c in cyl_faces]})\n"
+    )
 
     if not cyl_faces:
         return []
@@ -562,6 +568,34 @@ def detect_holes_fc(fc_shape):
         total_area = sum(c["area"] for c in cluster)
         depth = total_area / (2 * math.pi * c1["radius"])
         if depth < 0.5: continue
+
+        # ── Collar / formed-feature filter ──────────────────────────
+        # A collar cylinder is surrounded mostly by OTHER cylinders
+        # (forming a ring).  Real drilled holes connect primarily to
+        # planar faces (top/bottom of the plate).  Count adjacent face
+        # types across the whole cluster.
+        adj_cyl_count = 0
+        adj_plane_count = 0
+        for c in cluster:
+            f = fc_shape.Faces[c["fi"]]
+            for e in f.Edges:
+                for nfi in e2f.get(e.hashCode(), []):
+                    if nfi == c["fi"]:
+                        continue
+                    nf_type = fc_shape.Faces[nfi].Surface.TypeId
+                    if nf_type == "Part::GeomCylinder":
+                        adj_cyl_count += 1
+                    elif nf_type == "Part::GeomPlane":
+                        adj_plane_count += 1
+        # If a cylinder cluster touches 2+ other cylindrical faces AND
+        # has more cylinder neighbors than planar ones, it's part of a
+        # collar ring / formed feature, not a drilled hole.
+        if adj_cyl_count > adj_plane_count and adj_cyl_count >= 2:
+            sys.stderr.write(
+                f"[Hole Detection] Collar filter rejected cluster "
+                f"(r={c1['radius']:.2f}, adj_cyl={adj_cyl_count}, adj_plane={adj_plane_count})\n"
+            )
+            continue
 
         # Keep only near full cylinders so bend arcs / partial rolls are excluded.
         cluster_points = []
@@ -642,19 +676,77 @@ def detect_holes_fc(fc_shape):
             h2 = holes[j]
             dist = np.linalg.norm(np.array(h1["position"]) - np.array(h2["position"]))
             cross = np.linalg.norm(np.cross(h1["axis"], h2["axis"]))
-            if dist < 2.5 and cross < 0.1:
+            # Scale merge distance with diameter — large bores have wider
+            # cylinder segment offsets than small holes.
+            max_d = max(h1["diameter_mm"], h2["diameter_mm"])
+            merge_dist = max(2.5, max_d * 0.5)
+            if dist < merge_dist and cross < 0.1:
                 s_merged.add(j)
                 if h2["diameter_mm"] < best["diameter_mm"]:
                     best = h2
         final.append(best)
 
+    sys.stderr.write(
+        f"[Hole Detection] Cylindrical method found {len(final)} holes "
+        f"(diameters: {[round(h['diameter_mm'],2) for h in final]})\n"
+    )
     for idx, h in enumerate(final):
         h["id"] = f"hole_{idx+1}"
-    if final:
-        return final
+    # Always also run planar-loop detection and merge unique holes.
+    # This catches holes that don't have cylindrical face topology
+    # (e.g. small mounting holes in some STEP exports).
+    loop_holes = _detect_holes_from_planar_loops(fc_shape)
+    sys.stderr.write(
+        f"[Hole Detection] Planar-loop method found {len(loop_holes)} holes "
+        f"(diameters: {[round(h['diameter_mm'],2) for h in loop_holes]})\n"
+    )
+    if loop_holes:
+        for lh in loop_holes:
+            is_dup = False
+            for fh in final:
+                dist = np.linalg.norm(
+                    np.array(lh["position"]) - np.array(fh["position"])
+                )
+                # Scale diameter tolerance for large holes — the same bore
+                # is often measured at different diameters by each method.
+                max_dia = max(lh["diameter_mm"], fh["diameter_mm"], 1e-9)
+                dia_tol = max(1.5, max_dia * 0.35)
+                if dist < max(3.0, max_dia * 0.5) and abs(lh["diameter_mm"] - fh["diameter_mm"]) < dia_tol:
+                    is_dup = True
+                    break
+            if not is_dup:
+                final.append(lh)
 
-    # Fallback for non-cylindrical hole topology exports.
-    return _detect_holes_from_planar_loops(fc_shape)
+    # ── Size-based filter ─────────────────────────────────────────
+    # Real drilled / punched holes are never a large fraction of the
+    # part.  Collar openings, cutouts, and formed-feature bores are.
+    # Filter out any "hole" whose diameter exceeds 25% of the part's
+    # smallest bounding-box dimension.
+    try:
+        bb = fc_shape.BoundBox
+        min_dim = min(bb.XLength, bb.YLength, bb.ZLength)
+        max_dim = max(bb.XLength, bb.YLength, bb.ZLength)
+        # Use the mid-range dimension (not the thickness, not the longest)
+        dims_sorted = sorted([bb.XLength, bb.YLength, bb.ZLength])
+        ref_dim = dims_sorted[1] if len(dims_sorted) > 1 else max_dim
+        max_hole_dia = ref_dim * 0.55
+        if max_hole_dia > 5.0:  # Only apply if the threshold is reasonable
+            before_count = len(final)
+            final = [h for h in final if h["diameter_mm"] <= max_hole_dia]
+            if len(final) < before_count:
+                sys.stderr.write(
+                    f"[Hole Detection] Size filter removed {before_count - len(final)} "
+                    f"oversized holes (max_dia={max_hole_dia:.1f}mm, "
+                    f"ref_dim={ref_dim:.1f}mm)\n"
+                )
+    except Exception:
+        pass  # BoundBox may not be available on degenerate shapes
+
+    # Re-index
+    for idx, h in enumerate(final):
+        h["id"] = f"hole_{idx + 1}"
+
+    return final
 
 def detect_holes_from_2d_pattern(flat_faces):
     """Detect holes from the 2D unfolded flat pattern by examining inner wires.
@@ -1007,6 +1099,125 @@ def unfold_with_lib(filepath, profile="full"):
                     dg.add_edge(f1, f2, label=data["label"])
                 else:
                     dg.add_edge(f2, f1, label=data["label"])
+
+            # ── Formed-feature / collar detection ─────────────────────────
+            # Detect cylindrical subtrees that represent drawn collars or
+            # formed features (e.g. a round collar around a cutout) rather
+            # than true sheet-metal bends.  These are pruned from the graph
+            # so they don't appear in the flat pattern.
+            root_area = float(fc_shape.Faces[root_idx].Area)
+
+            def _subtree_nodes(node):
+                """Collect all descendants of *node* in the directed graph."""
+                collected = []
+                for child in dg.successors(node):
+                    collected.append(child)
+                    collected.extend(_subtree_nodes(child))
+                return collected
+
+            def _is_formed_feature_subtree(cyl_node):
+                """Return True if *cyl_node* (a cylinder) is the root of a
+                formed-feature collar rather than a genuine bend flange.
+
+                A collar/drawn feature is characterised by:
+                - No descendant planar face is large relative to the root
+                  (real bend flanges are comparable in size to the root plate).
+                - The total area of the entire subtree is small relative to
+                  the root (collars wrap around cutouts — they're compact).
+
+                We intentionally do NOT limit subtree depth because
+                rounded-rectangle collars can have chains of 8+ faces
+                (4 corner cylinders + 4 flat wall segments).
+                """
+                cyl_face = fc_shape.Faces[cyl_node]
+                if cyl_face.Surface.TypeId != "Part::GeomCylinder":
+                    return False
+
+                descendants = _subtree_nodes(cyl_node)
+
+                if not descendants:
+                    # Dead-end cylinder with no children — could be a drawn
+                    # lip or collar rim.  Prune it if its arc is wide enough.
+                    u_range = cyl_face.ParameterRange
+                    span_deg = math.degrees(u_range[1] - u_range[0])
+                    return span_deg >= 30
+
+                # Check if ANY descendant planar face is large (a real flange)
+                single_face_threshold = root_area * 0.20
+                total_subtree_area = float(cyl_face.Area)
+
+                for desc in descendants:
+                    desc_face = fc_shape.Faces[desc]
+                    desc_area = float(desc_face.Area)
+                    total_subtree_area += desc_area
+                    if desc_face.Surface.TypeId == "Part::GeomPlane":
+                        if desc_area > single_face_threshold:
+                            print(
+                                f"[Debug] Collar check: face {desc} is planar with area "
+                                f"{desc_area:.1f} > threshold {single_face_threshold:.1f} "
+                                f"— keeping as real bend",
+                                file=sys.stderr,
+                            )
+                            return False  # large flange child → real bend
+
+                # Also check total subtree area — if the whole subtree is
+                # more than 40% of the root, it's likely a substantial flange
+                # structure rather than a small collar.
+                if total_subtree_area > root_area * 0.40:
+                    print(
+                        f"[Debug] Collar check: subtree total area {total_subtree_area:.1f} "
+                        f"> 40% of root {root_area:.1f} — keeping as real bend",
+                        file=sys.stderr,
+                    )
+                    return False
+
+                return True
+
+            # Identify and remove formed-feature subtrees
+            formed_feature_nodes = set()
+            # Only check cylinder children of the root (direct bend candidates)
+            for u, v in list(dg.edges()):
+                if v in formed_feature_nodes:
+                    continue
+                cyl_face = fc_shape.Faces[v]
+                if cyl_face.Surface.TypeId != "Part::GeomCylinder":
+                    continue
+                if _is_formed_feature_subtree(v):
+                    subtree = [v] + _subtree_nodes(v)
+                    formed_feature_nodes.update(subtree)
+                    u_range = cyl_face.ParameterRange
+                    print(
+                        f"[Debug] Pruning formed-feature subtree rooted at face {v} "
+                        f"({len(subtree)} faces, arc={math.degrees(u_range[1] - u_range[0]):.0f}°)",
+                        file=sys.stderr,
+                    )
+
+            if formed_feature_nodes:
+                dg.remove_nodes_from(formed_feature_nodes)
+                print(
+                    f"[Debug] Removed {len(formed_feature_nodes)} formed-feature faces "
+                    f"from unfold graph (root_area={root_area:.1f})",
+                    file=sys.stderr,
+                )
+            else:
+                # Diagnostic: dump the graph structure for debugging
+                print(
+                    f"[Debug] No formed features detected. Graph has {dg.number_of_nodes()} nodes, "
+                    f"{dg.number_of_edges()} edges, root_area={root_area:.1f}",
+                    file=sys.stderr,
+                )
+                for u, v in dg.edges():
+                    vf = fc_shape.Faces[v]
+                    vtype = vf.Surface.TypeId.split("::")[-1]
+                    varea = float(vf.Area)
+                    extra = ""
+                    if vtype == "GeomCylinder":
+                        ur = vf.ParameterRange
+                        extra = f" arc={math.degrees(ur[1]-ur[0]):.0f}°"
+                    print(
+                        f"[Debug]   edge {u}->{v}: {vtype} area={varea:.1f}{extra}",
+                        file=sys.stderr,
+                    )
 
             # 3. Perform Unfolding traversal
             t_unfold_start = time.time()
