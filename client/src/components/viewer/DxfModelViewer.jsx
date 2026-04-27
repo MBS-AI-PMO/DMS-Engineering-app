@@ -112,22 +112,75 @@ const DxfModelViewer = ({
           isNativeInches: isInch
         };
         onDimensionsExtracted(dims);
-        setViewBoxData({ minX, minY, width: w, height: h });
+        setViewBoxData({ minX, minY, width: w, height: h, isNativeInches: isInch });
+
+        // 1. Flatten entities (handle blocks/inserts)
+        const allEntities = [];
+        const flatten = (entities, transform = { x: 0, y: 0, scale: 1 }) => {
+          entities.forEach(e => {
+            if (e.type === 'INSERT') {
+              const block = parsed.blocks[e.name];
+              if (block && block.entities) {
+                flatten(block.entities, {
+                  x: transform.x + e.position.x,
+                  y: transform.y + e.position.y,
+                  scale: transform.scale * (e.scale?.x || 1)
+                });
+              }
+            } else {
+              const cloned = JSON.parse(JSON.stringify(e));
+              if (cloned.position) {
+                cloned.position.x = transform.x + cloned.position.x * transform.scale;
+                cloned.position.y = transform.y + cloned.position.y * transform.scale;
+              }
+              if (cloned.center) {
+                cloned.center.x = transform.x + cloned.center.x * transform.scale;
+                cloned.center.y = transform.y + cloned.center.y * transform.scale;
+              }
+              if (cloned.r) cloned.r *= transform.scale;
+              if (cloned.vertices) {
+                cloned.vertices.forEach(v => {
+                  v.x = transform.x + v.x * transform.scale;
+                  v.y = transform.y + v.y * transform.scale;
+                });
+              }
+              allEntities.push(cloned);
+            }
+          });
+        };
+        flatten(parsed.entities || []);
 
         // Tech Data
-        const techData = calcDxfTechData(parsed.entities, isInch);
+        const techData = calcDxfTechData(allEntities, isInch);
         onTechDataExtracted(techData);
 
-        // Detect circle holes for tapping établissements 
-        const holes = (parsed.entities || [])
-          .filter(e => e.type === 'CIRCLE')
-          .map((c, i) => ({
-            id: i,
-            diameterInches: isInch ? c.r * 2 : (c.r * 2 / 25.4),
-            diameter_mm: isInch ? (c.r * 2 * 25.4) : (c.r * 2),
-            position: [c.center.x, c.center.y, 0],
-            axis: [0, 0, 1]
-          }));
+        // Advanced Hole Detection
+        const holes = allEntities
+          .filter(e => {
+            if (e.type === 'CIRCLE') return true;
+            if (e.type === 'LWPOLYLINE') {
+              const isClosed = e.shape || e.closed || (e.vertices?.length > 2 && Math.abs(e.vertices[0].x - e.vertices[e.vertices.length - 1].x) < 0.01);
+              if (!isClosed) return false;
+              let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+              e.vertices.forEach(v => { minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); });
+              const w = maxX - minX, h = maxY - minY;
+              return w > 0.1 && h > 0.1 && Math.abs(w / h - 1) < 0.2 && w < 150;
+            }
+            return false;
+          })
+          .map((c, i) => {
+            let diam = 0, x = 0, y = 0;
+            if (c.type === 'CIRCLE') {
+              diam = isInch ? c.r * 2 * 25.4 : c.r * 2;
+              x = c.center.x; y = c.center.y;
+            } else {
+              let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+              c.vertices.forEach(v => { minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); });
+              diam = isInch ? (maxX - minX) * 25.4 : (maxX - minX);
+              x = (minX + maxX) / 2; y = (minY + maxY) / 2;
+            }
+            return { id: i, diameterInches: diam / 25.4, diameter_mm: diam, position: [x, y, 0], axis: [0, 0, 1] };
+          });
         onHolesDetected(holes);
 
       } catch (err) {
@@ -147,118 +200,258 @@ const DxfModelViewer = ({
     if (!wrinkleGrain.current) wrinkleGrain.current = getWrinkleGrainTexture();
   }, []);
 
-  // --- Three.js DXF 3D View ---
+  // --- Three.js DXF View (Handles both 2D and 3D) ---
   useEffect(() => {
-    if (!selectedFile?.id || viewMode !== '3d' || !dxfSvg || !containerRef.current) return;
+    if (!selectedFile?.id || !dxfSvg || !containerRef.current) return;
     const el = containerRef.current;
     let reqId;
 
     const init = () => {
       el.innerHTML = '';
       const w = el.clientWidth || 600, h = el.clientHeight || 400;
+      const is3D = viewMode === '3d';
+
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xffffff);
-      const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
+
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       renderer.setSize(w, h);
       el.appendChild(renderer.domElement);
       rendererRef.current = renderer;
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controlsRef.current = controls;
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-      const light = new THREE.DirectionalLight(0xffffff, 1.5);
-      light.position.set(100, 200, 300);
-      scene.add(light);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x999999, 1.2));
+      // Lights (CAD style)
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const l1 = new THREE.DirectionalLight(0xffffff, 1.0);
+      l1.position.set(1000, 1000, 1000);
+      scene.add(l1);
+      const l2 = new THREE.DirectionalLight(0xffffff, 0.5);
+      l2.position.set(-1000, -1000, 500);
+      scene.add(l2);
 
+      // Parse SVG into Three.js
       const loader = new SVGLoader();
       const svgData = loader.parse(dxfSvg);
       const group = new THREE.Group();
-      const thicknessMM = selectedThickness ? parseFloat(selectedThickness) * 25.4 : 2;
+
+      const rawThick = selectedThickness ? parseFloat(selectedThickness) : 0;
+      const thicknessMM = rawThick > 0 ? rawThick * 25.4 : 2.5;
       const thicknessNative = (viewBoxData?.isNativeInches) ? (thicknessMM / 25.4) : thicknessMM;
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
-      const extrudeSettings = { depth: thicknessNative, bevelEnabled: false };
 
-      const allShapes = [];
-      svgData.paths.forEach((path) => {
-        try {
-          const shapes = SVGLoader.createShapes(path);
-          shapes.forEach(sh => allShapes.push(sh));
-        } catch (e) {
-          console.warn('Error creating shapes from SVG path:', e);
-        }
-        path.subPaths.forEach((sub) => {
-          const pts = sub.getPoints();
-          if (pts && pts.length > 0) {
-            const geomTop = new THREE.BufferGeometry().setFromPoints(pts);
-            const lineTop = new THREE.Line(geomTop, lineMat);
-            lineTop.position.z = thicknessNative + 0.01;
-            group.add(lineTop);
-            const geomBot = new THREE.BufferGeometry().setFromPoints(pts);
-            const lineBot = new THREE.Line(geomBot, lineMat);
-            lineBot.position.z = -0.01;
-            group.add(lineBot);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x1e293b });
+      const extrudeSettings = {
+        depth: thicknessNative,
+        bevelEnabled: true,
+        bevelThickness: 0.1,
+        bevelSize: 0.1,
+        bevelSegments: 2
+      };
+
+      // 1. Stitch segments into closed loops (Fixes the "fragmented lines" bug)
+      const segments = [];
+      svgData.paths.forEach(p => p.subPaths.forEach(s => {
+        const pts = s.getPoints();
+        if (pts.length > 1) segments.push({ pts, used: false });
+      }));
+
+      const shapes = [];
+      const findLoop = () => {
+        const start = segments.find(s => !s.used);
+        if (!start) return null;
+        start.used = true;
+        let loop = [...start.pts];
+        let changed = true;
+        while (changed) {
+          changed = false;
+          const end = loop[loop.length - 1];
+          for (let s of segments) {
+            if (s.used) continue;
+            const p1 = s.pts[0], p2 = s.pts[s.pts.length - 1];
+            if (end.distanceTo(p1) < 0.1) {
+              loop.push(...s.pts.slice(1)); s.used = true; changed = true; break;
+            } else if (end.distanceTo(p2) < 0.1) {
+              loop.push(...[...s.pts].reverse().slice(1)); s.used = true; changed = true; break;
+            }
           }
-        });
+        }
+        if (loop.length > 2 && loop[0].distanceTo(loop[loop.length - 1]) < 1.0) {
+          const sh = new THREE.Shape();
+          sh.moveTo(loop[0].x, loop[0].y);
+          for (let i = 1; i < loop.length; i++) sh.lineTo(loop[i].x, loop[i].y);
+          return sh;
+        }
+        return null;
+      };
+
+      let nextLoop;
+      while ((nextLoop = findLoop())) { shapes.push(nextLoop); }
+
+      // 2. Technical Edges (Always visible)
+      svgData.paths.forEach(p => p.subPaths.forEach(s => {
+        const pts = s.getPoints();
+        if (pts.length > 1) {
+          const geom = new THREE.BufferGeometry().setFromPoints(pts);
+          const lineT = new THREE.Line(geom, lineMat);
+          lineT.position.z = is3D ? thicknessNative + 0.05 : 0.05;
+          group.add(lineT);
+          if (is3D) {
+            const lineB = new THREE.Line(geom, lineMat);
+            lineB.position.z = -0.05;
+            group.add(lineB);
+          }
+        }
+      }));
+
+      const extrudeMat = new THREE.MeshStandardMaterial({
+        color: 0xe5e7eb, roughness: 0.35, metalness: 0.6,
+      });
+      extrudeMatRef.current = extrudeMat;
+
+      // 3. Robust Hierarchy & Subtraction
+      const meta = shapes.map(shape => {
+        const pts = shape.getPoints();
+        const box = new THREE.Box2().setFromPoints(pts);
+        return { shape, box, area: Math.abs(THREE.ShapeUtils.area(pts)), parent: null, depth: 0 };
       });
 
-      const metaShapes = allShapes.map(shape => {
-        const box = new THREE.Box2().setFromPoints(shape.getPoints());
-        return { shape, box, area: (box.max.x - box.min.x) * (box.max.y - box.min.y), parent: null, depth: 0 };
-      });
-      metaShapes.sort((a, b) => a.area - b.area);
-      for (let i = 0; i < metaShapes.length; i++) {
-        const child = metaShapes[i];
-        for (let j = i + 1; j < metaShapes.length; j++) {
-          const parent = metaShapes[j];
-          if (parent.box.containsPoint(child.box.min) && parent.box.containsPoint(child.box.max)) {
+      meta.sort((a, b) => a.area - b.area);
+      for (let i = 0; i < meta.length; i++) {
+        const child = meta[i];
+        const center = child.box.getCenter(new THREE.Vector2());
+        for (let j = i + 1; j < meta.length; j++) {
+          const parent = meta[j];
+          if (parent.box.clone().expandByScalar(0.1).containsPoint(center)) {
             child.parent = parent; break;
           }
         }
       }
-      metaShapes.forEach(m => { let curr = m; while (curr.parent) { m.depth++; curr = curr.parent; } });
+      meta.forEach(m => { let c = m; while (c.parent) { m.depth++; c = c.parent; } });
+      meta.forEach(m => { if (m.depth % 2 !== 0 && m.parent) m.parent.shape.holes.push(m.shape); });
 
-      const extrudeMat = new THREE.MeshStandardMaterial({
-        color: 0xcecece,
-        roughness: 0.6,
-        metalness: 0.05,
-        emissive: 0x000000,
-        emissiveIntensity: 0,
-        normalMap: null,
-        normalScale: new THREE.Vector2(0, 0)
-      });
-      extrudeMatRef.current = extrudeMat;
-
-      metaShapes.forEach(m => {
-        if (m.depth % 2 === 0) group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat));
-        else if (m.parent) m.parent.shape.holes.push(m.shape);
+      // 4. Render Final Geometry
+      meta.forEach(m => {
+        if (m.depth % 2 === 0) {
+          if (is3D) {
+            group.add(new THREE.Mesh(new THREE.ExtrudeGeometry(m.shape, extrudeSettings), extrudeMat));
+          } else {
+            const mesh = new THREE.Mesh(new THREE.ShapeGeometry(m.shape), new THREE.MeshBasicMaterial({
+              color: 0xf1f5f9, side: THREE.DoubleSide, transparent: true, opacity: 0.4
+            }));
+            mesh.position.z = -0.05;
+            group.add(mesh);
+          }
+        }
       });
 
       group.scale.y = -1;
       const box = new THREE.Box3().setFromObject(group);
       if (!box.isEmpty()) group.position.sub(box.getCenter(new THREE.Vector3()));
       scene.add(group);
-      const size = box.getSize(new THREE.Vector3());
-      const maxDim = Math.max(size.x, size.y, 20);
-      camera.position.set(maxDim, -maxDim, maxDim);
-      camera.up.set(0, 0, 1); camera.lookAt(0, 0, 0);
-      controls.update();
 
-      const animate = () => { reqId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z, 20);
+
+      // Camera & Controls setup based on mode
+      let camera;
+      if (is3D) {
+        camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
+        camera.position.set(maxDim, -maxDim, maxDim);
+      } else {
+        const aspect = w / h;
+        const fSize = maxDim * 1.2;
+        camera = new THREE.OrthographicCamera(
+          fSize * aspect / -2, fSize * aspect / 2,
+          fSize / 2, fSize / -2,
+          0.1, 10000
+        );
+        camera.position.set(0, 0, maxDim);
+      }
+
+      camera.up.set(0, 0, 1);
+      camera.lookAt(0, 0, 0);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      if (!is3D) {
+        controls.enableRotate = false;
+        controls.screenSpacePanning = true;
+      }
+      controlsRef.current = controls;
+
+      // Custom Zoom-to-Cursor logic
+      const onWheel = (ev) => {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+
+        const rect = el.getBoundingClientRect();
+        const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+
+        const ratio = ev.deltaY > 0 ? -0.1 : 0.1;
+
+        if (intersects.length > 0) {
+          const p = intersects[0].point;
+
+          if (camera.isOrthographicCamera) {
+            camera.zoom *= (1 + ratio);
+            camera.position.x += (p.x - camera.position.x) * ratio / (1 + ratio);
+            camera.position.y += (p.y - camera.position.y) * ratio / (1 + ratio);
+            camera.updateProjectionMatrix();
+          } else {
+            camera.position.x += (p.x - camera.position.x) * ratio;
+            camera.position.y += (p.y - camera.position.y) * ratio;
+            camera.position.z += (p.z - camera.position.z) * ratio;
+
+            controls.target.x += (p.x - controls.target.x) * 0.3;
+            controls.target.y += (p.y - controls.target.y) * 0.3;
+            controls.target.z += (p.z - controls.target.z) * 0.3;
+          }
+        } else {
+          if (camera.isOrthographicCamera) {
+            camera.zoom *= (1 + ratio);
+            camera.updateProjectionMatrix();
+          } else {
+            const target = controls.target;
+            camera.position.x += (target.x - camera.position.x) * ratio;
+            camera.position.y += (target.y - camera.position.y) * ratio;
+            camera.position.z += (target.z - camera.position.z) * ratio;
+          }
+        }
+        controls.update();
+      };
+
+      renderer.domElement.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
+      const animate = () => {
+        reqId = requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      };
       animate();
 
       const resizeObserver = new ResizeObserver(() => {
         const width = el.clientWidth;
         const height = el.clientHeight;
         if (width && height) {
-          camera.aspect = width / height;
+          if (camera.isPerspectiveCamera) {
+            camera.aspect = width / height;
+          } else {
+            const aspect = width / height;
+            const fSize = maxDim * 1.2;
+            camera.left = fSize * aspect / -2;
+            camera.right = fSize * aspect / 2;
+            camera.top = fSize / 2;
+            camera.bottom = fSize / -2;
+          }
           camera.updateProjectionMatrix();
           renderer.setSize(width, height);
         }
       });
       resizeObserver.observe(el);
+
       return () => {
         resizeObserver.disconnect();
         cancelAnimationFrame(reqId);
@@ -272,63 +465,7 @@ const DxfModelViewer = ({
     init();
   }, [selectedFile?.id, viewMode, dxfSvg, selectedThickness, viewBoxData?.isNativeInches]);
 
-  // Live finish updates without rebuilding the whole DXF 3D scene.
-  useEffect(() => {
-    if (viewMode !== '3d') return;
-    const mat = extrudeMatRef.current;
-    if (!mat) return;
-
-    const finishHex = activeFinishColor?.color || activeFinishColor?.hex || null;
-    const isWrinkled = !!(activeFinishColor?.is_wrinkled || activeFinishColor?.name?.toUpperCase().includes('WRINKLED'));
-
-    if (finishHex) {
-      mat.color.set(new THREE.Color(finishHex));
-      mat.emissive.set(isFinishPowderCoating ? 0x000000 : new THREE.Color(finishHex));
-      mat.emissiveIntensity = isFinishPowderCoating ? 0 : 0.15;
-      mat.roughness = isFinishPowderCoating ? (isWrinkled ? 0.55 : Math.max(0.32, 0.9 - ((activeFinishColor?.gloss ?? 35) / 100))) : 0.6;
-      mat.metalness = isWrinkled ? 0.18 : 0.05;
-      mat.normalMap = isWrinkled ? wrinkleNormal.current : null;
-      mat.normalScale = isWrinkled ? new THREE.Vector2(1.8, 1.8) : new THREE.Vector2(0, 0);
-      mat.roughnessMap = isWrinkled ? wrinkleGrain.current : null;
-    } else {
-      mat.color.set(0xcecece);
-      mat.emissive.set(0x000000);
-      mat.emissiveIntensity = 0;
-      mat.roughness = 0.6;
-      mat.metalness = 0.05;
-      mat.normalMap = null;
-      mat.normalScale = new THREE.Vector2(0, 0);
-      mat.roughnessMap = null;
-    }
-
-    mat.needsUpdate = true;
-  }, [activeFinishColor, isFinishPowderCoating, viewMode]);
-
-  if (viewMode === '2d') {
-    return (
-      <div className="dxf-svg-wrapper h-100 w-100 d-flex align-items-center justify-content-center p-3 position-relative overflow-hidden">
-        {dxfSvg ? (
-          <div className="position-relative d-flex align-items-center justify-content-center" style={{ width: '100%', height: '100%' }}>
-            <style>{`
-              .dxf-svg-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-              .dxf-svg-content svg { width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
-              .dxf-svg-content svg * {
-                fill: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex || 'rgba(0,0,0,0.4)') : 'rgba(0,0,0,0.05)'} !important;
-                fill-opacity: ${activeFinishColor ? 0.8 : 0.1} !important;
-                stroke: ${activeFinishColor ? (activeFinishColor.color || activeFinishColor.hex) : '#000'} !important;
-                stroke-opacity: 1.0 !important;
-                stroke-width: 2px !important;
-                transition: all 0.3s ease;
-              }
-            `}</style>
-            <div className="dxf-svg-content" dangerouslySetInnerHTML={{ __html: dxfSvg }} />
-          </div>
-        ) : <div>Parsing...</div>}
-      </div>
-    );
-  }
-
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return <div ref={containerRef} style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }} />;
 };
 
 export default React.memo(DxfModelViewer);

@@ -201,7 +201,7 @@ const StepModelViewer = ({
   onProgress = () => { },
   onDimensionsExtracted = () => { },
   viewMode = '3d',
-  setViewMode = () => {},
+  setViewMode = () => { },
 }) => {
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
@@ -379,6 +379,57 @@ const StepModelViewer = ({
       });
 
       viewerInstance.current = viewer;
+
+      // --- Custom Zoom to Cursor Feature ---
+      // Instead of zooming to the center, we raycast to find the point under the cursor
+      // and move both camera eye and center towards it.
+      // We use capture: true to intercept the event before the library's own listener.
+      const vInst = viewer.GetViewer();
+      const nav = vInst?.navigation;
+      if (vInst && vInst.canvas && nav) {
+        const handleWheel = (ev) => {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+
+          let delta = -ev.deltaY / 40;
+          let ratio = 0.1;
+          if (delta < 0) ratio = ratio * -1.0;
+
+          // Get mouse coordinates relative to canvas
+          const rect = vInst.canvas.getBoundingClientRect();
+          const mouseCoords = {
+            x: ev.clientX - rect.left,
+            y: ev.clientY - rect.top
+          };
+
+          // Use the viewer's built-in intersection logic (1 = MeshOnly, 2 = MeshAndLine)
+          const intersection = vInst.GetMeshIntersectionUnderMouse(2, mouseCoords);
+
+          if (intersection && intersection.point) {
+            const p = intersection.point;
+            const camera = nav.GetCamera();
+            if (camera && camera.eye && camera.center) {
+              // Zoom eye towards the point
+              camera.eye.x += (p.x - camera.eye.x) * ratio;
+              camera.eye.y += (p.y - camera.eye.y) * ratio;
+              camera.eye.z += (p.z - camera.eye.z) * ratio;
+
+              // Move rotation center (pivot) towards the point more aggressively
+              // so that rotation feels natural after zooming in.
+              // 0.3 factor ensures the pivot follows the area of interest.
+              camera.center.x += (p.x - camera.center.x) * 0.3;
+              camera.center.y += (p.y - camera.center.y) * 0.3;
+              camera.center.z += (p.z - camera.center.z) * 0.3;
+            }
+          } else {
+            // Fallback to central zoom if no mesh is under mouse
+            nav.Zoom(ratio);
+          }
+          nav.Update();
+        };
+
+        vInst.canvas.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+      }
       const modelFile = selectedFile?.file;
       const modelUrl = modelUrlOverride || selectedFile?.url || selectedFile?.path || modelFile?.path || modelFile?.url;
       const isBrowserFile = !modelUrlOverride && (typeof File !== 'undefined') && modelFile instanceof File;

@@ -1143,7 +1143,8 @@ def unfold_with_lib(filepath, profile="full"):
                     return span_deg >= 30
 
                 # Check if ANY descendant planar face is large (a real flange)
-                single_face_threshold = root_area * 0.20
+                # Reduced threshold from 0.20 to 0.02 to avoid pruning real flanges on very long parts.
+                single_face_threshold = max(20.0, root_area * 0.02)
                 total_subtree_area = float(cyl_face.Area)
 
                 for desc in descendants:
@@ -1151,6 +1152,20 @@ def unfold_with_lib(filepath, profile="full"):
                     desc_area = float(desc_face.Area)
                     total_subtree_area += desc_area
                     if desc_face.Surface.TypeId == "Part::GeomPlane":
+                        # If the face is perpendicular or angled relative to the root, it's very likely a flange
+                        dn = desc_face.normalAt(0, 0)
+                        desc_normal = _normalize(np.array([float(dn.x), float(dn.y), float(dn.z)]))
+                        alignment = abs(float(np.dot(desc_normal, root_normal)))
+                        
+                        # If not parallel (alignment < 0.95), keep it as a real bend
+                        if alignment < 0.95:
+                            print(
+                                f"[Debug] Collar check: face {desc} is non-parallel (alignment={alignment:.3f}) "
+                                f"— keeping as real bend",
+                                file=sys.stderr,
+                            )
+                            return False
+
                         if desc_area > single_face_threshold:
                             print(
                                 f"[Debug] Collar check: face {desc} is planar with area "
@@ -1161,12 +1176,12 @@ def unfold_with_lib(filepath, profile="full"):
                             return False  # large flange child → real bend
 
                 # Also check total subtree area — if the whole subtree is
-                # more than 40% of the root, it's likely a substantial flange
+                # more than 5% of the root (reduced from 40%), it's likely a substantial flange
                 # structure rather than a small collar.
-                if total_subtree_area > root_area * 0.40:
+                if total_subtree_area > max(50.0, root_area * 0.05):
                     print(
                         f"[Debug] Collar check: subtree total area {total_subtree_area:.1f} "
-                        f"> 40% of root {root_area:.1f} — keeping as real bend",
+                        f"> threshold — keeping as real bend",
                         file=sys.stderr,
                     )
                     return False

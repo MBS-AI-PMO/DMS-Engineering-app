@@ -156,7 +156,22 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     };
     const onWheel = (event) => {
       event.preventDefault();
-      zoomRef.current *= event.deltaY > 0 ? 1.1 : 0.9;
+      if (!cameraRef.current || camera._baseLeft === undefined) return;
+
+      const rect = mount.getBoundingClientRect();
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = (event.clientY - rect.top) / rect.height;
+
+      const oldZoom = zoomRef.current;
+      const newZoom = oldZoom * (event.deltaY > 0 ? 1.1 : 0.9);
+
+      const dWidth = (camera._baseRight - camera._baseLeft) * (newZoom - oldZoom);
+      const dHeight = (camera._baseTop - camera._baseBottom) * (newZoom - oldZoom);
+
+      panRef.current.x -= (nx - 0.5) * dWidth;
+      panRef.current.y += (ny - 0.5) * dHeight;
+
+      zoomRef.current = newZoom;
       updateCamera();
     };
 
