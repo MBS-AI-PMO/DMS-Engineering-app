@@ -23,49 +23,6 @@ import { generateOrderReport } from '../../utils/generateOrderReport';
 import '../../styles/PremiumAdminOrders.css';
 import { useToast } from '../../context/ToastContext';
 
-const CALIBRATION_STATUS_OPTIONS = [
-    { value: 'untouched', label: 'Untouched', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
-    { value: 'reviewed', label: 'Reviewed', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },
-    { value: 'tuned', label: 'Tuned', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-    { value: 'approved', label: 'Approved', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
-    { value: 'flagged', label: 'Flagged', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-];
-
-const toFiniteNumber = (value) => {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : null;
-};
-
-const parseQuoteSnapshot = (value) => {
-    if (!value) return {};
-    if (typeof value === 'object') return value;
-    try {
-        return JSON.parse(value);
-    } catch (err) {
-        return {};
-    }
-};
-
-const formatMoney = (value) => {
-    const num = toFiniteNumber(value);
-    return num === null ? '-' : `$${num.toFixed(2)}`;
-};
-
-const formatSignedNumber = (value, digits = 1, suffix = '') => {
-    const num = toFiniteNumber(value);
-    if (num === null) return '-';
-    const prefix = num > 0 ? '+' : '';
-    return `${prefix}${num.toFixed(digits)}${suffix}`;
-};
-
-const getVarianceMeta = (value) => {
-    const num = toFiniteNumber(value);
-    if (num === null) return { label: 'No comparison', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' };
-    if (Math.abs(num) < 5) return { label: 'Aligned', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' };
-    if (num > 0) return { label: 'Underquoted', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
-    return { label: 'Overquoted', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' };
-};
-
 const AdminOrdersList = () => {
     const [activeTab, setActiveTab] = useState('active'); // 'active' or 'deleted'
     const [orders, setOrders] = useState([]);
@@ -73,7 +30,6 @@ const AdminOrdersList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [previewItem, setPreviewItem] = useState(null);
-    const [calibrationSummary, setCalibrationSummary] = useState(null);
     const toast = useToast();
 
     const fetchOrders = useCallback(async () => {
@@ -89,23 +45,6 @@ const AdminOrdersList = () => {
             toast('Failed to fetch orders: ' + err.message, 'error');
         } finally {
             setLoading(false);
-        }
-    }, [activeTab, toast]);
-
-    const fetchCalibrationSummary = useCallback(async () => {
-        if (activeTab !== 'active') {
-            setCalibrationSummary(null);
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/orders/admin/calibration/summary');
-            const data = await response.json();
-            if (data.success) {
-                setCalibrationSummary(data.summary);
-            }
-        } catch (err) {
-            toast('Failed to fetch calibration summary: ' + err.message, 'error');
         }
     }, [activeTab, toast]);
 
@@ -156,10 +95,6 @@ const AdminOrdersList = () => {
     useEffect(() => {
         fetchOrders();
     }, [fetchOrders]);
-
-    useEffect(() => {
-        fetchCalibrationSummary();
-    }, [fetchCalibrationSummary]);
 
     const filteredOrders = orders.filter(o =>
         o.id.toString().includes(searchTerm) ||
@@ -263,39 +198,6 @@ const AdminOrdersList = () => {
                     </button>
                 )}
             </div>
-
-            {activeTab === 'active' && calibrationSummary ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '18px', marginBottom: '18px' }}>
-                    {[
-                        {
-                            label: 'Reviewed Items',
-                            value: `${calibrationSummary.totals.reviewedItems}/${calibrationSummary.totals.totalItems}`,
-                            hint: `${calibrationSummary.totals.tunedItems} tuned or approved`
-                        },
-                        {
-                            label: 'Avg Unit Drift',
-                            value: formatSignedNumber(calibrationSummary.totals.avgVariancePercent, 1, '%'),
-                            hint: 'Actual/target vs quoted unit price'
-                        },
-                        {
-                            label: 'Avg Setup Delta',
-                            value: formatSignedNumber(calibrationSummary.totals.avgSetupDelta, 1),
-                            hint: 'Actual setup count minus estimate'
-                        },
-                        {
-                            label: 'Top Warning',
-                            value: calibrationSummary.topWarnings?.[0]?.warning || 'None yet',
-                            hint: calibrationSummary.topWarnings?.[0] ? `${calibrationSummary.topWarnings[0].count} occurrences` : 'No warning trend recorded'
-                        },
-                    ].map(card => (
-                        <div key={card.label} style={{ background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92))', border: '1px solid rgba(99, 102, 241, 0.18)', borderRadius: '16px', padding: '18px 20px', boxShadow: '0 18px 36px rgba(2, 6, 23, 0.16)' }}>
-                            <div style={{ fontSize: '0.74rem', color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 800, marginBottom: '10px' }}>{card.label}</div>
-                            <div style={{ color: 'white', fontSize: card.label === 'Top Warning' ? '0.98rem' : '1.4rem', fontWeight: 800, lineHeight: 1.2 }}>{card.value}</div>
-                            <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '8px', lineHeight: 1.5 }}>{card.hint}</div>
-                        </div>
-                    ))}
-                </div>
-            ) : null}
 
             <div className="admin-orders-grid">
                 <div className="queue-header-row">
@@ -482,7 +384,7 @@ const AdminOrdersList = () => {
                                     <h4 style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.15em', color: '#a5b4fc', marginBottom: '15px', fontWeight: 800 }}>
                                         Configured Manufacturing Items
                                     </h4>
-                                    <AdminItemsList orderId={selectedOrder.id} order={selectedOrder} onPreview={setPreviewItem} onCalibrationSaved={fetchCalibrationSummary} />
+                                    <AdminItemsList orderId={selectedOrder.id} order={selectedOrder} onPreview={setPreviewItem} />
                                 </div>
                             </div>
                         </motion.div>
@@ -560,30 +462,16 @@ const AdminOrdersList = () => {
     );
 };
 
-const AdminItemsList = ({ orderId, order, onPreview, onCalibrationSaved }) => {
+const AdminItemsList = ({ orderId, order, onPreview }) => {
     const [items, setItems] = useState([]);
     const [loadingItems, setLoadingItems] = useState(true);
     const [generatingPdf, setGeneratingPdf] = useState(false);
-    const [savingItemId, setSavingItemId] = useState(null);
-    const [drafts, setDrafts] = useState({});
     const toast = useToast();
-
-    const buildDraft = (item) => ({
-        calibrationStatus: item.calibration_status || 'untouched',
-        targetUnitPrice: item.calibration_target_unit_price ?? '',
-        actualUnitPrice: item.calibration_actual_unit_price ?? '',
-        actualSetupCount: item.calibration_actual_setup_count ?? '',
-        actualRuntimeHours: item.calibration_actual_runtime_hours ?? '',
-        calibrationNotes: item.calibration_notes || '',
-    });
 
     useEffect(() => {
         setLoadingItems(true);
         fetch(`/api/orders/${orderId}`).then(r => r.json()).then(d => {
-            if (d.success) {
-                setItems(d.items);
-                setDrafts(Object.fromEntries(d.items.map(item => [item.id, buildDraft(item)])));
-            }
+            if (d.success) setItems(d.items);
         }).finally(() => setLoadingItems(false));
     }, [orderId]);
 
@@ -597,41 +485,6 @@ const AdminItemsList = ({ orderId, order, onPreview, onCalibrationSaved }) => {
             toast('Failed to generate report: ' + err.message, 'error');
         } finally {
             setGeneratingPdf(false);
-        }
-    };
-
-    const updateDraft = (itemId, field, value) => {
-        setDrafts(prev => ({
-            ...prev,
-            [itemId]: {
-                ...prev[itemId],
-                [field]: value
-            }
-        }));
-    };
-
-    const handleSaveCalibration = async (itemId) => {
-        const draft = drafts[itemId];
-        if (!draft) return;
-
-        setSavingItemId(itemId);
-        try {
-            const response = await fetch(`/api/orders/items/${itemId}/calibration`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(draft),
-            });
-            const data = await response.json();
-            if (!data.success) throw new Error(data.error || 'Failed to save calibration');
-
-            setItems(prev => prev.map(item => item.id === itemId ? data.item : item));
-            setDrafts(prev => ({ ...prev, [itemId]: buildDraft(data.item) }));
-            if (onCalibrationSaved) await onCalibrationSaved();
-            toast('Calibration review saved', 'success');
-        } catch (err) {
-            toast('Failed to save calibration: ' + err.message, 'error');
-        } finally {
-            setSavingItemId(null);
         }
     };
 
@@ -665,69 +518,24 @@ const AdminItemsList = ({ orderId, order, onPreview, onCalibrationSaved }) => {
         );
     }
 
-    const reviewedCount = items.filter(item => (item.calibration_status || 'untouched') !== 'untouched').length;
-
     return (
         <div className="admin-items-mini-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <div style={{ background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.9))', border: '1px solid rgba(99, 102, 241, 0.18)', borderRadius: '16px', padding: '18px 20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                    <div>
-                        <div style={{ fontSize: '0.74rem', color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 800, marginBottom: '8px' }}>Calibration Overview</div>
-                        <div style={{ color: 'white', fontSize: '1.2rem', fontWeight: 800 }}>{reviewedCount}/{items.length} items reviewed</div>
-                        <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '6px' }}>Save actual setup, runtime, and unit-price outcomes here to tune the CNC engine.</div>
-                    </div>
-                    <button
-                        onClick={handleGenerateReport}
-                        disabled={generatingPdf}
-                        style={{ background: generatingPdf ? 'rgba(100,100,100,0.2)' : 'linear-gradient(135deg, rgba(227, 27, 35, 0.15), rgba(227, 27, 35, 0.25))', border: '1px solid rgba(227, 27, 35, 0.4)', color: generatingPdf ? '#94a3b8' : '#e31b23', padding: '12px 14px', borderRadius: '10px', cursor: generatingPdf ? 'wait' : 'pointer', fontSize: '0.8rem', fontWeight: 800, transition: 'all 0.3s', whiteSpace: 'nowrap' }}
-                        title="Generate comprehensive PDF report with watermarks"
-                    >
-                        <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                        {generatingPdf ? 'GENERATING REPORT...' : 'GENERATE ORDER REPORT'}
-                    </button>
-                </div>
-            </div>
             {items.map(item => {
                 const config = typeof item.configuration_json === 'string' ? JSON.parse(item.configuration_json) : item.configuration_json;
-                const quoteSnapshot = parseQuoteSnapshot(item.quote_snapshot_json);
-                const metrics = quoteSnapshot?.summary?.cnc_metrics || {};
-                const warnings = Array.isArray(quoteSnapshot?.summary?.warnings) ? quoteSnapshot.summary.warnings : [];
-                const setupEstimate = toFiniteNumber(metrics?.setupCountEstimate) ?? toFiniteNumber(quoteSnapshot?.summary?.cnc_setup_context?.effective_setup_count);
-                const quotedUnitPrice = toFiniteNumber(quoteSnapshot?.summary?.final_unit_price) ?? toFiniteNumber(quoteSnapshot?.unitPrice) ?? toFiniteNumber(item.unit_price);
-                const targetUnitPrice = toFiniteNumber(item.calibration_target_unit_price);
-                const actualUnitPrice = toFiniteNumber(item.calibration_actual_unit_price);
-                const comparePrice = actualUnitPrice ?? targetUnitPrice;
-                const variancePercent = quotedUnitPrice !== null && comparePrice !== null && quotedUnitPrice !== 0
-                    ? ((comparePrice - quotedUnitPrice) / quotedUnitPrice) * 100
-                    : null;
-                const varianceMeta = getVarianceMeta(variancePercent);
-                const draft = drafts[item.id] || buildDraft(item);
-                const statusMeta = CALIBRATION_STATUS_OPTIONS.find(option => option.value === (draft.calibrationStatus || 'untouched')) || CALIBRATION_STATUS_OPTIONS[0];
-                const setupDelta = setupEstimate !== null && draft.actualSetupCount !== ''
-                    ? (Number(draft.actualSetupCount) - setupEstimate)
-                    : null;
+                const quoteSnapshot = typeof item.quote_snapshot_json === 'string' ? JSON.parse(item.quote_snapshot_json) : (item.quote_snapshot_json || {});
+                const setupEstimate = quoteSnapshot?.summary?.cnc_metrics?.setupCountEstimate;
                 return (
                     <div key={item.id} style={{ background: 'rgba(99, 102, 241, 0.03)', padding: '24px', borderRadius: '15px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '18px', flexWrap: 'wrap' }}>
-                            <div>
-                                <span style={{ display: 'block', fontWeight: 800, marginBottom: '6px', color: 'white', fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{item.file_name}</span>
-                                <span style={{ fontSize: '0.85rem', color: '#a5b4fc', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                                    {config.metal?.name} - {config.thickness}mm
-                                </span>
-                                <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                    <span style={{ background: varianceMeta.bg, color: varianceMeta.color, padding: '6px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                                        {varianceMeta.label}
-                                    </span>
-                                    <span style={{ background: statusMeta.bg, color: statusMeta.color, padding: '6px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                                        {statusMeta.label}
-                                    </span>
+                        <div style={{ marginBottom: '18px' }}>
+                            <span style={{ block: 'block', fontWeight: 800, marginBottom: '6px', color: 'white', fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{item.file_name}</span>
+                            <span style={{ fontSize: '0.85rem', color: '#a5b4fc', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                {config.metal?.name} - {config.thickness}mm
+                            </span>
+                            {setupEstimate ? (
+                                <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#c4b5fd', fontWeight: 700 }}>
+                                    Calibration snapshot: setup estimate {setupEstimate}
                                 </div>
-                            </div>
-                            <div style={{ minWidth: '200px', color: '#cbd5f5', fontSize: '0.82rem' }}>
-                                <div>Quoted unit: <strong style={{ color: 'white' }}>{formatMoney(quotedUnitPrice)}</strong></div>
-                                <div>Setup estimate: <strong style={{ color: 'white' }}>{setupEstimate ?? '-'}</strong></div>
-                                <div>Warnings: <strong style={{ color: 'white' }}>{warnings.length}</strong></div>
-                            </div>
+                            ) : null}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', gap: '4px', flex: '1 1 100%', marginBottom: '4px' }}>
