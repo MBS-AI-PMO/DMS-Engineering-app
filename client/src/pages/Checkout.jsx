@@ -95,6 +95,7 @@ const Checkout = () => {
                     fileName: item.fileName || item.file_name,
                     tempPath: item.tempPath || item.temp_path || '',
                     configuration: item.configuration || {},
+                    quoteSnapshot: item.quoteSnapshot || null,
                     quantity: item.quantity || 1,
                     unitPrice: item.pricing?.total || 0
                 })),

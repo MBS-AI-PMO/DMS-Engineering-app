@@ -55,7 +55,7 @@ export const CartProvider = ({ children }) => {
   }, [cartItems]);
 
   const addToCart = (item) => {
-    // item: { id, fileName, file, tempPath, configuration, pricing, quantity: 1 }
+    // item: { id, fileName, file, tempPath, configuration, quoteSnapshot, pricing, quantity: 1 }
     setCartItems(prev => {
       // Prevent duplicate cartId issues
       const newItem = {
@@ -124,11 +124,22 @@ export const CartProvider = ({ children }) => {
           (newQuantity > 0 ? (parseFloat(res.total_price || 0) / newQuantity) : 0)
         );
         const discountPercent = parseFloat(res.breakdown?.discount_percent || 0);
+        const quoteSnapshot = {
+          version: 'cnc-phase4-v1',
+          source: 'cart_reprice',
+          createdAt: new Date().toISOString(),
+          quantity: newQuantity,
+          unitPrice: unitFinal,
+          totalPrice: parseFloat(res.total_price || 0) || 0,
+          pricingInput: payload,
+          pricingResponse: res
+        };
 
         setCartItems(prev => prev.map(item =>
           item.cartId === cartId
             ? {
               ...item,
+              quoteSnapshot,
               pricing: {
                 ...item.pricing,
                 baseUnit: unitBase,

@@ -473,6 +473,15 @@ app.listen(port, async () => {
                 configured_file_path TEXT,
                 flat_file_path TEXT,
                 configuration_json JSONB NOT NULL,
+                quote_snapshot_json JSONB,
+                calibration_status VARCHAR(40) DEFAULT 'untouched',
+                calibration_target_unit_price NUMERIC(15,2),
+                calibration_actual_unit_price NUMERIC(15,2),
+                calibration_actual_setup_count INTEGER,
+                calibration_actual_runtime_hours NUMERIC(12,4),
+                calibration_notes TEXT,
+                calibration_reviewed_at TIMESTAMP,
+                calibration_reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 quantity INTEGER NOT NULL DEFAULT 1,
                 unit_price NUMERIC(15,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT NOW()
@@ -481,6 +490,15 @@ app.listen(port, async () => {
         // Ensure all columns exist for world-class persistence
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quote_snapshot_json JSONB;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_status VARCHAR(40) DEFAULT 'untouched';`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_target_unit_price NUMERIC(15,2);`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_actual_unit_price NUMERIC(15,2);`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_actual_setup_count INTEGER;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_actual_runtime_hours NUMERIC(12,4);`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_notes TEXT;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_reviewed_at TIMESTAMP;`);
+        await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS calibration_reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
         await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT;`);
 
         // Hardware Item Specification Migration

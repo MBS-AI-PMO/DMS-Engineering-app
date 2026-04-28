@@ -154,12 +154,131 @@ def _basis_from_normal(normal_vec):
     return n, u, v
 
 
+def _vector_to_np(vec_obj):
+    return np.array([float(vec_obj.x), float(vec_obj.y), float(vec_obj.z)], dtype=float)
+
+
+def _face_normal_np(face):
+    try:
+        return _normalize(_vector_to_np(face.normalAt(0, 0)))
+    except Exception:
+        try:
+            return _normalize(_vector_to_np(face.Surface.Axis))
+        except Exception:
+            return np.array([0.0, 0.0, 0.0], dtype=float)
+
+
+def _normal_group_key(normal, decimals=2, ignore_sign=False):
+    arr = np.asarray(normal, dtype=float)
+    if arr.shape[0] != 3:
+        return (0.0, 0.0, 0.0)
+    if ignore_sign:
+        arr = np.abs(arr)
+    rounded = np.round(arr, decimals=decimals)
+    return (float(rounded[0]), float(rounded[1]), float(rounded[2]))
+
+
+def _wire_profile_on_plane(wire, plane_normal):
+    try:
+        normal, u_vec, v_vec = _basis_from_normal(plane_normal)
+    except Exception:
+        return None
+
+    wire_points = []
+    for edge in getattr(wire, "Edges", []):
+        try:
+            pts = edge.discretize(Number=40)
+        except Exception:
+            pts = [v.Point for v in edge.Vertexes]
+
+        if not pts or len(pts) < 2:
+            continue
+
+        edge_pts = [_vector_to_np(p) for p in pts]
+        if wire_points:
+            if np.linalg.norm(edge_pts[0] - wire_points[-1]) <= 1e-6:
+                wire_points.extend(edge_pts[1:])
+            else:
+                wire_points.extend(edge_pts)
+        else:
+            wire_points.extend(edge_pts)
+
+    if len(wire_points) < 4:
+        return None
+
+    if np.linalg.norm(wire_points[0] - wire_points[-1]) > 1e-5:
+        wire_points.append(wire_points[0].copy())
+
+    pts3 = np.asarray(wire_points, dtype=float)
+    if pts3.shape[0] < 4:
+        return None
+
+    local = pts3 - pts3[0]
+    x = local @ u_vec
+    y = local @ v_vec
+    pts2 = np.column_stack((x, y))
+    seg = pts2[1:] - pts2[:-1]
+    perimeter = float(np.sum(np.linalg.norm(seg, axis=1)))
+    if perimeter < 1e-6:
+        return None
+
+    area = 0.5 * abs(float(np.sum(
+        pts2[:-1, 0] * pts2[1:, 1] - pts2[1:, 0] * pts2[:-1, 1]
+    )))
+    if area < 1e-6:
+        return None
+
+    min_xy = np.min(pts2[:-1], axis=0)
+    max_xy = np.max(pts2[:-1], axis=0)
+    span = np.maximum(max_xy - min_xy, 1e-6)
+    width = float(max(span[0], span[1]))
+    height = float(min(span[0], span[1]))
+    aspect_ratio = width / max(height, 1e-6)
+    roundness = (4.0 * math.pi * area) / (perimeter * perimeter + 1e-9)
+
+    return {
+        "area_mm2": float(area),
+        "perimeter_mm": float(perimeter),
+        "width_mm": width,
+        "height_mm": height,
+        "aspect_ratio": float(aspect_ratio),
+        "roundness": float(roundness),
+        "center": np.mean(pts3[:-1], axis=0),
+        "normal": normal,
+    }
+
+
 def _empty_non_flat_features():
     return {
         "hasRaisedFeatures": False,
         "raisedFeatureFaceCount": 0,
         "parallelPlanarFaceCount": 0,
         "maxOffsetMm": 0.0,
+        "reasons": [],
+    }
+
+
+def _empty_cnc_features():
+    return {
+        "planarFaceCount": 0,
+        "cylindricalFaceCount": 0,
+        "conicalFaceCount": 0,
+        "sphericalFaceCount": 0,
+        "toroidalFaceCount": 0,
+        "otherFaceCount": 0,
+        "innerLoopCount": 0,
+        "pocketCount": 0,
+        "slotCount": 0,
+        "recessedFaceCount": 0,
+        "deepPocketCount": 0,
+        "pocketDepthMmMax": 0.0,
+        "verticalWallFaceCount": 0,
+        "throughHoleCount": 0,
+        "blindHoleCount": 0,
+        "machiningDirectionCount": 0,
+        "setupCountEstimate": 1,
+        "cylindricalAreaRatio": 0.0,
+        "rotationalCandidate": False,
         "reasons": [],
     }
 
@@ -282,6 +401,185 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
         return result
     except Exception as ex:
         result["reasons"].append(f"Non-flat feature analysis warning: {ex}")
+        return result
+
+
+def _detect_cnc_features(fc_shape, thickness, root_idx=None, holes_data=None, non_flat_features=None):
+    result = _empty_cnc_features()
+    try:
+        faces = list(getattr(fc_shape, "Faces", []) or [])
+        if not faces:
+            return result
+
+        thickness_mm = float(thickness) if thickness and float(thickness) > 0 else 0.0
+        total_area = 0.0
+        cylindrical_area = 0.0
+        inner_loop_count = 0
+        pocket_count = 0
+        slot_count = 0
+        vertical_wall_faces = 0
+        oriented_planar_groups = {}
+        absolute_direction_groups = set()
+        root_normal = None
+
+        if root_idx is not None and 0 <= int(root_idx) < len(faces):
+            try:
+                root_normal = _face_normal_np(faces[int(root_idx)])
+            except Exception:
+                root_normal = None
+
+        for face in faces:
+            surface_type = str(getattr(face.Surface, "TypeId", ""))
+            face_area = float(getattr(face, "Area", 0.0) or 0.0)
+            total_area += max(0.0, face_area)
+
+            if surface_type == "Part::GeomPlane":
+                result["planarFaceCount"] += 1
+                normal = _face_normal_np(face)
+                if np.linalg.norm(normal) > 1e-9:
+                    absolute_direction_groups.add(_normal_group_key(normal, ignore_sign=True))
+                    center = _vector_to_np(face.CenterOfMass)
+                    projection = float(np.dot(center, normal))
+                    oriented_planar_groups.setdefault(_normal_group_key(normal), []).append({
+                        "projection": projection,
+                        "area": max(0.0, face_area),
+                    })
+
+                    if root_normal is not None:
+                        alignment = abs(float(np.dot(normal, root_normal)))
+                        if alignment < 0.35:
+                            vertical_wall_faces += 1
+
+                outer_hash = None
+                try:
+                    outer_hash = face.OuterWire.hashCode()
+                except Exception:
+                    outer_hash = None
+
+                for wire in getattr(face, "Wires", []):
+                    try:
+                        if outer_hash is not None and wire.hashCode() == outer_hash:
+                            continue
+                    except Exception:
+                        pass
+
+                    inner_loop_count += 1
+                    profile = _wire_profile_on_plane(
+                        wire,
+                        normal if np.linalg.norm(normal) > 1e-9 else np.array([0.0, 0.0, 1.0], dtype=float)
+                    )
+                    if not profile:
+                        continue
+
+                    area_mm2 = float(profile["area_mm2"])
+                    aspect_ratio = float(profile["aspect_ratio"])
+                    roundness = float(profile["roundness"])
+                    is_hole_like = roundness >= 0.8 and aspect_ratio <= 1.35
+                    is_slot_like = aspect_ratio >= 2.0 and roundness >= 0.42
+                    is_pocket_like = area_mm2 >= 4.0 and not is_hole_like
+
+                    if is_pocket_like:
+                        pocket_count += 1
+                    if is_slot_like:
+                        slot_count += 1
+
+            elif surface_type == "Part::GeomCylinder":
+                result["cylindricalFaceCount"] += 1
+                cylindrical_area += max(0.0, face_area)
+            elif surface_type == "Part::GeomCone":
+                result["conicalFaceCount"] += 1
+            elif surface_type == "Part::GeomSphere":
+                result["sphericalFaceCount"] += 1
+            elif surface_type == "Part::GeomToroid":
+                result["toroidalFaceCount"] += 1
+            else:
+                result["otherFaceCount"] += 1
+
+        min_recess_depth = max(0.4, thickness_mm * 0.35) if thickness_mm > 0 else 0.6
+        deep_pocket_threshold = max(3.0, thickness_mm * 1.5) if thickness_mm > 0 else 4.0
+        recessed_face_count = 0
+        deep_pocket_count = 0
+        max_pocket_depth = 0.0
+
+        for faces_in_group in oriented_planar_groups.values():
+            if len(faces_in_group) < 2:
+                continue
+            extreme_projection = max(item["projection"] for item in faces_in_group)
+            max_group_area = max(item["area"] for item in faces_in_group)
+
+            for item in faces_in_group:
+                depth_mm = extreme_projection - item["projection"]
+                if depth_mm <= min_recess_depth:
+                    continue
+                if item["area"] >= max_group_area * 0.98:
+                    continue
+                recessed_face_count += 1
+                max_pocket_depth = max(max_pocket_depth, depth_mm)
+                if depth_mm >= deep_pocket_threshold:
+                    deep_pocket_count += 1
+
+        holes = list(holes_data or [])
+        through_hole_count = 0
+        blind_hole_count = 0
+        for hole in holes:
+            depth_mm = float(hole.get("depth_mm") or 0.0)
+            if thickness_mm > 0 and depth_mm >= (thickness_mm * 0.8):
+                through_hole_count += 1
+            else:
+                blind_hole_count += 1
+
+        machining_direction_count = max(0, len(absolute_direction_groups))
+        setup_count_estimate = max(1, min(5, machining_direction_count or 1))
+        if deep_pocket_count > 0 and setup_count_estimate < 5:
+            setup_count_estimate += 1
+        if pocket_count > 3 and setup_count_estimate < 5:
+            setup_count_estimate += 1
+
+        cylindrical_area_ratio = (cylindrical_area / total_area) if total_area > 1e-6 else 0.0
+        rotational_candidate = bool(
+            result["cylindricalFaceCount"] >= 2
+            and cylindrical_area_ratio >= 0.35
+            and machining_direction_count <= 3
+        )
+
+        result.update({
+            "innerLoopCount": int(inner_loop_count),
+            "pocketCount": int(pocket_count),
+            "slotCount": int(slot_count),
+            "recessedFaceCount": int(recessed_face_count),
+            "deepPocketCount": int(deep_pocket_count),
+            "pocketDepthMmMax": round(float(max_pocket_depth), 4),
+            "verticalWallFaceCount": int(vertical_wall_faces),
+            "throughHoleCount": int(through_hole_count),
+            "blindHoleCount": int(blind_hole_count),
+            "machiningDirectionCount": int(machining_direction_count),
+            "setupCountEstimate": int(setup_count_estimate),
+            "cylindricalAreaRatio": round(float(cylindrical_area_ratio), 4),
+            "rotationalCandidate": rotational_candidate,
+        })
+
+        if rotational_candidate:
+            result["reasons"].append(
+                f"Cylindrical faces cover {cylindrical_area_ratio:.2%} of surface area across {result['cylindricalFaceCount']} faces."
+            )
+        if recessed_face_count > 0:
+            result["reasons"].append(
+                f"Detected {recessed_face_count} recessed planar face(s) with max pocket depth {max_pocket_depth:.2f} mm."
+            )
+        if slot_count > 0:
+            result["reasons"].append(f"Detected {slot_count} slot-like internal profile(s).")
+        if pocket_count > 0:
+            result["reasons"].append(f"Detected {pocket_count} non-circular internal pocket opening(s).")
+        if machining_direction_count > 0:
+            result["reasons"].append(
+                f"Detected {machining_direction_count} machining direction group(s) and estimated {setup_count_estimate} setup(s)."
+            )
+        if non_flat_features and non_flat_features.get("hasRaisedFeatures"):
+            result["reasons"].append("Raised/non-flat features are present and may require extra setups.")
+
+        return result
+    except Exception as ex:
+        result["reasons"].append(f"CNC feature analysis warning: {ex}")
         return result
 
 
@@ -1006,6 +1304,14 @@ def unfold_with_lib(filepath, profile="full"):
             emit_progress(58 if estimate_thickness else 42, "Detecting holes")
             holes_data = detect_holes_fc(fc_shape)
 
+        cnc_features = _detect_cnc_features(
+            fc_shape,
+            thickness,
+            root_idx=root_idx,
+            holes_data=holes_data,
+            non_flat_features=non_flat_features,
+        )
+
         emit_progress(96, "Finalizing analysis")
         return _json_safe({
             "success": True,
@@ -1025,6 +1331,7 @@ def unfold_with_lib(filepath, profile="full"):
             "frontBendEdges": [],
             "sideBendEdges": [],
             "detectedHoles": holes_data,
+            "cncFeatures": cnc_features,
         })
     
     t_start = time.time()
@@ -1462,6 +1769,14 @@ def unfold_with_lib(filepath, profile="full"):
         holes_data = detect_holes_fc(fc_shape)
         sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
+    cnc_features = _detect_cnc_features(
+        fc_shape,
+        thickness,
+        root_idx=chosen_root,
+        holes_data=holes_data,
+        non_flat_features=non_flat_features,
+    )
+
     sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")
     emit_progress(98, "Finalizing response")
 
@@ -1482,7 +1797,8 @@ def unfold_with_lib(filepath, profile="full"):
         "topBendEdges": views["top"]["bend_edges"],
         "frontBendEdges": views["front"]["bend_edges"],
         "sideBendEdges": views["side"]["bend_edges"],
-        "detectedHoles": holes_data
+        "detectedHoles": holes_data,
+        "cncFeatures": cnc_features,
     })
 
 if __name__ == "__main__":

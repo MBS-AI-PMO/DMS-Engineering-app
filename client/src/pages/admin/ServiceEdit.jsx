@@ -19,6 +19,66 @@ const emptyService = {
     pricing_config: {}
 };
 
+const CNC_OPERATIONS = ['Saw', 'Lathe', 'Mill', 'Deburr', 'Inspect'];
+
+const CNC_RUNTIME_FACTORS = [
+    { key: 'per_length_hr', label: 'Hours per Inch of Length' },
+    { key: 'per_width_hr', label: 'Hours per Inch of Width' },
+    { key: 'per_thickness_hr', label: 'Hours per Inch of Thickness' },
+    { key: 'per_area_hr', label: 'Hours per Sq. Inch of Area' },
+    { key: 'per_perimeter_hr', label: 'Hours per Inch of Perimeter' },
+    { key: 'per_hole_hr', label: 'Hours per Hole' },
+    { key: 'per_bend_hr', label: 'Hours per Bend' },
+    { key: 'per_part_volume_hr', label: 'Hours per Cu. In of Part Volume' },
+    { key: 'per_removed_volume_hr', label: 'Hours per Cu. In of Removed Volume' },
+    { key: 'per_removed_ratio_hr', label: 'Hours per Removed Volume Ratio' },
+    { key: 'per_complexity_hr', label: 'Hours per Complexity Point' },
+    { key: 'per_feature_density_hr', label: 'Hours per Feature Density Point' },
+    { key: 'per_thickness_span_hr', label: 'Hours per Thickness-to-Span Ratio' },
+    { key: 'per_pocket_hr', label: 'Hours per Pocket' },
+    { key: 'per_slot_hr', label: 'Hours per Slot' },
+    { key: 'per_recessed_face_hr', label: 'Hours per Recessed Face' },
+    { key: 'per_deep_pocket_hr', label: 'Hours per Deep Pocket' },
+    { key: 'per_setup_count_hr', label: 'Hours per Detected Setup' },
+    { key: 'per_direction_hr', label: 'Hours per Machining Direction' },
+    { key: 'per_through_hole_hr', label: 'Hours per Through Hole' },
+    { key: 'per_blind_hole_hr', label: 'Hours per Blind Hole' },
+    { key: 'per_vertical_wall_face_hr', label: 'Hours per Vertical Wall Face' },
+    { key: 'per_cylindrical_ratio_hr', label: 'Hours per Cylindrical Area Ratio' },
+    { key: 'per_pocket_depth_hr', label: 'Hours per Inch of Pocket Depth' },
+    { key: 'raised_feature_hr', label: 'Raised Feature Runtime Bonus (hr)' },
+    { key: 'rotational_bonus_hr', label: 'Rotational Bonus Runtime (hr)' },
+];
+
+const CNC_SETUP_RULE_FIELDS = [
+    { key: 'cnc_setup_base_count', label: 'Base Setup Count', step: '1', fallback: 1 },
+    { key: 'cnc_setup_rotational_extra', label: 'Rotational Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_large_part_threshold_in', label: 'Large Part Threshold (in)', step: '0.001', fallback: 0 },
+    { key: 'cnc_setup_large_part_extra', label: 'Large Part Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_hole_threshold', label: 'Hole Count Threshold', step: '1', fallback: 0 },
+    { key: 'cnc_setup_hole_extra', label: 'Hole Count Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_removed_ratio_threshold', label: 'Removed Ratio Threshold', step: '0.001', fallback: 0 },
+    { key: 'cnc_setup_removed_ratio_extra', label: 'Removed Ratio Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_complexity_threshold', label: 'Complexity Threshold', step: '0.001', fallback: 0 },
+    { key: 'cnc_setup_complexity_extra', label: 'Complexity Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_raised_feature_extra', label: 'Raised Feature Extra Setups', step: '1', fallback: 0 },
+    { key: 'cnc_setup_feature_estimate_weight', label: 'CAD Setup Estimate Weight', step: '0.1', fallback: 1 },
+    { key: 'cnc_setup_max_count', label: 'Max Setup Count', step: '1', fallback: 0 },
+];
+
+const CNC_RISK_RULE_FIELDS = [
+    { key: 'cnc_risk_complexity_threshold', label: 'Complexity Threshold', step: '0.001', fallback: 0 },
+    { key: 'cnc_risk_complexity_surcharge', label: 'Complexity Surcharge ($/unit)', step: '0.01', fallback: 0 },
+    { key: 'cnc_risk_hole_threshold', label: 'Hole Count Threshold', step: '1', fallback: 0 },
+    { key: 'cnc_risk_hole_surcharge', label: 'Hole Count Surcharge ($/unit)', step: '0.01', fallback: 0 },
+    { key: 'cnc_risk_removed_ratio_threshold', label: 'Removed Ratio Threshold', step: '0.001', fallback: 0 },
+    { key: 'cnc_risk_removed_ratio_surcharge', label: 'Removed Ratio Surcharge ($/unit)', step: '0.01', fallback: 0 },
+    { key: 'cnc_risk_thickness_span_threshold', label: 'Low Thickness/Span Threshold', step: '0.0001', fallback: 0 },
+    { key: 'cnc_risk_thickness_span_surcharge', label: 'Thin Wall Surcharge ($/unit)', step: '0.01', fallback: 0 },
+    { key: 'cnc_risk_raised_feature_surcharge', label: 'Raised Feature Surcharge ($/unit)', step: '0.01', fallback: 0 },
+    { key: 'cnc_risk_rotational_surcharge', label: 'Rotational Surcharge ($/unit)', step: '0.01', fallback: 0 },
+];
+
 export default function ServiceEdit() {
     const { id } = useParams();
     const isNew = !id;
@@ -1238,7 +1298,124 @@ export default function ServiceEdit() {
                                     </div>
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginTop: '20px' }}>
-                                        {['Saw', 'Lathe', 'Mill', 'Deburr', 'Inspect'].map(op => {
+                                        <div style={{ background: '#eff6ff', padding: '24px', borderRadius: '16px', border: '1.5px solid #bfdbfe' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1d4ed8' }}>Smart CNC Engine</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                                                        Choose between the legacy manual formula and the geometry-driven smart formula.
+                                                    </div>
+                                                </div>
+                                                <div className="unit-toggle-pills" style={{ display: 'flex', gap: '8px' }}>
+                                                    {['manual', 'smart'].map(mode => (
+                                                        <button
+                                                            key={mode}
+                                                            type="button"
+                                                            className={`unit-pill ${(service.pricing_config?.cnc_pricing_mode || 'manual') === mode ? 'active' : ''}`}
+                                                            onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, cnc_pricing_mode: mode } }))}
+                                                        >
+                                                            {mode === 'manual' ? 'Manual' : 'Smart'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '18px' }}>
+                                                {[
+                                                    ['cnc_rotational_minor_tolerance_in', 'Rotational Minor Tolerance (in)', 0.05],
+                                                    ['cnc_rotational_length_ratio_threshold', 'Rotational Length Ratio', 1.5],
+                                                    ['cnc_stock_pad_length_in', 'Stock Pad Length (in)', 0],
+                                                    ['cnc_stock_pad_width_in', 'Stock Pad Width (in)', 0],
+                                                    ['cnc_stock_pad_thickness_in', 'Stock Pad Thickness (in)', 0],
+                                                ].map(([field, label, fallback]) => (
+                                                    <div className="option-input-group" key={field}>
+                                                        <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{label}</label>
+                                                        <input
+                                                            type="number"
+                                                            step="0.001"
+                                                            value={service.pricing_config?.[field] ?? fallback}
+                                                            onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [field]: parseFloat(e.target.value) || 0 } }))}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1.5px solid #e2e8f0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+                                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0f766e' }} />
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>Setup Count Intelligence</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                                                        Derive setup count from part size, holes, removed material, complexity, and raised features.
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '18px' }}>
+                                                {CNC_SETUP_RULE_FIELDS.map(field => (
+                                                    <div className="option-input-group" key={field.key}>
+                                                        <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>{field.label}</label>
+                                                        <input
+                                                            type="number"
+                                                            step={field.step}
+                                                            value={service.pricing_config?.[field.key] ?? field.fallback}
+                                                            onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [field.key]: parseFloat(e.target.value) || 0 } }))}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div style={{ marginTop: '16px' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!service.pricing_config?.cnc_setup_feature_estimate_enabled}
+                                                        onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, cnc_setup_feature_estimate_enabled: e.target.checked } }))}
+                                                    />
+                                                    Use CAD-derived setup estimate as a floor for smart setup count
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: '#fff7ed', padding: '24px', borderRadius: '16px', border: '1.5px solid #fed7aa' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#9a3412' }}>Risk Surcharges & Warnings</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#7c2d12', marginTop: '4px' }}>
+                                                        Trigger configurable CNC warnings and per-unit surcharges for hard-to-machine geometry.
+                                                    </div>
+                                                </div>
+                                                <div className="unit-toggle-pills" style={{ display: 'flex', gap: '8px' }}>
+                                                    {[['off', false], ['on', true]].map(([label, value]) => (
+                                                        <button
+                                                            key={label}
+                                                            type="button"
+                                                            className={`unit-pill ${!!service.pricing_config?.cnc_risk_enabled === value ? 'active' : ''}`}
+                                                            onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, cnc_risk_enabled: value } }))}
+                                                        >
+                                                            {label === 'on' ? 'Enabled' : 'Disabled'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '18px' }}>
+                                                {CNC_RISK_RULE_FIELDS.map(field => (
+                                                    <div className="option-input-group" key={field.key}>
+                                                        <label style={{ color: '#7c2d12', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>{field.label}</label>
+                                                        <input
+                                                            type="number"
+                                                            step={field.step}
+                                                            value={service.pricing_config?.[field.key] ?? field.fallback}
+                                                            onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [field.key]: parseFloat(e.target.value) || 0 } }))}
+                                                            style={{ background: '#fff', border: '1.5px solid #fed7aa', borderRadius: '10px', padding: '10px 14px' }}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {CNC_OPERATIONS.map(op => {
                                             const key = op.toLowerCase();
                                             return (
                                                 <div key={op} style={{ background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -1308,6 +1485,114 @@ export default function ServiceEdit() {
                                                                 />
                                                             </div>
                                                         </div>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Mode</label>
+                                                            <div className="unit-toggle-pills" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                                {['always', 'auto', 'never'].map(mode => (
+                                                                    <button
+                                                                        key={mode}
+                                                                        type="button"
+                                                                        className={`unit-pill ${(service.pricing_config?.[`cnc_${key}_mode`] || ((service.pricing_config?.cnc_pricing_mode || 'manual') === 'smart' ? 'auto' : 'always')) === mode ? 'active' : ''}`}
+                                                                        onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_mode`]: mode } }))}
+                                                                    >
+                                                                        {mode}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Min Runtime (hr)</label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.001"
+                                                                value={service.pricing_config?.[`cnc_${key}_min_runtime_hr`] || 0}
+                                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_min_runtime_hr`]: parseFloat(e.target.value) || 0 } }))}
+                                                                style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                            />
+                                                        </div>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Setup Multiplier</label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.001"
+                                                                value={service.pricing_config?.[`cnc_${key}_setup_multiplier`] ?? 1}
+                                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_setup_multiplier`]: parseFloat(e.target.value) || 0 } }))}
+                                                                style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: '22px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+                                                        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#334155', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Auto Enable Rules</div>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '18px' }}>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!service.pricing_config?.[`cnc_${key}_require_rotational`]}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_require_rotational`]: e.target.checked } }))}
+                                                                />
+                                                                Require rotational part
+                                                            </label>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!service.pricing_config?.[`cnc_${key}_require_non_rotational`]}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_require_non_rotational`]: e.target.checked } }))}
+                                                                />
+                                                                Require non-rotational part
+                                                            </label>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!service.pricing_config?.[`cnc_${key}_rotational_bonus_enabled`]}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_rotational_bonus_enabled`]: e.target.checked } }))}
+                                                                />
+                                                                Add rotational runtime bonus
+                                                            </label>
+                                                            {[
+                                                                ['min_length_in', 'Min Length (in)'],
+                                                                ['min_width_in', 'Min Width (in)'],
+                                                                ['min_thickness_in', 'Min Thickness (in)'],
+                                                                ['min_holes', 'Min Hole Count'],
+                                                                ['min_removed_volume_cuin', 'Min Removed Volume (cu in)'],
+                                                                ['min_removed_ratio', 'Min Removed Ratio'],
+                                                                ['min_complexity', 'Min Complexity Score'],
+                                                                ['min_pockets', 'Min Pocket Count'],
+                                                                ['min_slots', 'Min Slot Count'],
+                                                                ['min_setup_count_est', 'Min Setup Estimate'],
+                                                                ['min_direction_count', 'Min Direction Count'],
+                                                                ['min_cylindrical_ratio', 'Min Cylindrical Ratio'],
+                                                            ].map(([field, label]) => (
+                                                                <div className="option-input-group" key={field}>
+                                                                    <label style={{ color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>{label}</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.001"
+                                                                        value={service.pricing_config?.[`cnc_${key}_${field}`] || 0}
+                                                                        onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_${field}`]: parseFloat(e.target.value) || 0 } }))}
+                                                                        style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: '22px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+                                                        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#334155', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Smart Runtime Factors</div>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px' }}>
+                                                            {CNC_RUNTIME_FACTORS.map(factor => (
+                                                                <div className="option-input-group" key={factor.key}>
+                                                                    <label style={{ color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>{factor.label}</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.0001"
+                                                                        value={service.pricing_config?.[`cnc_${key}_${factor.key}`] || 0}
+                                                                        onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_${factor.key}`]: parseFloat(e.target.value) || 0 } }))}
+                                                                        style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1321,7 +1606,10 @@ export default function ServiceEdit() {
                                         </div>
                                         <div style={{ fontSize: '0.8rem', color: '#0369a1', lineHeight: '1.6' }}>
                                             <code>Operation Cost = (Runtime × Quantity + Setup) × Shop Rate</code><br />
-                                            <code>TOTAL CNC COST = SUM(Saw, Lathe, Mill, Deburr, Inspect)</code>
+                                            <code>Smart Runtime = Base Runtime + Geometry Factors</code><br />
+                                            <code>Smart Setup = Base Setup Ã— Setup Multiplier Ã— Derived Setup Count</code><br />
+                                            <code>Risk Surcharge = SUM(Triggered Risk Rules)</code><br />
+                                            <code>TOTAL CNC COST = SUM(Enabled Operations) + Risk Surcharge</code>
                                         </div>
                                     </div>
                                 </div>

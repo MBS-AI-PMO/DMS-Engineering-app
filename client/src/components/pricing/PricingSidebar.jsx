@@ -40,6 +40,24 @@ const PricingSidebar = ({
     : (Number(metrics.diagonalMm || 0) / 25.4);
   const diagonalUnitLabel = activeUnit === 'mm' ? 'mm' : 'in';
 
+  const serviceBreakdown = Array.isArray(priceEstimate?.breakdown?.service_breakdown)
+    ? priceEstimate.breakdown.service_breakdown
+    : [];
+  const cncOperationBreakdown = Array.isArray(priceEstimate?.breakdown?.cnc_operation_breakdown)
+    ? priceEstimate.breakdown.cnc_operation_breakdown
+    : [];
+  const cncMetrics = priceEstimate?.breakdown?.cnc_derived_metrics || null;
+  const cncSetupContext = priceEstimate?.breakdown?.cnc_setup_context || null;
+  const cncRiskBreakdown = priceEstimate?.breakdown?.cnc_risk_breakdown || null;
+  const pricingWarnings = Array.isArray(priceEstimate?.breakdown?.warnings)
+    ? priceEstimate.breakdown.warnings
+    : [];
+  const enabledCncOps = cncOperationBreakdown.filter(op => op?.enabled);
+  const formatMetric = (value, digits = 3) => {
+    const num = Number(value || 0);
+    return Number.isFinite(num) ? num.toFixed(digits) : '0.000';
+  };
+
   return (
     <aside className="ip-sidebar" style={{
       background: '#fff',
@@ -189,6 +207,50 @@ const PricingSidebar = ({
             <div style={{ marginTop: 24 }}>
               <div className="ip-section-title">Cost Breakdown</div>
               <div style={{ background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 12, padding: '20px' }}>
+                {serviceBreakdown.length > 0 && (
+                  <>
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 10 }}>
+                        Pricing Lines
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {serviceBreakdown.map((row, index) => (
+                          <div
+                            key={`${row?.name || 'row'}-${index}`}
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}
+                          >
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>{row?.name || 'Service'}</span>
+                            <span style={{ fontSize: '12px', fontWeight: 900, color: '#1e293b' }}>
+                              ${formatMetric(row?.price, 2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ height: '1px', background: '#e2e8f0', margin: '14px 0' }} />
+                  </>
+                )}
+
+                {pricingWarnings.length > 0 && (
+                  <>
+                    <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10 }}>
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>
+                        Quote Warnings
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {pricingWarnings.map((warning, index) => (
+                          <div key={`${warning}-${index}`} style={{ fontSize: '11px', fontWeight: 700, color: '#9a3412', lineHeight: 1.5 }}>
+                            {warning}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ height: '1px', background: '#e2e8f0', margin: '14px 0' }} />
+                  </>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Unit Price</span>
                   <span style={{ fontSize: '14px', fontWeight: 800, color: '#1e293b' }}>
@@ -225,6 +287,155 @@ const PricingSidebar = ({
                   </div>
                 )}
               </div>
+
+              {cncMetrics && (
+                <div style={{ marginTop: 16, background: '#f8fafc', border: '1.5px solid #e8eaed', borderRadius: 12, padding: '20px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 12 }}>
+                    CNC Intelligence
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                    {[
+                      ['Complexity', formatMetric(cncMetrics.complexityScore, 2)],
+                      ['Removed Ratio', formatMetric(cncMetrics.removedVolumeRatio, 3)],
+                      ['Removed Vol', `${formatMetric(cncMetrics.removedVolumeCuIn, 3)} in³`],
+                      ['Feature Density', formatMetric(cncMetrics.featureDensity, 3)],
+                      ['Pockets', formatMetric(cncMetrics.pocketCount, 0)],
+                      ['Slots', formatMetric(cncMetrics.slotCount, 0)],
+                      ['Directions', formatMetric(cncMetrics.machiningDirectionCount, 0)],
+                      ['Setup Est', formatMetric(cncMetrics.setupCountEstimate, 0)],
+                      ['Rotational', cncMetrics.likelyRotational ? 'Yes' : 'No'],
+                      ['Raised Features', cncMetrics.hasRaisedFeatures ? 'Yes' : 'No'],
+                    ].map(([label, value]) => (
+                      <div key={label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>{label}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', marginTop: 4 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {cncSetupContext && (
+                    <>
+                      <div style={{ height: '1px', background: '#e2e8f0', margin: '16px 0' }} />
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 10 }}>
+                        Setup Intelligence
+                      </div>
+                      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Derived Setup Count</span>
+                          <span style={{ fontSize: '14px', fontWeight: 900, color: '#1e293b' }}>
+                            {Number(cncSetupContext?.setup_count || 0)}
+                          </span>
+                        </div>
+                        {Array.isArray(cncSetupContext?.factor_details) && cncSetupContext.factor_details.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {cncSetupContext.factor_details.map((item, index) => (
+                              <div key={`${item?.label || 'factor'}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                                <div>
+                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b' }}>{item?.label || 'Factor'}</div>
+                                  <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: 2 }}>{item?.detail || ''}</div>
+                                </div>
+                                <div style={{ fontSize: '11px', fontWeight: 900, color: '#0f766e' }}>
+                                  {Number(item?.added_count || 0) >= 0 ? '+' : ''}{Number(item?.added_count || 0)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {cncRiskBreakdown?.enabled && (
+                    <>
+                      <div style={{ height: '1px', background: '#e2e8f0', margin: '16px 0' }} />
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 10 }}>
+                        Risk Adjustments
+                      </div>
+                      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Applied Risk Surcharge</span>
+                          <span style={{ fontSize: '14px', fontWeight: 900, color: '#c2410c' }}>
+                            ${formatMetric(cncRiskBreakdown?.cost_per_unit_marked_up ?? cncRiskBreakdown?.cost_per_unit, 2)}
+                          </span>
+                        </div>
+                        {Array.isArray(cncRiskBreakdown?.items) && cncRiskBreakdown.items.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {cncRiskBreakdown.items.map((item, index) => (
+                              <div key={`${item?.key || 'risk'}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                                <div>
+                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b' }}>{item?.label || 'Risk'}</div>
+                                  <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: 2 }}>
+                                    {item?.comparison === '<='
+                                      ? `Triggered at ${formatMetric(item?.metric_value, 4)} <= ${formatMetric(item?.threshold, 4)}`
+                                      : item?.comparison === '>='
+                                        ? `Triggered at ${formatMetric(item?.metric_value, 3)} >= ${formatMetric(item?.threshold, 3)}`
+                                        : 'Triggered by geometry rule'}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '11px', fontWeight: 900, color: '#c2410c' }}>
+                                  ${formatMetric(item?.surcharge_marked_up ?? item?.surcharge_applied ?? item?.surcharge, 2)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {cncOperationBreakdown.length > 0 && (
+                    <>
+                      <div style={{ height: '1px', background: '#e2e8f0', margin: '16px 0' }} />
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 10 }}>
+                        Operation Breakdown
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {cncOperationBreakdown.map((op, index) => (
+                          <div key={`${op?.operation || 'op'}-${index}`} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                              <div>
+                                <div style={{ fontSize: '12px', fontWeight: 900, color: '#1e293b', textTransform: 'capitalize' }}>
+                                  {op?.operation || 'Operation'}
+                                </div>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: op?.enabled ? '#059669' : '#94a3b8', textTransform: 'uppercase', marginTop: 2 }}>
+                                  {op?.enabled ? `Enabled • ${op?.mode || 'manual'}` : `Skipped • ${op?.mode || 'manual'}`}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 900, color: '#1e293b' }}>
+                                  ${formatMetric(op?.unit_cost_marked_up ?? op?.unit_cost, 2)}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: 2 }}>
+                                  setup {formatMetric(op?.setup_hours, 3)}h
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                                  runtime {formatMetric(op?.runtime_hours_per_part, 3)}h
+                                </div>
+                                {op?.setup_count > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                                    setups {formatMetric(op?.setup_count, 0)} × mult {formatMetric(op?.setup_multiplier, 2)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {!op?.enabled && op?.skip_reason && (
+                              <div style={{ marginTop: 8, fontSize: '10px', color: '#94a3b8', lineHeight: 1.5 }}>
+                                {op.skip_reason}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {enabledCncOps.length === 0 && (
+                        <div style={{ marginTop: 10, fontSize: '11px', fontWeight: 700, color: '#64748b' }}>
+                          No CNC operations were enabled by the current smart rules.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
               <button className="ip-proceed-btn" style={{ marginTop: 24, padding: '16px' }} onClick={handleProceedToReview}>
                 ADD TO CART
