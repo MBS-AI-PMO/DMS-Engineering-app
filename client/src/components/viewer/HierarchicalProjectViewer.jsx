@@ -59,7 +59,15 @@ const HierarchicalProjectViewer = ({
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.72;
+    controls.zoomSpeed = 0.82;
+    controls.panSpeed = 0.82;
+    controls.screenSpacePanning = true;
+    controls.zoomToCursor = true;
     controlsRef.current = controls;
+    renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.style.touchAction = 'none';
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -111,11 +119,17 @@ const HierarchicalProjectViewer = ({
       }
     };
     currentMount.addEventListener('click', handleClick);
+    const handlePointerDown = () => { renderer.domElement.style.cursor = 'grabbing'; };
+    const handlePointerUp = () => { renderer.domElement.style.cursor = 'grab'; };
+    renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('pointerup', handlePointerUp);
 
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
       currentMount.removeEventListener('click', handleClick);
+      renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointerup', handlePointerUp);
       renderer.dispose();
       currentMount.removeChild(renderer.domElement);
     };

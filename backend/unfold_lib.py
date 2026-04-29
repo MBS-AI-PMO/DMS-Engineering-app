@@ -1404,6 +1404,79 @@ def unfold_with_lib(filepath, profile="full"):
             # than true sheet-metal bends.  These are pruned from the graph
             # so they don't appear in the flat pattern.
             root_area = float(fc_shape.Faces[root_idx].Area)
+            root_center_np = _vector_to_np(root_face.CenterOfMass)
+            root_normal_np = _face_normal_np(root_face)
+            _, root_u_vec, root_v_vec = _basis_from_normal(root_normal_np)
+
+            def _root_outer_uv_bounds():
+                """Return an approximate UV envelope for the root face outline."""
+                samples = []
+                try:
+                    for edge in root_face.OuterWire.Edges:
+                        for p in edge.discretize(Number=16):
+                            rel = _vector_to_np(p) - root_center_np
+                            samples.append([
+                                float(np.dot(rel, root_u_vec)),
+                                float(np.dot(rel, root_v_vec)),
+                            ])
+                except Exception:
+                    samples = []
+
+                if not samples:
+                    try:
+                        bb = root_face.BoundBox
+                        corners = [
+                            (bb.XMin, bb.YMin, bb.ZMin),
+                            (bb.XMin, bb.YMin, bb.ZMax),
+                            (bb.XMin, bb.YMax, bb.ZMin),
+                            (bb.XMin, bb.YMax, bb.ZMax),
+                            (bb.XMax, bb.YMin, bb.ZMin),
+                            (bb.XMax, bb.YMin, bb.ZMax),
+                            (bb.XMax, bb.YMax, bb.ZMin),
+                            (bb.XMax, bb.YMax, bb.ZMax),
+                        ]
+                        for x, y, z in corners:
+                            rel = np.array([float(x), float(y), float(z)], dtype=float) - root_center_np
+                            samples.append([
+                                float(np.dot(rel, root_u_vec)),
+                                float(np.dot(rel, root_v_vec)),
+                            ])
+                    except Exception:
+                        return None
+
+                arr = np.asarray(samples, dtype=float)
+                return np.min(arr, axis=0), np.max(arr, axis=0)
+
+            root_uv_bounds = _root_outer_uv_bounds()
+
+            def _node_center_uv(node_id):
+                rel = _vector_to_np(fc_shape.Faces[node_id].CenterOfMass) - root_center_np
+                return np.array([
+                    float(np.dot(rel, root_u_vec)),
+                    float(np.dot(rel, root_v_vec)),
+                ], dtype=float)
+
+            def _is_subtree_interior_to_root(node_ids):
+                """True when every face center sits safely inside the root plate footprint."""
+                if root_uv_bounds is None or not node_ids:
+                    return False
+
+                min_uv, max_uv = root_uv_bounds
+                span_uv = np.maximum(max_uv - min_uv, 1e-6)
+                thickness_value = float(thickness) if thickness else 0.0
+                margin = max(1.0, thickness_value * 1.5)
+                margin = min(margin, float(np.min(span_uv)) * 0.12)
+                safe_min = min_uv + margin
+                safe_max = max_uv - margin
+
+                if np.any(safe_min >= safe_max):
+                    return False
+
+                for node_id in node_ids:
+                    uv = _node_center_uv(node_id)
+                    if not (np.all(uv > safe_min) and np.all(uv < safe_max)):
+                        return False
+                return True
 
             def _subtree_nodes(node):
                 """Collect all descendants of *node* in the directed graph."""
@@ -1432,6 +1505,7 @@ def unfold_with_lib(filepath, profile="full"):
                     return False
 
                 descendants = _subtree_nodes(cyl_node)
+                subtree_nodes = [cyl_node] + descendants
 
                 if not descendants:
                     # Dead-end cylinder with no children — could be a drawn
@@ -1439,6 +1513,14 @@ def unfold_with_lib(filepath, profile="full"):
                     u_range = cyl_face.ParameterRange
                     span_deg = math.degrees(u_range[1] - u_range[0])
                     return span_deg >= 30
+
+                if _is_subtree_interior_to_root(subtree_nodes):
+                    print(
+                        f"[Debug] Collar check: subtree rooted at face {cyl_node} is inside "
+                        f"root footprint - pruning as internal formed feature",
+                        file=sys.stderr,
+                    )
+                    return True
 
                 # Check if ANY descendant planar face is large (a real flange)
                 # Reduced threshold from 0.20 to 0.02 to avoid pruning real flanges on very long parts.
@@ -1453,7 +1535,7 @@ def unfold_with_lib(filepath, profile="full"):
                         # If the face is perpendicular or angled relative to the root, it's very likely a flange
                         dn = desc_face.normalAt(0, 0)
                         desc_normal = _normalize(np.array([float(dn.x), float(dn.y), float(dn.z)]))
-                        alignment = abs(float(np.dot(desc_normal, root_normal)))
+                        alignment = abs(float(np.dot(desc_normal, root_normal_np)))
                         
                         # If not parallel (alignment < 0.95), keep it as a real bend
                         if alignment < 0.95:

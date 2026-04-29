@@ -18,6 +18,157 @@ const toFiniteNumber = (val) => {
     return isFinite(n) ? n : 0;
 };
 
+const getConfigNumber = (config, keys, fallback = 0) => {
+    for (const key of keys) {
+        if (config && config[key] !== undefined && config[key] !== null && config[key] !== '') {
+            const value = parseFloat(config[key]);
+            if (Number.isFinite(value)) return value;
+        }
+    }
+    return fallback;
+};
+
+const toBendLengthInches = (bend) => {
+    const explicitIn = getConfigNumber(bend, ['length_in', 'lengthIn'], NaN);
+    if (Number.isFinite(explicitIn)) return explicitIn;
+    const mm = getConfigNumber(bend, ['length', 'length_mm', 'lengthMm'], 0);
+    return mm / 25.4;
+};
+
+const toBendRadiusInches = (bend) => {
+    const explicitIn = getConfigNumber(bend, ['radius_in', 'radiusIn'], NaN);
+    if (Number.isFinite(explicitIn)) return explicitIn;
+    const mm = getConfigNumber(bend, ['radius', 'radius_mm', 'radiusMm'], 0);
+    return mm / 25.4;
+};
+
+const uniqueRoundedValues = (items, keys, decimals = 3) => {
+    const values = new Set();
+    const list = Array.isArray(items) ? items : [];
+    list.forEach((item) => {
+        const value = getConfigNumber(item, keys, NaN);
+        if (Number.isFinite(value)) values.add(Number(value).toFixed(decimals));
+    });
+    return values;
+};
+
+const getFeatureCount = (techData, pluralKey, countKeys = []) => {
+    if (Array.isArray(techData?.[pluralKey])) return techData[pluralKey].length;
+    for (const key of countKeys) {
+        const value = parseInt(techData?.[key], 10);
+        if (Number.isFinite(value)) return value;
+    }
+    return 0;
+};
+
+const calculateBendingPricing = (config = {}, techData = {}, qty = 1) => {
+    const quantity = Math.max(1, parseInt(qty, 10) || 1);
+    const bends = Array.isArray(techData?.bends) ? techData.bends : [];
+    const bendingUnit = String(config.bending_unit || 'in').toLowerCase();
+    const unitDivisor = bendingUnit === 'mm' ? 25.4 : 1;
+
+    const largeBendThreshold = getConfigNumber(config, ['large_bend_threshold'], 0) / unitDivisor;
+    const medBendThreshold = getConfigNumber(config, ['med_bend_threshold'], 0) / unitDivisor;
+
+    const setupTime = getConfigNumber(config, ['setup_time', 'setup_time_hours', 'setup_time_hr', 'setup_time_per_unique'], 0);
+    const laborRate = getConfigNumber(config, ['labor_rate', 'hourly_rate'], 0);
+    const timePerBendSec = getConfigNumber(config, ['time_per_bend_sec', 'time_per_bend_seconds'], 15);
+    const dailyCapacityHours = getConfigNumber(config, ['daily_capacity_hours', 'daily_capacity_hrs'], 0);
+
+    const smallBendRate = getConfigNumber(config, ['small_bend_rate'], 0);
+    const medBendRate = getConfigNumber(config, ['med_bend_rate'], 0);
+    const largeBendRate = getConfigNumber(config, ['large_bend_rate'], 0);
+    const otherFormedFeatureRate = getConfigNumber(config, ['other_formed_feature_rate'], 0);
+
+    let smallBendCount = 0;
+    let medBendCount = 0;
+    let largeBendCount = 0;
+    let hemCount = getFeatureCount(techData, 'hems', ['hemCount', 'hem_count']);
+    const bendRadii = new Set();
+
+    bends.forEach((bend) => {
+        const name = String(bend?.name || bend?.type || '').toLowerCase();
+        const angle = Math.round(getConfigNumber(bend, ['angle', 'initialAngle', 'included_angle'], 0));
+        const isHem = name.includes('hem') || Math.abs(angle - 180) < 5;
+
+        if (isHem) {
+            hemCount += 1;
+            return;
+        }
+
+        const lengthIn = toBendLengthInches(bend);
+        const radiusIn = toBendRadiusInches(bend);
+        bendRadii.add(radiusIn.toFixed(3));
+
+        if (lengthIn >= largeBendThreshold) {
+            largeBendCount += 1;
+        } else if (lengthIn >= medBendThreshold) {
+            medBendCount += 1;
+        } else {
+            smallBendCount += 1;
+        }
+    });
+
+    const offsets = Array.isArray(techData?.offsets) ? techData.offsets : [];
+    const curls = Array.isArray(techData?.curls) ? techData.curls : [];
+    const offsetCount = getFeatureCount(techData, 'offsets', ['offsetCount', 'offset_count']);
+    const curlCount = getFeatureCount(techData, 'curls', ['curlCount', 'curl_count']);
+    const uniqueOffsets = offsets.length ? uniqueRoundedValues(offsets, ['offset_height', 'offsetHeight', 'height']).size : 0;
+    const uniqueCurls = curls.length ? uniqueRoundedValues(curls, ['radius', 'radius_in', 'radiusIn']).size : 0;
+    const uniqueHems = Array.isArray(techData?.hems)
+        ? uniqueRoundedValues(techData.hems, ['radius', 'radius_in', 'radiusIn']).size
+        : (hemCount > 0 ? 1 : 0);
+
+    const otherFormedFeatureCount = offsetCount + curlCount + hemCount;
+    const uniqueBends = bendRadii.size;
+    const operationRuntime = (timePerBendSec * uniqueBends) / 3600;
+    const setupCost = laborRate * setupTime;
+    const machineCostTotal = quantity * (
+        (smallBendCount * smallBendRate)
+        + (medBendCount * medBendRate)
+        + (largeBendCount * largeBendRate)
+        + (otherFormedFeatureCount * otherFormedFeatureRate)
+    );
+    const totalCost = setupCost + machineCostTotal;
+    const unitCost = totalCost / quantity;
+    const days = dailyCapacityHours > 0
+        ? Math.ceil((setupTime + operationRuntime * quantity) / dailyCapacityHours)
+        : 0;
+
+    return {
+        unitCost,
+        totalCost,
+        setupCost,
+        machineCostTotal,
+        days,
+        variables: {
+            large_bend_threshold_in: largeBendThreshold,
+            med_bend_threshold_in: medBendThreshold,
+            small_bend_count: smallBendCount,
+            med_bend_count: medBendCount,
+            large_bend_count: largeBendCount,
+            offset_count: offsetCount,
+            unique_offsets: uniqueOffsets,
+            curl_count: curlCount,
+            unique_curls: uniqueCurls,
+            hem_count: hemCount,
+            unique_hems: uniqueHems,
+            unique_bends: uniqueBends,
+            setup_time: setupTime,
+            cost_per_small_bend: smallBendRate,
+            cost_per_med_bend: medBendRate,
+            cost_per_large_bend: largeBendRate,
+            cost_per_other_formed_feature: otherFormedFeatureRate,
+            other_formed_feature_count: otherFormedFeatureCount,
+            time_per_bend_seconds: timePerBendSec,
+            operation_runtime: operationRuntime,
+            runtime: operationRuntime,
+            labor_rate: laborRate,
+            daily_capacity_hours: dailyCapacityHours
+        }
+    };
+};
+
 const cleanupPreviewResultCache = () => {
     const now = Date.now();
     for (const [key, entry] of previewResultCache.entries()) {
@@ -963,6 +1114,8 @@ router.post('/calculate', async (req, res) => {
         // ── MAIN SERVICE COST ──────────────────────────────────────────────────
         let main_service_cost = 0;
         const techData = req.body.technical_data || {};
+        let bending_breakdown = null;
+        let skipMainServiceFallback = false;
 
         if (mainService) {
             const sTitle = (mainService.title || "").toLowerCase();
@@ -1060,46 +1213,12 @@ router.post('/calculate', async (req, res) => {
             // Setup Cost = Labor Rate * (Unique Bends) * Setup Time Per Feature
             // Machine Cost = (SmallBends * RateS + MedBends * RateM + LargeBends * RateL + Other * RateO)
             if (isBending && techData.bends && Array.isArray(techData.bends)) {
-                const laborRate = parseFloat(config.labor_rate) || 0;
-                const setupTimePerUnique = parseFloat(config.setup_time_per_unique) || 0;
-
-                const medThreshIn = parseFloat(config.med_bend_threshold) || 0;
-                const largeThreshIn = parseFloat(config.large_bend_threshold) || 0;
-
-                const rateSmall = parseFloat(config.small_bend_rate) || 0;
-                const rateMed = parseFloat(config.med_bend_rate) || 0;
-                const rateLarge = parseFloat(config.large_bend_rate) || 0;
-                const rateOther = parseFloat(config.other_formed_feature_rate) || 0;
-
-                let machineCostPerUnit = 0;
-                const uniqueFeatures = new Set();
-
-                techData.bends.forEach(bend => {
-                    const lenMm = parseFloat(bend.length) || 0;
-                    const lenIn = lenMm / 25.4;
-                    const radMm = Math.round((parseFloat(bend.radius) || 0) * 10) / 10;
-                    const ang = Math.round(parseFloat(bend.angle) || 0);
-
-                    const isHem = Math.abs(ang - 180) < 5;
-                    const type = isHem ? 'hem' : 'standard';
-                    uniqueFeatures.add(`${radMm}_${ang}_${type}`);
-
-                    if (isHem) {
-                        machineCostPerUnit += rateOther;
-                    } else if (lenIn >= largeThreshIn) {
-                        machineCostPerUnit += rateLarge;
-                    } else if (lenIn >= medThreshIn) {
-                        machineCostPerUnit += rateMed;
-                    } else {
-                        machineCostPerUnit += rateSmall;
-                    }
-                });
-
-                const totalUnique = uniqueFeatures.size;
-                const totalSetupCost = totalUnique * setupTimePerUnique * laborRate;
-
-                // Final unit price for bending (Setup amortized + direct machine dollar rates)
-                main_service_cost = (totalSetupCost / qty) + machineCostPerUnit;
+                bending_breakdown = calculateBendingPricing(config, techData, qty);
+                main_service_cost = bending_breakdown.unitCost;
+                skipMainServiceFallback = true;
+                if (bending_breakdown.days > 0) {
+                    lead_days = Math.max(lead_days || 0, bending_breakdown.days);
+                }
             }
 
             // ── CNC MACHINING (Multi-Operation Formula) ──────────────────────
@@ -1138,7 +1257,7 @@ router.post('/calculate', async (req, res) => {
             }
 
             // ── GENERIC SERVICE FALLBACK ──────────────────────────────────────
-            if (main_service_cost === 0) {
+            if (main_service_cost === 0 && !skipMainServiceFallback) {
                 main_service_cost = parseFloat(mainService.base_price) || 0;
             }
         }

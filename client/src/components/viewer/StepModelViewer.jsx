@@ -167,6 +167,29 @@ const resolveStudFitMm = (item) => {
 
 const PREVIEW_MATTE_HEX = 0x767d86;
 const REDUCED_HARDWARE_HEX = 0xC62828;
+const VIEWER_MIN_ZOOM_STEP = 0.04;
+const VIEWER_MAX_ZOOM_STEP = 0.22;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getCoordPoint = (coord) => ({
+  x: Number(coord?.x) || 0,
+  y: Number(coord?.y) || 0,
+  z: Number(coord?.z) || 0,
+});
+
+const setCameraCenter = (camera, point) => {
+  if (!camera?.center || !point) return;
+  camera.center.x = point.x;
+  camera.center.y = point.y;
+  camera.center.z = point.z;
+};
+
+const translateCameraEyeBy = (camera, dx, dy, dz) => {
+  camera.eye.x += dx;
+  camera.eye.y += dy;
+  camera.eye.z += dz;
+};
 
 const StepModelViewer = ({
   selectedFile,
@@ -365,6 +388,7 @@ const StepModelViewer = ({
             try {
               if (typeof viewer.Resize === 'function') viewer.Resize();
               viewer.FitToWindow();
+              setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
               viewer.Render();
             } catch (e) {
               console.debug('Initial FitToWindow/Resize skipped', e);
@@ -380,55 +404,102 @@ const StepModelViewer = ({
 
       viewerInstance.current = viewer;
 
-      // --- Custom Zoom to Cursor Feature ---
-      // Instead of zooming to the center, we raycast to find the point under the cursor
-      // and move both camera eye and center towards it.
-      // We use capture: true to intercept the event before the library's own listener.
+      // --- Viewer interaction polish ---
       const vInst = viewer.GetViewer();
       const nav = vInst?.navigation;
+      const viewerCanvas = nav?.canvas || vInst?.canvas;
+      let cleanupViewerInteraction = () => { };
       if (vInst && vInst.canvas && nav) {
+        const canvas = viewerCanvas || vInst.canvas;
+        const originalOrbit = typeof nav.Orbit === 'function' ? nav.Orbit.bind(nav) : null;
+
+        if (originalOrbit) {
+          nav.Orbit = (angleX, angleY) => {
+            setCameraCenter(nav.GetCamera?.(), centroidRef.current);
+            originalOrbit(angleX * 0.62, angleY * 0.62);
+            setCameraCenter(nav.GetCamera?.(), centroidRef.current);
+          };
+        }
+
+        if (typeof nav.SetNavigationMode === 'function' && OV.NavigationMode?.FixedUpVector !== undefined) {
+          nav.SetNavigationMode(OV.NavigationMode.FixedUpVector);
+        }
+
+        canvas.style.cursor = 'grab';
+        canvas.style.touchAction = 'none';
+
         const handleWheel = (ev) => {
           ev.preventDefault();
           ev.stopImmediatePropagation();
 
-          let delta = -ev.deltaY / 40;
-          let ratio = 0.1;
-          if (delta < 0) ratio = ratio * -1.0;
-
-          // Get mouse coordinates relative to canvas
-          const rect = vInst.canvas.getBoundingClientRect();
+          const zoomIn = ev.deltaY < 0;
+          const zoomStep = clamp(Math.abs(ev.deltaY) * 0.0015, VIEWER_MIN_ZOOM_STEP, VIEWER_MAX_ZOOM_STEP);
+          const ratio = zoomIn ? zoomStep : -zoomStep;
+          const rect = canvas.getBoundingClientRect();
           const mouseCoords = {
             x: ev.clientX - rect.left,
             y: ev.clientY - rect.top
           };
 
-          // Use the viewer's built-in intersection logic (1 = MeshOnly, 2 = MeshAndLine)
           const intersection = vInst.GetMeshIntersectionUnderMouse(2, mouseCoords);
-
           if (intersection && intersection.point) {
-            const p = intersection.point;
             const camera = nav.GetCamera();
             if (camera && camera.eye && camera.center) {
-              // Zoom eye towards the point
-              camera.eye.x += (p.x - camera.eye.x) * ratio;
-              camera.eye.y += (p.y - camera.eye.y) * ratio;
-              camera.eye.z += (p.z - camera.eye.z) * ratio;
-
-              // Move rotation center (pivot) towards the point more aggressively
-              // so that rotation feels natural after zooming in.
-              // 0.3 factor ensures the pivot follows the area of interest.
-              camera.center.x += (p.x - camera.center.x) * 0.3;
-              camera.center.y += (p.y - camera.center.y) * 0.3;
-              camera.center.z += (p.z - camera.center.z) * 0.3;
+              setCameraCenter(camera, centroidRef.current);
+              const eye = getCoordPoint(camera.eye);
+              const hit = getCoordPoint(intersection.point);
+              const ray = new THREE.Vector3(hit.x - eye.x, hit.y - eye.y, hit.z - eye.z);
+              const distanceToHit = ray.length();
+              if (distanceToHit > 1e-6) {
+                ray.normalize();
+                const moveDistance = distanceToHit * ratio;
+                translateCameraEyeBy(
+                  camera,
+                  ray.x * moveDistance,
+                  ray.y * moveDistance,
+                  ray.z * moveDistance
+                );
+                setCameraCenter(camera, centroidRef.current);
+              } else {
+                nav.Zoom(ratio);
+                setCameraCenter(camera, centroidRef.current);
+              }
             }
           } else {
-            // Fallback to central zoom if no mesh is under mouse
             nav.Zoom(ratio);
+            setCameraCenter(nav.GetCamera?.(), centroidRef.current);
           }
           nav.Update();
         };
 
-        vInst.canvas.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+        const handlePointerDown = () => {
+          canvas.style.cursor = 'grabbing';
+        };
+        const handlePointerUp = () => {
+          canvas.style.cursor = 'grab';
+        };
+        const handlePointerLeave = () => {
+          if (!nav?.mouse?.IsButtonDown?.()) {
+            canvas.style.cursor = 'grab';
+          }
+        };
+
+        canvas.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('pointerdown', handlePointerDown);
+        canvas.addEventListener('mouseleave', handlePointerLeave);
+        document.addEventListener('mouseup', handlePointerUp);
+        document.addEventListener('pointerup', handlePointerUp);
+
+        cleanupViewerInteraction = () => {
+          canvas.removeEventListener('wheel', handleWheel, { capture: true });
+          canvas.removeEventListener('mousedown', handlePointerDown);
+          canvas.removeEventListener('pointerdown', handlePointerDown);
+          canvas.removeEventListener('mouseleave', handlePointerLeave);
+          document.removeEventListener('mouseup', handlePointerUp);
+          document.removeEventListener('pointerup', handlePointerUp);
+          if (originalOrbit) nav.Orbit = originalOrbit;
+        };
       }
       const modelFile = selectedFile?.file;
       const modelUrl = modelUrlOverride || selectedFile?.url || selectedFile?.path || modelFile?.path || modelFile?.url;
@@ -462,7 +533,11 @@ const StepModelViewer = ({
             }
 
             setTimeout(() => {
-              try { viewerInstance.current.FitToWindow(); viewerInstance.current.Render(); } catch { console.debug('Resize FitToWindow skipped'); }
+              try {
+                viewerInstance.current.FitToWindow();
+                setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
+                viewerInstance.current.Render();
+              } catch { console.debug('Resize FitToWindow skipped'); }
             }, 50);
           }
         } catch (e) {
@@ -474,6 +549,7 @@ const StepModelViewer = ({
       return () => {
         clearInterval(progressTimer);
         resizeObserver.disconnect();
+        cleanupViewerInteraction();
 
         holeMarkersRef.current.forEach((m) => {
           m.parent?.remove(m);
@@ -511,7 +587,11 @@ const StepModelViewer = ({
       root.position[thicknessAxis] = origPosition[thicknessAxis] + localCenter * (1 - scaleFactor);
     }
     setTimeout(() => {
-      try { viewerInstance.current?.FitToWindow(); viewerInstance.current?.Render(); } catch { console.debug('Scale FitToWindow skipped'); }
+      try {
+        viewerInstance.current?.FitToWindow();
+        setCameraCenter(viewerInstance.current?.GetViewer?.()?.navigation?.GetCamera?.(), centroidRef.current);
+        viewerInstance.current?.Render();
+      } catch { console.debug('Scale FitToWindow skipped'); }
     }, 50);
   }, [selectedThickness, modelLoadCount]);
 
