@@ -1345,20 +1345,48 @@ def unfold_with_lib(filepath, profile="full"):
     potential_roots.sort(key=lambda x: -x["area"])
     
     chosen_root = potential_roots[0]["index"] # Fallback to largest
-    
-    # Try to find a pair of anti-parallel faces with similar large areas
-    for i in range(min(5, len(potential_roots))):
+
+    # Prefer the parallel skin pair aligned to the model's thinnest axis.
+    # Very thick/bent solids can have larger side faces than their true top/bottom
+    # skins; choosing only by area makes the 2D flat view unfold the wrong surface.
+    thin_axis_idx = None
+    try:
+        bb = fc_shape.BoundBox
+        spans = [float(bb.XLength), float(bb.YLength), float(bb.ZLength)]
+        thin_axis_idx = int(np.argmin(np.asarray(spans, dtype=float)))
+    except Exception:
+        thin_axis_idx = None
+
+    best_thin_axis_pair = None
+    best_thin_axis_score = -1.0
+    best_area_pair = None
+    best_area_score = -1.0
+
+    # Try to find a pair of anti-parallel faces with similar areas
+    for i in range(min(20, len(potential_roots))):
         f1 = potential_roots[i]
-        for j in range(i + 1, min(10, len(potential_roots))):
+        for j in range(i + 1, min(30, len(potential_roots))):
             f2 = potential_roots[j]
             # If they are parallel/anti-parallel and have similar areas
             if abs(f1["normal"].dot(f2["normal"])) > 0.99:
                 if abs(f1["area"] - f2["area"]) / max(f1["area"], f2["area"]) < 0.2:
-                    # We found the top/bottom skin pair
-                    chosen_root = f1["index"]
-                    break
-        else: continue
-        break
+                    area_score = min(float(f1["area"]), float(f2["area"]))
+                    if area_score > best_area_score:
+                        best_area_score = area_score
+                        best_area_pair = f1
+
+                    if thin_axis_idx is not None:
+                        n = f1["normal"]
+                        comps = [abs(float(n.x)), abs(float(n.y)), abs(float(n.z))]
+                        axis_score = comps[thin_axis_idx]
+                        if axis_score > 0.85 and area_score > best_thin_axis_score:
+                            best_thin_axis_score = area_score
+                            best_thin_axis_pair = f1
+
+    if best_thin_axis_pair is not None:
+        chosen_root = best_thin_axis_pair["index"]
+    elif best_area_pair is not None:
+        chosen_root = best_area_pair["index"]
     
     success = False
     last_error = None

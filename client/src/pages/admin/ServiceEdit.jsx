@@ -1108,14 +1108,14 @@ export default function ServiceEdit() {
                                                     <label>Daily Capacity (Hours)</label>
                                                     <input
                                                         type="number"
-                                                        value={service.pricing_config?.daily_capacity_hours ?? 8}
+                                                        value={service.pricing_config?.daily_capacity_hours ?? 0}
                                                         onChange={e => {
                                                             const val = e.target.value;
                                                             setService(s => ({
                                                                 ...s,
                                                                 pricing_config: {
                                                                     ...s.pricing_config,
-                                                                    daily_capacity_hours: val === '' ? 8 : (parseFloat(val) || 0)
+                                                                    daily_capacity_hours: val === '' ? 0 : (parseFloat(val) || 0)
                                                                 }
                                                             }));
                                                         }}
@@ -1158,10 +1158,10 @@ export default function ServiceEdit() {
                                             </div>
                                             <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
                                                 {[
-                                                    { label: 'Small Bend Rate ($)', key: 'small_bend_rate' },
-                                                    { label: 'Med Bend Rate ($)', key: 'med_bend_rate' },
-                                                    { label: 'Large Bend Rate ($)', key: 'large_bend_rate' },
-                                                    { label: 'Other Formed Feature Rate ($)', key: 'other_formed_feature_rate' }
+                                                    { label: 'Cost Per Small Bend ($)', key: 'small_bend_rate' },
+                                                    { label: 'Cost Per Med Bend ($)', key: 'med_bend_rate' },
+                                                    { label: 'Cost Per Large Bend ($)', key: 'large_bend_rate' },
+                                                    { label: 'Cost Per Other Formed Feature ($)', key: 'other_formed_feature_rate' }
                                                 ].map(item => (
                                                     <div className="option-input-group" key={item.key}>
                                                         <label>{item.label}</label>
@@ -1215,9 +1215,11 @@ export default function ServiceEdit() {
                                                 <div style={{ fontWeight: 800, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <Info size={12} /> PRICING LOGIC
                                                 </div>
-                                                <code>setup_cost = labor_rate × setup_time</code><br />
-                                                <code>machine_cost = part.qty × (other_formed_feature_count × other_formed_feature_rate + large_bend_count × large_bend_rate + small_bend_count × small_bend_rate + med_bend_count × med_bend_rate)</code><br />
-                                                <code>TOTAL_COST = setup_cost + machine_cost</code>
+                                                <code>setup_cost = labor_rate x setup_time</code><br />
+                                                <code>runtime = unique_bends x time_per_bend_sec / 3600</code><br />
+                                                <code>machine_cost = part.qty x (other_formed_feature_count x other_formed_feature_rate + large_bend_count x large_bend_rate + small_bend_count x small_bend_rate + med_bend_count x med_bend_rate)</code><br />
+                                                <code>TOTAL_COST = setup_cost + machine_cost</code><br />
+                                                <code>DAYS = ceil((setup_time + runtime x part.qty) / daily_capacity_hours)</code>
                                             </div>
                                         </section>
                                     </div>

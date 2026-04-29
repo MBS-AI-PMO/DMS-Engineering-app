@@ -219,10 +219,20 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     // Check for both camelCase and snake_case backend names
     const bendPts = data.bendEdges || data.bend_edges || [];
     let cutPts = data.cutEdges || data.cut_edges || [];
+    const backendBounds = boundsToBox(data.bounds) || null;
+    const flatBounds = unfoldedGeometry.boundingBox?.clone?.() || backendBounds;
+    const flatSize = new THREE.Vector3();
+    if (flatBounds && !flatBounds.isEmpty()) flatBounds.getSize(flatSize);
+    const minFlatSpan = Math.max(0.001, Math.min(
+      Math.abs(flatSize.x || 0),
+      Math.abs(flatSize.y || 0)
+    ));
+    const reportedThickness = Number.parseFloat(data.thickness || 0) || 0;
+    const isLikelyNonSheetFlat = reportedThickness > 0 && reportedThickness > minFlatSpan * 0.45;
 
     // Derive a clean 2D boundary from the flattened mesh to suppress internal
     // face seam lines while preserving true contour/hole edges in display.
-    if (flatVertices.length > 0) {
+    if (flatVertices.length > 0 && !isLikelyNonSheetFlat) {
       try {
         const indexedGeometry = mergeVertices(unfoldedGeometry, 0.001);
         indexedGeometry.computeVertexNormals();
@@ -251,8 +261,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
       topBendEdges,
       frontEdges,
       sideEdges,
-      bounds: unfoldedGeometry.boundingBox.clone(),
-      hasFilledFace: true,
+      bounds: flatBounds?.clone?.() || unfoldedGeometry.boundingBox.clone(),
+      hasFilledFace: !isLikelyNonSheetFlat,
       mode: 'backend',
     };
   }, []);

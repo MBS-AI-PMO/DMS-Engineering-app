@@ -61,6 +61,60 @@ const getFeatureCount = (techData, pluralKey, countKeys = []) => {
     return 0;
 };
 
+const parseServiceIdList = (value) => {
+    if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+};
+
+const thicknessToInches = (thickness = {}) => {
+    const raw = toFiniteNumber(thickness.value ?? thickness.inch ?? thickness.in ?? thickness.thickness);
+    if (raw <= 0) return 0;
+    const metric = String(thickness.metric || thickness.unit || '').toLowerCase();
+    return metric === 'mm' ? raw / 25.4 : raw;
+};
+
+const findThicknessEntry = (metal, thicknessIn) => {
+    const thicknesses = Array.isArray(metal?.quick_look?.thicknesses) ? metal.quick_look.thicknesses : [];
+    if (!thicknesses.length || thicknessIn <= 0) return null;
+    return thicknesses.find((th) => Math.abs(thicknessToInches(th) - thicknessIn) <= 0.001) || null;
+};
+
+const getBendingSupportStatus = (metal, serviceId, thicknessIn) => {
+    if (!metal || !serviceId) return { supported: true, warning: '' };
+
+    const bendServiceId = Number(serviceId);
+    const metalServices = parseServiceIdList(metal.services);
+    const thicknessEntry = findThicknessEntry(metal, thicknessIn);
+    const thicknessServices = parseServiceIdList(thicknessEntry?.services);
+    const hasMetalGrant = metalServices.includes(bendServiceId);
+    const hasThicknessGrant = thicknessServices.includes(bendServiceId);
+    const thicknessLabel = thicknessIn > 0 ? `${thicknessIn.toFixed(3)} in` : 'selected thickness';
+
+    if (!hasMetalGrant && !hasThicknessGrant) {
+        return {
+            supported: false,
+            warning: `Bending is not available for ${metal.name || 'this material'} at ${thicknessLabel}.`
+        };
+    }
+
+    if (metal.is_bendable === false && !hasThicknessGrant) {
+        return {
+            supported: false,
+            warning: `${metal.name || 'This material'} at ${thicknessLabel} is not bendable, so bending cost was removed.`
+        };
+    }
+
+    return { supported: true, warning: '' };
+};
+
 const calculateBendingPricing = (config = {}, techData = {}, qty = 1) => {
     const quantity = Math.max(1, parseInt(qty, 10) || 1);
     const bends = Array.isArray(techData?.bends) ? techData.bends : [];
@@ -1000,6 +1054,7 @@ router.post('/calculate', async (req, res) => {
         const mainService = serviceRes.rows[0] || null;
         const metalConfig = metalConfigRes.rows[0] || null;
         const config = mainService?.pricing_config || {};
+        const pricingWarnings = [];
 
         const metalValidationError = validateMetalBounds({
             metal,
@@ -1208,16 +1263,18 @@ router.post('/calculate', async (req, res) => {
                 }
             }
 
-            // ── BENDING (bending.csv) ─────────────────────────────────────────
-            // cost/unit = (setup_cost / qty) + machine_cost
-            // Setup Cost = Labor Rate * (Unique Bends) * Setup Time Per Feature
-            // Machine Cost = (SmallBends * RateS + MedBends * RateM + LargeBends * RateL + Other * RateO)
+            // BENDING: setup + qty-scaled formed feature costs, with runtime derived from unique bend radii.
             if (isBending && techData.bends && Array.isArray(techData.bends)) {
-                bending_breakdown = calculateBendingPricing(config, techData, qty);
-                main_service_cost = bending_breakdown.unitCost;
                 skipMainServiceFallback = true;
-                if (bending_breakdown.days > 0) {
-                    lead_days = Math.max(lead_days || 0, bending_breakdown.days);
+                const bendSupport = getBendingSupportStatus(metal, mainService.id, thicknessInNum);
+                if (!bendSupport.supported) {
+                    if (bendSupport.warning) pricingWarnings.push(bendSupport.warning);
+                } else {
+                    bending_breakdown = calculateBendingPricing(config, techData, qty);
+                    main_service_cost = bending_breakdown.unitCost;
+                    if (bending_breakdown.days > 0) {
+                        lead_days = Math.max(lead_days || 0, bending_breakdown.days);
+                    }
                 }
             }
 
@@ -1329,44 +1386,19 @@ router.post('/calculate', async (req, res) => {
 
                 // ── BENDING (as additional service) ──────────────────────────
                 if (sTitleLower.includes('bend') && techData && Array.isArray(techData.bends) && techData.bends.length > 0) {
-                    const cfg = s.pricing_config || {};
-                    const laborRate = parseFloat(cfg.labor_rate) || 0;
-                    const setupTimePerUnique = parseFloat(cfg.setup_time_per_unique) || 0;
-                    const medThreshIn = parseFloat(cfg.med_bend_threshold) || 0;
-                    const largeThreshIn = parseFloat(cfg.large_bend_threshold) || 0;
-
-                    const rateSmall = parseFloat(cfg.small_bend_rate) || 0;
-                    const rateMed = parseFloat(cfg.med_bend_rate) || 0;
-                    const rateLarge = parseFloat(cfg.large_bend_rate) || 0;
-                    const rateOther = parseFloat(cfg.other_formed_feature_rate) || 0;
-
-                    let machineCostPerUnit = 0;
-                    const uniqueFeatures = new Set();
-                    const bends = Array.isArray(techData.bends) ? techData.bends : [];
-
-                    bends.forEach(bend => {
-                        const radMm = Math.round((parseFloat(bend.radius) || 0) * 10) / 10;
-                        const ang = Math.round(parseFloat(bend.angle) || 0);
-                        const isHem = Math.abs(ang - 180) < 5;
-                        const type = isHem ? 'HEM' : 'BEND';
-                        const lenIn = (parseFloat(bend.length) || 0) / 25.4;
-
-                        uniqueFeatures.add(`${radMm}_${ang}_${type}`);
-
-                        if (isHem) {
-                            machineCostPerUnit += rateOther;
-                        } else if (lenIn >= largeThreshIn) {
-                            machineCostPerUnit += rateLarge;
-                        } else if (lenIn >= medThreshIn) {
-                            machineCostPerUnit += rateMed;
-                        } else {
-                            machineCostPerUnit += rateSmall;
+                    const bendSupport = getBendingSupportStatus(metal, s.id, thicknessInNum);
+                    if (!bendSupport.supported) {
+                        if (bendSupport.warning) pricingWarnings.push(bendSupport.warning);
+                        continue;
+                    } else {
+                        const cfg = s.pricing_config || {};
+                        const bendPrice = calculateBendingPricing(cfg, techData, qty);
+                        sPrice = bendPrice.unitCost;
+                        bending_breakdown = bendPrice;
+                        if (bendPrice.days > 0) {
+                            lead_days = Math.max(lead_days || 0, bendPrice.days);
                         }
-                    });
-
-                    const totalUnique = uniqueFeatures.size;
-                    const totalSetupCost = totalUnique * setupTimePerUnique * laborRate;
-                    sPrice = (totalSetupCost / qty) + machineCostPerUnit;
+                    }
                 }
 
                 additional_cost += sPrice;
@@ -1514,7 +1546,8 @@ router.post('/calculate', async (req, res) => {
         const warnings = Array.from(new Set([
             ...(boundsWarning ? [boundsWarning] : []),
             ...(laser_warning ? ['Part dimensions or thickness exceed standard limits. Please verify capability.'] : []),
-            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : [])
+            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : []),
+            ...pricingWarnings
         ].filter(Boolean)));
 
         res.json({
@@ -1531,7 +1564,8 @@ router.post('/calculate', async (req, res) => {
                 discount_percent,
                 discount_amount: unit_discount_amount * qty,
                 applied_tier,
-                warnings
+                warnings,
+                bending: bending_breakdown ? bending_breakdown.variables : null
             }
         });
 

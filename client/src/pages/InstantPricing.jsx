@@ -47,6 +47,19 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const parseServiceIds = (value) => {
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const sumSegmentLengths = (flatEdgePoints = []) => {
   if (!Array.isArray(flatEdgePoints) || flatEdgePoints.length < 6) return 0;
   let total = 0;
@@ -454,6 +467,45 @@ const InstantPricing = () => {
     [allServices]
   );
 
+  const selectedThicknessObj = useMemo(() => {
+    if (!selectedMetal || !selectedThickness) return null;
+    return (selectedMetal.quick_look?.thicknesses || []).find(t => String(t.value) === String(selectedThickness)) || null;
+  }, [selectedMetal, selectedThickness]);
+
+  const bendSupportStatus = useMemo(() => {
+    if (!bendService || !selectedMetal) return { supported: false, warning: '' };
+
+    const bendServiceId = Number(bendService.id);
+    const metalServiceIds = parseServiceIds(selectedMetal.services);
+    const thicknessServiceIds = parseServiceIds(selectedThicknessObj?.services);
+    const hasMetalGrant = metalServiceIds.includes(bendServiceId);
+    const hasThicknessGrant = thicknessServiceIds.includes(bendServiceId);
+    const selectedLabel = selectedThicknessDisplay || selectedThickness || 'selected thickness';
+
+    if (!hasMetalGrant && !hasThicknessGrant) {
+      return {
+        supported: false,
+        warning: `Bending is not available for ${selectedMetal.name} at ${selectedLabel}.`
+      };
+    }
+
+    if (selectedMetal.is_bendable === false && !hasThicknessGrant) {
+      return {
+        supported: false,
+        warning: `${selectedMetal.name} at ${selectedLabel} is not bendable, so bending cost was removed.`
+      };
+    }
+
+    return { supported: true, warning: '' };
+  }, [bendService, selectedMetal, selectedThicknessObj, selectedThicknessDisplay, selectedThickness]);
+
+  const quoteAdditionalServices = useMemo(() => {
+    return selectedAdditionalServices.filter((svc) => {
+      const title = String(svc?.title || '').toLowerCase();
+      return !(title.includes('bend') && !bendSupportStatus.supported);
+    });
+  }, [selectedAdditionalServices, bendSupportStatus.supported]);
+
   const bendDisplayPrice = useMemo(() => {
     const rows = priceEstimate?.breakdown?.service_breakdown || [];
     const bendRow = rows.find(r => (r?.name || '').toLowerCase().includes('bend'));
@@ -470,7 +522,13 @@ const InstantPricing = () => {
     const bendCount = bendCountTotal;
     const hasBendingServiceSelected = selectedAdditionalServices.some(s => s.id === bendService.id);
 
-    if (bendCount > 0 && !hasBendingServiceSelected) {
+    if ((bendCount === 0 || !bendSupportStatus.supported) && hasBendingServiceSelected) {
+      setSelectedAdditionalServices(prev => prev.filter(s => s.id !== bendService.id));
+      setSelectedBends({});
+      return;
+    }
+
+    if (bendCount > 0 && bendSupportStatus.supported && !hasBendingServiceSelected) {
       setSelectedAdditionalServices(prev => [...prev, bendService]);
       return;
     }
@@ -479,7 +537,7 @@ const InstantPricing = () => {
       setSelectedAdditionalServices(prev => prev.filter(s => s.id !== bendService.id));
       setSelectedBends({});
     }
-  }, [bendService, bendCountTotal, selectedAdditionalServices]);
+  }, [bendService, bendCountTotal, bendSupportStatus.supported, selectedAdditionalServices]);
 
   useEffect(() => {
     if (!selectedProductionService) return;
@@ -678,7 +736,7 @@ const InstantPricing = () => {
       bendCount: bendList?.length || 0,
       detectedHoles,
       detectedBends,
-      additionalServices: selectedAdditionalServices,
+      additionalServices: quoteAdditionalServices,
       dimensions: displayDimensions,
       dxfSvg: dxfSvg,
       selectedFinishColors,
@@ -1030,7 +1088,7 @@ const InstantPricing = () => {
           length_in: displayDimensions.inches.l,
           height_in: displayDimensions.inches.w,
           quantity: quantity,
-          additional_services: selectedAdditionalServices.map(s => {
+          additional_services: quoteAdditionalServices.map(s => {
             const opt = selectedFinishColors[s.id];
             return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
           }),
@@ -1079,7 +1137,7 @@ const InstantPricing = () => {
     return () => clearTimeout(timeoutId);
     // toast/isCNC are derived — including them triggers unnecessary recalcs on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMetal, selectedProductionService, selectedAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData]);
+  }, [selectedMetal, selectedProductionService, selectedAdditionalServices, quoteAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData]);
 
   // ── Dimension Validation Helper ────────────────────────
 
@@ -2498,9 +2556,6 @@ const InstantPricing = () => {
                                       : null;
                             const isBendService = kind === 'bend';
                             const bendCount = bendList?.length || 0;
-                            const isActive = isBendService
-                              ? bendCount > 0
-                              : selectedAdditionalServices.some(s => s.id === svc.id);
 
                             // Check if the service is assigned globally to the metal
                             let metalSvcsRoot = selectedMetal?.services;
@@ -2520,6 +2575,9 @@ const InstantPricing = () => {
                             const isNoBends = isBendService && bendCount === 0;
 
                             const isUnsupported = (isBendUnsupported || isThicknessLocked || isNoBends);
+                            const isActive = isBendService
+                              ? bendCount > 0 && !isUnsupported
+                              : selectedAdditionalServices.some(s => s.id === svc.id);
                             const lockReason = isBendUnsupported
                               ? `${selectedMetal?.name} is typically not bendable`
                               : isThicknessLocked
@@ -2793,7 +2851,10 @@ const InstantPricing = () => {
                       })()}
 
                       {(() => {
-                        const warnings = priceEstimate?.breakdown?.warnings || [];
+                        const warnings = Array.from(new Set([
+                          ...(priceEstimate?.breakdown?.warnings || []),
+                          ...(bendSupportStatus.warning && bendCountTotal > 0 ? [bendSupportStatus.warning] : [])
+                        ]));
                         if (warnings.length === 0) return null;
                         return (
                           <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 10 }}>
