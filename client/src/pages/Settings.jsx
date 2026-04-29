@@ -6,6 +6,49 @@ import { User, Mail, Phone, MapPin, Lock, Save, Eye, EyeOff, CheckCircle } from 
 import { useAuth } from '../context/AuthContext';
 import { getUserProfile, updateUserProfile, updateUserPassword } from '../utils/api';
 import { useToast } from '../context/ToastContext';
+import Skeleton from '../components/Skeleton';
+
+const SettingsSkeleton = () => (
+    <div className="settings-page">
+        <div className="settings-hero">
+            <div className="container">
+                <div className="settings-hero-content settings-hero-skeleton">
+                    <Skeleton dark variant="rectangle" style={{ width: 64, height: 64, borderRadius: 18, flexShrink: 0 }} />
+                    <div className="settings-skeleton-copy">
+                        <Skeleton dark variant="text" style={{ width: 220, height: 32, marginBottom: 10 }} />
+                        <Skeleton dark variant="text" style={{ width: 320, maxWidth: '70vw', height: 14 }} />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div className="container settings-container">
+            <div className="settings-grid">
+                {[0, 1].map(card => (
+                    <div key={card} className="settings-card settings-card-skeleton">
+                        <div className="settings-card-header">
+                            <Skeleton dark variant="rectangle" style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0 }} />
+                            <div className="settings-skeleton-copy">
+                                <Skeleton dark variant="text" style={{ width: 190, height: 20, marginBottom: 9 }} />
+                                <Skeleton dark variant="text" style={{ width: 240, maxWidth: '100%', height: 12 }} />
+                            </div>
+                        </div>
+
+                        <div className="settings-form">
+                            {[0, 1, 2, 3].map(row => (
+                                <div key={row} className="settings-field">
+                                    <Skeleton dark variant="text" style={{ width: 96, height: 11 }} />
+                                    <Skeleton dark variant="rectangle" style={{ width: '100%', height: row === 3 ? 82 : 45, borderRadius: 11 }} />
+                                </div>
+                            ))}
+                            <Skeleton dark variant="rectangle" style={{ width: 170, height: 44, borderRadius: 11 }} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    </div>
+);
 
 export default function Settings() {
     const { user, loading: authLoading } = useAuth();
@@ -78,15 +121,7 @@ export default function Settings() {
         }
     };
 
-    if (authLoading) {
-        return (
-            <div className="settings-page">
-                <div className="settings-loading">
-                    <div className="settings-spinner" />
-                </div>
-            </div>
-        );
-    }
+    if (authLoading) return <SettingsSkeleton />;
 
     const firstName = user?.name?.split(' ')[0] || 'User';
 

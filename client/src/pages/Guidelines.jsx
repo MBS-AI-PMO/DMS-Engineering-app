@@ -1,16 +1,65 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Info, Loader2 } from 'lucide-react';
+import { CheckCircle2, Info, Loader2, Filter, ChevronRight } from 'lucide-react';
 import { guidelinesData as staticGuidelines } from '../data/guidelinesData';
 import { fetchGuidelines } from '../utils/api';
 import { normalizeGuideline } from '../utils/guidelineUtils';
+
+const GuidelinesSkeleton = () => (
+  <div className="guidelines-page">
+    <section className="guidelines-hero">
+      <div className="container">
+        <div className="skeleton-dark" style={{ width: '60%', height: '60px', marginBottom: '20px', borderRadius: '12px' }}></div>
+        <div className="skeleton-dark" style={{ width: '40%', height: '24px', borderRadius: '8px' }}></div>
+      </div>
+    </section>
+
+    <div className="container guidelines-layout">
+      <aside className="guidelines-sidebar">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="skeleton-dark" style={{ height: '52px', width: '100%', marginBottom: '12px', borderRadius: '12px' }}></div>
+        ))}
+      </aside>
+
+      <main className="guidelines-content">
+        <div className="guidelines-detail">
+          <div className="detail-header" style={{ marginBottom: '40px' }}>
+            <div className="skeleton-dark" style={{ width: '45%', height: '42px', marginBottom: '25px', borderRadius: '10px' }}></div>
+            <div className="skeleton-dark" style={{ width: '100%', height: '48px', borderRadius: '14px' }}></div>
+          </div>
+
+          <div className="detail-body">
+            <div className="skeleton-dark" style={{ width: '100%', height: '20px', marginBottom: '12px', borderRadius: '4px' }}></div>
+            <div className="skeleton-dark" style={{ width: '100%', height: '20px', marginBottom: '12px', borderRadius: '4px' }}></div>
+            <div className="skeleton-dark" style={{ width: '80%', height: '20px', marginBottom: '40px', borderRadius: '4px' }}></div>
+
+            <div className="skeleton-dark" style={{ width: '100%', height: '400px', borderRadius: '24px' }}></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+);
 
 const Guidelines = () => {
   const [activeTab, setActiveTab] = useState(null);
   const [guidelines, setGuidelines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const loadGuidelines = async () => {
@@ -45,40 +94,7 @@ const Guidelines = () => {
 
   const activeData = guidelines.find(item => (item.service_id || item.id) === activeTab);
 
-  if (loading) {
-    return (
-      <div className="guidelines-page">
-        <section className="guidelines-hero">
-          <div className="container">
-            <div className="skeleton-item" style={{ width: '50%', height: '56px', marginBottom: '20px', borderRadius: '12px' }}></div>
-            <div className="skeleton-item" style={{ width: '70%', height: '24px', borderRadius: '8px' }}></div>
-          </div>
-        </section>
-        
-        <div className="container guidelines-layout">
-          <aside className="guidelines-sidebar">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="skeleton-item" style={{ height: '48px', width: '100%', marginBottom: '12px', borderRadius: '10px' }}></div>
-            ))}
-          </aside>
-          
-          <main className="guidelines-content">
-            <div className="guidelines-detail">
-              <div className="detail-header" style={{ marginBottom: '40px' }}>
-                <div className="skeleton-item" style={{ width: '40%', height: '40px', marginBottom: '20px', borderRadius: '8px' }}></div>
-                <div className="skeleton-item" style={{ width: '100%', height: '44px', borderRadius: '12px' }}></div>
-              </div>
-              
-              <div className="detail-body">
-                <div className="skeleton-item" style={{ width: '100%', height: '80px', marginBottom: '30px', borderRadius: '12px' }}></div>
-                <div className="skeleton-item" style={{ width: '100%', height: '350px', borderRadius: '16px' }}></div>
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <GuidelinesSkeleton />;
 
   if (!activeData) return <div className="container p-10 text-center">No guidelines available.</div>;
 
@@ -86,6 +102,15 @@ const Guidelines = () => {
     <div className="guidelines-page">
       {/* Hero Section */}
       <section className="guidelines-hero">
+        <img
+          src="/assets/guidelines-hero.png"
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          className="guidelines-hero-bg"
+        />
+        <div className="guidelines-hero-overlay"></div>
         <div className="container">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -97,6 +122,35 @@ const Guidelines = () => {
           </motion.div>
         </div>
       </section>
+
+      {/* Mobile Dropdown Selector */}
+      <div className="container">
+        <div className="guidelines-mobile-select" ref={dropdownRef} onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+          <Filter className="filter-icon" size={18} />
+          <div className="selected-category-text">
+            {activeData.title}
+          </div>
+          <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
+
+          {isDropdownOpen && (
+            <div className="guidelines-dropdown-menu">
+              {guidelines.map((item) => (
+                <div
+                  key={item.service_id || item.id}
+                  className={`dropdown-item ${activeTab === (item.service_id || item.id) ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveTab(item.service_id || item.id);
+                    setIsDropdownOpen(false);
+                  }}
+                >
+                  {item.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="container guidelines-layout">
         {/* Sidebar */}

@@ -28,14 +28,17 @@ async function setupSettings() {
             { platform: 'instagram', url: 'https://instagram.com', enabled: true }
         ];
 
+        const heroImage = '/assets/hero-home.avif';
+
         // Insert / Update defaults
         await db.query(`
             INSERT INTO site_settings (key, value)
-            VALUES ($1, $2), ($3, $4)
+            VALUES ($1, $2), ($3, $4), ($5, $6)
             ON CONFLICT (key) DO NOTHING
         `, [
             'footer_contact', JSON.stringify(footerContact),
-            'social_links', JSON.stringify(socialLinks)
+            'social_links', JSON.stringify(socialLinks),
+            'hero_image', JSON.stringify(heroImage)
         ]);
 
         console.log('✓ Default settings initialized');

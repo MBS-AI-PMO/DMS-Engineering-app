@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { X, ChevronRight, ChevronLeft, AlertTriangle, CheckCircle } from 'lucide-react';
 import { fetchCategories, fetchMetals } from '../utils/api';
 
@@ -24,6 +24,7 @@ export default function QuoteFlow({ isOpen, onClose, modelDimensions = null }) {
     // Fetch categories on open
     useEffect(() => {
         if (!isOpen) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setStep(0);
         setSelectedCategory(null);
         setSelectedMetal(null);
@@ -34,6 +35,7 @@ export default function QuoteFlow({ isOpen, onClose, modelDimensions = null }) {
     // Fetch metals when category chosen
     useEffect(() => {
         if (!selectedCategory) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
         fetchMetals(selectedCategory.name)
             .then(setMetals)
@@ -129,7 +131,15 @@ export default function QuoteFlow({ isOpen, onClose, modelDimensions = null }) {
                                         <h2 className="qf-title">Select Metal</h2>
                                         <p className="qf-subtitle">{selectedCategory?.name}</p>
                                         {loading ? (
-                                            <div className="qf-loading">Loading metals…</div>
+                                            <div className="qf-grid qf-skeleton-grid" aria-label="Loading metals">
+                                                {[...Array(6)].map((_, idx) => (
+                                                    <div key={idx} className="qf-option-card qf-option-skeleton" aria-hidden="true">
+                                                        <span className="skeleton qf-skeleton-thumb" />
+                                                        <span className="skeleton qf-skeleton-name" />
+                                                        <span className="skeleton qf-skeleton-arrow" />
+                                                    </div>
+                                                ))}
+                                            </div>
                                         ) : (
                                             <div className="qf-grid">
                                                 {metals.map(m => (

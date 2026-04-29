@@ -185,8 +185,22 @@ const Orders = () => {
         return (
             <div className="orders-page">
                 <div className="container">
-                    <div className="skeleton-list">
-                        {[1, 2, 3].map(i => <div key={i} className="skeleton-item" />)}
+                    <div className="orders-header orders-header-skeleton">
+                        <div>
+                            <div className="skeleton orders-skeleton-title" />
+                            <div className="skeleton orders-skeleton-subtitle" />
+                        </div>
+                        <div className="skeleton orders-skeleton-search" />
+                    </div>
+                    <div className="skeleton-list orders-skeleton-list">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="skeleton-item order-card-skeleton">
+                                <div className="skeleton orders-skeleton-pill" />
+                                <div className="skeleton orders-skeleton-pill short" />
+                                <div className="skeleton orders-skeleton-pill" />
+                                <div className="skeleton orders-skeleton-status" />
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -292,6 +306,7 @@ const Orders = () => {
                                                 ? (previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null)
                                                 : (previewItem.item.configured_file_path ? '/' + previewItem.item.configured_file_path : null)
                                         }}
+                                        tempPath={previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null}
                                         configuration={previewItem.mode === 'configured' ? parseConfig(previewItem.item.configuration_json) : {}}
                                     />
                                 </div>

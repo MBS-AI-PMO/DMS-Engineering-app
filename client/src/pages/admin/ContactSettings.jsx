@@ -10,12 +10,14 @@ export default function ContactSettings() {
         top_metals: [],
         navbar_logo: '',
         footer_logo: '',
-        site_logo: ''
+        site_logo: '',
+        hero_image: ''
     });
-    const [uploading, setUploading] = useState({ navbar: false, footer: false, site: false });
+    const [uploading, setUploading] = useState({ navbar: false, footer: false, site: false, hero: false });
     const navbarInputRef = useRef(null);
     const footerInputRef = useRef(null);
     const siteInputRef = useRef(null);
+    const heroInputRef = useRef(null);
     const [allMetals, setAllMetals] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -31,7 +33,8 @@ export default function ContactSettings() {
                     top_metals: data.top_metals || prev.top_metals,
                     navbar_logo: data.navbar_logo || '',
                     footer_logo: data.footer_logo || '',
-                    site_logo: data.site_logo || ''
+                    site_logo: data.site_logo || '',
+                    hero_image: data.hero_image || ''
                 }));
                 setAllMetals(Array.isArray(metals) ? metals : []);
             })
@@ -110,6 +113,15 @@ export default function ContactSettings() {
         } catch (err) {
             toast(`Failed to remove logo: ${err.message}`, 'error');
         }
+    };
+
+    const resolveImagePreview = (value) => {
+        if (!value) return '';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object') {
+            return value.avif || value.webp || value.jpg || value.jpeg || value.png || value.src || '';
+        }
+        return '';
     };
 
     // Metals not yet added
@@ -339,6 +351,32 @@ export default function ContactSettings() {
                                     <input type="file" ref={siteInputRef} hidden onChange={e => handleLogoUpload('site_logo', e.target.files[0])} accept="image/*" />
                                     <button className="admin-btn-secondary full-width" onClick={() => siteInputRef.current?.click()} disabled={uploading.site}>
                                         <UploadCloud size={16} /> Choose Icon
+                                    </button>
+                                </div>
+
+                                {/* Hero Image */}
+                                <div className="logo-upload-item">
+                                    <label>Homepage Hero Image (Auto-Optimized)</label>
+                                    <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 8px' }}>
+                                        Upload once. It is automatically optimized to AVIF/WebP/JPG and saved in DB under hero_image.
+                                    </p>
+                                    <div className="logo-preview-box" style={{ height: 150 }}>
+                                        {resolveImagePreview(settings.hero_image) ? (
+                                            <div className="preview-container">
+                                                <img src={resolveImagePreview(settings.hero_image)} alt="Hero" style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
+                                                <button className="remove-logo-btn" onClick={() => removeLogo('hero_image')}><Trash2 size={14} /></button>
+                                            </div>
+                                        ) : (
+                                            <div className="empty-preview" onClick={() => heroInputRef.current?.click()}>
+                                                <ImageIcon size={24} />
+                                                <span>Upload Hero Image</span>
+                                            </div>
+                                        )}
+                                        {uploading.hero && <div className="upload-overlay"><Loader2 className="spin" /></div>}
+                                    </div>
+                                    <input type="file" ref={heroInputRef} hidden onChange={e => handleLogoUpload('hero_image', e.target.files[0])} accept="image/*" />
+                                    <button className="admin-btn-secondary full-width" onClick={() => heroInputRef.current?.click()} disabled={uploading.hero}>
+                                        <UploadCloud size={16} /> Choose Hero Image
                                     </button>
                                 </div>
                             </div>

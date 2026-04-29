@@ -15,8 +15,10 @@ import {
   unfoldSheetMetal,
 } from '../../utils/geometryUtils';
 
+const DEFAULT_OPTIONS = Object.freeze({});
+
 const FlatPatternViewer = forwardRef(function FlatPatternViewer(
-  { geometries = [], options = {}, backendData, sourceFlatData, formatKind, holes = [], activeHoleId = null },
+  { geometries = [], options = DEFAULT_OPTIONS, backendData, sourceFlatData, formatKind, holes = [], activeHoleId = null },
   ref
 ) {
   const mountRef = useRef(null);
@@ -154,7 +156,22 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     };
     const onWheel = (event) => {
       event.preventDefault();
-      zoomRef.current *= event.deltaY > 0 ? 1.1 : 0.9;
+      if (!cameraRef.current || camera._baseLeft === undefined) return;
+
+      const rect = mount.getBoundingClientRect();
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = (event.clientY - rect.top) / rect.height;
+
+      const oldZoom = zoomRef.current;
+      const newZoom = oldZoom * (event.deltaY > 0 ? 1.1 : 0.9);
+
+      const dWidth = (camera._baseRight - camera._baseLeft) * (newZoom - oldZoom);
+      const dHeight = (camera._baseTop - camera._baseBottom) * (newZoom - oldZoom);
+
+      panRef.current.x -= (nx - 0.5) * dWidth;
+      panRef.current.y += (ny - 0.5) * dHeight;
+
+      zoomRef.current = newZoom;
       updateCamera();
     };
 
@@ -201,14 +218,51 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
 
     // Check for both camelCase and snake_case backend names
     const bendPts = data.bendEdges || data.bend_edges || [];
-    const cutPts = data.cutEdges || data.cut_edges || [];
+    let cutPts = data.cutEdges || data.cut_edges || [];
+    const backendBounds = boundsToBox(data.bounds) || null;
+    const flatBounds = unfoldedGeometry.boundingBox?.clone?.() || backendBounds;
+    const flatSize = new THREE.Vector3();
+    if (flatBounds && !flatBounds.isEmpty()) flatBounds.getSize(flatSize);
+    const minFlatSpan = Math.max(0.001, Math.min(
+      Math.abs(flatSize.x || 0),
+      Math.abs(flatSize.y || 0)
+    ));
+    const reportedThickness = Number.parseFloat(data.thickness || 0) || 0;
+    const isLikelyNonSheetFlat = reportedThickness > 0 && reportedThickness > minFlatSpan * 0.45;
+
+    // Derive a clean 2D boundary from the flattened mesh to suppress internal
+    // face seam lines while preserving true contour/hole edges in display.
+    if (flatVertices.length > 0 && !isLikelyNonSheetFlat) {
+      try {
+        const indexedGeometry = mergeVertices(unfoldedGeometry, 0.001);
+        indexedGeometry.computeVertexNormals();
+        const boundaryGeometry = new THREE.EdgesGeometry(indexedGeometry, 1);
+        const boundaryAttr = boundaryGeometry.getAttribute('position');
+        const boundaryPts = boundaryAttr ? Array.from(boundaryAttr.array) : [];
+        if (boundaryPts.length >= 6) {
+          cutPts = boundaryPts;
+        }
+      } catch {
+        // Keep backend-provided cut points if boundary extraction fails.
+      }
+    }
+
+    // Technical projection layers
+    const topEdges = data.topEdges || [];
+    const topBendEdges = data.topBendEdges || [];
+    const frontEdges = data.frontEdges || [];
+    const sideEdges = data.sideEdges || [];
 
     return {
       unfoldedGeometry,
       cutPts,
       bendPts,
-      bounds: unfoldedGeometry.boundingBox.clone(),
-      hasFilledFace: true,
+      topEdges,
+      topBendEdges,
+      frontEdges,
+      sideEdges,
+      bounds: flatBounds?.clone?.() || unfoldedGeometry.boundingBox.clone(),
+      hasFilledFace: !isLikelyNonSheetFlat,
       mode: 'backend',
     };
   }, []);
@@ -253,8 +307,8 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
   }, []);
 
   // Build and display flat pattern geometry
-  const highlightBends = options.highlightBends;
-  const gridEnabled = options.grid;
+  const highlightBends = !!options?.highlightBends;
+  const gridEnabled = !!options?.grid;
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -328,32 +382,39 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     }
 
     // Cut lines (solid)
-    if (viewData.cutPts.length >= 6) {
+    const activeCutPts = viewData.cutPts;
+
+    if (activeCutPts.length >= 6) {
       const cutGeometry = new THREE.BufferGeometry();
       cutGeometry.setAttribute(
         'position',
-        new THREE.Float32BufferAttribute(viewData.cutPts, 3)
+        new THREE.Float32BufferAttribute(activeCutPts, 3)
       );
       group.add(
         new THREE.LineSegments(
           cutGeometry,
-          new THREE.LineBasicMaterial({ color: 0x1f2937, linewidth: 1 })
+          new THREE.LineBasicMaterial({ color: 0x111827, linewidth: 1 })
         )
       );
     }
 
     // Bend lines (dashed)
-    if (viewData.bendPts.length >= 6) {
+    const activeBendPts = viewData.bendPts;
+
+    if (activeBendPts.length >= 6) {
       const bendGeometry = new THREE.BufferGeometry();
       bendGeometry.setAttribute(
         'position',
-        new THREE.Float32BufferAttribute(viewData.bendPts, 3)
+        new THREE.Float32BufferAttribute(activeBendPts, 3)
       );
+
+      // Professional Cyan (0x0ed6e6) for all bend lines
+      const bendColor = highlightBends ? 0xff0000 : 0x0ed6e6;
 
       const bendLine = new THREE.LineSegments(
         bendGeometry,
         new THREE.LineDashedMaterial({
-          color: highlightBends ? 0xff0000 : 0x4b5563, // Brighter red for highlight
+          color: bendColor,
           dashSize: maxDim * (highlightBends ? 0.05 : 0.018),
           gapSize: maxDim * (highlightBends ? 0.02 : 0.012),
           linewidth: highlightBends ? 4 : 2,
@@ -415,8 +476,9 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
     gridEnabled,
     backendData,
     sourceFlatData,
-    holes,          // Added dependency
-    activeHoleId,   // Added dependency
+    holes,
+    activeHoleId,
+    formatKind,
     fitCamera,
     buildFromBackend,
     buildFromSource,

@@ -17,7 +17,7 @@ const Footer = () => {
             { platform: 'instagram', url: '#', enabled: true }
         ],
         top_metals: [],
-        footer_logo: localStorage.getItem('footer_logo') || ''
+        footer_logo: localStorage.getItem('footer_logo') || '/logo.webp'
     });
     const [nlEmail, setNlEmail] = useState('');
     const [nlLoading, setNlLoading] = useState(false);
@@ -84,7 +84,7 @@ const Footer = () => {
                     >
                         <Link to="/" className="footer-logo">
                             <img
-                                src={settings.footer_logo || "/logo.png"}
+                                src={settings.footer_logo || "/logo.webp"}
                                 alt="DMS Logo" className="footer-logo-img" loading="lazy" decoding="async"
                             />
                             <span className="footer-tagline">Precision. Quality. DMS.</span>

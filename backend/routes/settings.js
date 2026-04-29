@@ -4,6 +4,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { optimizeImage, optimizeHeroImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
@@ -25,13 +26,13 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    limits: { fileSize: 12 * 1024 * 1024 }, // 12MB limit for large hero uploads
     fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|svg|webp|gif/;
+        const allowedTypes = /jpeg|jpg|png|svg|webp|gif|avif/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
         if (extname && mimetype) return cb(null, true);
-        cb(new Error('Only images (jpg, png, svg, webp, gif) are allowed'));
+        cb(new Error('Only images (jpg, png, svg, webp, avif, gif) are allowed'));
     }
 });
 
@@ -107,7 +108,24 @@ router.post('/upload-logo', authenticate, requireAdmin, upload.single('logo'), a
             return res.status(400).json({ success: false, error: 'Setting key is required' });
         }
 
-        const logoPath = `/uploads/logos/${req.file.filename}`;
+        let valueToSave;
+
+        if (key === 'hero_image') {
+            const heroFiles = await optimizeHeroImage(req.file.path);
+            if (heroFiles?.avif || heroFiles?.webp || heroFiles?.jpg) {
+                valueToSave = {
+                    avif: heroFiles.avif ? `/uploads/logos/${heroFiles.avif}` : '',
+                    webp: heroFiles.webp ? `/uploads/logos/${heroFiles.webp}` : '',
+                    jpg: heroFiles.jpg ? `/uploads/logos/${heroFiles.jpg}` : '',
+                };
+            } else {
+                valueToSave = heroFiles?.src ? `/uploads/logos/${heroFiles.src}` : `/uploads/logos/${path.basename(req.file.path)}`;
+            }
+        } else {
+            // Optimize logos (converts to WebP, resizes, strips metadata)
+            const optimizedFilename = await optimizeImage(req.file.path);
+            valueToSave = `/uploads/logos/${optimizedFilename}`;
+        }
 
         // Update database
         await db.query(`
@@ -115,9 +133,9 @@ router.post('/upload-logo', authenticate, requireAdmin, upload.single('logo'), a
             VALUES ($1, $2)
             ON CONFLICT (key) DO UPDATE 
             SET value = $2, updated_at = CURRENT_TIMESTAMP
-        `, [key, JSON.stringify(logoPath)]);
+        `, [key, JSON.stringify(valueToSave)]);
 
-        res.json({ success: true, data: logoPath });
+        res.json({ success: true, data: valueToSave });
     } catch (err) {
         console.error('Error uploading logo:', err);
         res.status(500).json({ success: false, error: 'Failed to upload logo' });

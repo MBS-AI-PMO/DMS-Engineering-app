@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Layers, Plus, Trash2, Pencil, X, Info, ChevronRight, Package } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Layers, Plus, Trash2, Pencil, X, Info, Package, Ruler } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchSheetCostRates, createSheetCostRate, updateSheetCostRate, deleteSheetCostRate, fetchCategories } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
-const EMPTY_FORM = { family: '', min_thick: '', max_thick: '', ga: '', sheet_cost_4x8: '' };
+const INCH_TO_MM = 25.4;
+const EMPTY_FORM = { family: '', thickness_in: '', thickness_mm: '', ga: '', sheet_cost_4x8: '', sheet_cost_5x10: '' };
 
 const INP = { width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontWeight: 600, fontSize: '0.9rem', background: 'white', color: '#1e293b', outline: 'none' };
 
@@ -14,15 +15,36 @@ function fmt(val, decimals = 4) {
     return parseFloat(n.toFixed(decimals)).toString();
 }
 
+function parseNum(val) {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+}
+
+function getThicknessIn(row) {
+    const candidates = [row?.thickness, row?.max_thick, row?.min_thick];
+    for (const candidate of candidates) {
+        const n = parseNum(candidate);
+        if (n != null) return n;
+    }
+    return null;
+}
+
+
+
+function normalizeFamily(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
 export default function SheetCostRatesAdmin() {
+    const MotionDiv = motion.div;
     const toast = useToast();
-    const [rates, setRates]           = useState([]);
+    const [rates, setRates] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [loading, setLoading]       = useState(true);
-    const [saving, setSaving]         = useState(false);
-    const [modalOpen, setModalOpen]   = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
     const [editingRow, setEditingRow] = useState(null);
-    const [form, setForm]             = useState(EMPTY_FORM);
+    const [form, setForm] = useState(EMPTY_FORM);
 
     const load = useCallback(async () => {
         try {
@@ -39,37 +61,86 @@ export default function SheetCostRatesAdmin() {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        fetchCategories().then(data => setCategories(data || [])).catch(() => {});
+        fetchCategories().then(data => setCategories(data || [])).catch(() => { });
     }, []);
 
     const openNew = () => { setEditingRow(null); setForm(EMPTY_FORM); setModalOpen(true); };
 
     const openEdit = (row) => {
+        const thicknessIn = getThicknessIn(row);
+        const thicknessMm = thicknessIn != null ? thicknessIn * INCH_TO_MM : null;
         setEditingRow(row);
         setForm({
-            family:         row.family,
-            min_thick:      fmt(row.min_thick, 6),
-            max_thick:      fmt(row.max_thick, 6),
-            ga:             row.ga != null ? String(row.ga) : '',
-            sheet_cost_4x8: fmt(row.sheet_cost_4x8, 4),
+            family: row.family || '',
+            thickness_in: thicknessIn != null ? fmt(thicknessIn, 6) : '',
+            thickness_mm: thicknessMm != null ? fmt(thicknessMm, 3) : '',
+            ga: row.ga != null ? String(row.ga) : '',
+            sheet_cost_4x8: row.sheet_cost_4x8 != null ? fmt(row.sheet_cost_4x8, 4) : '',
+            sheet_cost_5x10: row.sheet_cost_5x10 != null ? fmt(row.sheet_cost_5x10, 4) : '',
         });
         setModalOpen(true);
     };
 
     const closeModal = () => { setModalOpen(false); setEditingRow(null); setForm(EMPTY_FORM); };
 
+    const handleThicknessInChange = (value) => {
+        const parsedIn = parseNum(value);
+        setForm(prev => ({
+            ...prev,
+            thickness_in: value,
+            thickness_mm: value === '' ? '' : parsedIn == null ? prev.thickness_mm : fmt(parsedIn * INCH_TO_MM, 3)
+        }));
+    };
+
+    const handleThicknessMmChange = (value) => {
+        const parsedMm = parseNum(value);
+        setForm(prev => ({
+            ...prev,
+            thickness_mm: value,
+            thickness_in: value === '' ? '' : parsedMm == null ? prev.thickness_in : fmt(parsedMm / INCH_TO_MM, 6)
+        }));
+    };
+
     const handleSave = async () => {
-        if (!form.family || form.min_thick === '' || form.max_thick === '' || form.sheet_cost_4x8 === '') {
-            toast('Family, thickness range, and sheet cost are required.', 'error');
+        const thicknessIn = parseNum(form.thickness_in);
+        const thicknessMm = parseNum(form.thickness_mm);
+        const resolvedThicknessIn = thicknessIn != null ? thicknessIn : (thicknessMm != null ? (thicknessMm / INCH_TO_MM) : null);
+        const cost4x8 = parseNum(form.sheet_cost_4x8);
+        const cost5x10 = parseNum(form.sheet_cost_5x10);
+        const parsedGauge = form.ga === '' ? null : parseInt(form.ga, 10);
+
+        if (!form.family || resolvedThicknessIn == null || (cost4x8 == null && cost5x10 == null)) {
+            toast('Family, thickness, and at least one sheet cost are required.', 'error');
             return;
         }
+        if (resolvedThicknessIn <= 0) {
+            toast('Thickness must be greater than zero.', 'error');
+            return;
+        }
+        if ((cost4x8 != null && cost4x8 < 0) || (cost5x10 != null && cost5x10 < 0)) {
+            toast('Sheet costs cannot be negative.', 'error');
+            return;
+        }
+        if (form.ga !== '' && !Number.isFinite(parsedGauge)) {
+            toast('Gauge must be a whole number.', 'error');
+            return;
+        }
+
+        const payload = {
+            family: form.family,
+            thickness: resolvedThicknessIn,
+            ga: parsedGauge,
+            sheet_cost_4x8: cost4x8 || 0,
+            sheet_cost_5x10: cost5x10 || 0,
+        };
+
         try {
             setSaving(true);
             if (editingRow) {
-                await updateSheetCostRate(editingRow.id, form);
+                await updateSheetCostRate(editingRow.id, payload);
                 toast('Sheet cost updated.', 'success');
             } else {
-                await createSheetCostRate(form);
+                await createSheetCostRate(payload);
                 toast('Sheet cost added.', 'success');
             }
             closeModal();
@@ -92,13 +163,82 @@ export default function SheetCostRatesAdmin() {
         }
     };
 
-    // Group by family for display
-    const grouped = rates.reduce((acc, r) => {
-        if (!acc[r.family]) acc[r.family] = [];
-        acc[r.family].push(r);
-        return acc;
-    }, {});
-    const families = Object.keys(grouped);
+    const grouped = useMemo(() => {
+        const groupedByFamily = {};
+        for (const row of rates) {
+            const family = row.family || 'Uncategorized';
+            if (!groupedByFamily[family]) groupedByFamily[family] = [];
+            groupedByFamily[family].push(row);
+        }
+
+        for (const family of Object.keys(groupedByFamily)) {
+            groupedByFamily[family].sort((a, b) => {
+                const aTh = getThicknessIn(a);
+                const bTh = getThicknessIn(b);
+                if (aTh == null && bTh == null) return 0;
+                if (aTh == null) return 1;
+                if (bTh == null) return -1;
+                return aTh - bTh;
+            });
+        }
+
+        return groupedByFamily;
+    }, [rates]);
+
+    const families = useMemo(() => Object.keys(grouped), [grouped]);
+
+    const gaugeByCategory = useMemo(() => {
+        const categoryNameByKey = new Map();
+        for (const category of categories) {
+            const categoryName = String(category?.name || '').trim();
+            if (!categoryName) continue;
+            categoryNameByKey.set(normalizeFamily(categoryName), categoryName);
+        }
+
+        const statsByKey = new Map();
+        for (const row of rates) {
+            const family = String(row?.family || '').trim();
+            if (!family) continue;
+            const key = normalizeFamily(family);
+            if (!statsByKey.has(key)) {
+                statsByKey.set(key, {
+                    family,
+                    entryCount: 0,
+                    gauges: [],
+                });
+            }
+
+            const stat = statsByKey.get(key);
+            stat.entryCount += 1;
+            const ga = parseNum(row.ga);
+            if (ga != null) stat.gauges.push(ga);
+        }
+
+        const orderedKeys = [];
+        const seenKeys = new Set();
+        const pushKey = (key) => {
+            if (!key || seenKeys.has(key)) return;
+            seenKeys.add(key);
+            orderedKeys.push(key);
+        };
+
+        for (const key of categoryNameByKey.keys()) pushKey(key);
+        for (const key of statsByKey.keys()) pushKey(key);
+
+        return orderedKeys.map((key) => {
+            const stat = statsByKey.get(key);
+            const gauges = stat?.gauges || [];
+            const minGauge = gauges.length > 0 ? Math.min(...gauges) : null;
+            const maxGauge = gauges.length > 0 ? Math.max(...gauges) : null;
+
+            return {
+                family: stat?.family || categoryNameByKey.get(key) || key,
+                entryCount: stat?.entryCount || 0,
+                minGauge,
+                maxGauge,
+            };
+        });
+    }, [categories, rates]);
 
     return (
         <div className="admin-page-wrapper">
@@ -106,7 +246,7 @@ export default function SheetCostRatesAdmin() {
             <header className="admin-page-header">
                 <div>
                     <h1 className="admin-page-title">Sheet Material Costs</h1>
-                    <p className="admin-page-subtitle">4×8 sheet price per material family and thickness range — used to calculate material cost per part.</p>
+                    <p className="admin-page-subtitle">5x10 sheet price per material family and thickness, shown in both inches and millimeters.</p>
                 </div>
                 <button
                     onClick={openNew}
@@ -129,8 +269,8 @@ export default function SheetCostRatesAdmin() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {[
                             { step: '1', label: 'Part dimensions come from the uploaded file', sub: 'length, width, and thickness are all known' },
-                            { step: '2', label: 'Look up sheet cost for this metal + thickness', sub: 'matches family AND min_thick < part < max_thick' },
-                            { step: '3', label: 'Calculate how many parts fit on one 4×8 sheet', sub: 'accounting for edge buffer, part gap, and kerf' },
+                            { step: '2', label: 'Look up sheet cost by metal category and thickness', sub: 'uses category first, then nearest configured thickness if needed' },
+                            { step: '3', label: 'Calculate how many parts fit on one 5x10 sheet', sub: 'accounting for edge buffer, part gap, and kerf' },
                             { step: '4', label: 'Material cost = sheet cost ÷ parts per sheet', sub: 'each part pays its proportional share' },
                         ].map(s => (
                             <div key={s.step} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -155,21 +295,43 @@ export default function SheetCostRatesAdmin() {
                     <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.9 }}>
                         <div><span style={{ color: '#38bdf8' }}>buffered_L</span> = part_L + 0.0625 + 0.01</div>
                         <div><span style={{ color: '#38bdf8' }}>buffered_W</span> = part_W + 0.0625 + 0.01</div>
-                        <div><span style={{ color: '#38bdf8' }}>usable_L</span> = 96 − 2×0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 95.8125)</span></div>
-                        <div><span style={{ color: '#38bdf8' }}>usable_W</span> = 48 − 2×0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 47.8125)</span></div>
-                        <div style={{ marginTop: 4 }}><span style={{ color: '#34d399' }}>pps</span> = floor(usable_L / buffered_L) <span style={{ color: '#6366f1' }}>×</span> floor(usable_W / buffered_W)</div>
-                        <div><span style={{ color: '#f59e0b' }}>cost/unit</span> = sheet_cost_4x8 <span style={{ color: '#6366f1' }}>÷</span> pps</div>
+                        <div><span style={{ color: '#38bdf8' }}>usable_L</span> = 120 - 2*0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 119.8125)</span></div>
+                        <div><span style={{ color: '#38bdf8' }}>usable_W</span> = 60 - 2*0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 59.8125)</span></div>
+                        <div style={{ marginTop: 4 }}><span style={{ color: '#34d399' }}>pps</span> = floor(usable_L / buffered_L) * floor(usable_W / buffered_W)</div>
+                        <div><span style={{ color: '#f59e0b' }}>cost/unit</span> = sheet_cost_5x10 / pps</div>
                     </div>
                     <div style={{ marginTop: 14, padding: '10px 14px', background: '#1e293b', borderRadius: 10, border: '1px solid #334155' }}>
                         <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Example</div>
                         <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.8 }}>
-                            Part: 10″ × 5″ &nbsp;|&nbsp; Sheet cost: $50<br />
-                            buffered: 10.0725 × 5.0725<br />
-                            pps = floor(95.8125/10.0725) × floor(47.8125/5.0725) = <span style={{ color: '#34d399' }}>9 × 9 = 81</span><br />
-                            <strong style={{ color: '#f59e0b' }}>cost/unit = $50 ÷ 81 = $0.62</strong>
+                            Part: 10in x 5in | Sheet cost: $90<br />
+                            buffered: 10.0725 x 5.0725<br />
+                            pps = floor(119.8125/10.0725) * floor(59.8125/5.0725) = <span style={{ color: '#34d399' }}>11 * 11 = 121</span><br />
+                            <strong style={{ color: '#f59e0b' }}>cost/unit = $90 / 121 = $0.74</strong>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* ── Gauge summary by category ── */}
+            <div style={{ marginBottom: 20, padding: '16px 18px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <Ruler size={15} color="#334155" />
+                    <strong style={{ fontSize: '0.86rem', color: '#1e293b' }}>Gauge range by metal category</strong>
+                </div>
+                {gaugeByCategory.length === 0 ? (
+                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>No category gauge data yet.</div>
+                ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                        {gaugeByCategory.map((item) => (
+                            <div key={item.family} style={{ padding: '10px 12px', borderRadius: 10, background: 'white', border: '1px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 700, marginBottom: 4 }}>{item.family}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#475569' }}>Min GA: <strong>{item.minGauge != null ? item.minGauge : 'N/A'}</strong></div>
+                                <div style={{ fontSize: '0.75rem', color: '#475569' }}>Max GA: <strong>{item.maxGauge != null ? item.maxGauge : 'N/A'}</strong></div>
+                                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{item.entryCount} sheet cost row(s)</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* ── Important note ── */}
@@ -177,17 +339,39 @@ export default function SheetCostRatesAdmin() {
                 <Info size={15} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
                 <div style={{ fontSize: '0.82rem', color: '#1e40af', lineHeight: 1.5 }}>
                     <strong>Family must match the metal's category name exactly</strong> (e.g. "Aluminum", "Stainless Steel").
-                    Go to <strong>Metals → edit a metal</strong> to see its category. Entries are matched by
-                    <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: 4, margin: '0 3px' }}>min_thick &lt; part_thickness</code>
-                    AND
-                    <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: 4, margin: '0 3px' }}>max_thick ≥ part_thickness</code>.
+                    Go to <strong>Metals &gt; edit a metal</strong> to see its category.
+                    Thickness is entered as a single value and shown in both inches and mm.
                 </div>
             </div>
 
             {/* ── Table ── */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 {loading ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
+                    <div style={{ padding: '16px 18px' }}>
+                        {[...Array(6)].map((_, i) => (
+                            <div
+                                key={`sheet-skel-${i}`}
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1.1fr 0.8fr 0.9fr 0.9fr 1fr 0.8fr',
+                                    gap: 14,
+                                    alignItems: 'center',
+                                    padding: '14px 6px',
+                                    borderBottom: i < 5 ? '1px solid #f8fafc' : 'none',
+                                }}
+                            >
+                                <div className="skeleton-box" style={{ width: '68%', height: 24, borderRadius: 999 }} />
+                                <div className="skeleton-box" style={{ width: '44%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '52%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '52%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '62%', height: 16 }} />
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : rates.length === 0 ? (
                     <div style={{ padding: '70px', textAlign: 'center', color: '#94a3b8' }}>
                         <Package size={36} color="#e2e8f0" style={{ marginBottom: 14 }} />
@@ -198,9 +382,13 @@ export default function SheetCostRatesAdmin() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                {['Family', 'Gauge (GA)', 'Min Thick (in)', 'Max Thick (in)', 'Sheet Cost 4×8 ($)', 'Actions'].map(h => (
-                                    <th key={h} style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>{h}</th>
-                                ))}
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Family</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Gauge (GA)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (in)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (mm)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 4x8 ($)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 5x10 ($)</th>
+                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -226,22 +414,37 @@ export default function SheetCostRatesAdmin() {
                                         <td style={{ padding: '16px 24px' }}>
                                             {row.ga != null
                                                 ? <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>GA {row.ga}</span>
-                                                : <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>—</span>
+                                                : <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>N/A</span>
                                             }
                                         </td>
 
-                                        {/* Thickness range */}
+                                        {/* Thickness in */}
                                         <td style={{ padding: '16px 24px', fontFamily: 'monospace', fontWeight: 600, color: '#475569', fontSize: '0.9rem' }}>
-                                            {fmt(row.min_thick, 4)}
-                                        </td>
-                                        <td style={{ padding: '16px 24px', fontFamily: 'monospace', fontWeight: 600, color: '#475569', fontSize: '0.9rem' }}>
-                                            {fmt(row.max_thick, 4)}
+                                            {(() => {
+                                                const thicknessIn = getThicknessIn(row);
+                                                return thicknessIn != null ? fmt(thicknessIn, 4) : 'N/A';
+                                            })()}
                                         </td>
 
-                                        {/* Sheet cost */}
+                                        {/* Thickness mm */}
+                                        <td style={{ padding: '16px 24px', fontFamily: 'monospace', fontWeight: 600, color: '#475569', fontSize: '0.9rem' }}>
+                                            {(() => {
+                                                const thicknessIn = getThicknessIn(row);
+                                                return thicknessIn != null ? fmt(thicknessIn * INCH_TO_MM, 3) : 'N/A';
+                                            })()}
+                                        </td>
+
+                                        {/* Sheet cost 4x8 */}
                                         <td style={{ padding: '16px 24px' }}>
-                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '1rem' }}>
-                                                ${parseFloat(row.sheet_cost_4x8).toFixed(2)}
+                                            <span style={{ fontWeight: 700, color: '#64748b', fontSize: '0.95rem' }}>
+                                                {row.sheet_cost_4x8 != null && parseFloat(row.sheet_cost_4x8) > 0 ? `$${parseFloat(row.sheet_cost_4x8).toFixed(2)}` : '—'}
+                                            </span>
+                                        </td>
+
+                                        {/* Sheet cost 5x10 */}
+                                        <td style={{ padding: '16px 24px' }}>
+                                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
+                                                {row.sheet_cost_5x10 != null && parseFloat(row.sheet_cost_5x10) > 0 ? `$${parseFloat(row.sheet_cost_5x10).toFixed(2)}` : '—'}
                                             </span>
                                         </td>
 
@@ -274,7 +477,7 @@ export default function SheetCostRatesAdmin() {
             <AnimatePresence>
                 {modalOpen && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-                        <motion.div
+                        <MotionDiv
                             initial={{ opacity: 0, scale: 0.95, y: 14 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 14 }}
@@ -288,7 +491,7 @@ export default function SheetCostRatesAdmin() {
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.95rem' }}>{editingRow ? 'Edit Sheet Cost' : 'Add Sheet Cost'}</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>One row per gauge / thickness range</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>One row per category + gauge + thickness</div>
                                     </div>
                                 </div>
                                 <button onClick={closeModal} style={{ width: 30, height: 30, borderRadius: 8, background: '#f1f5f9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -317,26 +520,34 @@ export default function SheetCostRatesAdmin() {
                                     </div>
                                 </div>
 
-                                {/* Thickness range */}
+                                {/* Thickness point */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Min Thickness (in)</label>
-                                        <input type="number" step="any" value={form.min_thick} onChange={e => setForm(f => ({ ...f, min_thick: e.target.value }))} placeholder="e.g. 0.0" style={INP} />
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Thickness (in)</label>
+                                        <input type="number" step="any" min="0" value={form.thickness_in} onChange={e => handleThicknessInChange(e.target.value)} placeholder="e.g. 0.125" style={INP} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Max Thickness (in)</label>
-                                        <input type="number" step="any" value={form.max_thick} onChange={e => setForm(f => ({ ...f, max_thick: e.target.value }))} placeholder="e.g. 0.06" style={INP} />
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Thickness (mm)</label>
+                                        <input type="number" step="any" min="0" value={form.thickness_mm} onChange={e => handleThicknessMmChange(e.target.value)} placeholder="e.g. 3.175" style={INP} />
                                     </div>
                                 </div>
                                 <div style={{ padding: '8px 12px', background: '#f0f9ff', borderRadius: 8, fontSize: '0.75rem', color: '#0369a1', border: '1px solid #bae6fd' }}>
-                                    Rule matches when: <code style={{ background: '#e0f2fe', padding: '1px 5px', borderRadius: 4 }}>min_thick &lt; part_thickness</code> AND <code style={{ background: '#e0f2fe', padding: '1px 5px', borderRadius: 4 }}>max_thick ≥ part_thickness</code>
+                                    Enter thickness in either inches or mm. Both inputs stay synchronized.
                                 </div>
 
-                                {/* Sheet cost */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 4×8 ($)</label>
-                                    <input type="number" step="0.01" min="0" value={form.sheet_cost_4x8} onChange={e => setForm(f => ({ ...f, sheet_cost_4x8: e.target.value }))} placeholder="e.g. 48.50" style={{ ...INP, fontWeight: 700 }} />
-                                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: 4, display: 'block' }}>Price of one 4 ft × 8 ft (96″ × 48″) sheet</span>
+                                {/* Sheet costs */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 4x8 ($)</label>
+                                        <input type="number" step="0.01" min="0" value={form.sheet_cost_4x8} onChange={e => setForm(f => ({ ...f, sheet_cost_4x8: e.target.value }))} placeholder="e.g. 60.00" style={INP} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 5x10 ($)</label>
+                                        <input type="number" step="0.01" min="0" value={form.sheet_cost_5x10} onChange={e => setForm(f => ({ ...f, sheet_cost_5x10: e.target.value }))} placeholder="e.g. 90.00" style={{ ...INP, fontWeight: 700 }} />
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
+                                    Prices for standard 4x8 (48"x96") and 5x10 (60"x120") sheets.
                                 </div>
                             </div>
 
@@ -349,7 +560,7 @@ export default function SheetCostRatesAdmin() {
                                     {saving ? 'Saving…' : editingRow ? 'Save Changes' : 'Add Rate'}
                                 </button>
                             </div>
-                        </motion.div>
+                        </MotionDiv>
                     </div>
                 )}
             </AnimatePresence>

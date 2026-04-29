@@ -29,6 +29,21 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       include: ['occt-import-js'],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor-react';
+              if (id.includes('three')) return 'vendor-three';
+              if (id.includes('framer-motion')) return 'vendor-motion';
+              if (id.includes('online-3d-viewer')) return 'vendor-ov';
+              return 'vendor';
+            }
+          },
+        },
+      },
+    },
     server: {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
@@ -40,6 +55,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/uploads': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/temp_uploads': {
           target: apiTarget,
           changeOrigin: true,
         }

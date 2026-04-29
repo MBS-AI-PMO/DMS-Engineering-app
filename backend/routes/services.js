@@ -91,7 +91,7 @@ router.get('/usage', async (req, res) => {
     }
 });
 
-// GET /api/services/:id/metals — Metals using a specific service
+// GET /api/services/:id/metals — Metals using a specific service (full data for frontend)
 router.get('/:id/metals', async (req, res) => {
     try {
         const serviceId = parseInt(req.params.id);
@@ -100,8 +100,9 @@ router.get('/:id/metals', async (req, res) => {
         }
 
         const result = await db.query(`
-            SELECT m.id, m.name, m.slug, m.image_path,
+            SELECT m.*,
                 mc.name as category_name,
+                mc.slug as category_slug,
                 m.services::jsonb @> to_jsonb($1::int) as metal_level,
                 EXISTS (
                     SELECT 1 FROM jsonb_array_elements(
@@ -122,7 +123,7 @@ router.get('/:id/metals', async (req, res) => {
                     ) t
                     WHERE t->'services' @> to_jsonb($1::int)
                 )
-            ORDER BY m.name
+            ORDER BY m.display_order, m.name
         `, [serviceId]);
 
         res.json({ success: true, data: result.rows });

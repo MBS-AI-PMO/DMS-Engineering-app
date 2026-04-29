@@ -4,9 +4,10 @@ const compression = require('compression');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const db = require('./db');
-require('dotenv').config();
+require('dotenv').config({ override: true });
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -30,9 +31,28 @@ const legalRoutes = require('./routes/legal');
 const app = express();
 const port = process.env.PORT || 5000;
 
-// FIX 1: Allow your public IP in CORS so the frontend can talk to the backend
+// Async CAD job polling must always return fresh JSON; avoid 304/ETag responses.
+app.set('etag', false);
+
+const DEFAULT_CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+const parseEnvOrigins = (value) => String(value || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+const publicIpOrigin = process.env.PUBLIC_IP ? `http://${process.env.PUBLIC_IP}` : '';
+const configuredOrigins = new Set([
+    ...DEFAULT_CORS_ORIGINS,
+    ...parseEnvOrigins(process.env.CORS_ORIGINS),
+    ...parseEnvOrigins(publicIpOrigin),
+]);
+const allowAllCors = ['1', 'true', 'yes', 'on'].includes(String(process.env.CORS_ALLOW_ALL || '').trim().toLowerCase());
+
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', `http://${process.env.PUBLIC_IP || '3.133.86.166'}`],
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (allowAllCors || configuredOrigins.has(origin)) return callback(null, true);
+        return callback(null, false);
+    },
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -47,6 +67,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // Serve temporary CAD assets for cart persistence établissement
 app.use('/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
+// Also expose temp uploads behind /api for production proxies that only forward /api to backend.
+app.use('/api/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
@@ -90,6 +112,12 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const setNoStore = (res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+};
 
 // FIX 2: Added a root health check so http://IP:5000/health actually works
 app.get('/health', (req, res) => {
@@ -136,43 +164,239 @@ app.get('/api/db-check', async (req, res) => {
 });
 
 // Ported Unfold Logic (STEP/STP)
-app.post('/api/unfold', upload.single('file'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No file uploaded' });
+// Common Python Helper
+const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
+const PYTHON_BASE_URL = `http://localhost:${PYTHON_PORT}`;
+const parsePositiveInt = (value, fallback) => {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? Math.floor(num) : fallback;
+};
+const PYTHON_REQUEST_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_REQUEST_TIMEOUT_MS, 240_000);
+const PYTHON_SYNC_UNFOLD_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_SYNC_UNFOLD_TIMEOUT_MS, 900_000);
+const PYTHON_STATUS_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_STATUS_TIMEOUT_MS, 120_000);
+const getPythonTimeoutMs = (subpath) => (subpath === '/unfold' ? PYTHON_SYNC_UNFOLD_TIMEOUT_MS : PYTHON_REQUEST_TIMEOUT_MS);
+const DETECT_HOLES_ENGINE_VERSION = 'v2-planar-loop-fallback';
+const DETECT_HOLES_CACHE_TTL_MS = 8 * 60 * 1000;
+const DETECT_HOLES_CACHE_MAX = 256;
+const detectHolesCache = new Map();
+
+const callPython = async (subpath, formData) => {
+    const pyRes = await fetch(`${PYTHON_BASE_URL}${subpath}`, {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(getPythonTimeoutMs(subpath)),
+    });
+    if (!pyRes.ok) {
+        const errText = await pyRes.text().catch(() => '');
+        throw new Error(`Python error (${pyRes.status}): ${errText}`);
+    }
+    return pyRes.json();
+};
+
+const callPythonGet = async (subpath) => {
+    const pyRes = await fetch(`${PYTHON_BASE_URL}${subpath}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(PYTHON_STATUS_TIMEOUT_MS),
+    });
+    if (!pyRes.ok) {
+        const errText = await pyRes.text().catch(() => '');
+        throw new Error(`Python error (${pyRes.status}): ${errText}`);
+    }
+    return pyRes.json();
+};
+
+const cleanupDetectHolesCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of detectHolesCache.entries()) {
+        if (!entry || entry.expiresAt <= now) {
+            detectHolesCache.delete(key);
+        }
     }
 
-    const filename = (req.file.originalname || req.file.filename || '').toLowerCase();
-    if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
-        fs.unlink(req.file.path, () => {});
+    while (detectHolesCache.size > DETECT_HOLES_CACHE_MAX) {
+        const oldestKey = detectHolesCache.keys().next().value;
+        if (!oldestKey) break;
+        detectHolesCache.delete(oldestKey);
+    }
+};
+
+const getCachedDetectHoles = (cacheKey) => {
+    cleanupDetectHolesCache();
+    const entry = detectHolesCache.get(cacheKey);
+    return entry ? entry.value : null;
+};
+
+const setCachedDetectHoles = (cacheKey, data) => {
+    cleanupDetectHolesCache();
+    detectHolesCache.set(cacheKey, {
+        value: data,
+        expiresAt: Date.now() + DETECT_HOLES_CACHE_TTL_MS,
+    });
+};
+
+const resolveStepInputPath = (tempPath) => {
+    const backendRoot = __dirname;
+    const fileName = path.basename(String(tempPath || ''));
+    const candidates = [
+        path.resolve(backendRoot, String(tempPath || '')),
+        path.resolve(backendRoot, 'temp_uploads', fileName),
+        path.resolve(backendRoot, 'uploads', 'orders', fileName),
+    ];
+
+    const backendRootNorm = backendRoot.toLowerCase();
+    for (const candidate of candidates) {
+        const normalized = candidate.toLowerCase();
+        if (!normalized.startsWith(backendRootNorm)) continue;
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return null;
+};
+
+const runDetectHolesWithCache = async ({ fileBuffer, filename, cacheKey }) => {
+    const cached = getCachedDetectHoles(cacheKey);
+    if (cached) return cached;
+
+    const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+    const form = new FormData();
+    form.append('file', blob, filename || 'model.step');
+
+    const data = await callPython('/detect-holes', form);
+    setCachedDetectHoles(cacheKey, data);
+    return data;
+};
+
+app.post('/api/detect-holes-by-temp', async (req, res) => {
+    const { tempPath } = req.body || {};
+    if (!tempPath || typeof tempPath !== 'string') {
+        return res.status(400).json({ success: false, error: 'tempPath is required' });
+    }
+
+    const inputPath = resolveStepInputPath(tempPath);
+    if (!inputPath) {
+        return res.status(404).json({ success: false, error: 'STEP file not found' });
+    }
+
+    const ext = path.extname(inputPath).toLowerCase();
+    if (ext !== '.step' && ext !== '.stp') {
         return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
     }
 
-    const PYTHON_PORT = process.env.PYTHON_PORT || 8000;
-    const PYTHON_URL = `http://localhost:${PYTHON_PORT}/unfold`;
+    try {
+        const stat = fs.statSync(inputPath);
+        const cacheKey = `tmp:${DETECT_HOLES_ENGINE_VERSION}:${path.basename(inputPath)}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
+        const cached = getCachedDetectHoles(cacheKey);
+        if (cached) {
+            return res.json({ success: true, cached: true, ...cached });
+        }
+
+        const fileBuffer = fs.readFileSync(inputPath);
+        const data = await runDetectHolesWithCache({ fileBuffer, filename: path.basename(inputPath), cacheKey });
+        return res.json({ success: true, cached: false, ...data });
+    } catch (err) {
+        console.error('[CAD-ERROR]', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// --- Fast Analysis (Holes/Dimensions) ---
+app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const filename = (req.file.originalname || '').toLowerCase();
+    if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
+        fs.unlink(req.file.path, () => { });
+        return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
+    }
 
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
+        const hash = crypto.createHash('sha1').update(fileBuffer).digest('hex');
+        const cacheKey = `upload:${DETECT_HOLES_ENGINE_VERSION}:${hash}`;
+        const data = await runDetectHolesWithCache({
+            fileBuffer,
+            filename: req.file.originalname || 'model.step',
+            cacheKey,
+        });
+
+        return res.json({ success: true, ...data });
+    } catch (err) {
+        console.error('[CAD-ERROR]', err);
+        return res.status(500).json({ success: false, error: err.message });
+    } finally {
+        fs.unlink(req.file.path, () => { });
+    }
+});
+
+// --- Full Unfold (Bends/Flat Pattern) ---
+app.post('/api/unfold', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const filename = (req.file.originalname || '').toLowerCase();
+    if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
+        fs.unlink(req.file.path, () => { });
+        return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
+    }
+
+    try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
         const form = new FormData();
         form.append('file', blob, req.file.originalname || 'model.step');
 
-        const pyRes = await fetch(PYTHON_URL, {
-            method: 'POST',
-            body: form,
-            signal: AbortSignal.timeout(120_000),
-        });
-
-        if (!pyRes.ok) {
-            const errText = await pyRes.text().catch(() => '');
-            return res.status(502).json({ success: false, error: `Python backend error: ${pyRes.status}`, detail: errText });
-        }
-
-        const data = await pyRes.json();
+        const data = await callPython('/unfold', form);
         return res.json({ success: true, ...data });
     } catch (err) {
+        console.error('[CAD-ERROR]', err);
         return res.status(500).json({ success: false, error: err.message });
     } finally {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(req.file.path, () => { });
+    }
+});
+
+// --- Async Unfold Job (Progress + Result Polling) ---
+app.post('/api/unfold-job/start', upload.single('file'), async (req, res) => {
+    setNoStore(res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const filename = (req.file.originalname || '').toLowerCase();
+    if (!filename.endsWith('.step') && !filename.endsWith('.stp')) {
+        fs.unlink(req.file.path, () => { });
+        return res.status(400).json({ success: false, error: 'Only STEP/STP files supported' });
+    }
+
+    try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+        const form = new FormData();
+        form.append('file', blob, req.file.originalname || 'model.step');
+
+        const data = await callPython('/unfold-job/start', form);
+        return res.json({ success: true, ...data });
+    } catch (err) {
+        console.error('[CAD-ERROR]', err);
+        return res.status(500).json({ success: false, error: err.message });
+    } finally {
+        fs.unlink(req.file.path, () => { });
+    }
+});
+
+app.get('/api/unfold-job/:jobId', async (req, res) => {
+    setNoStore(res);
+    const jobId = String(req.params.jobId || '').trim();
+    if (!jobId) {
+        return res.status(400).json({ success: false, error: 'jobId is required' });
+    }
+
+    try {
+        const data = await callPythonGet(`/unfold-job/status?jobId=${encodeURIComponent(jobId)}`);
+        return res.json({ success: true, ...data });
+    } catch (err) {
+        console.error('[CAD-ERROR]', err);
+        const notFound = /\(404\)/.test(String(err.message || ''));
+        return res.status(notFound ? 404 : 500).json({ success: false, error: err.message });
     }
 });
 
@@ -233,6 +457,7 @@ app.listen(port, async () => {
                 zip_code VARCHAR(20),
                 total_price NUMERIC(15,2) NOT NULL,
                 payment_method VARCHAR(50) DEFAULT 'COD',
+                payment_id TEXT,
                 status VARCHAR(50) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
@@ -256,6 +481,7 @@ app.listen(port, async () => {
         // Ensure all columns exist for world-class persistence
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
+        await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT;`);
 
         // Hardware Item Specification Migration
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);

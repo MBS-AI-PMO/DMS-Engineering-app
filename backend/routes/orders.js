@@ -8,6 +8,199 @@ const util = require('util');
 
 const router = express.Router();
 
+const toFiniteNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+};
+
+const INCH_TO_MM = 25.4;
+const inToMm = (value) => {
+    const num = toFiniteNumber(value);
+    return num === null ? null : num * INCH_TO_MM;
+};
+
+const mmToIn = (value) => {
+    const num = toFiniteNumber(value);
+    return num === null ? null : num / INCH_TO_MM;
+};
+
+const normalizeServiceDimension = (inchesValue, unit) => {
+    return unit === 'mm' ? inToMm(inchesValue) : inchesValue;
+};
+
+const extractOrderItemDimensionsInches = (item) => {
+    const cfg = item?.configuration || {};
+    const dimIn = cfg?.dimensions?.inches || {};
+    const dimMm = cfg?.dimensions?.mm || {};
+
+    let lengthIn = toFiniteNumber(dimIn.l);
+    let widthIn = toFiniteNumber(dimIn.w);
+    let thicknessIn = toFiniteNumber(dimIn.t);
+
+    if (lengthIn === null) lengthIn = mmToIn(dimMm.l);
+    if (widthIn === null) widthIn = mmToIn(dimMm.w);
+    if (thicknessIn === null) thicknessIn = mmToIn(dimMm.t);
+
+    return { lengthIn, widthIn, thicknessIn };
+};
+
+const validateMetalBounds = ({ metalName, metalConfig, lengthIn, widthIn, thicknessIn }) => {
+    if (!(lengthIn > 0) || !(widthIn > 0) || !(thicknessIn > 0)) {
+        return 'Missing or invalid model dimensions.';
+    }
+
+    const lengthMm = inToMm(lengthIn);
+    const widthMm = inToMm(widthIn);
+    const thicknessMm = inToMm(thicknessIn);
+
+    // metal_configs bounds are stored in inches; convert to mm for comparison
+    const minX = inToMm(metalConfig?.min_x);
+    const maxX = inToMm(metalConfig?.max_x);
+    const minY = inToMm(metalConfig?.min_y);
+    const maxY = inToMm(metalConfig?.max_y);
+    const minZ = inToMm(metalConfig?.min_z);
+    const maxZ = inToMm(metalConfig?.max_z);
+
+    if (maxX !== null && maxX > 0 && lengthMm > maxX) {
+        return `Part length ${lengthMm.toFixed(3)} mm exceeds max ${maxX.toFixed(3)} mm for ${metalName}.`;
+    }
+    if (minX !== null && minX > 0 && lengthMm < minX) {
+        return `Part length ${lengthMm.toFixed(3)} mm is below min ${minX.toFixed(3)} mm for ${metalName}.`;
+    }
+    if (maxY !== null && maxY > 0 && widthMm > maxY) {
+        return `Part width ${widthMm.toFixed(3)} mm exceeds max ${maxY.toFixed(3)} mm for ${metalName}.`;
+    }
+    if (minY !== null && minY > 0 && widthMm < minY) {
+        return `Part width ${widthMm.toFixed(3)} mm is below min ${minY.toFixed(3)} mm for ${metalName}.`;
+    }
+    // Thickness validation is not needed here — the user selects from a
+    // dropdown of available_thicknesses in the UI.  The dimensions.mm.t
+    // value is the model's physical thickness which can differ from stock
+    // thickness (e.g. bent/formed parts), so comparing it against the
+    // allowed list produces false rejections.
+
+    return null;
+};
+
+const validateServiceBounds = ({ service, lengthIn, widthIn, thicknessIn }) => {
+    if (!service) return null;
+    if (!(lengthIn > 0) || !(widthIn > 0) || !(thicknessIn > 0)) {
+        return `Missing or invalid dimensions for service ${service.title}.`;
+    }
+
+    const unit = String(service.dimensions_unit || 'in').toLowerCase() === 'mm' ? 'mm' : 'in';
+    const lengthVal = normalizeServiceDimension(lengthIn, unit);
+    const widthVal = normalizeServiceDimension(widthIn, unit);
+    const thickVal = normalizeServiceDimension(thicknessIn, unit);
+    const unitLabel = unit === 'mm' ? 'mm' : 'in';
+
+    const minL = toFiniteNumber(service.min_length);
+    const maxL = toFiniteNumber(service.max_length);
+    const minW = toFiniteNumber(service.min_width);
+    const maxW = toFiniteNumber(service.max_width);
+    const minH = toFiniteNumber(service.min_height);
+    const maxH = toFiniteNumber(service.max_height);
+
+    if (maxL !== null && maxL > 0 && lengthVal > maxL) {
+        return `Part length ${lengthVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxL.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minL !== null && minL > 0 && lengthVal < minL) {
+        return `Part length ${lengthVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minL.toFixed(3)} ${unitLabel}.`;
+    }
+    if (maxW !== null && maxW > 0 && widthVal > maxW) {
+        return `Part width ${widthVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxW.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minW !== null && minW > 0 && widthVal < minW) {
+        return `Part width ${widthVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minW.toFixed(3)} ${unitLabel}.`;
+    }
+    if (maxH !== null && maxH > 0 && thickVal > maxH) {
+        return `Part thickness ${thickVal.toFixed(3)} ${unitLabel} exceeds ${service.title} max ${maxH.toFixed(3)} ${unitLabel}.`;
+    }
+    if (minH !== null && minH > 0 && thickVal < minH) {
+        return `Part thickness ${thickVal.toFixed(3)} ${unitLabel} is below ${service.title} min ${minH.toFixed(3)} ${unitLabel}.`;
+    }
+
+    return null;
+};
+
+const validateOrderItemsAgainstBounds = async (items = []) => {
+    const metalCache = new Map();
+    const serviceCache = new Map();
+
+    for (let index = 0; index < items.length; index++) {
+        const item = items[index] || {};
+        const itemLabel = item.fileName || `Item ${index + 1}`;
+        const { lengthIn, widthIn, thicknessIn } = extractOrderItemDimensionsInches(item);
+
+        if (!(lengthIn > 0) || !(widthIn > 0) || !(thicknessIn > 0)) {
+            return `${itemLabel}: missing or invalid model dimensions.`;
+        }
+
+        const metalId = toFiniteNumber(
+            item?.configuration?.metal?.id ||
+            item?.configuration?.metal_id ||
+            item?.metal_id
+        );
+        if (metalId !== null) {
+            let metalCtx = metalCache.get(metalId);
+            if (!metalCtx) {
+                const metalRes = await db.query(`
+                    SELECT m.id, m.name,
+                           mc.min_x, mc.max_x, mc.min_y, mc.max_y, mc.min_z, mc.max_z,
+                           COALESCE(mc.available_thicknesses, '[]'::jsonb) AS available_thicknesses
+                    FROM metals m
+                    LEFT JOIN metal_configs mc ON mc.metal_id = m.id
+                    WHERE m.id = $1
+                `, [metalId]);
+                metalCtx = metalRes.rows[0] || null;
+                metalCache.set(metalId, metalCtx);
+            }
+
+            if (!metalCtx) {
+                return `${itemLabel}: selected metal was not found.`;
+            }
+
+            const metalError = validateMetalBounds({
+                metalName: metalCtx.name,
+                metalConfig: metalCtx,
+                lengthIn,
+                widthIn,
+                thicknessIn,
+            });
+            if (metalError) return `${itemLabel}: ${metalError}`;
+        }
+
+        const serviceId = toFiniteNumber(
+            item?.configuration?.productionService?.id ||
+            item?.configuration?.productionServiceId ||
+            item?.configuration?.service?.id ||
+            item?.service_id
+        );
+        if (serviceId !== null) {
+            let svc = serviceCache.get(serviceId);
+            if (!svc) {
+                const svcRes = await db.query(`
+                    SELECT id, title, dimensions_unit,
+                           min_length, max_length, min_width, max_width, min_height, max_height
+                    FROM services
+                    WHERE id = $1
+                `, [serviceId]);
+                svc = svcRes.rows[0] || null;
+                serviceCache.set(serviceId, svc);
+            }
+
+            if (!svc) {
+                return `${itemLabel}: selected production method was not found.`;
+            }
+
+            const svcError = validateServiceBounds({ service: svc, lengthIn, widthIn, thicknessIn });
+            if (svcError) return `${itemLabel}: ${svcError}`;
+        }
+    }
+
+    return null;
+};
+
 // Helper: Move file from temp to permanent order storage
 const finalizeOrderFile = (tempPath) => {
     if (!tempPath) return null;
@@ -132,11 +325,26 @@ router.post('/', async (req, res) => {
     const {
         email, fullName, phone, address, city, zipCode,
         items, // Array of { fileName, tempPath, configuration, quantity, unitPrice }
-        totalPrice
+        totalPrice,
+        payment_method,
+        payment_id
     } = req.body;
 
     if (!email || !items || items.length === 0) {
         return res.status(400).json({ success: false, error: 'Incomplete order data' });
+    }
+
+    const boundsValidationError = await validateOrderItemsAgainstBounds(items);
+    if (boundsValidationError) {
+        return res.status(400).json({ success: false, error: boundsValidationError });
+    }
+
+    const normalizedPaymentMethod = String(payment_method || 'COD').trim().toUpperCase();
+    const paymentMethod = ['COD', 'PAYPAL'].includes(normalizedPaymentMethod) ? normalizedPaymentMethod : 'COD';
+    const paymentId = payment_id ? String(payment_id) : null;
+
+    if (paymentMethod === 'PAYPAL' && !paymentId) {
+        return res.status(400).json({ success: false, error: 'Missing PayPal payment reference' });
     }
 
     try {
@@ -144,10 +352,10 @@ router.post('/', async (req, res) => {
 
         // 1. Create the Order
         const orderRes = await db.query(
-            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, status, admin_deletion_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'COD', 'pending', 'active')
+            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, payment_id, status, admin_deletion_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', 'active')
              RETURNING *`,
-            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, totalPrice]
+            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, totalPrice, paymentMethod, paymentId]
         );
         const orderId = orderRes.rows[0].id;
 
@@ -290,6 +498,8 @@ const useAdminAuth = (req, res, next) => {
     req.tokenName = 'admin_token';
     next();
 };
+
+
 
 /**
  * PUT /api/orders/:id/status — ADMIN ONLY: Update order production status

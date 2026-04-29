@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { Calculator, Info, ArrowRight, Save, Hash, Loader2 } from 'lucide-react';
+import { Calculator, Info, ArrowRight, Save, Hash, Loader2, Check, Wrench, Layers, Grid } from 'lucide-react';
 import { fetchSettings, updateSetting } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -28,34 +28,71 @@ export default function PricingCalculator() {
     const toast = useToast();
     const [calc, setCalc] = useState({ width: '', length: '', cost: '', markup: '' });
     const [unit, setUnit] = useState('inch');
-    const [globalMarkup, setGlobalMarkup] = useState(10);
+    const [settings, setSettings] = useState({
+        inside_labor_markup: 0,
+        material_markup: 0,
+        markup_enabled_services: [] // Array of service titles or IDs
+    });
+    const [allServices, setAllServices] = useState([]);
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // Fetch global markup on mount
+    // Fetch global settings and services on mount
     useEffect(() => {
-        fetchSettings()
-            .then(data => {
-                if (data.general_markup !== undefined) {
-                    setGlobalMarkup(data.general_markup);
-                    // Initialize calculator markup with global markup if not already set
-                    setCalc(prev => ({ ...prev, markup: prev.markup || data.general_markup.toString() }));
-                }
-            })
-            .catch(err => toast('Failed to load global markup: ' + err.message, 'error'))
-            .finally(() => setLoadingSettings(false));
+        const load = async () => {
+            setLoadingSettings(true);
+            try {
+                const [data, svcs] = await Promise.all([
+                    fetchSettings(),
+                    fetch('/api/services').then(res => res.json())
+                ]);
+
+                const newSettings = {
+                    inside_labor_markup: data.inside_labor_markup !== undefined ? data.inside_labor_markup : 0,
+                    material_markup: data.material_markup !== undefined ? data.material_markup : 0,
+                    markup_enabled_services: Array.isArray(data.markup_enabled_services) ? data.markup_enabled_services : []
+                };
+                setSettings(newSettings);
+                setAllServices(svcs.data || []);
+
+                // Initialize calculator markup with inside labor markup
+                setCalc(prev => ({ ...prev, markup: prev.markup || newSettings.inside_labor_markup.toString() }));
+            } catch (err) {
+                toast('Failed to load settings: ' + err.message, 'error');
+            } finally {
+                setLoadingSettings(false);
+            }
+        };
+        load();
     }, [toast]);
 
-    const handleSaveGlobalMarkup = async () => {
+    const handleSaveSettings = async () => {
         setSaving(true);
         try {
-            await updateSetting('general_markup', globalMarkup);
-            toast('Global markup saved successfully', 'success');
+            await Promise.all([
+                updateSetting('inside_labor_markup', settings.inside_labor_markup),
+                updateSetting('material_markup', settings.material_markup),
+                updateSetting('markup_enabled_services', settings.markup_enabled_services),
+                // Reset others to 0 to eliminate them from calculations
+                updateSetting('general_markup', 0),
+                updateSetting('overhead_markup', 0)
+            ]);
+            toast('Pricing settings saved successfully', 'success');
         } catch (err) {
             toast('Failed to save: ' + err.message, 'error');
         } finally {
             setSaving(false);
         }
+    };
+
+    const toggleServiceMarkup = (serviceTitle) => {
+        setSettings(prev => {
+            const current = [...(prev.markup_enabled_services || [])];
+            const idx = current.indexOf(serviceTitle);
+            if (idx >= 0) current.splice(idx, 1);
+            else current.push(serviceTitle);
+            return { ...prev, markup_enabled_services: current };
+        });
     };
 
     // Unit conversion factors relative to Inch
@@ -96,8 +133,8 @@ export default function PricingCalculator() {
         <div className="admin-page">
             <header className="admin-page-header">
                 <div>
-                    <h1 className="admin-page-title">Pricing Calculator</h1>
-                    <p className="admin-page-subtitle">Calculate material costs and markups in real-time</p>
+                    <h1 className="admin-page-title">Markups</h1>
+                    <p className="admin-page-subtitle">Configure global labor and material markups</p>
                 </div>
             </header>
 
@@ -228,10 +265,10 @@ export default function PricingCalculator() {
                             <div style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '10px' }}>
                                 <Save size={20} style={{ color: '#6366f1', display: 'block' }} />
                             </div>
-                            <h2 className="calc-card-title" style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', margin: 0 }}>Global Pricing Settings</h2>
+                            <h2 className="calc-card-title" style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', margin: 0 }}>Markups</h2>
                         </div>
                         <button
-                            onClick={handleSaveGlobalMarkup}
+                            onClick={handleSaveSettings}
                             className="calc-save-btn"
                             disabled={saving}
                             style={{
@@ -256,49 +293,149 @@ export default function PricingCalculator() {
                     </div>
 
                     <div className="calc-card-body" style={{ padding: '24px', background: '#f8fafc', borderTop: '1px solid #f1f5f9' }}>
-                        <div style={{ maxWidth: '400px' }}>
-                            <div className="calc-input-group">
-                                <label className="calc-input-label" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
-                                    General Markup (%)
-                                </label>
-                                {loadingSettings ? (
-                                    <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
-                                ) : (
-                                    <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                        <input
-                                            type="number"
-                                            className="calc-input-field"
-                                            value={globalMarkup}
-                                            onChange={(e) => setGlobalMarkup(parseFloat(e.target.value) || 0)}
-                                            placeholder="10"
-                                            style={{
-                                                width: '100%',
-                                                padding: '12px 16px',
-                                                paddingRight: '45px',
-                                                fontSize: '16px',
-                                                fontWeight: '500',
-                                                color: '#1e293b',
-                                                background: '#fff',
-                                                border: '2px solid #e2e8f0',
-                                                borderRadius: '12px',
-                                                outline: 'none',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                        />
-                                        <span style={{
-                                            position: 'absolute',
-                                            right: '16px',
-                                            fontSize: '16px',
-                                            fontWeight: '600',
-                                            color: '#94a3b8'
-                                        }}>%</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '40px' }}>
+
+                            {/* LABOR SECTION */}
+                            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
+                                    <div style={{ padding: '6px', background: '#e0e7ff', color: '#4338ca', borderRadius: '8px' }}>
+                                        <Wrench size={16} />
                                     </div>
-                                )}
-                                <p style={{ fontSize: '13px', color: '#64748b', marginTop: '10px', lineHeight: '1.5', display: 'flex', alignItems: 'start', gap: '6px' }}>
-                                    <Info size={14} style={{ marginTop: '2px', flexShrink: 0 }} />
-                                    This is the default profit margin multiplier applied to all instant pricing calculations across the platform.
-                                </p>
+                                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Labor Markups</h3>
+                                </div>
+
+                                <div className="calc-input-group" style={{ marginBottom: '32px' }}>
+                                    <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '12px' }}>
+                                        Inside Labor Markup (%)
+                                    </label>
+                                    {loadingSettings ? (
+                                        <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
+                                    ) : (
+                                        <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center', maxWidth: '400px' }}>
+                                            <input
+                                                type="number"
+                                                className="calc-input-field"
+                                                value={settings.inside_labor_markup}
+                                                onChange={(e) => setSettings(p => ({ ...p, inside_labor_markup: parseFloat(e.target.value) || 0 }))}
+                                                placeholder="0"
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '12px 16px',
+                                                    paddingRight: '45px',
+                                                    fontSize: '16px',
+                                                    fontWeight: '600',
+                                                    color: '#1e293b',
+                                                    background: '#f8fafc',
+                                                    border: '2px solid #e2e8f0',
+                                                    borderRadius: '12px',
+                                                    outline: 'none',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                            />
+                                            <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '600', color: '#94a3b8' }}>%</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ paddingTop: '24px', borderTop: '1px dashed #e2e8f0' }}>
+                                    <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700', color: '#64748b', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        Apply Labor Markup To:
+                                    </label>
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                                        gap: '10px'
+                                    }}>
+                                        {allServices.map(svc => (
+                                            <div
+                                                key={svc.id}
+                                                onClick={() => toggleServiceMarkup(svc.title)}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '10px',
+                                                    padding: '10px 14px',
+                                                    background: (settings.markup_enabled_services || []).includes(svc.title) ? '#f5f7ff' : '#fff',
+                                                    border: '1.5px solid',
+                                                    borderColor: (settings.markup_enabled_services || []).includes(svc.title) ? '#6366f1' : '#e2e8f0',
+                                                    borderRadius: '10px',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: '18px',
+                                                    height: '18px',
+                                                    borderRadius: '5px',
+                                                    border: '2px solid',
+                                                    borderColor: (settings.markup_enabled_services || []).includes(svc.title) ? '#6366f1' : '#cbd5e1',
+                                                    background: (settings.markup_enabled_services || []).includes(svc.title) ? '#6366f1' : 'transparent',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'white'
+                                                }}>
+                                                    {(settings.markup_enabled_services || []).includes(svc.title) && <Check size={12} />}
+                                                </div>
+                                                <span style={{
+                                                    fontSize: '13px',
+                                                    fontWeight: '600',
+                                                    color: (settings.markup_enabled_services || []).includes(svc.title) ? '#1e293b' : '#64748b'
+                                                }}>
+                                                    {svc.title}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* MATERIAL SECTION */}
+                            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
+                                    <div style={{ padding: '6px', background: '#fffbeb', color: '#d97706', borderRadius: '8px' }}>
+                                        <Layers size={16} />
+                                    </div>
+                                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Material Markups</h3>
+                                </div>
+
+                                <div className="calc-input-group">
+                                    <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '12px' }}>
+                                        Global Material Markup (%)
+                                    </label>
+                                    {loadingSettings ? (
+                                        <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
+                                    ) : (
+                                        <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center', maxWidth: '400px' }}>
+                                            <input
+                                                type="number"
+                                                className="calc-input-field"
+                                                value={settings.material_markup}
+                                                onChange={(e) => setSettings(p => ({ ...p, material_markup: parseFloat(e.target.value) || 0 }))}
+                                                placeholder="0"
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '12px 16px',
+                                                    paddingRight: '45px',
+                                                    fontSize: '16px',
+                                                    fontWeight: '600',
+                                                    color: '#1e293b',
+                                                    background: '#f8fafc',
+                                                    border: '2px solid #e2e8f0',
+                                                    borderRadius: '12px',
+                                                    outline: 'none',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                            />
+                                            <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '600', color: '#94a3b8' }}>%</span>
+                                        </div>
+                                    )}
+                                    <p style={{ margin: '12px 0 0 0', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                                        This markup is applied automatically to all material costs.
+                                    </p>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </motion.div>

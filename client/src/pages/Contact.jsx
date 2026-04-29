@@ -35,9 +35,28 @@ const Contact = () => {
         message: ''
     });
 
+    const [isSubmitted, setIsSubmitted] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const handleSubmit = (e) => {
         e.preventDefault();
-        alert('Thank you for reaching out! We will get back to you shortly.');
+        setIsSubmitting(true);
+
+        // Simulate API call
+        setTimeout(() => {
+            setIsSubmitting(false);
+            setIsSubmitted(true);
+            setFormState({
+                name: '',
+                email: '',
+                company: '',
+                subject: '',
+                message: ''
+            });
+
+            // Reset submission state after 5 seconds
+            setTimeout(() => setIsSubmitted(false), 5000);
+        }, 1500);
     };
 
     const handleChange = (e) => {
@@ -140,38 +159,80 @@ const Contact = () => {
                             viewport={{ once: true }}
                             className="contact-form-container"
                         >
-                            <form className="contact-form" onSubmit={handleSubmit}>
-                                <div className="form-group">
-                                    <label>Full Name</label>
-                                    <input type="text" name="name" placeholder="John Doe" required onChange={handleChange} />
-                                </div>
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label>Email Address</label>
-                                        <input type="email" name="email" placeholder="john@company.com" required onChange={handleChange} />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Company</label>
-                                        <input type="text" name="company" placeholder="Industries Inc." onChange={handleChange} />
-                                    </div>
-                                </div>
-                                <div className="form-group">
-                                    <label>Subject</label>
-                                    <select name="subject" onChange={handleChange}>
-                                        <option>Laser Cutting Quote</option>
-                                        <option>Material Consultation</option>
-                                        <option>Bulk Production</option>
-                                        <option>Other</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label>Message</label>
-                                    <textarea name="message" rows="5" placeholder="Tell us about your project..." required onChange={handleChange}></textarea>
-                                </div>
-                                <button type="submit" className="btn-submit">
-                                    Send Message <Send size={18} />
-                                </button>
-                            </form>
+                            <AnimatePresence mode="wait">
+                                {isSubmitted ? (
+                                    <motion.div
+                                        key="success"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.9 }}
+                                        className="contact-success-msg"
+                                    >
+                                        <div className="success-icon">
+                                            <ShieldCheck size={48} />
+                                        </div>
+                                        <h3>Message Sent Successfully!</h3>
+                                        <p>Thank you for reaching out. One of our engineers will review your inquiry and get back to you within 24 hours.</p>
+                                        <button className="btn-reset" onClick={() => setIsSubmitted(false)}>Send Another Message</button>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                        <div className="form-header">
+                                            <div className="form-header-icon">
+                                                <MessageSquare size={22} />
+                                            </div>
+                                            <div>
+                                                <h3>Send us a Message</h3>
+                                                <p>We'll respond within 24 hours</p>
+                                            </div>
+                                        </div>
+                                        <form className="contact-form" onSubmit={handleSubmit}>
+                                            <div className="form-group floating">
+                                                <input type="text" name="name" id="name" placeholder=" " required value={formState.name} onChange={handleChange} />
+                                                <label htmlFor="name">Full Name</label>
+                                            </div>
+                                            <div className="form-group floating">
+                                                <input type="email" name="email" id="email" placeholder=" " required value={formState.email} onChange={handleChange} />
+                                                <label htmlFor="email">Email Address</label>
+                                            </div>
+                                            <div className="form-group floating">
+                                                <input type="text" name="company" id="company" placeholder=" " value={formState.company} onChange={handleChange} />
+                                                <label htmlFor="company">Company</label>
+                                            </div>
+                                            <div className="form-group floating">
+                                                <select
+                                                    name="subject"
+                                                    id="subject"
+                                                    value={formState.subject}
+                                                    onChange={handleChange}
+                                                    className={formState.subject ? 'has-value' : ''}
+                                                >
+                                                    <option value="">Select a subject...</option>
+                                                    <option>Laser Cutting Quote</option>
+                                                    <option>Material Consultation</option>
+                                                    <option>Bulk Production</option>
+                                                    <option>Other</option>
+                                                </select>
+                                                <label htmlFor="subject">Subject</label>
+                                            </div>
+                                            <div className="form-group floating">
+                                                <textarea name="message" id="message" rows="5" placeholder=" " required value={formState.message} onChange={handleChange}></textarea>
+                                                <label htmlFor="message">Your Message</label>
+                                            </div>
+                                            <button type="submit" className={`btn-submit ${isSubmitting ? 'loading' : ''}`} disabled={isSubmitting}>
+                                                {isSubmitting ? (
+                                                    <span className="loader"></span>
+                                                ) : (
+                                                    <>
+                                                        <span className="btn-submit-text">Send Message</span>
+                                                        <span className="btn-submit-icon"><Send size={18} /></span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </form>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     </div>
                 </div>

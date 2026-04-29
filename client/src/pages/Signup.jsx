@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { User, Mail, Lock, Eye, EyeOff, UserPlus, CheckSquare } from 'lucide-react';
-import { registerUser } from '../utils/api';
+import { registerUser, fetchSettings } from '../utils/api';
 
 export default function Signup() {
     const navigate = useNavigate();
@@ -11,6 +11,18 @@ export default function Signup() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
+
+    useEffect(() => {
+        fetchSettings()
+            .then(data => {
+                if (data.navbar_logo) {
+                    setLogo(data.navbar_logo);
+                    localStorage.setItem('navbar_logo', data.navbar_logo);
+                }
+            })
+            .catch(err => console.error('Failed to load logo:', err));
+    }, []);
 
     const set = (field) => (e) => {
         const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -65,7 +77,7 @@ export default function Signup() {
             >
                 <div className="auth-logo">
                     <Link to="/">
-                        <img src="/logo.png" alt="DMS Logo" className="auth-logo-img" decoding="async" />
+                        <img src={logo} alt="DMS Logo" className="auth-logo-img" decoding="async" />
                     </Link>
                 </div>
 

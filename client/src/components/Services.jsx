@@ -104,8 +104,10 @@ const Services = () => {
                     viewport={{ once: true }}
                     transition={{ duration: 0.8, delay: 0.4 }}
                 >
-                    <button className="btn-services-outline">VIEW ALL SERVICES</button>
-                    <button className="btn-services-solid">GET STARTED</button>
+                    <Link to="/services" className="btn-services-outline" style={{ textDecoration: 'none' }}>
+                        VIEW ALL SERVICES
+                    </Link>
+                    <Link to="/get-instant-pricing" className="btn-services-solid" style={{ textDecoration: 'none' }}>GET STARTED</Link>
                 </motion.div>
             </div>
         </section>

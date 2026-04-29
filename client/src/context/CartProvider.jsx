@@ -86,11 +86,18 @@ export const CartProvider = ({ children }) => {
 
       const { configuration } = itemToUpdate;
       const isCNC = configuration.productionService?.title?.toLowerCase()?.includes('cnc');
+      const normalizedThicknessInches = (() => {
+        if (isCNC) return configuration.dimensions?.inches?.t;
+        const selectedThickness = configuration.selectedThickness;
+        const tObj = (configuration.metal?.quick_look?.thicknesses || []).find(th => String(th.value) === String(selectedThickness));
+        if (!tObj) return selectedThickness;
+        return tObj.metric === 'mm' ? (parseFloat(tObj.value) / 25.4).toString() : tObj.value;
+      })();
 
       const payload = {
         metal_id: configuration.metal?.id,
         service_id: configuration.productionService?.id,
-        thickness_value: isCNC ? configuration.dimensions?.inches?.t : configuration.selectedThickness,
+        thickness_value: normalizedThicknessInches,
         length_in: configuration.dimensions?.inches?.l,
         height_in: configuration.dimensions?.inches?.w,
         quantity: newQuantity,
@@ -98,19 +105,25 @@ export const CartProvider = ({ children }) => {
           id: s.id,
           option_id: configuration.selectedFinishColors?.[s.id]?.id || null
         })),
-        taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price }))
+        taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price })),
+        hardware: Object.values(configuration.selectedHardware || {}).map(h => ({ name: h?.item?.name, price: h?.item?.price || 0 })),
+        countersinks: Object.values(configuration.selectedCountersinks || {}).map(cs => ({ name: cs?.name, price: cs?.price || 0 })),
+        technical_data: configuration.pricingTechnicalData || {
+          totalPerimeter: ((parseFloat(configuration.dimensions?.inches?.l) || 0) + (parseFloat(configuration.dimensions?.inches?.w) || 0)) * 2 * 25.4,
+          pierceCount: Math.max(1, (configuration.detectedHoles || []).length || 1),
+          bends: []
+        }
       };
 
       const res = await calculatePrice(payload);
 
       if (res.success) {
-        // res.total_price already includes anodizing (sent via additional_services to the API)
-        // Calculate non-engine costs (taps and hardware) to add to the base unit établissements
-        const totalTaps = Object.values(configuration.selectedTaps || {}).reduce((acc, t) => acc + (parseFloat(t.price) || 0), 0);
-        const totalHardware = Object.values(configuration.selectedHardware || {}).reduce((acc, { item }) => acc + (parseFloat(item?.price) || 0), 0);
-        const nonEngineUnitCost = (totalTaps + totalHardware) / newQuantity;
-
-        const engineBase = parseFloat(res.breakdown?.unit_total || 0);
+        const unitBase = parseFloat(res.breakdown?.unit_total || 0);
+        const unitFinal = parseFloat(
+          res.breakdown?.final_unit_price ||
+          (newQuantity > 0 ? (parseFloat(res.total_price || 0) / newQuantity) : 0)
+        );
+        const discountPercent = parseFloat(res.breakdown?.discount_percent || 0);
 
         setCartItems(prev => prev.map(item =>
           item.cartId === cartId
@@ -118,11 +131,9 @@ export const CartProvider = ({ children }) => {
               ...item,
               pricing: {
                 ...item.pricing,
-                // Keep original Qty 1 baseUnit, or establish a new anchored base if missing
-                baseUnit: item.pricing.baseUnit || (engineBase + nonEngineUnitCost),
-                discount_percent: parseFloat(res.breakdown?.discount_percent || 0),
-                // Apply Linear Pricing: AnchoredBase * (1 - VolumeDiscount)
-                total: (item.pricing.baseUnit || (engineBase + nonEngineUnitCost)) * (1 - (parseFloat(res.breakdown?.discount_percent || 0) / 100))
+                baseUnit: unitBase,
+                discount_percent: discountPercent,
+                total: unitFinal
               },
               isUpdating: false
             }

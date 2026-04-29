@@ -217,7 +217,6 @@ async function migrate() {
             );
         `);
         console.log('  ✓ order_items table');
-
         // Updated_at trigger function
         await db.query(`
             CREATE OR REPLACE FUNCTION update_updated_at_column()

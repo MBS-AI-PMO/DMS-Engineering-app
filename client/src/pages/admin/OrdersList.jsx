@@ -450,6 +450,7 @@ const AdminOrdersList = () => {
                                             ? (previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null)
                                             : (previewItem.item.configured_file_path ? '/' + previewItem.item.configured_file_path : null)
                                     }}
+                                    tempPath={previewItem.item.original_file_path ? '/' + previewItem.item.original_file_path : null}
                                     configuration={previewItem.mode === 'configured' ? (typeof previewItem.item.configuration_json === 'string' ? JSON.parse(previewItem.item.configuration_json) : previewItem.item.configuration_json) : {}}
                                 />
                             </div>

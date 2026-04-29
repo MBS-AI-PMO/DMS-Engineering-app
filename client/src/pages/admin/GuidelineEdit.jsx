@@ -141,8 +141,43 @@ export default function GuidelineEdit() {
 
     if (loading) {
         return (
-            <div className="edit-guideline-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                <Loader2 className="animate-spin text-blue-600" size={48} />
+            <div className="edit-guideline-page">
+                <div className="edit-guideline-container">
+                    <div className="page-top-actions" style={{ marginBottom: 20 }}>
+                        <div className="skeleton-box" style={{ width: 120, height: 36, borderRadius: 12 }} />
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <div className="skeleton-box" style={{ width: 92, height: 36, borderRadius: 12 }} />
+                            <div className="skeleton-box" style={{ width: 132, height: 36, borderRadius: 12 }} />
+                        </div>
+                    </div>
+
+                    <div className="skeleton-box" style={{ width: '48%', height: 38, marginBottom: 18, borderRadius: 12 }} />
+
+                    <section className="guideline-section" style={{ marginBottom: 18 }}>
+                        <div className="section-header" style={{ marginBottom: 14 }}>
+                            <div className="skeleton-box" style={{ width: 220, height: 20 }} />
+                        </div>
+                        <div className="section-body">
+                            <div className="skeleton-box" style={{ width: '100%', height: 130, borderRadius: 14 }} />
+                        </div>
+                    </section>
+
+                    <section className="guideline-section" style={{ marginBottom: 18 }}>
+                        <div className="section-header" style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="skeleton-box" style={{ width: 190, height: 20 }} />
+                            <div className="skeleton-box" style={{ width: 86, height: 30, borderRadius: 10 }} />
+                        </div>
+                        <div className="section-body" style={{ display: 'grid', gap: 12 }}>
+                            {[...Array(4)].map((_, i) => (
+                                <div key={`guide-req-skel-${i}`} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 36px', gap: 10, alignItems: 'center' }}>
+                                    <div className="skeleton-box" style={{ width: 24, height: 24, borderRadius: 8 }} />
+                                    <div className="skeleton-box" style={{ width: '100%', height: 40, borderRadius: 10 }} />
+                                    <div className="skeleton-box" style={{ width: 32, height: 32, borderRadius: 8 }} />
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                </div>
             </div>
         );
     }

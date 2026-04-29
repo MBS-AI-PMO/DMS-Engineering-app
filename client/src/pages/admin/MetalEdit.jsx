@@ -231,6 +231,7 @@ export default function MetalEdit() {
             fetchMetalBySlug(slug)
                 .then(data => {
                     setMetal({
+                        id: data.id,
                         name: data.name || '',
                         category_id: data.category_id || '',
                         thickness: data.thickness || '',

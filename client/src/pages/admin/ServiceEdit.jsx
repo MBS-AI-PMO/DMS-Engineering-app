@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';  // eslint-disable-line no-unused-vars
-import { Save, X, Upload, Layers, Shield, Zap, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler, Grid } from 'lucide-react';
+import { Save, X, Upload, Layers, Shield, Zap, CornerDownRight, ChevronLeft, ChevronRight, Loader2, Wrench, Edit2, Plus, Hash, ArrowDown, ArrowUp, Maximize, Check, ArrowRight, Trash2, Cpu, Package, Info, Camera, Ruler, Grid, DollarSign, History } from 'lucide-react';
 import {
     fetchServices, createService, updateService, uploadServiceImage,
     fetchHardwareTypes, fetchHardwareItemsByType, uploadHardwareTypeImage,
@@ -9,6 +9,7 @@ import {
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
+import { wrinkleSwatchStyle } from '../../utils/wrinkleTexture';
 
 const emptyService = {
     title: '', description: '', image_path: '', display_order: 0,
@@ -18,11 +19,33 @@ const emptyService = {
     pricing_config: {}
 };
 
+const CNC_OPERATIONS = ['Saw', 'Lathe', 'Mill', 'Deburr', 'Inspect'];
+
 export default function ServiceEdit() {
     const { id } = useParams();
     const isNew = !id;
     const navigate = useNavigate();
     const toast = useToast();
+
+    // Inline styles for input prefixes
+    const inputIconStyles = `
+        .input-with-icon {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-with-icon .prefix {
+            position: absolute;
+            left: 12px;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+        .input-with-icon input {
+            padding-left: 28px !important;
+        }
+    `;
 
     const [service, setService] = useState(emptyService);
     const [allServices, setAllServices] = useState([]);
@@ -59,6 +82,9 @@ export default function ServiceEdit() {
     const [zoomedImage, setZoomedImage] = useState(null);
     const [confirmDeleteHwItem, setConfirmDeleteHwItem] = useState(null);
     const [hwUnit, setHwUnit] = useState('in');
+    const [bendingUnit, setBendingUnit] = useState('in');
+    const [pcDimUnit, setPcDimUnit] = useState('in');
+    const [pcTimeUnit, setPcTimeUnit] = useState('hr');
     const hwTypeImgRef = useRef(null);
 
     const isHardware = service?.title?.toLowerCase()?.includes('hardware') || service?.title?.toLowerCase()?.includes('insertion');
@@ -91,6 +117,13 @@ export default function ServiceEdit() {
                             service_options: Array.isArray(match.service_options) ? match.service_options : [],
                             pricing_config: match.pricing_config || {}
                         });
+
+                        if (match.pricing_config?.bending_unit) {
+                            setBendingUnit(match.pricing_config.bending_unit);
+                        }
+
+                        if (match.pricing_config?.pc_dim_unit) setPcDimUnit(match.pricing_config.pc_dim_unit);
+                        if (match.pricing_config?.pc_time_unit) setPcTimeUnit(match.pricing_config.pc_time_unit);
 
                         // If it's Hardware, fetch its types
                         if (match.title?.toLowerCase()?.includes('hardware')) {
@@ -238,6 +271,23 @@ export default function ServiceEdit() {
         }
     };
 
+    const toggleBendingUnit = (newUnit) => {
+        if (bendingUnit === newUnit) return;
+        const ratio = newUnit === 'mm' ? 25.4 : (1 / 25.4);
+        const conv = (v) => v ? parseFloat((parseFloat(v) * ratio).toFixed(4)) : 0;
+
+        setService(prev => ({
+            ...prev,
+            pricing_config: {
+                ...prev.pricing_config,
+                med_bend_threshold: conv(prev.pricing_config?.med_bend_threshold),
+                large_bend_threshold: conv(prev.pricing_config?.large_bend_threshold),
+                bending_unit: newUnit
+            }
+        }));
+        setBendingUnit(newUnit);
+    };
+
     const toggleUnit = (newUnit) => {
         if (service.dimensions_unit === newUnit) return;
         const ratio = newUnit === 'mm' ? 25.4 : (1 / 25.4);
@@ -253,6 +303,42 @@ export default function ServiceEdit() {
             min_height: conv(prev.min_height),
             max_height: conv(prev.max_height)
         }));
+    };
+
+    const togglePCDimUnit = (newUnit) => {
+        if (pcDimUnit === newUnit) return;
+        const ratio = newUnit === 'mm' ? 25.4 : (1 / 25.4);
+        const conv = (v) => v ? parseFloat((parseFloat(v) * ratio).toFixed(4)) : 0;
+
+        setService(prev => ({
+            ...prev,
+            pricing_config: {
+                ...prev.pricing_config,
+                oven_width: conv(prev.pricing_config?.oven_width),
+                oven_length: conv(prev.pricing_config?.oven_length),
+                part_thickness: conv(prev.pricing_config?.part_thickness),
+                part_length: conv(prev.pricing_config?.part_length),
+                part_width: conv(prev.pricing_config?.part_width),
+                pc_dim_unit: newUnit
+            }
+        }));
+        setPcDimUnit(newUnit);
+    };
+
+    const togglePCTimeUnit = (newUnit) => {
+        if (pcTimeUnit === newUnit) return;
+        const ratio = newUnit === 'min' ? 60 : (1 / 60);
+        const conv = (v) => v ? parseFloat((parseFloat(v) * ratio).toFixed(4)) : 0;
+
+        setService(prev => ({
+            ...prev,
+            pricing_config: {
+                ...prev.pricing_config,
+                setup_time: conv(prev.pricing_config?.setup_time),
+                pc_time_unit: newUnit
+            }
+        }));
+        setPcTimeUnit(newUnit);
     };
 
     const openTapModal = (index = null) => {
@@ -316,6 +402,7 @@ export default function ServiceEdit() {
 
     return (
         <div className="admin-edit-page">
+            <style>{inputIconStyles}</style>
             <main className="admin-edit-content">
                 <div className="admin-edit-top-actions">
                     <Link to="/admin/services" className="admin-back-link">
@@ -532,32 +619,70 @@ export default function ServiceEdit() {
                                                     <Cpu size={16} />
                                                     <span>Powder Coating Pricing Configuration</span>
                                                 </div>
+                                                <div style={{ display: 'flex', gap: '12px' }}>
+                                                    <div className="unit-toggle-pills" style={{ marginBottom: 0 }}>
+                                                        <button className={`unit-pill ${pcDimUnit === 'in' ? 'active' : ''}`} onClick={() => togglePCDimUnit('in')}>IN</button>
+                                                        <button className={`unit-pill ${pcDimUnit === 'mm' ? 'active' : ''}`} onClick={() => togglePCDimUnit('mm')}>MM</button>
+                                                    </div>
+                                                    <div className="unit-toggle-pills" style={{ marginBottom: 0 }}>
+                                                        <button className={`unit-pill ${pcTimeUnit === 'hr' ? 'active' : ''}`} onClick={() => togglePCTimeUnit('hr')}>HR</button>
+                                                        <button className={`unit-pill ${pcTimeUnit === 'min' ? 'active' : ''}`} onClick={() => togglePCTimeUnit('min')}>MIN</button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                                                 <div className="option-input-group">
-                                                    <label>Batch Cost ($)</label>
+                                                    <label>Setup Time ({pcTimeUnit})</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.setup_time || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Usable Oven Width ({pcDimUnit})</label>
+                                                    <input type="number" value={service.pricing_config?.oven_width || (pcDimUnit === 'in' ? 90 : 2286)} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_width: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Usable Oven Length ({pcDimUnit})</label>
+                                                    <input type="number" value={service.pricing_config?.oven_length || (pcDimUnit === 'in' ? 162 : 4114)} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Part Thickness ({pcDimUnit})</label>
+                                                    <input type="number" step="0.001" value={service.pricing_config?.part_thickness || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_thickness: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Part Length ({pcDimUnit})</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.part_length || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_length: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Part Width ({pcDimUnit})</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.part_width || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_width: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>test1</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.test1 || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, test1: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>test2</label>
+                                                    <input type="number" step="0.01" value={service.pricing_config?.test2 || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, test2: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Parts per batch (Batches)</label>
+                                                    <input type="number" value={service.pricing_config?.parts_per_batch || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, parts_per_batch: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Number of Batches</label>
+                                                    <input type="number" value={service.pricing_config?.num_batches || 1} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, num_batches: parseFloat(e.target.value) || 0 } }))} />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Cost per Batch ($)</label>
                                                     <input type="number" step="0.01" value={service.pricing_config?.batch_cost || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, batch_cost: parseFloat(e.target.value) || 0 } }))} />
                                                 </div>
                                                 <div className="option-input-group">
-                                                    <label>Shop Rate ($/hr)</label>
+                                                    <label>Shop Rate ($/Hr)</label>
                                                     <input type="number" step="0.01" value={service.pricing_config?.shop_rate || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, shop_rate: parseFloat(e.target.value) || 0 } }))} />
-                                                </div>
-                                                <div className="option-input-group">
-                                                    <label>Setup Time (min)</label>
-                                                    <input type="number" value={service.pricing_config?.setup_time || 0} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_time: parseFloat(e.target.value) || 0 } }))} />
-                                                </div>
-                                                <div className="option-input-group">
-                                                    <label>Oven Width (in)</label>
-                                                    <input type="number" value={service.pricing_config?.oven_width || 90} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_width: parseFloat(e.target.value) || 0 } }))} />
-                                                </div>
-                                                <div className="option-input-group">
-                                                    <label>Oven Length (in)</label>
-                                                    <input type="number" value={service.pricing_config?.oven_length || 160} onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, oven_length: parseFloat(e.target.value) || 0 } }))} />
                                                 </div>
                                             </div>
                                             <p className="admin-card-tip" style={{ marginTop: '12px' }}>
                                                 Formula: <code>cost/unit = (setup_time × shop_rate / 60 + batches × batch_cost) / qty</code>.
-                                                Parts per batch uses thickness + 24&Prime; rack clearance across both oven orientations.
+                                                Parts per batch = floor(oven_dim / (part_width + part_gap)) × floor(other_oven_dim / (thickness + rack_clearance)), taking the better of the two oven orientations.
                                             </p>
                                         </div>
                                     )}
@@ -596,7 +721,7 @@ export default function ServiceEdit() {
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
                                                 {(service.service_options || []).map((opt, idx) => (
                                                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#f8fafc', borderRadius: '14px', border: '1.5px solid #f1f5f9' }}>
-                                                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: opt.color || '#000000', flexShrink: 0, border: '3px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+                                                        <div style={{ ...wrinkleSwatchStyle(opt.color || '#000000', !!opt.is_wrinkled, 10), width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0, border: '3px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
                                                         <div style={{ flex: 1, minWidth: 0 }}>
                                                             <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.name || <span style={{ color: '#94a3b8' }}>Unnamed</span>}</div>
                                                             <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
@@ -750,109 +875,353 @@ export default function ServiceEdit() {
                             const isLaser = service?.title?.toLowerCase()?.includes('laser');
                             if (isLaser) return (
                                 <div className="admin-edit-card service-options-card">
-                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Maximize size={16} />
-                                            <span>Laser Cutting Pricing Configuration</span>
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '24px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div className="icon-badge" style={{ width: '40px', height: '40px', background: '#f0f9ff', color: '#0ea5e9', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Zap size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Laser Cutting Configuration</h3>
+                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Configure labor rates, setup times, and daily production capacity.</p>
+                                            </div>
                                         </div>
                                     </div>
-                                    <p className="admin-card-tip">Configure pricing parameters for Laser Cutting. These are added to the material cost in the quote flow.</p>
 
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', marginTop: '20px', maxWidth: '320px' }}>
+                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px', marginTop: '20px' }}>
                                         <div className="option-input-group">
-                                            <label><Cpu size={10} style={{ marginRight: '4px' }} /> Machine Hourly Rate ($/hr)</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={service.pricing_config?.hourly_rate || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, hourly_rate: parseFloat(e.target.value) || 0 } }))}
-                                            />
+                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Labor Rate ($/hr)</label>
+                                            <div className="input-with-icon">
+                                                <span className="prefix">$</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={service.pricing_config?.hourly_rate || 0}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, hourly_rate: parseFloat(e.target.value) || 0 } }))}
+                                                    placeholder="e.g. 120.00"
+                                                />
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>Standard shop rate per hour</span>
+                                        </div>
+
+                                        <div className="option-input-group">
+                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Setup Time (hr)</label>
+                                            <div className="input-with-icon">
+                                                <input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    value={service.pricing_config?.laser_setup_time_hr || 0}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, laser_setup_time_hr: parseFloat(e.target.value) || 0 } }))}
+                                                />
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>One-time setup cost per order</span>
+                                        </div>
+
+                                        <div className="option-input-group">
+                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Daily Capacity (hrs)</label>
+                                            <div className="input-with-icon">
+                                                <input
+                                                    type="number"
+                                                    step="0.1"
+                                                    value={service.pricing_config?.daily_capacity_hrs || 0}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, daily_capacity_hrs: parseFloat(e.target.value) || 0 } }))}
+                                                    placeholder="e.g. 8.0"
+                                                />
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>Used to calculate Lead Days (0 to disable)</span>
                                         </div>
                                     </div>
-                                    <p className="admin-card-tip" style={{ marginTop: '12px' }}>
-                                        Formula: <code>cost/unit = (HourlyRate × setup_hrs / qty) + (HourlyRate × runtime_h)</code>
-                                        <br />
-                                        Setup time is automatic: <strong>0.3 h</strong> if thickness ≤ 0.25 in, <strong>0.25 h</strong> if thickness &gt; 0.25 in.
-                                        Cut speed and pierce time come from the <strong>Laser Rates</strong> table.
-                                    </p>
+
+                                    {/* Nesting Parameters Section */}
+                                    <div style={{ marginTop: '32px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                            <Grid size={14} color="#8b5cf6" />
+                                            <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Nesting & Material Parameters (in)</h4>
+                                        </div>
+                                        <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                                            <div className="option-input-group">
+                                                <label>Edge Buffer (in)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={service.pricing_config?.edge_buffer ?? 0.125}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, edge_buffer: parseFloat(e.target.value) || 0 } }))}
+                                                />
+                                            </div>
+                                            <div className="option-input-group">
+                                                <label>Part Buffer (in)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={service.pricing_config?.part_buffer ?? 0.0625}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_buffer: parseFloat(e.target.value) || 0 } }))}
+                                                />
+                                            </div>
+                                            <div className="option-input-group">
+                                                <label>Kerf Width (in)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={service.pricing_config?.kerf_width ?? 0.01}
+                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, kerf_width: parseFloat(e.target.value) || 0 } }))}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ marginTop: '32px', padding: '20px', background: '#f0f9ff', borderRadius: '16px', border: '1.5px solid #bae6fd' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                            <Info size={16} color="#0369a1" />
+                                            <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase' }}>Formula Breakdown</h4>
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#0369a1', lineHeight: '1.6' }}>
+                                            <code>runtime = (cut_length * 25.4 / cut_rate / 3600) + (pierce_count * pierce_time / 3600)</code><br />
+                                            <code>setup_cost = labor_rate * setup_time</code><br />
+                                            <code>labor_cost = labor_rate * runtime * qty</code><br />
+                                            <code>COST = setup_cost + labor_cost</code><br />
+                                            <code style={{ fontWeight: 700 }}>DAYS = ceil((setup_time + runtime * qty) / daily_capacity)</code>
+                                        </div>
+                                    </div>
                                 </div>
                             );
 
                             const isBending = service?.title?.toLowerCase()?.includes('bending');
                             if (isBending) return (
-                                <div className="admin-edit-card service-options-card">
-                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Wrench size={16} />
-                                            <span>Bending Technical Pricing</span>
+                                <div className="admin-edit-card service-options-card bending-pricing-card">
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '24px', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div className="icon-badge" style={{ width: '40px', height: '40px', background: '#f5f3ff', color: '#8b5cf6', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Wrench size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Bending Technical Pricing</h3>
+                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Configure thresholds, rates, and unit preferences for bending operations.</p>
+                                            </div>
+                                        </div>
+                                        <div className="unit-toggle-pills">
+                                            <button
+                                                className={`unit-pill ${bendingUnit === 'in' ? 'active' : ''}`}
+                                                onClick={() => toggleBendingUnit('in')}
+                                            >
+                                                IN
+                                            </button>
+                                            <button
+                                                className={`unit-pill ${bendingUnit === 'mm' ? 'active' : ''}`}
+                                                onClick={() => toggleBendingUnit('mm')}
+                                            >
+                                                MM
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                    <div className="bending-prefs-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1.5px solid #e2e8f0', marginBottom: '32px' }}>
                                         <div className="option-input-group">
-                                            <label>Setup Fee ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.setup_fee || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, setup_fee: parseFloat(e.target.value) || 0 } }))}
-                                            />
+                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px', display: 'block' }}>Setup Time Display</label>
+                                            <div className="unit-toggle-pills" style={{ width: 'fit-content' }}>
+                                                {['Hours', 'Minutes'].map(u => (
+                                                    <button
+                                                        key={u}
+                                                        className={`unit-pill ${(service.pricing_config?.setup_time_display_unit || 'Hours') === u ? 'active' : ''}`}
+                                                        onClick={() => {
+                                                            const newUnit = u;
+                                                            setService(s => ({
+                                                                ...s,
+                                                                pricing_config: {
+                                                                    ...s.pricing_config,
+                                                                    setup_time_display_unit: newUnit
+                                                                }
+                                                            }));
+                                                        }}
+                                                        style={{ padding: '6px 16px', fontSize: '0.75rem' }}
+                                                    >
+                                                        {u}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                         <div className="option-input-group">
-                                            <label>Labor Hourly Rate ($/hr)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.hourly_rate || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, hourly_rate: parseFloat(e.target.value) || 0 } }))}
-                                            />
+                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px', display: 'block' }}>Runtime Display</label>
+                                            <div className="unit-toggle-pills" style={{ width: 'fit-content' }}>
+                                                {['Hours', 'Minutes', 'Seconds'].map(u => (
+                                                    <button
+                                                        key={u}
+                                                        className={`unit-pill ${(service.pricing_config?.runtime_display_unit || 'Minutes') === u ? 'active' : ''}`}
+                                                        onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, runtime_display_unit: u } }))}
+                                                        style={{ padding: '6px 16px', fontSize: '0.75rem' }}
+                                                    >
+                                                        {u}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Thresholds (mm)</h4>
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                                        <div className="option-input-group">
-                                            <label>Medium Bend Threshold (mm)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.med_bend_threshold || 200}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, med_bend_threshold: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label>Large Bend Threshold (mm)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.large_bend_threshold || 500}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_threshold: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                    </div>
 
-                                    <h4 style={{ marginTop: '20px', marginBottom: '10px', fontSize: '13px' }}>Rates per Category ($)</h4>
-                                    <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-                                        <div className="option-input-group">
-                                            <label>Small Rate ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.small_bend_rate || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, small_bend_rate: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label>Medium Rate ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.med_bend_rate || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, med_bend_rate: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label>Large Rate ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.large_bend_rate || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_rate: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
+                                    <div className="pricing-sections-container" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                                        {/* Setup & Rates Section */}
+                                        <section>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                                <DollarSign size={14} color="#8b5cf6" />
+                                                <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Standard Rates & Setup</h4>
+                                            </div>
+                                            <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                                                <div className="option-input-group">
+                                                    <label>Labor Rate ($/hr)</label>
+                                                    <div className="input-with-icon">
+                                                        <span className="prefix">$</span>
+                                                        <input
+                                                            type="number"
+                                                            value={service.pricing_config?.labor_rate || 0}
+                                                            onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, labor_rate: parseFloat(e.target.value) || 0 } }))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Setup Time ({service.pricing_config?.setup_time_display_unit || 'Hours'})</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.0001"
+                                                        value={(() => {
+                                                            const val = service.pricing_config?.setup_time || 0;
+                                                            const unit = service.pricing_config?.setup_time_display_unit || 'Hours';
+                                                            if (unit === 'Minutes') return parseFloat((val * 60).toFixed(4));
+                                                            if (unit === 'Seconds') return parseFloat((val * 3600).toFixed(4));
+                                                            return val;
+                                                        })()}
+                                                        onChange={e => {
+                                                            const inputVal = parseFloat(e.target.value) || 0;
+                                                            const unit = service.pricing_config?.setup_time_display_unit || 'Hours';
+                                                            let hourVal = inputVal;
+                                                            if (unit === 'Minutes') hourVal = inputVal / 60;
+                                                            else if (unit === 'Seconds') hourVal = inputVal / 3600;
+
+                                                            setService(s => ({
+                                                                ...s,
+                                                                pricing_config: {
+                                                                    ...s.pricing_config,
+                                                                    setup_time: parseFloat(hourVal.toFixed(8))
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Daily Capacity (Hours)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={service.pricing_config?.daily_capacity_hours ?? 0}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setService(s => ({
+                                                                ...s,
+                                                                pricing_config: {
+                                                                    ...s.pricing_config,
+                                                                    daily_capacity_hours: val === '' ? 0 : (parseFloat(val) || 0)
+                                                                }
+                                                            }));
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        {/* Thresholds Section */}
+                                        <section>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                                <Maximize size={14} color="#8b5cf6" />
+                                                <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Bend Length Thresholds ({bendingUnit})</h4>
+                                            </div>
+                                            <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                                <div className="option-input-group">
+                                                    <label>Med Bend Threshold ({bendingUnit})</label>
+                                                    <input
+                                                        type="number"
+                                                        value={service.pricing_config?.med_bend_threshold || 0}
+                                                        onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, med_bend_threshold: parseFloat(e.target.value) || 0 } }))}
+                                                    />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label>Large Bend Threshold ({bendingUnit})</label>
+                                                    <input
+                                                        type="number"
+                                                        value={service.pricing_config?.large_bend_threshold || 0}
+                                                        onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, large_bend_threshold: parseFloat(e.target.value) || 0 } }))}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        {/* Per-Bend Rates Section */}
+                                        <section>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                                <Hash size={14} color="#8b5cf6" />
+                                                <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Per-Bend Rates (Currency)</h4>
+                                            </div>
+                                            <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
+                                                {[
+                                                    { label: 'Cost Per Small Bend ($)', key: 'small_bend_rate' },
+                                                    { label: 'Cost Per Med Bend ($)', key: 'med_bend_rate' },
+                                                    { label: 'Cost Per Large Bend ($)', key: 'large_bend_rate' },
+                                                    { label: 'Cost Per Other Formed Feature ($)', key: 'other_formed_feature_rate' }
+                                                ].map(item => (
+                                                    <div className="option-input-group" key={item.key}>
+                                                        <label>{item.label}</label>
+                                                        <div className="input-with-icon">
+                                                            <span className="prefix">$</span>
+                                                            <input
+                                                                type="number"
+                                                                value={service.pricing_config?.[item.key] || 0}
+                                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [item.key]: parseFloat(e.target.value) || 0 } }))}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+
+                                        {/* Runtime Calculation Section */}
+                                        <section style={{ padding: '24px', background: '#f5f3ff', borderRadius: '16px', border: '1.5px solid #ddd6fe' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                                                <Zap size={16} color="#7c3aed" />
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#5b21b6' }}>Runtime & Formula</h4>
+                                            </div>
+                                            <div className="laser-pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '20px' }}>
+                                                <div className="option-input-group">
+                                                    <label style={{ color: '#6d28d9' }}>Time Per Bend (seconds)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={service.pricing_config?.time_per_bend_sec ?? 15}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setService(s => ({
+                                                                ...s,
+                                                                pricing_config: {
+                                                                    ...s.pricing_config,
+                                                                    time_per_bend_sec: val === '' ? 15 : (parseFloat(val) || 0)
+                                                                }
+                                                            }));
+                                                        }}
+                                                        style={{ borderColor: '#ddd6fe' }}
+                                                    />
+                                                </div>
+                                                <div className="option-input-group">
+                                                    <label style={{ color: '#6d28d9' }}>Operation Runtime ({service.pricing_config?.runtime_display_unit || 'Minutes'})</label>
+                                                    <div className="read-only-display" style={{ padding: '10px 14px', background: 'white', borderRadius: '8px', border: '1.5px solid #ddd6fe', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        <span>{service.pricing_config?.operation_runtime || 0}</span>
+                                                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase' }}>Calculated</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#6d28d9', background: '#ffffff80', padding: '12px', borderRadius: '8px', lineHeight: '1.6' }}>
+                                                <div style={{ fontWeight: 800, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Info size={12} /> PRICING LOGIC
+                                                </div>
+                                                <code>setup_cost = labor_rate x setup_time</code><br />
+                                                <code>runtime = unique_bends x time_per_bend_sec / 3600</code><br />
+                                                <code>machine_cost = part.qty x (other_formed_feature_count x other_formed_feature_rate + large_bend_count x large_bend_rate + small_bend_count x small_bend_rate + med_bend_count x med_bend_rate)</code><br />
+                                                <code>TOTAL_COST = setup_cost + machine_cost</code><br />
+                                                <code>DAYS = ceil((setup_time + runtime x part.qty) / daily_capacity_hours)</code>
+                                            </div>
+                                        </section>
                                     </div>
                                 </div>
                             );
@@ -860,56 +1229,104 @@ export default function ServiceEdit() {
                             const isCNC = (service?.title?.toLowerCase()?.includes('cnc')) || (parseInt(id) === 2);
                             if (isCNC) return (
                                 <div className="admin-edit-card service-options-card">
-                                    <div className="admin-hierarchy-header" style={{ marginBottom: '20px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Maximize size={16} />
-                                            <span>CNC Pricing Configuration</span>
+                                    <div className="admin-hierarchy-header" style={{ marginBottom: '24px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div className="icon-badge" style={{ width: '40px', height: '40px', background: '#f0f9ff', color: '#3b82f6', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Cpu size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>CNC Operations Configuration</h3>
+                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Configure Saw, Lathe, Mill, Deburr, and Inspect operations.</p>
+                                            </div>
                                         </div>
                                     </div>
-                                    <p className="admin-card-tip">Configure global pricing parameters for CNC Machining. These are added to the material cost in the quote flow.</p>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
-                                        <div className="option-input-group">
-                                            <label><Hash size={10} style={{ marginRight: '4px' }} /> Base Setup Fee ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.base_setup || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, base_setup: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label><ArrowRight size={10} style={{ marginRight: '4px' }} /> Price per Inch Width ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.price_per_width || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_width: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label><ArrowUp size={10} style={{ marginRight: '4px' }} /> Price per Inch Length ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.price_per_length || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_length: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
-                                        <div className="option-input-group">
-                                            <label><Maximize size={10} style={{ marginRight: '4px' }} /> Price per Inch Thickness ($)</label>
-                                            <input
-                                                type="number"
-                                                value={service.pricing_config?.price_per_thickness || 0}
-                                                onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, price_per_thickness: parseFloat(e.target.value) || 0 } }))}
-                                            />
-                                        </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginTop: '20px' }}>
+                                        {CNC_OPERATIONS.map(op => {
+                                            const key = op.toLowerCase();
+                                            return (
+                                                <div key={op} style={{ background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+                                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6' }} />
+                                                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{op} Operation</span>
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '24px' }}>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Setup Time</label>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.001"
+                                                                    value={service.pricing_config?.[`cnc_${key}_setup`] || 0}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_setup`]: parseFloat(e.target.value) || 0 } }))}
+                                                                    style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                                />
+                                                                <div className="unit-toggle-pills" style={{ display: 'flex', gap: '6px' }}>
+                                                                    {['Hours', 'Minutes', 'Seconds'].map(u => (
+                                                                        <button
+                                                                            key={u}
+                                                                            className={`unit-pill ${(service.pricing_config?.[`cnc_${key}_setup_unit`] || 'Hours') === u ? 'active' : ''}`}
+                                                                            onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_setup_unit`]: u } }))}
+                                                                            style={{ padding: '4px 12px', fontSize: '0.7rem', borderRadius: '6px', border: '1.5px solid #e2e8f0', fontWeight: 600 }}
+                                                                        >
+                                                                            {u}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Runtime / Part</label>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.001"
+                                                                    value={service.pricing_config?.[`cnc_${key}_runtime`] || 0}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_runtime`]: parseFloat(e.target.value) || 0 } }))}
+                                                                    style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' }}
+                                                                />
+                                                                <div className="unit-toggle-pills" style={{ display: 'flex', gap: '6px' }}>
+                                                                    {['Hours', 'Minutes', 'Seconds'].map(u => (
+                                                                        <button
+                                                                            key={u}
+                                                                            className={`unit-pill ${(service.pricing_config?.[`cnc_${key}_runtime_unit`] || 'Hours') === u ? 'active' : ''}`}
+                                                                            onClick={() => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_runtime_unit`]: u } }))}
+                                                                            style={{ padding: '4px 12px', fontSize: '0.7rem', borderRadius: '6px', border: '1.5px solid #e2e8f0', fontWeight: 600 }}
+                                                                        >
+                                                                            {u}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="option-input-group">
+                                                            <label style={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Shop Rate ($/hr)</label>
+                                                            <div className="input-with-icon" style={{ position: 'relative' }}>
+                                                                <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: 700, fontSize: '0.9rem' }}>$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={service.pricing_config?.[`cnc_${key}_rate`] || 0}
+                                                                    onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, [`cnc_${key}_rate`]: parseFloat(e.target.value) || 0 } }))}
+                                                                    style={{ paddingLeft: '32px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px 10px 32px' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 12, marginTop: 16 }}>
-                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', marginBottom: 6 }}>PRICING FORMULA</div>
-                                        <code style={{ fontSize: 12, color: '#1e293b' }}>
-                                            Price = ${service.pricing_config?.base_setup || 0} (setup)
-                                            {service.pricing_config?.price_per_length ? ` + ${service.pricing_config.price_per_length} × Length (in)` : ''}
-                                            {service.pricing_config?.price_per_width ? ` + ${service.pricing_config.price_per_width} × Width (in)` : ''}
-                                            {service.pricing_config?.price_per_thickness ? ` + ${service.pricing_config.price_per_thickness} × Thickness (in)` : ''}
-                                        </code>
+
+                                    <div style={{ marginTop: '24px', padding: '20px', background: '#f0f9ff', borderRadius: '16px', border: '1.5px solid #bae6fd' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                            <Info size={16} color="#0369a1" />
+                                            <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase' }}>Formula Summary</h4>
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: '#0369a1', lineHeight: '1.6' }}>
+                                            <code>Operation Cost = (Runtime × Quantity + Setup) × Shop Rate</code><br />
+                                            <code>TOTAL CNC COST = SUM(Saw, Lathe, Mill, Deburr, Inspect)</code>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -1183,7 +1600,7 @@ export default function ServiceEdit() {
                         )}
                     </aside>
                 </div>
-            </main>
+            </main >
 
             <AnimatePresence>
                 {isTapModalOpen && (
@@ -2036,14 +2453,16 @@ export default function ServiceEdit() {
                                         </div>
                                         <div className="admin-form-group" style={{ marginBottom: 0 }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: '#475569', display: 'block' }}>Unit Price ($)</label>
-                                            <input
-                                                type="number"
-                                                step="0.0001"
-                                                value={hwItemForm.price}
-                                                onChange={e => setHwItemForm(p => ({ ...p, price: e.target.value }))}
-                                                placeholder="0.0000"
-                                                style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1.5px solid #e2e8f0', fontSize: '0.95rem' }}
-                                            />
+                                            <div className="input-with-icon">
+                                                <span className="prefix">$</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    value={hwItemForm.price}
+                                                    onChange={e => setHwItemForm(p => ({ ...p, price: e.target.value }))}
+                                                    placeholder="0.0000"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

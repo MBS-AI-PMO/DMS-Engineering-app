@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Zap, Plus, Trash2, Pencil, X, AlertTriangle, ChevronRight, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { fetchLaserRates, createLaserRate, updateLaserRate, deleteLaserRate, fetchCategories } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -15,21 +15,40 @@ function fmt(val, decimals = 4) {
     return parseFloat(n.toFixed(decimals)).toString();
 }
 
+function getRowWarnings(row) {
+    const thickness = parseFloat(row.thickness);
+    const cutRate = parseFloat(row.cut_rate);
+    const pierceTime = parseFloat(row.pierce_time);
+
+    const warnings = [];
+    if (!Number.isFinite(thickness) || thickness <= 0) warnings.push('Thickness must be greater than 0');
+    if (!Number.isFinite(cutRate) || cutRate <= 0) warnings.push('Cut rate must be greater than 0');
+    if (!Number.isFinite(pierceTime) || pierceTime < 0) warnings.push('Pierce time must be 0 or greater');
+
+    return warnings;
+}
+
 export default function LaserRatesAdmin() {
     const toast = useToast();
-    const [rates, setRates]         = useState([]);
+    const [rates, setRates] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [loading, setLoading]     = useState(true);
-    const [saving, setSaving]       = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingRow, setEditingRow] = useState(null); // null = new
-    const [form, setForm]           = useState(EMPTY_FORM);
+    const [form, setForm] = useState(EMPTY_FORM);
 
     const load = useCallback(async () => {
         try {
             setLoading(true);
             const data = await fetchLaserRates();
-            setRates(data || []);
+            const sorted = (data || []).sort((a, b) => {
+                if (a.material_family !== b.material_family) {
+                    return a.material_family.localeCompare(b.material_family);
+                }
+                return parseFloat(a.thickness) - parseFloat(b.thickness);
+            });
+            setRates(sorted);
         } catch (err) {
             toast('Failed to load laser rates: ' + err.message, 'error');
         } finally {
@@ -40,7 +59,7 @@ export default function LaserRatesAdmin() {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        fetchCategories().then(data => setCategories(data || [])).catch(() => {});
+        fetchCategories().then(data => setCategories(data || [])).catch(() => { });
     }, []);
 
     const openNew = () => {
@@ -53,9 +72,9 @@ export default function LaserRatesAdmin() {
         setEditingRow(row);
         setForm({
             material_family: row.material_family,
-            thickness:       fmt(row.thickness, 6),
-            cut_rate:        fmt(row.cut_rate, 4),
-            pierce_time:     fmt(row.pierce_time, 4),
+            thickness: fmt(row.thickness, 6),
+            cut_rate: fmt(row.cut_rate, 4),
+            pierce_time: fmt(row.pierce_time, 4),
         });
         setModalOpen(true);
     };
@@ -146,14 +165,11 @@ export default function LaserRatesAdmin() {
                         <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Price Formula</span>
                     </div>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#94a3b8', lineHeight: 2 }}>
-                        <div><span style={{ color: '#38bdf8' }}>runtime</span> = perimeter_mm <span style={{ color: '#6366f1' }}>÷</span> cut_rate <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
+                        <div><span style={{ color: '#38bdf8' }}>total_cut</span> = perimeter_mm + <span style={{ color: '#6366f1' }}>etch_length_mm</span></div>
+                        <div><span style={{ color: '#38bdf8' }}>runtime</span> = total_cut <span style={{ color: '#6366f1' }}>÷</span> cut_rate <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
                         <div style={{ paddingLeft: 16, color: '#64748b' }}>+ pierce_count <span style={{ color: '#6366f1' }}>×</span> pierce_time <span style={{ color: '#6366f1' }}>÷</span> 3600</div>
-                        <div style={{ marginTop: 4 }}><span style={{ color: '#38bdf8' }}>setup_hrs</span> = 0.3 h <span style={{ color: '#64748b' }}>(0.25 h if &gt; 0.25&Prime;)</span></div>
+                        <div style={{ marginTop: 4 }}><span style={{ color: '#38bdf8' }}>setup_hrs</span> = <span style={{ color: '#64748b' }}>[Value from Service Config]</span></div>
                         <div><span style={{ color: '#34d399' }}>cost/unit</span> = rate × <span style={{ color: '#f59e0b' }}>(setup_hrs÷qty + runtime)</span></div>
-                    </div>
-                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#451a03', borderRadius: 8, border: '1px solid #92400e' }}>
-                        <AlertTriangle size={13} color="#f59e0b" />
-                        <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600 }}>Thickness &gt; 0.376 in triggers a warning in the quote</span>
                     </div>
                 </div>
             </div>
@@ -161,7 +177,30 @@ export default function LaserRatesAdmin() {
             {/* ── Table ── */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 {loading ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
+                    <div style={{ padding: '16px 18px' }}>
+                        {[...Array(6)].map((_, i) => (
+                            <div
+                                key={`laser-skel-${i}`}
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1.1fr 1fr 1fr 1fr 0.7fr',
+                                    gap: 14,
+                                    alignItems: 'center',
+                                    padding: '14px 6px',
+                                    borderBottom: i < 5 ? '1px solid #f8fafc' : 'none',
+                                }}
+                            >
+                                <div className="skeleton-box" style={{ width: '62%', height: 24, borderRadius: 999 }} />
+                                <div className="skeleton-box" style={{ width: '48%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '56%', height: 16 }} />
+                                <div className="skeleton-box" style={{ width: '42%', height: 16 }} />
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                    <div className="skeleton-box" style={{ width: 34, height: 34, borderRadius: 9 }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
@@ -173,7 +212,8 @@ export default function LaserRatesAdmin() {
                         </thead>
                         <tbody>
                             {rates.map((row, i) => {
-                                const isAboveWarn = parseFloat(row.thickness) > 0.376;
+                                const rowWarnings = getRowWarnings(row);
+                                const hasWarning = rowWarnings.length > 0;
                                 return (
                                     <tr key={row.id} style={{ borderTop: i > 0 ? '1px solid #f8fafc' : 'none', transition: 'background 0.15s' }}
                                         onMouseEnter={e => e.currentTarget.style.background = '#fafbff'}
@@ -191,8 +231,11 @@ export default function LaserRatesAdmin() {
                                         <td style={{ padding: '16px 24px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                 <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b', fontFamily: 'monospace' }}>{fmt(row.thickness, 6)}</span>
-                                                {isAboveWarn && (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #fcd34d', fontSize: '10px', fontWeight: 700, color: '#92400e' }}>
+                                                {hasWarning && (
+                                                    <span
+                                                        title={rowWarnings.join(' • ')}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #fcd34d', fontSize: '10px', fontWeight: 700, color: '#92400e' }}
+                                                    >
                                                         <AlertTriangle size={10} /> WARN
                                                     </span>
                                                 )}
@@ -248,7 +291,7 @@ export default function LaserRatesAdmin() {
             <AnimatePresence>
                 {modalOpen && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-                        <motion.div
+                        <Motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 14 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 14 }}
@@ -310,7 +353,7 @@ export default function LaserRatesAdmin() {
                                     {saving ? 'Saving…' : editingRow ? 'Save Changes' : 'Add Rate'}
                                 </button>
                             </div>
-                        </motion.div>
+                        </Motion.div>
                     </div>
                 )}
             </AnimatePresence>

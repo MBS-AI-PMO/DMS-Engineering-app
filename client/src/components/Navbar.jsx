@@ -12,7 +12,7 @@ const Navbar = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.png');
+    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
@@ -76,7 +76,7 @@ const Navbar = () => {
 
     const navLinks = [
         { name: 'Metals', path: '/metals' },
-        { name: 'Services', path: '/#services' },
+        { name: 'Services', path: '/services' },
         { name: 'Guidelines', path: '/guidelines' },
         { name: 'FAQ', path: '/faq' },
         { name: 'Contact', path: '/contact' },
