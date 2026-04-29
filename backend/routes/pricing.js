@@ -270,496 +270,6 @@ const getConfigHours = (config, keyPrefix, defaultUnit = 'Hours') => {
     return value;
 };
 
-const getConfigBool = (config, key, fallback = false) => {
-    const value = config?.[key];
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value !== 0;
-    if (typeof value === 'string') {
-        const normalized = value.trim().toLowerCase();
-        if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-        if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
-    }
-    return fallback;
-};
-
-const getConfigNumber = (config, key, fallback = 0) => {
-    const value = config?.[key];
-    if (value === undefined || value === null || value === '') return fallback;
-    const num = parseFloat(value);
-    return Number.isFinite(num) ? num : fallback;
-};
-
-const getConfigInteger = (config, key, fallback = 0) => {
-    const value = config?.[key];
-    if (value === undefined || value === null || value === '') return fallback;
-    const num = parseInt(value, 10);
-    return Number.isFinite(num) ? num : fallback;
-};
-
-const deriveCncMetrics = ({ lengthIn, heightIn, thicknessIn, techData = {}, config = {} }) => {
-    const partLengthIn = Math.max(toFiniteNumber(lengthIn), toFiniteNumber(heightIn));
-    const partWidthIn = Math.min(toFiniteNumber(lengthIn), toFiniteNumber(heightIn));
-    const partThicknessIn = toFiniteNumber(thicknessIn);
-    const areaSqIn = toFiniteNumber(techData.areaSqIn) || (partLengthIn * partWidthIn);
-    const perimeterIn = toFiniteNumber(techData.perimeterIn) || (toFiniteNumber(techData.totalPerimeter) / 25.4);
-    const holeCount = Math.max(0, parseInt(techData.holeCount ?? techData.holesCount ?? 0, 10) || 0);
-    const bendCount = Math.max(0, parseInt(techData.bendCount ?? (Array.isArray(techData.bends) ? techData.bends.length : 0), 10) || 0);
-    const hasRaisedFeatures = Boolean(techData.hasRaisedFeatures);
-    const raisedFeatureFaceCount = Math.max(0, parseInt(techData.raisedFeatureFaceCount ?? 0, 10) || 0);
-    const partVolumeCuIn = toFiniteNumber(techData.partVolumeCuIn);
-    const pocketCount = Math.max(0, getConfigInteger(techData, 'pocketCount', 0));
-    const slotCount = Math.max(0, getConfigInteger(techData, 'slotCount', 0));
-    const recessedFaceCount = Math.max(0, getConfigInteger(techData, 'recessedFaceCount', 0));
-    const deepPocketCount = Math.max(0, getConfigInteger(techData, 'deepPocketCount', 0));
-    const machiningDirectionCount = Math.max(0, getConfigInteger(techData, 'machiningDirectionCount', 0));
-    const setupCountEstimate = Math.max(1, getConfigInteger(techData, 'setupCountEstimate', 1));
-    const throughHoleCount = Math.max(0, getConfigInteger(techData, 'throughHoleCount', 0));
-    const blindHoleCount = Math.max(0, getConfigInteger(techData, 'blindHoleCount', 0));
-    const verticalWallFaceCount = Math.max(0, getConfigInteger(techData, 'verticalWallFaceCount', 0));
-    const cylindricalFaceCount = Math.max(0, getConfigInteger(techData, 'cylindricalFaceCount', 0));
-    const planarFaceCount = Math.max(0, getConfigInteger(techData, 'planarFaceCount', 0));
-    const pocketDepthInMax = toFiniteNumber(techData.pocketDepthInMax)
-        || (toFiniteNumber(techData.pocketDepthMmMax) / 25.4);
-    const cylindricalAreaRatio = toFiniteNumber(techData.cylindricalAreaRatio);
-    const rotationalCandidate = getConfigBool(techData, 'rotationalCandidate', false);
-
-    const stockPadLength = Math.max(0, toFiniteNumber(config.cnc_stock_pad_length_in));
-    const stockPadWidth = Math.max(0, toFiniteNumber(config.cnc_stock_pad_width_in));
-    const stockPadThickness = Math.max(0, toFiniteNumber(config.cnc_stock_pad_thickness_in));
-    const stockLengthIn = partLengthIn + stockPadLength;
-    const stockWidthIn = partWidthIn + stockPadWidth;
-    const stockThicknessIn = partThicknessIn + stockPadThickness;
-    const stockVolumeCuIn = stockLengthIn * stockWidthIn * stockThicknessIn;
-
-    const removedVolumeCuIn = Math.max(
-        0,
-        toFiniteNumber(techData.removedVolumeCuIn) || (stockVolumeCuIn > 0 && partVolumeCuIn > 0 ? stockVolumeCuIn - partVolumeCuIn : 0)
-    );
-    const removedVolumeRatio = toFiniteNumber(techData.removedVolumeRatio)
-        || (stockVolumeCuIn > 0 ? removedVolumeCuIn / stockVolumeCuIn : 0);
-
-    const featureDensity = toFiniteNumber(techData.featureDensity)
-        || (areaSqIn > 0 ? holeCount / areaSqIn : 0);
-
-    const thicknessToSpanRatio = toFiniteNumber(techData.thicknessToSpanRatio)
-        || ((partLengthIn > 0 && partWidthIn > 0) ? (partThicknessIn / Math.max(partLengthIn, partWidthIn)) : 0);
-
-    const defaultComplexity =
-        (perimeterIn > 0 && areaSqIn > 0 ? perimeterIn / Math.max(1, Math.sqrt(areaSqIn)) : 0)
-        + (holeCount * 0.35)
-        + (bendCount * 0.5)
-        + (pocketCount * 0.8)
-        + (slotCount * 0.9)
-        + (recessedFaceCount * 0.45)
-        + (deepPocketCount * 1.1)
-        + (machiningDirectionCount * 0.4)
-        + (blindHoleCount * 0.35)
-        + (verticalWallFaceCount * 0.08)
-        + (cylindricalAreaRatio * 2.5)
-        + (removedVolumeRatio * 4)
-        + (hasRaisedFeatures ? 2 : 0)
-        + (raisedFeatureFaceCount * 0.1);
-
-    const complexityScore = toFiniteNumber(techData.complexityScore) || defaultComplexity;
-
-    const rotationalMinorTolerance = Math.max(0, toFiniteNumber(config.cnc_rotational_minor_tolerance_in)) || 0.05;
-    const rotationalLengthRatioThreshold = Math.max(0, toFiniteNumber(config.cnc_rotational_length_ratio_threshold)) || 1.5;
-    const minorA = Math.min(partWidthIn, partThicknessIn);
-    const minorB = Math.max(partWidthIn, partThicknessIn);
-    const likelyRotationalFromEnvelope = minorA > 0
-        && Math.abs(minorB - minorA) <= rotationalMinorTolerance
-        && (partLengthIn / minorA) >= rotationalLengthRatioThreshold;
-    const likelyRotational = Boolean(rotationalCandidate || likelyRotationalFromEnvelope);
-
-    return {
-        partLengthIn,
-        partWidthIn,
-        partThicknessIn,
-        areaSqIn,
-        perimeterIn,
-        holeCount,
-        bendCount,
-        pocketCount,
-        slotCount,
-        recessedFaceCount,
-        deepPocketCount,
-        machiningDirectionCount,
-        setupCountEstimate,
-        throughHoleCount,
-        blindHoleCount,
-        verticalWallFaceCount,
-        cylindricalFaceCount,
-        planarFaceCount,
-        pocketDepthInMax,
-        cylindricalAreaRatio,
-        rotationalCandidate,
-        hasRaisedFeatures,
-        raisedFeatureFaceCount,
-        partVolumeCuIn,
-        stockLengthIn,
-        stockWidthIn,
-        stockThicknessIn,
-        stockVolumeCuIn,
-        removedVolumeCuIn,
-        removedVolumeRatio,
-        featureDensity,
-        thicknessToSpanRatio,
-        complexityScore,
-        likelyRotational
-    };
-};
-
-const deriveCncSetupContext = (config, metrics) => {
-    const factorDetails = [];
-    let setupCount = Math.max(0, getConfigInteger(config, 'cnc_setup_base_count', 1));
-    const maxDimensionIn = Math.max(metrics.partLengthIn, metrics.partWidthIn, metrics.partThicknessIn);
-
-    factorDetails.push({
-        label: 'Base Setup Count',
-        added_count: setupCount,
-        detail: 'Starting setup count before geometry adjustments.'
-    });
-
-    const addSetupFactor = (label, addedCount, condition, detail) => {
-        if (!condition || addedCount === 0) return;
-        setupCount += addedCount;
-        factorDetails.push({
-            label,
-            added_count: addedCount,
-            detail
-        });
-    };
-
-    addSetupFactor(
-        'Rotational Part Bonus',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_rotational_extra', 0)),
-        metrics.likelyRotational,
-        'Turned or near-cylindrical parts can require dedicated workholding.'
-    );
-
-    const largePartThreshold = Math.max(0, getConfigNumber(config, 'cnc_setup_large_part_threshold_in', 0));
-    addSetupFactor(
-        'Large Part Threshold',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_large_part_extra', 0)),
-        largePartThreshold > 0 && maxDimensionIn >= largePartThreshold,
-        `Largest dimension ${maxDimensionIn.toFixed(3)} in meets threshold ${largePartThreshold.toFixed(3)} in.`
-    );
-
-    const holeThreshold = Math.max(0, getConfigInteger(config, 'cnc_setup_hole_threshold', 0));
-    addSetupFactor(
-        'Hole Count Threshold',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_hole_extra', 0)),
-        holeThreshold > 0 && metrics.holeCount >= holeThreshold,
-        `Hole count ${metrics.holeCount} meets threshold ${holeThreshold}.`
-    );
-
-    const removedRatioThreshold = Math.max(0, getConfigNumber(config, 'cnc_setup_removed_ratio_threshold', 0));
-    addSetupFactor(
-        'Removed Material Threshold',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_removed_ratio_extra', 0)),
-        removedRatioThreshold > 0 && metrics.removedVolumeRatio >= removedRatioThreshold,
-        `Removed ratio ${metrics.removedVolumeRatio.toFixed(3)} meets threshold ${removedRatioThreshold.toFixed(3)}.`
-    );
-
-    const complexityThreshold = Math.max(0, getConfigNumber(config, 'cnc_setup_complexity_threshold', 0));
-    addSetupFactor(
-        'Complexity Threshold',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_complexity_extra', 0)),
-        complexityThreshold > 0 && metrics.complexityScore >= complexityThreshold,
-        `Complexity ${metrics.complexityScore.toFixed(3)} meets threshold ${complexityThreshold.toFixed(3)}.`
-    );
-
-    addSetupFactor(
-        'Raised Feature Bonus',
-        Math.max(0, getConfigInteger(config, 'cnc_setup_raised_feature_extra', 0)),
-        metrics.hasRaisedFeatures,
-        'Raised features can require extra orientation or handling.'
-    );
-
-    if (getConfigBool(config, 'cnc_setup_feature_estimate_enabled', false)) {
-        const featureEstimateWeight = Math.max(0, getConfigNumber(config, 'cnc_setup_feature_estimate_weight', 1));
-        const detectedSetupFloor = Math.max(1, Math.round(Math.max(1, metrics.setupCountEstimate || 1) * featureEstimateWeight));
-        if (detectedSetupFloor > setupCount) {
-            factorDetails.push({
-                label: 'CAD Setup Estimate',
-                added_count: detectedSetupFloor - setupCount,
-                detail: `Topology analysis estimated ${metrics.setupCountEstimate} setup(s), scaled to ${detectedSetupFloor}.`
-            });
-            setupCount = detectedSetupFloor;
-        }
-    }
-
-    const maxCount = Math.max(0, getConfigInteger(config, 'cnc_setup_max_count', 0));
-    if (maxCount > 0 && setupCount > maxCount) {
-        factorDetails.push({
-            label: 'Setup Count Cap',
-            added_count: maxCount - setupCount,
-            detail: `Setup count capped at ${maxCount}.`
-        });
-        setupCount = maxCount;
-    }
-
-    return {
-        setup_count: Math.max(0, setupCount),
-        max_dimension_in: maxDimensionIn,
-        factor_details: factorDetails
-    };
-};
-
-const isCncOperationEnabled = (op, config, metrics, pricingMode) => {
-    const mode = String(
-        config?.[`cnc_${op}_mode`]
-        || (pricingMode === 'smart' ? 'auto' : 'always')
-    ).trim().toLowerCase();
-
-    if (mode === 'never' || mode === 'off' || mode === 'disabled') {
-        return { enabled: false, mode, reason: 'Disabled by admin setting.' };
-    }
-
-    if (mode === 'always' || pricingMode !== 'smart') {
-        return { enabled: true, mode, reason: null };
-    }
-
-    if (getConfigBool(config, `cnc_${op}_require_rotational`, false) && !metrics.likelyRotational) {
-        return { enabled: false, mode, reason: 'Requires a rotational part.' };
-    }
-
-    if (getConfigBool(config, `cnc_${op}_require_non_rotational`, false) && metrics.likelyRotational) {
-        return { enabled: false, mode, reason: 'Requires a non-rotational part.' };
-    }
-
-    if (metrics.partLengthIn < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_length_in`]))) {
-        return { enabled: false, mode, reason: 'Part length is below the configured threshold.' };
-    }
-
-    if (metrics.partWidthIn < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_width_in`]))) {
-        return { enabled: false, mode, reason: 'Part width is below the configured threshold.' };
-    }
-
-    if (metrics.partThicknessIn < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_thickness_in`]))) {
-        return { enabled: false, mode, reason: 'Part thickness is below the configured threshold.' };
-    }
-
-    if (metrics.holeCount < Math.max(0, parseInt(config?.[`cnc_${op}_min_holes`] ?? 0, 10) || 0)) {
-        return { enabled: false, mode, reason: 'Hole count is below the configured threshold.' };
-    }
-
-    if (metrics.removedVolumeCuIn < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_removed_volume_cuin`]))) {
-        return { enabled: false, mode, reason: 'Removed volume is below the configured threshold.' };
-    }
-
-    if (metrics.removedVolumeRatio < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_removed_ratio`]))) {
-        return { enabled: false, mode, reason: 'Removed material ratio is below the configured threshold.' };
-    }
-
-    if (metrics.complexityScore < Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_complexity`]))) {
-        return { enabled: false, mode, reason: 'Complexity score is below the configured threshold.' };
-    }
-
-    if (metrics.pocketCount < Math.max(0, getConfigInteger(config, `cnc_${op}_min_pockets`, 0))) {
-        return { enabled: false, mode, reason: 'Pocket count is below the configured threshold.' };
-    }
-
-    if (metrics.slotCount < Math.max(0, getConfigInteger(config, `cnc_${op}_min_slots`, 0))) {
-        return { enabled: false, mode, reason: 'Slot count is below the configured threshold.' };
-    }
-
-    if (metrics.setupCountEstimate < Math.max(0, getConfigInteger(config, `cnc_${op}_min_setup_count_est`, 0))) {
-        return { enabled: false, mode, reason: 'Estimated setup count is below the configured threshold.' };
-    }
-
-    if (metrics.machiningDirectionCount < Math.max(0, getConfigInteger(config, `cnc_${op}_min_direction_count`, 0))) {
-        return { enabled: false, mode, reason: 'Machining direction count is below the configured threshold.' };
-    }
-
-    if (metrics.cylindricalAreaRatio < Math.max(0, getConfigNumber(config, `cnc_${op}_min_cylindrical_ratio`, 0))) {
-        return { enabled: false, mode, reason: 'Cylindrical area ratio is below the configured threshold.' };
-    }
-
-    switch (op) {
-        case 'lathe':
-            return {
-                enabled: metrics.likelyRotational,
-                mode,
-                reason: metrics.likelyRotational ? null : 'Lathe is only enabled for rotational geometry.'
-            };
-        case 'mill':
-            return {
-                enabled: !metrics.likelyRotational || metrics.holeCount > 0 || metrics.removedVolumeCuIn > 0,
-                mode,
-                reason: null
-            };
-        case 'deburr':
-            return {
-                enabled: metrics.perimeterIn > 0 || metrics.holeCount > 0,
-                mode,
-                reason: null
-            };
-        case 'inspect':
-            return { enabled: true, mode, reason: null };
-        case 'saw':
-        default:
-            return {
-                enabled: metrics.stockVolumeCuIn > 0,
-                mode,
-                reason: metrics.stockVolumeCuIn > 0 ? null : 'No stock envelope was available for saw estimation.'
-            };
-    }
-};
-
-const getSmartCncRuntimeHours = (op, config, metrics) => {
-    const baseRuntime = getConfigHours(config, `cnc_${op}_runtime`, 'Hours');
-    const minRuntime = Math.max(0, toFiniteNumber(config?.[`cnc_${op}_min_runtime_hr`]));
-
-    let runtime =
-        baseRuntime
-        + (metrics.partLengthIn * toFiniteNumber(config?.[`cnc_${op}_per_length_hr`]))
-        + (metrics.partWidthIn * toFiniteNumber(config?.[`cnc_${op}_per_width_hr`]))
-        + (metrics.partThicknessIn * toFiniteNumber(config?.[`cnc_${op}_per_thickness_hr`]))
-        + (metrics.areaSqIn * toFiniteNumber(config?.[`cnc_${op}_per_area_hr`]))
-        + (metrics.perimeterIn * toFiniteNumber(config?.[`cnc_${op}_per_perimeter_hr`]))
-        + (metrics.holeCount * toFiniteNumber(config?.[`cnc_${op}_per_hole_hr`]))
-        + (metrics.bendCount * toFiniteNumber(config?.[`cnc_${op}_per_bend_hr`]))
-        + (metrics.partVolumeCuIn * toFiniteNumber(config?.[`cnc_${op}_per_part_volume_hr`]))
-        + (metrics.removedVolumeCuIn * toFiniteNumber(config?.[`cnc_${op}_per_removed_volume_hr`]))
-        + (metrics.removedVolumeRatio * toFiniteNumber(config?.[`cnc_${op}_per_removed_ratio_hr`]))
-        + (metrics.complexityScore * toFiniteNumber(config?.[`cnc_${op}_per_complexity_hr`]))
-        + (metrics.featureDensity * toFiniteNumber(config?.[`cnc_${op}_per_feature_density_hr`]))
-        + (metrics.thicknessToSpanRatio * toFiniteNumber(config?.[`cnc_${op}_per_thickness_span_hr`]))
-        + (metrics.pocketCount * toFiniteNumber(config?.[`cnc_${op}_per_pocket_hr`]))
-        + (metrics.slotCount * toFiniteNumber(config?.[`cnc_${op}_per_slot_hr`]))
-        + (metrics.recessedFaceCount * toFiniteNumber(config?.[`cnc_${op}_per_recessed_face_hr`]))
-        + (metrics.deepPocketCount * toFiniteNumber(config?.[`cnc_${op}_per_deep_pocket_hr`]))
-        + (metrics.setupCountEstimate * toFiniteNumber(config?.[`cnc_${op}_per_setup_count_hr`]))
-        + (metrics.machiningDirectionCount * toFiniteNumber(config?.[`cnc_${op}_per_direction_hr`]))
-        + (metrics.throughHoleCount * toFiniteNumber(config?.[`cnc_${op}_per_through_hole_hr`]))
-        + (metrics.blindHoleCount * toFiniteNumber(config?.[`cnc_${op}_per_blind_hole_hr`]))
-        + (metrics.verticalWallFaceCount * toFiniteNumber(config?.[`cnc_${op}_per_vertical_wall_face_hr`]))
-        + (metrics.cylindricalAreaRatio * toFiniteNumber(config?.[`cnc_${op}_per_cylindrical_ratio_hr`]))
-        + (metrics.pocketDepthInMax * toFiniteNumber(config?.[`cnc_${op}_per_pocket_depth_hr`]));
-
-    if (metrics.hasRaisedFeatures) {
-        runtime += toFiniteNumber(config?.[`cnc_${op}_raised_feature_hr`]);
-    }
-
-    if (metrics.likelyRotational && getConfigBool(config, `cnc_${op}_rotational_bonus_enabled`, false)) {
-        runtime += toFiniteNumber(config?.[`cnc_${op}_rotational_bonus_hr`]);
-    }
-
-    runtime = Math.max(0, runtime);
-    if (minRuntime > 0) runtime = Math.max(runtime, minRuntime);
-
-    return runtime;
-};
-
-const deriveCncRiskAdjustments = (config, metrics) => {
-    const enabled = getConfigBool(config, 'cnc_risk_enabled', false);
-    const items = [];
-    const warnings = [];
-    let costPerUnit = 0;
-
-    if (!enabled) {
-        return {
-            enabled: false,
-            cost_per_unit: 0,
-            items,
-            warnings
-        };
-    }
-
-    const addRisk = ({ key, label, condition, surcharge, metricValue, threshold, comparison, warning }) => {
-        if (!condition) return;
-        const appliedSurcharge = Math.max(0, surcharge);
-        costPerUnit += appliedSurcharge;
-        items.push({
-            key,
-            label,
-            surcharge: appliedSurcharge,
-            metric_value: metricValue,
-            threshold,
-            comparison
-        });
-        if (warning) warnings.push(warning);
-    };
-
-    const complexityThreshold = Math.max(0, getConfigNumber(config, 'cnc_risk_complexity_threshold', 0));
-    addRisk({
-        key: 'complexity',
-        label: 'Complexity Risk',
-        condition: complexityThreshold > 0 && metrics.complexityScore >= complexityThreshold,
-        surcharge: getConfigNumber(config, 'cnc_risk_complexity_surcharge', 0),
-        metricValue: metrics.complexityScore,
-        threshold: complexityThreshold,
-        comparison: '>=',
-        warning: `High CNC complexity detected (${metrics.complexityScore.toFixed(2)}).`
-    });
-
-    const holeThreshold = Math.max(0, getConfigInteger(config, 'cnc_risk_hole_threshold', 0));
-    addRisk({
-        key: 'holes',
-        label: 'Hole Count Risk',
-        condition: holeThreshold > 0 && metrics.holeCount >= holeThreshold,
-        surcharge: getConfigNumber(config, 'cnc_risk_hole_surcharge', 0),
-        metricValue: metrics.holeCount,
-        threshold: holeThreshold,
-        comparison: '>=',
-        warning: `High hole count detected (${metrics.holeCount} holes).`
-    });
-
-    const removedRatioThreshold = Math.max(0, getConfigNumber(config, 'cnc_risk_removed_ratio_threshold', 0));
-    addRisk({
-        key: 'removed_ratio',
-        label: 'Material Removal Risk',
-        condition: removedRatioThreshold > 0 && metrics.removedVolumeRatio >= removedRatioThreshold,
-        surcharge: getConfigNumber(config, 'cnc_risk_removed_ratio_surcharge', 0),
-        metricValue: metrics.removedVolumeRatio,
-        threshold: removedRatioThreshold,
-        comparison: '>=',
-        warning: `High material removal ratio detected (${metrics.removedVolumeRatio.toFixed(3)}).`
-    });
-
-    const thicknessSpanThreshold = Math.max(0, getConfigNumber(config, 'cnc_risk_thickness_span_threshold', 0));
-    addRisk({
-        key: 'thickness_span',
-        label: 'Thin Wall Risk',
-        condition: thicknessSpanThreshold > 0 && metrics.thicknessToSpanRatio > 0 && metrics.thicknessToSpanRatio <= thicknessSpanThreshold,
-        surcharge: getConfigNumber(config, 'cnc_risk_thickness_span_surcharge', 0),
-        metricValue: metrics.thicknessToSpanRatio,
-        threshold: thicknessSpanThreshold,
-        comparison: '<=',
-        warning: `Low thickness-to-span ratio detected (${metrics.thicknessToSpanRatio.toFixed(4)}).`
-    });
-
-    addRisk({
-        key: 'raised_features',
-        label: 'Raised Feature Risk',
-        condition: metrics.hasRaisedFeatures,
-        surcharge: getConfigNumber(config, 'cnc_risk_raised_feature_surcharge', 0),
-        metricValue: metrics.raisedFeatureFaceCount,
-        threshold: null,
-        comparison: 'present',
-        warning: 'Raised or non-flat features detected and may require additional machining attention.'
-    });
-
-    addRisk({
-        key: 'rotational',
-        label: 'Rotational Geometry Risk',
-        condition: metrics.likelyRotational,
-        surcharge: getConfigNumber(config, 'cnc_risk_rotational_surcharge', 0),
-        metricValue: 1,
-        threshold: null,
-        comparison: 'present',
-        warning: 'Rotational geometry detected and may require turning-specific setup.'
-    });
-
-    return {
-        enabled: true,
-        cost_per_unit: costPerUnit,
-        items,
-        warnings
-    };
-};
-
 // ── Admin Routes ─────────────────────────────────────────
 
 /**
@@ -1453,11 +963,6 @@ router.post('/calculate', async (req, res) => {
         // ── MAIN SERVICE COST ──────────────────────────────────────────────────
         let main_service_cost = 0;
         const techData = req.body.technical_data || {};
-        let cncOperationBreakdown = [];
-        let cncDerivedMetrics = null;
-        let cncSetupContext = null;
-        let cncRiskBreakdown = null;
-        let cncWarnings = [];
 
         if (mainService) {
             const sTitle = (mainService.title || "").toLowerCase();
@@ -1601,117 +1106,31 @@ router.post('/calculate', async (req, res) => {
             if (isCNC) {
                 let totalCncProductionCost = 0;
                 const operations = ['saw', 'lathe', 'mill', 'deburr', 'inspect'];
-                const cncPricingMode = String(config.cnc_pricing_mode || 'manual').trim().toLowerCase();
-                let enabledCncOperationCount = 0;
-                cncDerivedMetrics = deriveCncMetrics({
-                    lengthIn: lengthInNum,
-                    heightIn: heightInNum,
-                    thicknessIn: thicknessInNum,
-                    techData,
-                    config
-                });
-                cncSetupContext = cncPricingMode === 'smart'
-                    ? deriveCncSetupContext(config, cncDerivedMetrics)
-                    : null;
 
                 operations.forEach(op => {
-                    const baseSetupHours = getConfigHours(config, `cnc_${op}_setup`, 'Hours');
-                    let setupHours = baseSetupHours;
-                    let runtime = getConfigHours(config, `cnc_${op}_runtime`, 'Hours');
+                    let setup = parseFloat(config[`cnc_${op}_setup`]) || 0;
+                    let runtime = parseFloat(config[`cnc_${op}_runtime`]) || 0;
                     const rate = parseFloat(config[`cnc_${op}_rate`]) || 0;
-                    const enabledInfo = isCncOperationEnabled(op, config, cncDerivedMetrics, cncPricingMode);
-                    const setupMultiplier = cncPricingMode === 'smart'
-                        ? Math.max(0, getConfigNumber(config, `cnc_${op}_setup_multiplier`, 1))
-                        : 1;
-                    const setupCount = cncPricingMode === 'smart'
-                        ? Math.max(0, toFiniteNumber(cncSetupContext?.setup_count))
-                        : 1;
+                    const setupUnit = config[`cnc_${op}_setup_unit`] || 'Hours';
+                    const runtimeUnit = config[`cnc_${op}_runtime_unit`] || 'Hours';
 
-                    if (cncPricingMode === 'smart') {
-                        runtime = getSmartCncRuntimeHours(op, config, cncDerivedMetrics);
-                        setupHours = baseSetupHours * setupMultiplier * setupCount;
-                    }
+                    if (setupUnit === 'Minutes') setup /= 60;
+                    else if (setupUnit === 'Seconds') setup /= 3600;
 
-                    if (!enabledInfo.enabled || rate <= 0 || (setupHours <= 0 && runtime <= 0)) {
-                        cncOperationBreakdown.push({
-                            operation: op,
-                            enabled: false,
-                            mode: enabledInfo.mode,
-                            skip_reason: enabledInfo.reason || null,
-                            base_setup_hours: baseSetupHours,
-                            setup_multiplier: setupMultiplier,
-                            setup_count: setupCount,
-                            setup_hours: setupHours,
-                            runtime_hours_per_part: runtime,
-                            rate,
-                            unit_cost: 0
-                        });
-                        return;
-                    }
-
-                    enabledCncOperationCount += 1;
+                    if (runtimeUnit === 'Minutes') runtime /= 60;
+                    else if (runtimeUnit === 'Seconds') runtime /= 3600;
 
                     // PRICE = (runtime * qty + setup) * shop_rate
-                    const opCostTotal = (runtime * qty + setupHours) * rate;
-                    const unitCost = qty > 0 ? (opCostTotal / qty) : 0;
+                    const opCostTotal = (runtime * qty + setup) * rate;
 
                     if (qty > 0) {
-                        totalCncProductionCost += unitCost;
+                        totalCncProductionCost += (opCostTotal / qty);
                     }
-
-                    cncOperationBreakdown.push({
-                        operation: op,
-                        enabled: true,
-                        mode: enabledInfo.mode,
-                        skip_reason: null,
-                        base_setup_hours: baseSetupHours,
-                        setup_multiplier: setupMultiplier,
-                        setup_count: setupCount,
-                        setup_hours: setupHours,
-                        runtime_hours_per_part: runtime,
-                        rate,
-                        unit_cost: unitCost
-                    });
                 });
-
-                if (cncPricingMode === 'smart') {
-                    cncRiskBreakdown = deriveCncRiskAdjustments(config, cncDerivedMetrics);
-                    const rawRiskCost = Math.max(0, toFiniteNumber(cncRiskBreakdown?.cost_per_unit));
-                    const applyRiskCost = enabledCncOperationCount > 0 && rawRiskCost > 0;
-                    const appliedRiskCost = applyRiskCost ? rawRiskCost : 0;
-
-                    cncRiskBreakdown = {
-                        ...(cncRiskBreakdown || {}),
-                        applied: applyRiskCost,
-                        cost_per_unit_raw: rawRiskCost,
-                        cost_per_unit: appliedRiskCost,
-                        items: Array.isArray(cncRiskBreakdown?.items)
-                            ? cncRiskBreakdown.items.map(item => ({
-                                ...item,
-                                surcharge_applied: applyRiskCost ? Math.max(0, toFiniteNumber(item?.surcharge)) : 0
-                            }))
-                            : []
-                    };
-
-                    cncWarnings = Array.isArray(cncRiskBreakdown?.warnings)
-                        ? [...cncRiskBreakdown.warnings]
-                        : [];
-
-                    if (enabledCncOperationCount === 0) {
-                        cncWarnings.push('No CNC operations were enabled by the current smart rules.');
-                    }
-
-                    totalCncProductionCost += appliedRiskCost;
-                }
 
                 if (totalCncProductionCost > 0) {
                     console.log(`[Debug] CNC Production Cost Breakdown:`, {
                         totalUnit: totalCncProductionCost,
-                        mode: cncPricingMode,
-                        metrics: cncDerivedMetrics,
-                        setupContext: cncSetupContext,
-                        risk: cncRiskBreakdown,
-                        operations: cncOperationBreakdown,
                         qty
                     });
                 }
@@ -1889,21 +1308,6 @@ router.post('/calculate', async (req, res) => {
 
         const material_marked_up = material_cost * material_factor;
         const production_marked_up = main_service_cost * main_mu_factor;
-        const markedCncOperationBreakdown = cncOperationBreakdown.map(op => ({
-            ...op,
-            unit_cost_marked_up: (parseFloat(op?.unit_cost) || 0) * main_mu_factor
-        }));
-        const markedCncRiskBreakdown = cncRiskBreakdown ? {
-            ...cncRiskBreakdown,
-            cost_per_unit_marked_up: (parseFloat(cncRiskBreakdown?.cost_per_unit) || 0) * main_mu_factor,
-            cost_per_unit_raw_marked_up: (parseFloat(cncRiskBreakdown?.cost_per_unit_raw) || 0) * main_mu_factor,
-            items: Array.isArray(cncRiskBreakdown.items)
-                ? cncRiskBreakdown.items.map(item => ({
-                    ...item,
-                    surcharge_marked_up: (parseFloat(item?.surcharge_applied ?? item?.surcharge) || 0) * main_mu_factor
-                }))
-                : []
-        } : null;
 
         const marked_service_breakdown = [];
         let total_additional_marked_up = 0;
@@ -1991,8 +1395,7 @@ router.post('/calculate', async (req, res) => {
         const warnings = Array.from(new Set([
             ...(boundsWarning ? [boundsWarning] : []),
             ...(laser_warning ? ['Part dimensions or thickness exceed standard limits. Please verify capability.'] : []),
-            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : []),
-            ...(Array.isArray(cncWarnings) ? cncWarnings : [])
+            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : [])
         ].filter(Boolean)));
 
         res.json({
@@ -2009,10 +1412,6 @@ router.post('/calculate', async (req, res) => {
                 discount_percent,
                 discount_amount: unit_discount_amount * qty,
                 applied_tier,
-                cnc_operation_breakdown: markedCncOperationBreakdown,
-                cnc_derived_metrics: cncDerivedMetrics,
-                cnc_setup_context: cncSetupContext,
-                cnc_risk_breakdown: markedCncRiskBreakdown,
                 warnings
             }
         });

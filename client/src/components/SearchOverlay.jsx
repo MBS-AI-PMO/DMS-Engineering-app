@@ -147,6 +147,21 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                 </div>
                             )}
 
+                            {query && isLoading && allResults.length === 0 && (
+                                <div className="search-result-group search-skeleton-group" aria-label="Loading search results">
+                                    <h4 className="search-group-title">Searching catalog</h4>
+                                    {[...Array(4)].map((_, idx) => (
+                                        <div key={idx} className="search-item search-item-skeleton" aria-hidden="true">
+                                            <div className="search-item-thumb skeleton" />
+                                            <div className="search-item-info">
+                                                <div className="skeleton search-skeleton-title" />
+                                                <div className="skeleton search-skeleton-desc" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {query && allResults.length === 0 && !isLoading && (
                                 <div className="search-empty">
                                     <p>No results found for "{query}"</p>

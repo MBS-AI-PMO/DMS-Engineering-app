@@ -1304,14 +1304,6 @@ def unfold_with_lib(filepath, profile="full"):
             emit_progress(58 if estimate_thickness else 42, "Detecting holes")
             holes_data = detect_holes_fc(fc_shape)
 
-        cnc_features = _detect_cnc_features(
-            fc_shape,
-            thickness,
-            root_idx=root_idx,
-            holes_data=holes_data,
-            non_flat_features=non_flat_features,
-        )
-
         emit_progress(96, "Finalizing analysis")
         return _json_safe({
             "success": True,
@@ -1331,7 +1323,6 @@ def unfold_with_lib(filepath, profile="full"):
             "frontBendEdges": [],
             "sideBendEdges": [],
             "detectedHoles": holes_data,
-            "cncFeatures": cnc_features,
         })
     
     t_start = time.time()
@@ -1769,14 +1760,6 @@ def unfold_with_lib(filepath, profile="full"):
         holes_data = detect_holes_fc(fc_shape)
         sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
-    cnc_features = _detect_cnc_features(
-        fc_shape,
-        thickness,
-        root_idx=chosen_root,
-        holes_data=holes_data,
-        non_flat_features=non_flat_features,
-    )
-
     sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")
     emit_progress(98, "Finalizing response")
 
@@ -1798,7 +1781,6 @@ def unfold_with_lib(filepath, profile="full"):
         "frontBendEdges": views["front"]["bend_edges"],
         "sideBendEdges": views["side"]["bend_edges"],
         "detectedHoles": holes_data,
-        "cncFeatures": cnc_features,
     })
 
 if __name__ == "__main__":

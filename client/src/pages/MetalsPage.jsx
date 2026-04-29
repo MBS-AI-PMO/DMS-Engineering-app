@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { ChevronRight, Filter, Search, ArrowRight, Shield, Zap, Award, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Award, Boxes, CheckCircle2, ChevronRight, Filter, Gauge, Search, Shield, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { metalsData as staticMetalsData } from '../data/metalsData';
 import { fetchMetals, fetchCategories } from '../utils/api';
 
@@ -89,6 +89,23 @@ const MetalsPage = () => {
         });
     }, [selectedCategory, searchQuery, metals]);
 
+    const featuredMetals = useMemo(() => filteredMetals.slice(0, 4), [filteredMetals]);
+    const visibleMetals = loading ? [] : filteredMetals;
+    const categoryCount = selectedCategory === 'All'
+        ? metals.length
+        : filteredMetals.length;
+
+    const getThicknessText = (metal) => {
+        if (!metal?.thickness) return 'Custom stock';
+        const parts = String(metal.thickness).split(':');
+        return (parts.length > 1 ? parts.pop() : metal.thickness).trim();
+    };
+
+    const getRangeText = (metal) => {
+        if (!metal?.thickness) return metal?.category || 'Material';
+        return String(metal.thickness).split(':')[0].trim();
+    };
+
     return (
         <div className="metals-page">
             <style>{`
@@ -122,220 +139,212 @@ const MetalsPage = () => {
                 </div>
             </div>
 
-            {/* Catalog Section */}
-            <section className="catalog-section">
-                <div className="container">
-                    {/* Filter Bar */}
-                    <div className="catalog-controls">
-                        <div className="category-selector-wrapper">
-                            <div className="category-tabs">
-                                {categories.map(cat => (
-                                    <button
-                                        key={cat}
-                                        className={`category-tab ${selectedCategory === cat ? 'active' : ''}`}
-                                        onClick={() => setSelectedCategory(cat)}
-                                    >
-                                        {cat}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="category-mobile-select" ref={dropdownRef} onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-                                <Filter className="filter-icon" size={18} />
-                                <div className="selected-category-text">
-                                    {selectedCategory}
-                                </div>
-                                <ChevronRight className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`} size={18} />
+            <section className="metals-catalog-shell">
+                <div className="container metals-catalog-container">
+                    <div className="metals-command-bar">
+                        <div className="metals-command-copy">
+                            <span className="metals-eyebrow"><Boxes size={16} /> Live material library</span>
+                            <h2>Choose stock by process, grade, and thickness.</h2>
+                            <p>Browse production-ready metals, compare stock availability, and open the exact material profile before quoting.</p>
+                        </div>
 
-                                {isDropdownOpen && (
-                                    <div className="category-dropdown-menu">
-                                        {categories.map(cat => (
-                                            <div
-                                                key={cat}
-                                                className={`dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedCategory(cat);
-                                                    setIsDropdownOpen(false);
-                                                }}
-                                            >
-                                                {cat}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                        <div className="metals-stats-strip" aria-label="Catalog summary">
+                            <div>
+                                <strong>{metals.length}</strong>
+                                <span>Total metals</span>
+                            </div>
+                            <div>
+                                <strong>{categories.length}</strong>
+                                <span>Categories</span>
+                            </div>
+                            <div>
+                                <strong>{categoryCount}</strong>
+                                <span>Current view</span>
                             </div>
                         </div>
-                        <div className="catalog-search">
-                            <Search className="search-icon" size={18} />
+                    </div>
+
+                    <div className="metals-toolbar">
+                        <div className="metals-search-field">
+                            <Search size={18} />
                             <input
-                                type="text"
-                                placeholder="Search materials or specs..."
+                                type="search"
+                                placeholder="Search material, alloy, or finish"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    {/* Result Info */}
-                    <div className="catalog-info">
-                        <p>Showing <strong>{filteredMetals.length}</strong> materials</p>
-                    </div>
+                        <div className="metals-filter-desktop" aria-label="Material categories">
+                            {categories.map(cat => (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    className={selectedCategory === cat ? 'active' : ''}
+                                    onClick={() => setSelectedCategory(cat)}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
 
-                    {/* Material List Layout */}
-                    <div className="material-catalog-list">
-                        {loading && (
-                            [...Array(6)].map((_, i) => (
-                                <div key={i} className="material-detail-card">
-                                    {/* Image panel */}
-                                    <div className="card-image">
-                                        <div className="skeleton" style={{ width: '100%', height: '100%', borderRadius: 0 }} />
-                                    </div>
+                        <div className="metals-filter-mobile" ref={dropdownRef}>
+                            <button
+                                type="button"
+                                className="metals-filter-trigger"
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            >
+                                <Filter size={17} />
+                                <span>{selectedCategory}</span>
+                                <ChevronRight size={17} className={isDropdownOpen ? 'open' : ''} />
+                            </button>
 
-                                    {/* Body */}
-                                    <div className="card-body">
-                                        {/* card-main: header + desc + specs */}
-                                        <div className="card-main">
-                                            {/* Header: title + tag placeholder */}
-                                            <div className="card-header">
-                                                <div className="title-group">
-                                                    <div className="skeleton" style={{ width: '180px', height: '26px', borderRadius: '6px', marginBottom: '8px' }} />
-                                                    <div className="skeleton" style={{ width: '110px', height: '14px', borderRadius: '4px' }} />
-                                                </div>
-                                            </div>
-
-                                            {/* Description lines */}
-                                            <div className="skeleton" style={{ width: '100%', height: '14px', borderRadius: '4px', marginBottom: '8px' }} />
-                                            <div className="skeleton" style={{ width: '82%', height: '14px', borderRadius: '4px', marginBottom: '28px' }} />
-
-                                            {/* Spec items */}
-                                            <div className="card-specs">
-                                                <div className="spec-item">
-                                                    <div className="skeleton" style={{ width: '48px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
-                                                    <div className="skeleton" style={{ width: '90px', height: '18px', borderRadius: '4px' }} />
-                                                </div>
-                                                <div className="spec-item">
-                                                    <div className="skeleton" style={{ width: '48px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
-                                                    <div className="skeleton" style={{ width: '70px', height: '18px', borderRadius: '4px' }} />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* card-actions: price info + button */}
-                                        <div className="card-actions">
-                                            <div className="card-price-info">
-                                                <div className="skeleton" style={{ width: '100px', height: '11px', borderRadius: '4px', marginBottom: '6px' }} />
-                                                <div className="skeleton" style={{ width: '130px', height: '20px', borderRadius: '4px' }} />
-                                            </div>
-                                            <div className="skeleton" style={{ width: '150px', height: '48px', borderRadius: '12px' }} />
-                                        </div>
-                                    </div>
+                            {isDropdownOpen && (
+                                <div className="metals-filter-menu">
+                                    {categories.map(cat => (
+                                        <button
+                                            key={cat}
+                                            type="button"
+                                            className={selectedCategory === cat ? 'active' : ''}
+                                            onClick={() => {
+                                                setSelectedCategory(cat);
+                                                setIsDropdownOpen(false);
+                                            }}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
                                 </div>
-                            ))
-                        )}
-                        <AnimatePresence mode='popLayout'>
-                            {filteredMetals.map((metal, index) => (
-                                <motion.div
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="metals-results-row">
+                        <span>{loading ? 'Loading materials' : `${filteredMetals.length} materials found`}</span>
+                        <span>{selectedCategory === 'All' ? 'All categories' : selectedCategory}</span>
+                    </div>
+
+                    {featuredMetals.length > 0 && !loading && (
+                        <div className="metals-feature-row">
+                            {featuredMetals.map(metal => (
+                                <Link to={`/metal/${metal.slug || metal.id}`} className="metals-feature-chip" key={`feature-${metal.id}`}>
+                                    <span>{metal.name}</span>
+                                    <ChevronRight size={15} />
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="metals-grid-redesign">
+                        {loading && [...Array(6)].map((_, i) => (
+                            <article key={i} className="metal-card-redesign skeleton-card-redesign">
+                                <div className="metal-card-media skeleton" />
+                                <div className="metal-card-content">
+                                    <div className="skeleton skeleton-line wide" />
+                                    <div className="skeleton skeleton-line" />
+                                    <div className="skeleton skeleton-copy" />
+                                    <div className="skeleton skeleton-copy short" />
+                                </div>
+                            </article>
+                        ))}
+
+                        <AnimatePresence mode="popLayout">
+                            {visibleMetals.map((metal, index) => (
+                                <motion.article
                                     key={metal.id}
                                     layout
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                                    className="material-detail-card"
+                                    initial={{ opacity: 0, y: 14 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 14 }}
+                                    transition={{ duration: 0.25, delay: Math.min(index * 0.025, 0.16) }}
+                                    className="metal-card-redesign"
                                 >
-                                    <div className="card-image">
-                                        <img src={metal.image} alt={metal.name} loading="lazy" decoding="async" />
+                                    <Link to={`/metal/${metal.slug || metal.id}`} className="metal-card-hit-area" aria-label={`View ${metal.name}`} />
+                                    <div className="metal-card-media">
+                                        {metal.image ? (
+                                            <img src={metal.image} alt={metal.name} loading="lazy" decoding="async" />
+                                        ) : (
+                                            <div className="metal-image-fallback"><Sparkles size={28} /></div>
+                                        )}
+                                        <span>{metal.category || 'Material'}</span>
                                     </div>
-                                    <div className="card-body">
-                                        <div className="card-main">
-                                            <div className="card-header">
-                                                <div className="title-group">
-                                                    <h3>{metal.name}</h3>
-                                                </div>
-                                                <div className="tags">
-                                                    {(metal.name.toLowerCase().includes('titanium') || metal.subLabel?.toLowerCase().includes('titanium')) && (
-                                                        <div className="red-touch">
-                                                            <span className="view-errors">Premium Grade</span>
-                                                            <AlertTriangle size={16} className="error-icon" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <p className="card-desc">{metal.description}</p>
 
-                                            <div className="card-specs">
-                                                <div className="spec-item">
-                                                    <span className="spec-label">Range</span>
-                                                    <span className="spec-value">{metal.thickness.split(':')[0]}</span>
-                                                </div>
-                                                <div className="spec-item">
-                                                    <span className="spec-label">Status</span>
-                                                    <span className="spec-value">In Stock</span>
-                                                </div>
+                                    <div className="metal-card-content">
+                                        <div className="metal-card-heading">
+                                            <div>
+                                                <h3>{metal.name}</h3>
+                                                <p>{metal.description || 'Production material available for custom manufacturing.'}</p>
                                             </div>
+                                            <ChevronRight size={20} />
                                         </div>
 
-                                        <div className="card-actions">
-                                            <div className="card-price-info">
-                                                <span className="price-label">Thickness range</span>
-                                                <span className="price-value">{metal.thickness.split(':').pop().trim()}</span>
+                                        <div className="metal-spec-row">
+                                            <div>
+                                                <span>Range</span>
+                                                <strong>{getRangeText(metal)}</strong>
                                             </div>
-                                            <Link to={`/metal/${metal.slug || metal.id}`} className="card-btn-link">
-                                                <span>View Details</span>
-                                                <ChevronRight size={18} />
-                                            </Link>
+                                            <div>
+                                                <span>Thickness</span>
+                                                <strong>{getThicknessText(metal)}</strong>
+                                            </div>
+                                            <div>
+                                                <span>Status</span>
+                                                <strong>In stock</strong>
+                                            </div>
                                         </div>
                                     </div>
-                                </motion.div>
+                                </motion.article>
                             ))}
                         </AnimatePresence>
                     </div>
 
-                    {filteredMetals.length === 0 && (
-                        <div className="no-results">
-                            <Search size={48} />
+                    {!loading && filteredMetals.length === 0 && (
+                        <div className="metals-empty-state">
+                            <Search size={34} />
                             <h3>No materials found</h3>
-                            <p>Try adjusting your search or category filters.</p>
-                            <button onClick={() => { setSelectedCategory('All'); setSearchQuery(''); }} className="reset-btn">
-                                Clear all filters
+                            <p>Try a different alloy, category, or stock keyword.</p>
+                            <button type="button" onClick={() => { setSelectedCategory('All'); setSearchQuery(''); }}>
+                                Clear filters
                             </button>
                         </div>
                     )}
                 </div>
             </section>
 
-            {/* Why Choose Section */}
-            <section className="metals-benefits">
-                <div className="container">
-                    <div className="benefits-grid">
-                        <div className="benefit-card">
-                            <div className="benefit-icon"><Shield size={24} /></div>
-                            <h4>Certified Quality</h4>
-                            <p>All materials come with mill test reports upon request to ensure traceability.</p>
-                        </div>
-                        <div className="benefit-card">
-                            <div className="benefit-icon"><Zap size={24} /></div>
-                            <h4>Instant Quoting</h4>
-                            <p>Upload your CAD files and get pricing in seconds for any material in our catalog.</p>
-                        </div>
-                        <div className="benefit-card">
-                            <div className="benefit-icon"><Award size={24} /></div>
-                            <h4>Industry Standards</h4>
-                            <p>We source metals that meet or exceed ASTM and industry-specific certifications.</p>
-                        </div>
+            <section className="metals-assurance-band">
+                <div className="container metals-assurance-grid">
+                    <div className="assurance-item">
+                        <Shield size={22} />
+                        <h3>Traceable Stock</h3>
+                        <p>Material records and mill test reports can be aligned to production requirements.</p>
+                    </div>
+                    <div className="assurance-item">
+                        <Gauge size={22} />
+                        <h3>Process Ready</h3>
+                        <p>Catalog entries are structured around quoting, cutting, forming, and finishing workflows.</p>
+                    </div>
+                    <div className="assurance-item">
+                        <SlidersHorizontal size={22} />
+                        <h3>Configurable Options</h3>
+                        <p>Thickness, service compatibility, and production settings stay tied to admin controls.</p>
+                    </div>
+                    <div className="assurance-item">
+                        <Award size={22} />
+                        <h3>Engineering Grade</h3>
+                        <p>Metals are organized for practical specification review, not a generic storefront list.</p>
                     </div>
                 </div>
             </section>
 
-            <section className="metals-cta">
-                <div className="container">
-                    <div className="cta-box">
-                        <h2>Ready to start your project?</h2>
-                        <p>Upload your design and see the precision of DMS Engineering for yourself.</p>
-                        <Link to="/get-instant-pricing" className="cta-btn secondary">
-                            Get Instant Pricing <ArrowRight size={20} />
-                        </Link>
+            <section className="metals-production-strip">
+                <div className="container metals-production-inner">
+                    <div>
+                        <span><CheckCircle2 size={18} /> Catalog connected to instant pricing</span>
+                        <h2>Move from material selection to quote setup without losing context.</h2>
                     </div>
+                    <Link to="/get-instant-pricing" className="metals-primary-action">
+                        Start Quote <ArrowRight size={18} />
+                    </Link>
                 </div>
             </section>
         </div>

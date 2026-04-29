@@ -347,8 +347,7 @@ class CORSHandler(BaseHTTPRequestHandler):
                 "holes": r.get("detectedHoles", []),
                 "faceMeshes": r.get("faceMeshes", {}),
                 "bendTree": r.get("bendTree", None),
-                "thickness": r.get("thickness", 2.0),
-                "cncFeatures": r.get("cncFeatures", {})
+                "thickness": r.get("thickness", 2.0)
                 }
             )
         elif post_path == "/unfold-job/start":

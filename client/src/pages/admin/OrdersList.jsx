@@ -522,8 +522,6 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
         <div className="admin-items-mini-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {items.map(item => {
                 const config = typeof item.configuration_json === 'string' ? JSON.parse(item.configuration_json) : item.configuration_json;
-                const quoteSnapshot = typeof item.quote_snapshot_json === 'string' ? JSON.parse(item.quote_snapshot_json) : (item.quote_snapshot_json || {});
-                const setupEstimate = quoteSnapshot?.summary?.cnc_metrics?.setupCountEstimate;
                 return (
                     <div key={item.id} style={{ background: 'rgba(99, 102, 241, 0.03)', padding: '24px', borderRadius: '15px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
                         <div style={{ marginBottom: '18px' }}>
@@ -531,11 +529,6 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
                             <span style={{ fontSize: '0.85rem', color: '#a5b4fc', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                                 {config.metal?.name} - {config.thickness}mm
                             </span>
-                            {setupEstimate ? (
-                                <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#c4b5fd', fontWeight: 700 }}>
-                                    Calibration snapshot: setup estimate {setupEstimate}
-                                </div>
-                            ) : null}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', gap: '4px', flex: '1 1 100%', marginBottom: '4px' }}>

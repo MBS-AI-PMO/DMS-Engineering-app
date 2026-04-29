@@ -284,123 +284,12 @@ const InstantPricing = () => {
   }, [backendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length]);
 
   const pricingTechnicalData = useMemo(() => {
-    const lengthIn = toFiniteNumber(displayDimensions?.inches?.l);
-    const widthIn = toFiniteNumber(displayDimensions?.inches?.w);
-    const thicknessIn = toFiniteNumber(displayDimensions?.inches?.t);
-    const thicknessMm = toFiniteNumber(displayDimensions?.mm?.t);
-    const partVolumeCuIn = toFiniteNumber(displayDimensions?.inches?.volume);
-    const boundingStockVolumeCuIn = lengthIn > 0 && widthIn > 0 && thicknessIn > 0
-      ? (lengthIn * widthIn * thicknessIn)
-      : 0;
-    const removedVolumeCuIn = boundingStockVolumeCuIn > 0 && partVolumeCuIn > 0
-      ? Math.max(0, boundingStockVolumeCuIn - partVolumeCuIn)
-      : 0;
-    const removedVolumeRatio = boundingStockVolumeCuIn > 0
-      ? (removedVolumeCuIn / boundingStockVolumeCuIn)
-      : 0;
-    const bendCount = Array.isArray(backendData?.bends) ? backendData.bends.length : 0;
-    const holeCount = Math.max(
-      detectedHoles.length,
-      Math.max(0, Number.parseInt(dxfTechData?.pierceCount, 10) || 0),
-      Math.max(0, Number.parseInt(backendData?.pierceCount, 10) || 0)
-    );
-    const areaSqIn = lengthIn * widthIn;
-    const perimeterIn = perimeterMm > 0 ? perimeterMm / 25.4 : 0;
-    const featureDensity = areaSqIn > 0 ? holeCount / areaSqIn : 0;
-    const thicknessToSpanRatio = (lengthIn > 0 && widthIn > 0)
-      ? (thicknessIn / Math.max(lengthIn, widthIn))
-      : 0;
-    const raisedFeatureFaceCount = Number.parseInt(backendData?.nonFlatFeatures?.raisedFeatureFaceCount, 10) || 0;
-    const hasRaisedFeatures = Boolean(backendData?.nonFlatFeatures?.hasRaisedFeatures);
-    const cncFeatures = backendData?.cncFeatures || {};
-    const pocketCount = Math.max(0, Number.parseInt(cncFeatures?.pocketCount, 10) || 0);
-    const slotCount = Math.max(0, Number.parseInt(cncFeatures?.slotCount, 10) || 0);
-    const recessedFaceCount = Math.max(0, Number.parseInt(cncFeatures?.recessedFaceCount, 10) || 0);
-    const deepPocketCount = Math.max(0, Number.parseInt(cncFeatures?.deepPocketCount, 10) || 0);
-    const machiningDirectionCount = Math.max(0, Number.parseInt(cncFeatures?.machiningDirectionCount, 10) || 0);
-    const setupCountEstimate = Math.max(1, Number.parseInt(cncFeatures?.setupCountEstimate, 10) || 1);
-    const throughHoleCount = Math.max(0, Number.parseInt(cncFeatures?.throughHoleCount, 10) || 0);
-    const blindHoleCount = Math.max(0, Number.parseInt(cncFeatures?.blindHoleCount, 10) || 0);
-    const verticalWallFaceCount = Math.max(0, Number.parseInt(cncFeatures?.verticalWallFaceCount, 10) || 0);
-    const cylindricalFaceCount = Math.max(0, Number.parseInt(cncFeatures?.cylindricalFaceCount, 10) || 0);
-    const planarFaceCount = Math.max(0, Number.parseInt(cncFeatures?.planarFaceCount, 10) || 0);
-    const pocketDepthMmMax = toFiniteNumber(cncFeatures?.pocketDepthMmMax);
-    const pocketDepthInMax = pocketDepthMmMax > 0 ? (pocketDepthMmMax / 25.4) : 0;
-    const cylindricalAreaRatio = toFiniteNumber(cncFeatures?.cylindricalAreaRatio);
-    const rotationalCandidate = Boolean(cncFeatures?.rotationalCandidate);
-    const complexityScore =
-      (perimeterIn > 0 && areaSqIn > 0 ? perimeterIn / Math.max(1, Math.sqrt(areaSqIn)) : 0)
-      + (holeCount * 0.35)
-      + (bendCount * 0.5)
-      + (pocketCount * 0.8)
-      + (slotCount * 0.9)
-      + (recessedFaceCount * 0.45)
-      + (deepPocketCount * 1.1)
-      + (machiningDirectionCount * 0.4)
-      + (blindHoleCount * 0.35)
-      + (verticalWallFaceCount * 0.08)
-      + (cylindricalAreaRatio * 2.5)
-      + (removedVolumeRatio * 4)
-      + (hasRaisedFeatures ? 2 : 0)
-      + (raisedFeatureFaceCount * 0.1);
-
     return {
-      fileType: currentIsStep ? 'step' : (currentIsDxf ? '2d' : 'unknown'),
       totalPerimeter: perimeterMm,
-      perimeterIn,
       pierceCount,
-      holeCount,
-      bends: Array.isArray(backendData?.bends) ? backendData.bends : [],
-      bendCount,
-      lengthIn,
-      widthIn,
-      thicknessIn,
-      areaSqIn,
-      partVolumeCuIn,
-      boundingStockVolumeCuIn,
-      removedVolumeCuIn,
-      removedVolumeRatio,
-      featureDensity,
-      thicknessToSpanRatio,
-      complexityScore,
-      hasRaisedFeatures,
-      raisedFeatureFaceCount,
-      pocketCount,
-      slotCount,
-      recessedFaceCount,
-      deepPocketCount,
-      machiningDirectionCount,
-      setupCountEstimate,
-      throughHoleCount,
-      blindHoleCount,
-      verticalWallFaceCount,
-      cylindricalFaceCount,
-      planarFaceCount,
-      pocketDepthMmMax,
-      pocketDepthInMax,
-      cylindricalAreaRatio,
-      rotationalCandidate,
-      cncFeatures,
-      thicknessMm
+      bends: Array.isArray(backendData?.bends) ? backendData.bends : []
     };
-  }, [
-    perimeterMm,
-    pierceCount,
-    backendData?.bends,
-    backendData?.cncFeatures,
-    backendData?.nonFlatFeatures?.hasRaisedFeatures,
-    backendData?.nonFlatFeatures?.raisedFeatureFaceCount,
-    backendData?.pierceCount,
-    dxfTechData?.pierceCount,
-    displayDimensions?.mm?.t,
-    displayDimensions?.inches?.l,
-    displayDimensions?.inches?.w,
-    displayDimensions?.inches?.t,
-    displayDimensions?.inches?.volume,
-    detectedHoles.length,
-    currentIsStep,
-    currentIsDxf
-  ]);
+  }, [perimeterMm, pierceCount, backendData?.bends]);
 
   const measurementMetrics = useMemo(() => {
     const lengthMm = toFiniteNumber(displayDimensions?.mm?.l);
@@ -772,23 +661,6 @@ const InstantPricing = () => {
       (quantity > 0 ? (parseFloat(priceEstimate?.total_price || 0) / quantity) : 0)
     );
     const discountPercent = parseFloat(priceEstimate.breakdown?.discount_percent || 0);
-    const pricingInput = {
-      metal_id: selectedMetal?.id || null,
-      service_id: selectedProductionService?.id || null,
-      thickness_value: pricingThicknessInches > 0 ? pricingThicknessInches.toFixed(6) : null,
-      length_in: displayDimensions.inches.l,
-      height_in: displayDimensions.inches.w,
-      quantity,
-      additional_services: selectedAdditionalServices.map(s => {
-        const opt = selectedFinishColors[s.id];
-        return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
-      }),
-      taps: Object.values(selectedTaps).map(t => ({ name: t.name, price: t.price || 0 })),
-      hardware: Object.values(selectedHardware).map(h => ({ name: h.item?.name, price: h.item?.price || 0 })),
-      countersinks: Object.values(selectedCountersinks).map(cs => ({ name: cs.name, price: cs.price || 0 })),
-      technical_data: pricingTechnicalData,
-    };
-
     const config = {
       productionService: selectedProductionService,
       metal: selectedMetal,
@@ -813,23 +685,11 @@ const InstantPricing = () => {
       pricingTechnicalData,
     };
 
-    const quoteSnapshot = {
-      version: 'cnc-phase4-v1',
-      source: 'instant_pricing',
-      createdAt: new Date().toISOString(),
-      quantity,
-      unitPrice: unitFinalPrice,
-      totalPrice: parseFloat(priceEstimate?.total_price || 0) || 0,
-      pricingInput,
-      pricingResponse: priceEstimate,
-    };
-
     addToCart({
       fileName: selectedFile.file.name,
       file: selectedFile.file,
       tempPath: selectedFile.tempPath,
       configuration: config,
-      quoteSnapshot,
       pricing: {
         baseUnit: unitBasePrice,
         discount_percent: discountPercent,

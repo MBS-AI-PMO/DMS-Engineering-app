@@ -26,13 +26,6 @@ const parseConfig = (config) => {
     return config || {};
 };
 
-const parseQuoteSnapshot = (snapshot) => {
-    if (typeof snapshot === 'string') {
-        try { return JSON.parse(snapshot); } catch (e) { return {}; }
-    }
-    return snapshot || {};
-};
-
 // Memoized Item Row for maximum render performance
 const ItemRow = React.memo(({ item, onPreview }) => {
     const config = useMemo(() => parseConfig(item.configuration_json), [item.configuration_json]);
@@ -192,8 +185,22 @@ const Orders = () => {
         return (
             <div className="orders-page">
                 <div className="container">
-                    <div className="skeleton-list">
-                        {[1, 2, 3].map(i => <div key={i} className="skeleton-item" />)}
+                    <div className="orders-header orders-header-skeleton">
+                        <div>
+                            <div className="skeleton orders-skeleton-title" />
+                            <div className="skeleton orders-skeleton-subtitle" />
+                        </div>
+                        <div className="skeleton orders-skeleton-search" />
+                    </div>
+                    <div className="skeleton-list orders-skeleton-list">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="skeleton-item order-card-skeleton">
+                                <div className="skeleton orders-skeleton-pill" />
+                                <div className="skeleton orders-skeleton-pill short" />
+                                <div className="skeleton orders-skeleton-pill" />
+                                <div className="skeleton orders-skeleton-status" />
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -304,33 +311,6 @@ const Orders = () => {
                                     />
                                 </div>
                                 <div className="preview-meta">
-                                    {(() => {
-                                        const snapshot = parseQuoteSnapshot(previewItem.item.quote_snapshot_json);
-                                        const cncMetrics = snapshot?.summary?.cnc_metrics || null;
-                                        if (!snapshot || Object.keys(snapshot).length === 0) return null;
-                                        return (
-                                            <div className="meta-grid" style={{ marginBottom: '18px' }}>
-                                                <div className="meta-item">
-                                                    <span className="label">Quote Source</span>
-                                                    <span className="value">{snapshot.source || 'quote'}</span>
-                                                </div>
-                                                <div className="meta-item">
-                                                    <span className="label">Quoted Qty</span>
-                                                    <span className="value">{snapshot.quantity || previewItem.item.quantity}</span>
-                                                </div>
-                                                <div className="meta-item">
-                                                    <span className="label">Quoted Unit</span>
-                                                    <span className="value">${Number(snapshot.unitPrice || previewItem.item.unit_price || 0).toFixed(2)}</span>
-                                                </div>
-                                                {cncMetrics && (
-                                                    <div className="meta-item">
-                                                        <span className="label">CNC Setup Est.</span>
-                                                        <span className="value">{cncMetrics.setupCountEstimate || 'N/A'}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
                                     <h4>Configuration Details</h4>
                                     <div className="meta-grid">
                                         <div className="meta-item">

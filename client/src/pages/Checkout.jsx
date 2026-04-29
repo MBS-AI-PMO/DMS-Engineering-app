@@ -23,6 +23,7 @@ const Checkout = () => {
     const [isSuccess, setIsSuccess] = useState(false);
     const [orderId, setOrderId] = useState(null);
     const [selectedPayment, setSelectedPayment] = useState(null);
+    const [paymentConfigLoading, setPaymentConfigLoading] = useState(true);
     const [paymentConfig, setPaymentConfig] = useState({ cod_enabled: true, paypal_enabled: false, paypal_client_id: '', paypal_mode: 'sandbox' });
 
     const [formData, setFormData] = useState({
@@ -35,6 +36,7 @@ const Checkout = () => {
     });
 
     useEffect(() => {
+        setPaymentConfigLoading(true);
         fetchPaymentConfig()
             .then(cfg => {
                 setPaymentConfig(cfg);
@@ -46,7 +48,8 @@ const Checkout = () => {
                 // Fallback: COD only
                 setPaymentConfig({ cod_enabled: true, paypal_enabled: false, paypal_client_id: '', paypal_mode: 'sandbox' });
                 setSelectedPayment('cod');
-            });
+            })
+            .finally(() => setPaymentConfigLoading(false));
     }, []);
 
     useEffect(() => {
@@ -95,7 +98,6 @@ const Checkout = () => {
                     fileName: item.fileName || item.file_name,
                     tempPath: item.tempPath || item.temp_path || '',
                     configuration: item.configuration || {},
-                    quoteSnapshot: item.quoteSnapshot || null,
                     quantity: item.quantity || 1,
                     unitPrice: item.pricing?.total || 0
                 })),
@@ -267,7 +269,24 @@ const Checkout = () => {
                                 </div>
 
                                 <div className="checkout-payment-methods">
-                                    {paymentConfig.cod_enabled && (
+                                    {paymentConfigLoading && (
+                                        <>
+                                            {[0, 1].map(idx => (
+                                                <div key={idx} className="payment-gateway-card checkout-payment-skeleton" aria-hidden="true">
+                                                    <div className="gateway-info">
+                                                        <span className="skeleton checkout-skeleton-icon" />
+                                                        <div className="gateway-text">
+                                                            <span className="skeleton checkout-skeleton-title" />
+                                                            <span className="skeleton checkout-skeleton-line" />
+                                                        </div>
+                                                    </div>
+                                                    <span className="skeleton checkout-skeleton-toggle" />
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+
+                                    {!paymentConfigLoading && paymentConfig.cod_enabled && (
                                         <div
                                             className={`payment-gateway-card${selectedPayment === 'cod' ? ' selected' : ''}`}
                                             onClick={() => setSelectedPayment('cod')}
@@ -287,7 +306,7 @@ const Checkout = () => {
                                         </div>
                                     )}
 
-                                    {paymentConfig.paypal_enabled && paypalInitialOptions && (
+                                    {!paymentConfigLoading && paymentConfig.paypal_enabled && paypalInitialOptions && (
                                         <div
                                             className={`payment-gateway-card${selectedPayment === 'paypal' ? ' selected' : ''}`}
                                             onClick={() => setSelectedPayment('paypal')}

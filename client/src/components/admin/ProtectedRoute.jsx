@@ -6,8 +6,21 @@ export default function ProtectedRoute({ children }) {
 
     if (loading) {
         return (
-            <div className="admin-loading">
-                <div className="admin-loading-spinner"></div>
+            <div className="admin-auth-skeleton" aria-label="Loading admin dashboard">
+                <aside className="admin-auth-skeleton-sidebar">
+                    {[...Array(6)].map((_, idx) => (
+                        <div key={idx} className="skeleton admin-auth-skeleton-nav" />
+                    ))}
+                </aside>
+                <main className="admin-auth-skeleton-main">
+                    <div className="skeleton admin-auth-skeleton-title" />
+                    <div className="admin-auth-skeleton-cards">
+                        {[...Array(3)].map((_, idx) => (
+                            <div key={idx} className="skeleton admin-auth-skeleton-card" />
+                        ))}
+                    </div>
+                    <div className="skeleton admin-auth-skeleton-table" />
+                </main>
             </div>
         );
     }

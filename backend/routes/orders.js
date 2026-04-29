@@ -7,29 +7,10 @@ const { spawn } = require('child_process');
 const util = require('util');
 
 const router = express.Router();
-const CALIBRATION_STATUSES = new Set(['untouched', 'reviewed', 'tuned', 'approved', 'flagged']);
 
 const toFiniteNumber = (value) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
-};
-
-const toOptionalNumberInput = (value) => {
-    if (value === '' || value === null || typeof value === 'undefined') return null;
-    const num = Number(value);
-    return Number.isFinite(num) ? num : NaN;
-};
-
-const toOptionalIntegerInput = (value) => {
-    if (value === '' || value === null || typeof value === 'undefined') return null;
-    const num = parseInt(value, 10);
-    return Number.isFinite(num) ? num : NaN;
-};
-
-const normalizeOptionalText = (value) => {
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    return trimmed || null;
 };
 
 const INCH_TO_MM = 25.4;
@@ -220,104 +201,6 @@ const validateOrderItemsAgainstBounds = async (items = []) => {
     return null;
 };
 
-const sanitizeQuoteSnapshot = (snapshot = null) => {
-    if (!snapshot || typeof snapshot !== 'object') return null;
-
-    const quantity = Math.max(1, parseInt(snapshot.quantity, 10) || 1);
-    const totalPrice = toFiniteNumber(snapshot.totalPrice);
-    const unitPrice = toFiniteNumber(snapshot.unitPrice);
-    const payload = snapshot.pricingInput && typeof snapshot.pricingInput === 'object'
-        ? snapshot.pricingInput
-        : {};
-    const response = snapshot.pricingResponse && typeof snapshot.pricingResponse === 'object'
-        ? snapshot.pricingResponse
-        : {};
-    const breakdown = response.breakdown && typeof response.breakdown === 'object'
-        ? response.breakdown
-        : {};
-
-    return {
-        version: snapshot.version || 'cnc-phase4-v1',
-        source: snapshot.source || 'quote',
-        createdAt: snapshot.createdAt || new Date().toISOString(),
-        quantity,
-        totalPrice,
-        unitPrice,
-        pricingInput: payload,
-        pricingResponse: response,
-        summary: {
-            final_unit_price: toFiniteNumber(breakdown.final_unit_price),
-            unit_total: toFiniteNumber(breakdown.unit_total),
-            material_cost: toFiniteNumber(breakdown.material_cost),
-            production_cost: toFiniteNumber(breakdown.production_cost),
-            additional_services_cost: toFiniteNumber(breakdown.additional_services_cost),
-            discount_percent: toFiniteNumber(breakdown.discount_percent),
-            warnings: Array.isArray(breakdown.warnings) ? breakdown.warnings : [],
-            cnc_metrics: breakdown.cnc_derived_metrics || null,
-            cnc_setup_context: breakdown.cnc_setup_context || null,
-            cnc_risk_breakdown: breakdown.cnc_risk_breakdown || null,
-            cnc_operation_breakdown: Array.isArray(breakdown.cnc_operation_breakdown)
-                ? breakdown.cnc_operation_breakdown
-                : [],
-        }
-    };
-};
-
-const parseQuoteSnapshot = (value) => {
-    if (!value) return null;
-    if (typeof value === 'object') return value;
-    if (typeof value !== 'string') return null;
-
-    try {
-        return JSON.parse(value);
-    } catch (err) {
-        return null;
-    }
-};
-
-const buildCalibrationRowSummary = (row) => {
-    const snapshot = parseQuoteSnapshot(row.quote_snapshot_json);
-    const summary = snapshot?.summary || {};
-    const metrics = summary?.cnc_metrics || {};
-    const setupContext = summary?.cnc_setup_context || {};
-    const warnings = Array.isArray(summary?.warnings) ? summary.warnings : [];
-    const quotedUnitPrice = toFiniteNumber(summary?.final_unit_price) ?? toFiniteNumber(snapshot?.unitPrice);
-    const targetUnitPrice = toFiniteNumber(row.calibration_target_unit_price);
-    const actualUnitPrice = toFiniteNumber(row.calibration_actual_unit_price);
-    const comparePrice = actualUnitPrice ?? targetUnitPrice;
-    const setupEstimate = toFiniteNumber(metrics?.setupCountEstimate) ?? toFiniteNumber(setupContext?.effective_setup_count);
-    const actualSetupCount = toFiniteNumber(row.calibration_actual_setup_count);
-    const varianceValue = quotedUnitPrice !== null && comparePrice !== null
-        ? comparePrice - quotedUnitPrice
-        : null;
-    const variancePercent = varianceValue !== null && quotedUnitPrice
-        ? (varianceValue / quotedUnitPrice) * 100
-        : null;
-    const setupDelta = setupEstimate !== null && actualSetupCount !== null
-        ? actualSetupCount - setupEstimate
-        : null;
-
-    return {
-        itemId: row.id,
-        orderId: row.order_id,
-        fileName: row.file_name,
-        calibrationStatus: row.calibration_status || 'untouched',
-        quotedUnitPrice,
-        targetUnitPrice,
-        actualUnitPrice,
-        setupEstimate,
-        actualSetupCount,
-        actualRuntimeHours: toFiniteNumber(row.calibration_actual_runtime_hours),
-        varianceValue,
-        variancePercent,
-        setupDelta,
-        warningCount: warnings.length,
-        warnings,
-        reviewedAt: row.calibration_reviewed_at,
-        snapshotSource: snapshot?.source || null,
-    };
-};
-
 // Helper: Move file from temp to permanent order storage
 const finalizeOrderFile = (tempPath) => {
     if (!tempPath) return null;
@@ -441,7 +324,7 @@ router.post('/', async (req, res) => {
 
     const {
         email, fullName, phone, address, city, zipCode,
-        items, // Array of { fileName, tempPath, configuration, quantity, unitPrice, quoteSnapshot }
+        items, // Array of { fileName, tempPath, configuration, quantity, unitPrice }
         totalPrice,
         payment_method,
         payment_id
@@ -481,8 +364,8 @@ router.post('/', async (req, res) => {
             const rawPath = finalizeOrderFile(path.resolve(__dirname, '..', item.tempPath));
 
             const itemRes = await db.query(
-                `INSERT INTO order_items (order_id, file_name, original_file_path, configured_file_path, flat_file_path, configuration_json, quote_snapshot_json, quantity, unit_price)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+                `INSERT INTO order_items (order_id, file_name, original_file_path, configured_file_path, flat_file_path, configuration_json, quantity, unit_price)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
                 [
                     orderId,
                     item.fileName,
@@ -490,7 +373,6 @@ router.post('/', async (req, res) => {
                     rawPath, // Initial fallback établissements établissements
                     null,
                     JSON.stringify(item.configuration || {}),
-                    JSON.stringify(sanitizeQuoteSnapshot(item.quoteSnapshot)),
                     item.quantity || 1,
                     item.unitPrice || 0
                 ]
@@ -617,141 +499,7 @@ const useAdminAuth = (req, res, next) => {
     next();
 };
 
-router.get('/admin/calibration/summary', useAdminAuth, authenticate, requireAdmin, async (req, res) => {
-    try {
-        const result = await db.query(`
-            SELECT
-                oi.id,
-                oi.order_id,
-                oi.file_name,
-                oi.quote_snapshot_json,
-                oi.calibration_status,
-                oi.calibration_target_unit_price,
-                oi.calibration_actual_unit_price,
-                oi.calibration_actual_setup_count,
-                oi.calibration_actual_runtime_hours,
-                oi.calibration_reviewed_at
-            FROM order_items oi
-            INNER JOIN orders o ON o.id = oi.order_id
-            WHERE o.admin_deletion_status = 'active'
-            ORDER BY o.created_at DESC, oi.id DESC
-        `);
 
-        const rows = result.rows.map(buildCalibrationRowSummary);
-        const reviewedRows = rows.filter(row => row.calibrationStatus !== 'untouched');
-        const tunedRows = rows.filter(row => row.calibrationStatus === 'tuned' || row.calibrationStatus === 'approved');
-        const varianceRows = rows.filter(row => row.variancePercent !== null);
-        const setupRows = rows.filter(row => row.setupDelta !== null);
-        const warningCounts = new Map();
-        const statusCounts = new Map();
-
-        for (const row of rows) {
-            statusCounts.set(row.calibrationStatus, (statusCounts.get(row.calibrationStatus) || 0) + 1);
-            row.warnings.forEach(warning => {
-                warningCounts.set(warning, (warningCounts.get(warning) || 0) + 1);
-            });
-        }
-
-        const avgVariancePercent = varianceRows.length
-            ? varianceRows.reduce((sum, row) => sum + row.variancePercent, 0) / varianceRows.length
-            : null;
-        const avgSetupDelta = setupRows.length
-            ? setupRows.reduce((sum, row) => sum + row.setupDelta, 0) / setupRows.length
-            : null;
-
-        const topWarnings = Array.from(warningCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([warning, count]) => ({ warning, count }));
-
-        const largestUnitPriceDrift = rows
-            .filter(row => row.variancePercent !== null)
-            .sort((a, b) => Math.abs(b.variancePercent) - Math.abs(a.variancePercent))
-            .slice(0, 5);
-
-        res.json({
-            success: true,
-            summary: {
-                totals: {
-                    totalItems: rows.length,
-                    reviewedItems: reviewedRows.length,
-                    tunedItems: tunedRows.length,
-                    itemsWithSnapshots: rows.filter(row => row.snapshotSource).length,
-                    avgVariancePercent,
-                    avgSetupDelta,
-                },
-                byStatus: Array.from(statusCounts.entries()).map(([status, count]) => ({ status, count })),
-                topWarnings,
-                largestUnitPriceDrift,
-            }
-        });
-    } catch (err) {
-        console.error('Calibration summary error:', err);
-        res.status(500).json({ success: false, error: 'Failed to build calibration summary' });
-    }
-});
-
-router.put('/items/:itemId/calibration', useAdminAuth, authenticate, requireAdmin, async (req, res) => {
-    const calibrationStatus = CALIBRATION_STATUSES.has(req.body?.calibrationStatus)
-        ? req.body.calibrationStatus
-        : 'untouched';
-    const targetUnitPrice = toOptionalNumberInput(req.body?.targetUnitPrice);
-    const actualUnitPrice = toOptionalNumberInput(req.body?.actualUnitPrice);
-    const actualSetupCount = toOptionalIntegerInput(req.body?.actualSetupCount);
-    const actualRuntimeHours = toOptionalNumberInput(req.body?.actualRuntimeHours);
-    const calibrationNotes = normalizeOptionalText(req.body?.calibrationNotes);
-
-    if ([targetUnitPrice, actualUnitPrice, actualRuntimeHours].some(Number.isNaN) || Number.isNaN(actualSetupCount)) {
-        return res.status(400).json({ success: false, error: 'Calibration values must be valid numbers.' });
-    }
-
-    const hasReviewData = calibrationStatus !== 'untouched'
-        || targetUnitPrice !== null
-        || actualUnitPrice !== null
-        || actualSetupCount !== null
-        || actualRuntimeHours !== null
-        || calibrationNotes !== null;
-
-    try {
-        const result = await db.query(`
-            UPDATE order_items
-            SET
-                calibration_status = $1,
-                calibration_target_unit_price = $2,
-                calibration_actual_unit_price = $3,
-                calibration_actual_setup_count = $4,
-                calibration_actual_runtime_hours = $5,
-                calibration_notes = $6,
-                calibration_reviewed_at = $7,
-                calibration_reviewed_by = $8
-            WHERE id = $9
-            RETURNING *
-        `, [
-            calibrationStatus,
-            targetUnitPrice,
-            actualUnitPrice,
-            actualSetupCount,
-            actualRuntimeHours,
-            calibrationNotes,
-            hasReviewData ? new Date() : null,
-            hasReviewData ? req.user.id : null,
-            req.params.itemId
-        ]);
-
-        if (!result.rows.length) {
-            return res.status(404).json({ success: false, error: 'Order item not found' });
-        }
-
-        res.json({
-            success: true,
-            item: result.rows[0],
-            calibrationSummary: buildCalibrationRowSummary(result.rows[0]),
-        });
-    } catch (err) {
-        console.error('Calibration update error:', err);
-        res.status(500).json({ success: false, error: 'Failed to save calibration review' });
-    }
-});
 
 /**
  * PUT /api/orders/:id/status — ADMIN ONLY: Update order production status
