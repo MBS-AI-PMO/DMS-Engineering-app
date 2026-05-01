@@ -89,6 +89,32 @@ def emit_progress(percent, stage):
         # Progress reporting must never interrupt geometry processing.
         pass
 
+def _estimate_sheet_thickness(shape, selected_face):
+    """Prefer the selected planar skin pair over repeated cylinder radius deltas."""
+    face_thickness = 0.0
+    try:
+        if selected_face is not None:
+            face_thickness = float(EstimateThickness.from_face(shape, selected_face) or 0.0)
+    except Exception:
+        face_thickness = 0.0
+
+    if math.isfinite(face_thickness) and face_thickness > 0:
+        return face_thickness
+
+    try:
+        cylinder_thickness = float(EstimateThickness.from_cylinders(shape) or 0.0)
+    except Exception:
+        cylinder_thickness = 0.0
+
+    if math.isfinite(cylinder_thickness) and cylinder_thickness > 0:
+        return cylinder_thickness
+
+    user_thickness = EstimateThickness.from_user_input()
+    if user_thickness:
+        return float(user_thickness)
+
+    raise RuntimeError("Couldn't estimate thickness for shape!")
+
 def _normalize(vec):
     length = np.linalg.norm(vec)
     if length < 1e-12:
@@ -1291,7 +1317,7 @@ def unfold_with_lib(filepath, profile="full"):
                 ]
                 if planar_faces:
                     root_idx = max(planar_faces, key=lambda x: x[1])[0]
-                    thickness = float(EstimateThickness.using_best_method(fc_shape, root_idx))
+                    thickness = float(_estimate_sheet_thickness(fc_shape, root_idx))
             except Exception:
                 # Keep robust fallback thickness for downstream UI flows.
                 thickness = 2.0
@@ -1404,7 +1430,7 @@ def unfold_with_lib(filepath, profile="full"):
             print(f"[Debug] Root Normal: {root_normal}", file=sys.stderr)
             graph = build_graph_of_tangent_faces(fc_shape, root_idx)
             print(f"[Debug] Graph built with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges", file=sys.stderr)
-            thickness = EstimateThickness.using_best_method(fc_shape, root_idx)
+            thickness = _estimate_sheet_thickness(fc_shape, root_idx)
             print(f"[Debug] Detected thickness: {thickness}", file=sys.stderr)
             bac = BendAllowanceCalculator.from_single_value(0.44) # Standard K-factor
             
@@ -1828,10 +1854,19 @@ def unfold_with_lib(filepath, profile="full"):
             except Exception:
                 pass
 
-    # Calculate bounding box for 2D layout centering
+    # Calculate bounding box for 2D layout centering (prefer cut edges)
     width, height = 0, 0
-    if flat_vertices:
-        pts = np.array(flat_vertices).reshape(-1, 3)
+    try:
+        if cut_edges_2d and len(cut_edges_2d) >= 6:
+            pts = np.array(cut_edges_2d, dtype=float).reshape(-1, 3)
+            v_min, v_max = np.min(pts, axis=0), np.max(pts, axis=0)
+            width = float(v_max[0] - v_min[0])
+            height = float(v_max[1] - v_min[1])
+    except Exception:
+        width, height = 0, 0
+
+    if (width <= 0 or height <= 0) and flat_vertices:
+        pts = np.array(flat_vertices, dtype=float).reshape(-1, 3)
         v_min, v_max = np.min(pts, axis=0), np.max(pts, axis=0)
         width = float(v_max[0] - v_min[0])
         height = float(v_max[1] - v_min[1])

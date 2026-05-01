@@ -530,6 +530,7 @@ const ProjectViewer = ({
             isBendingActive={Boolean((configuration.detectedBends || []).length)}
             detectedBends={configuration.detectedBends || []}
             selectedThickness={selectedThickness}
+            selectedThicknessMm={configuration?.dimensions?.mm?.t || null}
             isModelFadedManually={false}
             isAnodizingModalOpen={false}
             dimensions={configuration.dimensions || null}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as OV from 'online-3d-viewer';
 import * as THREE from 'three';
 import { getWrinkleNormalTexture as getWrinkleNormal, getWrinkleGrainTexture as getWrinkleGrain } from '../../utils/wrinkleThreeTextures';
@@ -214,6 +214,7 @@ const StepModelViewer = ({
   isBendingActive = false,
   detectedBends = [],
   selectedThickness = null,
+  selectedThicknessMm = null,
   isModelFadedManually = false,
   isAnodizingModalOpen = false,
   dimensions = null,
@@ -233,6 +234,12 @@ const StepModelViewer = ({
   const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
   const holeMarkersRef = useRef([]);
   const [modelLoadCount, setModelLoadCount] = useState(0);
+  const selectedThicknessValueMm = useMemo(() => {
+    const mm = Number.parseFloat(selectedThicknessMm);
+    if (Number.isFinite(mm) && mm > 0) return mm;
+    const inches = Number.parseFloat(selectedThickness);
+    return Number.isFinite(inches) && inches > 0 ? inches * 25.4 : 0;
+  }, [selectedThicknessMm, selectedThickness]);
 
   // Procedural texture reference
   const wrinkleNormal = useRef(null);
@@ -577,12 +584,11 @@ const StepModelViewer = ({
     const data = modelOriginalDataRef.current;
     if (!data?.root) return;
     const { root, origScale, origPosition, thicknessAxis, origThicknessMM, localCenter } = data;
-    if (!selectedThickness) {
+    if (!(selectedThicknessValueMm > 0)) {
       root.scale.copy(origScale);
       root.position.copy(origPosition);
     } else {
-      const newThicknessMM = parseFloat(selectedThickness) * 25.4;
-      const scaleFactor = origThicknessMM > 0 ? newThicknessMM / origThicknessMM : 1;
+      const scaleFactor = origThicknessMM > 0 ? selectedThicknessValueMm / origThicknessMM : 1;
       root.scale[thicknessAxis] = origScale[thicknessAxis] * scaleFactor;
       root.position[thicknessAxis] = origPosition[thicknessAxis] + localCenter * (1 - scaleFactor);
     }
@@ -593,7 +599,7 @@ const StepModelViewer = ({
         viewerInstance.current?.Render();
       } catch { console.debug('Scale FitToWindow skipped'); }
     }, 50);
-  }, [selectedThickness, modelLoadCount]);
+  }, [selectedThicknessValueMm, modelLoadCount]);
 
   // --- Apply Styles / Colors / Fading ---
   useEffect(() => {
@@ -762,7 +768,9 @@ const StepModelViewer = ({
 
         const modelData = modelOriginalDataRef.current;
         const modelRoot = modelData?.root || v.scene;
-        const scaleFactor = modelData ? (parseFloat(selectedThickness || 1) * 25.4) / modelData.origThicknessMM : 1;
+        const scaleFactor = modelData && selectedThicknessValueMm > 0
+          ? (selectedThicknessValueMm / modelData.origThicknessMM)
+          : 1;
         const _ta = modelData?.thicknessAxis || 'y';
         const origT = modelData?.origThicknessMM || 2.0;
 
@@ -824,9 +832,8 @@ const StepModelViewer = ({
         // --- Tapping ---
         const hasTapsAssigned = Object.keys(selectedTaps).length > 0;
         if (isTappingActive || hasTapsAssigned) {
-          const selectedThicknessMm = Number.parseFloat(selectedThickness);
-          const selectedThicknessHintMm = Number.isFinite(selectedThicknessMm) && selectedThicknessMm > 0
-            ? (selectedThicknessMm * 25.4)
+          const selectedThicknessHintMm = selectedThicknessValueMm > 0
+            ? selectedThicknessValueMm
             : null;
           const dimensionsThicknessMm = Number(dimensions?.mm?.t);
           const dimensionThicknessHintMm = Number.isFinite(dimensionsThicknessMm) && dimensionsThicknessMm > 0
@@ -1502,7 +1509,7 @@ const StepModelViewer = ({
       } catch (err) { console.warn('Marker error:', err); }
     };
     updateMarkers();
-  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, tapOptions, selectedHardware, hardwareResizeReport, modelLoadCount, selectedThickness, isCountersinkingActive, csOptions, selectedCountersinks, showCountersinkMarkers, countersinkMarkerStyle, isBendingActive, detectedBends]);
+  }, [detectedHoles, selectedTaps, activeTapHole, isTappingActive, tapOptions, selectedHardware, hardwareResizeReport, modelLoadCount, selectedThicknessValueMm, isCountersinkingActive, csOptions, selectedCountersinks, showCountersinkMarkers, countersinkMarkerStyle, isBendingActive, detectedBends]);
 
   // --- Click / Interaction ---
   useEffect(() => {

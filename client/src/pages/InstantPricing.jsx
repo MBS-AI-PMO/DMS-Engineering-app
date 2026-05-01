@@ -87,6 +87,10 @@ const getProcessFlags = (serviceTitle = '') => {
 };
 
 // ─── Child Components ─────────────────────────────────────
+const getFileAnalysisKey = (fileEntry) => (
+  fileEntry?.id || fileEntry?.tempPath || fileEntry?.file?.name || ''
+);
+
 const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
 );
@@ -136,6 +140,7 @@ const InstantPricing = () => {
   const [selectedThickness, setSelectedThickness] = useState(null);
   const currentIsStep = useMemo(() => isStepFile(selectedFile?.file?.name), [selectedFile]);
   const currentIsDxf = useMemo(() => is2DFile(selectedFile?.file?.name), [selectedFile]);
+  const selectedFileKey = useMemo(() => getFileAnalysisKey(selectedFile), [selectedFile]);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
   const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
@@ -182,6 +187,14 @@ const InstantPricing = () => {
   const [bendTree, setBendTree] = useState(null);
   const [detectedBends, setDetectedBends] = useState([]);
   const [selectedBends, setSelectedBends] = useState({});
+  const currentBackendData = (
+    currentIsStep && selectedFileKey && backendData?.__fileKey === selectedFileKey
+      ? backendData
+      : null
+  );
+  const currentUnfoldReady = Boolean(
+    currentBackendData && bendTree
+  );
 
   const selectedThicknessMM = useMemo(() => {
     if (!selectedMetal || !selectedThickness) return 0;
@@ -196,33 +209,65 @@ const InstantPricing = () => {
 
   const modelThicknessFrom2dMm = useMemo(() => {
     if (!currentIsStep) return 0;
-    return toFiniteNumber(backendData?.thickness);
-  }, [currentIsStep, backendData?.thickness]);
+    return toFiniteNumber(currentBackendData?.thickness);
+  }, [currentIsStep, currentBackendData?.thickness]);
 
   const modelThicknessFrom3dMm = useMemo(() => {
     return toFiniteNumber(dimensions?.mm?.t);
   }, [dimensions?.mm?.t]);
 
-  const resolvedModelThicknessMm = useMemo(() => {
-    if (modelThicknessFrom2dMm > 0) return modelThicknessFrom2dMm;
-    if (modelThicknessFrom3dMm > 0) return modelThicknessFrom3dMm;
-    if (selectedThicknessMM > 0) return selectedThicknessMM;
-    return 0;
-  }, [modelThicknessFrom2dMm, modelThicknessFrom3dMm, selectedThicknessMM]);
+  const modelSize = useMemo(() => {
+    const l = toFiniteNumber(dimensions?.mm?.l);
+    const w = toFiniteNumber(dimensions?.mm?.w);
+    const hasSize = l > 0 && w > 0;
+    return {
+      l,
+      w,
+      max: hasSize ? Math.max(l, w) : 0,
+      min: hasSize ? Math.min(l, w) : 0,
+      hasSize
+    };
+  }, [dimensions?.mm?.l, dimensions?.mm?.w]);
+
+  const flatSize = useMemo(() => {
+    const width = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.width) : 0;
+    const height = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.height) : 0;
+    const hasSize = width > 0 && height > 0;
+    return {
+      width,
+      height,
+      max: hasSize ? Math.max(width, height) : 0,
+      min: hasSize ? Math.min(width, height) : 0,
+      hasSize
+    };
+  }, [currentIsStep, currentBackendData?.bbox?.width, currentBackendData?.bbox?.height]);
+
+  const thicknessResolution = useMemo(() => {
+    if (currentIsStep && modelThicknessFrom2dMm > 0) {
+      return { value: modelThicknessFrom2dMm, source: 'Sheet stock from STEP' };
+    }
+    if (currentIsStep && modelThicknessFrom3dMm > 0) {
+      return { value: modelThicknessFrom3dMm, source: '3D bounding box' };
+    }
+    if (selectedThicknessMM > 0) {
+      return { value: selectedThicknessMM, source: 'Selected stock' };
+    }
+    return { value: 0, source: currentIsStep ? '3D model unavailable' : 'Unknown' };
+  }, [currentIsStep, modelThicknessFrom2dMm, modelThicknessFrom3dMm, selectedThicknessMM]);
+
+  const resolvedModelThicknessMm = thicknessResolution.value;
+
+  const useFlatSize = useMemo(() => {
+    if (!currentIsStep) return false;
+    return flatSize.hasSize;
+  }, [currentIsStep, flatSize.hasSize]);
 
   const dimensionSourceLabel = useMemo(() => {
-    const flatW = toFiniteNumber(backendData?.bbox?.width);
-    const flatH = toFiniteNumber(backendData?.bbox?.height);
-    if (currentIsStep && flatW > 0 && flatH > 0) return '2D flat pattern';
-    return '3D bounding box';
-  }, [currentIsStep, backendData?.bbox?.width, backendData?.bbox?.height]);
+    if (currentIsDxf) return '2D drawing';
+    return useFlatSize ? '2D flat pattern' : '3D bounding box';
+  }, [currentIsDxf, useFlatSize]);
 
-  const thicknessSourceLabel = useMemo(() => {
-    if (modelThicknessFrom2dMm > 0) return '2D flat pattern';
-    if (modelThicknessFrom3dMm > 0) return '3D model';
-    if (selectedThicknessMM > 0) return 'Selected stock';
-    return 'Unknown';
-  }, [modelThicknessFrom2dMm, modelThicknessFrom3dMm, selectedThicknessMM]);
+  const thicknessSourceLabel = thicknessResolution.source;
 
   const selectedThicknessDisplay = useMemo(() => {
     if (!selectedThickness) return null;
@@ -233,18 +278,14 @@ const InstantPricing = () => {
   }, [selectedThickness, selectedThicknessMM]);
 
   const displayDimensions = useMemo(() => {
-    const flatWidthMm = currentIsStep ? toFiniteNumber(backendData?.bbox?.width) : 0;
-    const flatHeightMm = currentIsStep ? toFiniteNumber(backendData?.bbox?.height) : 0;
-    const hasFlatSize = flatWidthMm > 0 && flatHeightMm > 0;
-
-    const modelLenMm = toFiniteNumber(dimensions?.mm?.l);
-    const modelWidMm = toFiniteNumber(dimensions?.mm?.w);
-
-    const lengthMm = hasFlatSize ? Math.max(flatWidthMm, flatHeightMm) : modelLenMm;
-    const widthMm = hasFlatSize ? Math.min(flatWidthMm, flatHeightMm) : modelWidMm;
+    const modelLenMm = modelSize.l;
+    const modelWidMm = modelSize.w;
+    const lengthMm = useFlatSize ? flatSize.max : modelLenMm;
+    const widthMm = useFlatSize ? flatSize.min : modelWidMm;
     const thicknessMm = resolvedModelThicknessMm;
     const volumeMm3 = toFiniteNumber(dimensions?.mm?.volume);
 
+    if (currentIsStep && !useFlatSize) return null;
     if (!(lengthMm > 0) || !(widthMm > 0)) return null;
 
     return {
@@ -263,46 +304,47 @@ const InstantPricing = () => {
     };
   }, [
     currentIsStep,
-    backendData?.bbox?.width,
-    backendData?.bbox?.height,
-    dimensions?.mm?.l,
-    dimensions?.mm?.w,
+    modelSize.l,
+    modelSize.w,
+    flatSize.max,
+    flatSize.min,
+    useFlatSize,
     dimensions?.mm?.volume,
     resolvedModelThicknessMm
   ]);
 
   const perimeterMm = useMemo(() => {
-    const direct = toFiniteNumber(backendData?.totalPerimeter);
+    const direct = toFiniteNumber(currentBackendData?.totalPerimeter);
     if (direct > 0) return direct;
 
     const dxfPerimeter = toFiniteNumber(dxfTechData?.totalPerimeter);
     if (dxfPerimeter > 0) return dxfPerimeter;
 
-    const edgePerimeter = sumSegmentLengths(backendData?.cutEdges);
+    const edgePerimeter = sumSegmentLengths(currentBackendData?.cutEdges);
     if (edgePerimeter > 0) return edgePerimeter;
 
     const l = toFiniteNumber(displayDimensions?.mm?.l);
     const w = toFiniteNumber(displayDimensions?.mm?.w);
     return l > 0 && w > 0 ? ((l + w) * 2) : 0;
-  }, [backendData?.totalPerimeter, backendData?.cutEdges, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
+  }, [currentBackendData?.totalPerimeter, currentBackendData?.cutEdges, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
 
   const pierceCount = useMemo(() => {
-    const direct = Number.parseInt(backendData?.pierceCount, 10);
+    const direct = Number.parseInt(currentBackendData?.pierceCount, 10);
     if (Number.isFinite(direct) && direct > 0) return direct;
 
     const dxfCount = Number.parseInt(dxfTechData?.pierceCount, 10);
     if (Number.isFinite(dxfCount) && dxfCount > 0) return dxfCount;
 
     return Math.max(1, detectedHoles.length || 1);
-  }, [backendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length]);
+  }, [currentBackendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length]);
 
   const pricingTechnicalData = useMemo(() => {
     return {
       totalPerimeter: perimeterMm,
       pierceCount,
-      bends: Array.isArray(backendData?.bends) ? backendData.bends : []
+      bends: Array.isArray(currentBackendData?.bends) ? currentBackendData.bends : []
     };
-  }, [perimeterMm, pierceCount, backendData?.bends]);
+  }, [perimeterMm, pierceCount, currentBackendData?.bends]);
 
   const measurementMetrics = useMemo(() => {
     const lengthMm = toFiniteNumber(displayDimensions?.mm?.l);
@@ -342,12 +384,12 @@ const InstantPricing = () => {
 
   const bendCountTotal = useMemo(() => {
     const fromTree = bendList.length;
-    const fromBackend = Array.isArray(backendData?.bends) ? backendData.bends.length : 0;
+    const fromBackend = Array.isArray(currentBackendData?.bends) ? currentBackendData.bends.length : 0;
     return Math.max(fromTree, fromBackend);
-  }, [bendList.length, backendData?.bends]);
+  }, [bendList.length, currentBackendData?.bends]);
 
   const nonFlatFeatureInfo = useMemo(() => {
-    const raw = backendData?.nonFlatFeatures;
+    const raw = currentBackendData?.nonFlatFeatures;
     if (!raw || typeof raw !== 'object') {
       return {
         hasRaisedFeatures: false,
@@ -367,7 +409,7 @@ const InstantPricing = () => {
       maxOffsetMm,
       primaryReason: reasons[0] || ''
     };
-  }, [backendData?.nonFlatFeatures]);
+  }, [currentBackendData?.nonFlatFeatures]);
 
   const isLaserBlockedByBends = bendCountTotal > 0;
   const isLaserBlockedByNonFlatFeatures = currentIsStep && nonFlatFeatureInfo.hasRaisedFeatures;
@@ -895,6 +937,10 @@ const InstantPricing = () => {
     setDetectedHoles([]);
     setIsDetectingHoles(false);
     setSelectedThickness(null);
+    setBackendData(null);
+    setBendTree(null);
+    setDetectedBends([]);
+    setSelectedBends({});
     setDxfTechData(null);
     setUnfoldProgress(0);
     setUnfoldStage('');
@@ -916,6 +962,7 @@ const InstantPricing = () => {
   // 1) When the backend (via handleUnfold) returns detectedHoles, adopt them.
   useEffect(() => {
     if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
+    if (backendData?.__fileKey !== selectedFileKey) return;
     const backendHoles = Array.isArray(backendData?.detectedHoles) ? backendData.detectedHoles : [];
     if (backendHoles.length === 0) return;
     const tMm = detectHolesContextRef.current.thicknessMm;
@@ -938,7 +985,7 @@ const InstantPricing = () => {
       try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       detectHolesAbortRef.current = null;
     }
-  }, [selectedFile, backendData?.detectedHoles]);
+  }, [selectedFile, selectedFileKey, backendData?.__fileKey, backendData?.detectedHoles]);
 
   // 2) Fire the direct /api/detect-holes fetch once per file. Depends ONLY on
   // selectedFile so no other state change can abort the in-flight request.
@@ -1175,7 +1222,7 @@ const InstantPricing = () => {
     setIsImporting(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open: openFilePicker } = useDropzone({
     onDrop,
     accept: {
       'model/step': ['.step', '.stp'],
@@ -1185,6 +1232,45 @@ const InstantPricing = () => {
     },
     maxFiles: 10
   });
+
+  const renderUnitToggle = (className = '') => (
+    <div className={`ip-unit-toggle ${className}`.trim()} role="group" aria-label="Measurement unit">
+      <button
+        type="button"
+        className={`ip-unit-btn ${unit === 'mm' ? 'active' : ''}`}
+        aria-pressed={unit === 'mm'}
+        onClick={() => setUnit('mm')}
+      >
+        MM
+      </button>
+      <button
+        type="button"
+        className={`ip-unit-btn ${unit === 'inch' ? 'active' : ''}`}
+        aria-pressed={unit === 'inch'}
+        onClick={() => setUnit('inch')}
+      >
+        IN
+      </button>
+    </div>
+  );
+
+  const formatRulePairMm = (xMm, yMm) => {
+    const x = toFiniteNumber(xMm);
+    const y = toFiniteNumber(yMm);
+    const suffix = unit === 'mm' ? 'mm' : 'in';
+    const displayX = unit === 'mm' ? x : x / 25.4;
+    const displayY = unit === 'mm' ? y : y / 25.4;
+    return `${displayX.toFixed(3)} x ${displayY.toFixed(3)} ${suffix}`;
+  };
+
+  const formatRuleRangeMm = (minMm, maxMm) => {
+    const min = toFiniteNumber(minMm);
+    const max = toFiniteNumber(maxMm);
+    const suffix = unit === 'mm' ? 'mm' : 'in';
+    const displayMin = unit === 'mm' ? min : min / 25.4;
+    const displayMax = unit === 'mm' ? max : max / 25.4;
+    return `${displayMin.toFixed(3)}-${displayMax.toFixed(3)} ${suffix}`;
+  };
 
   const removeFile = (id) => {
     const fileToRemove = files.find(f => f.id === id);
@@ -1197,13 +1283,15 @@ const InstantPricing = () => {
   };
 
   const handleUnfold = useCallback(async (isBackground = false) => {
-    // Only return early if we have BOTH backendData AND the bendTree analysis (if it's a STEP file)
-    if (!selectedFile || is2DFile(selectedFile.file.name) || (backendData && (bendTree))) {
+    if (!selectedFile || is2DFile(selectedFile.file.name)) {
       if (is2DFile(selectedFile?.file?.name)) { setViewMode('2d'); setActiveAxis('flat'); }
       return;
     }
 
-    const unfoldFileKey = selectedFile?.id || selectedFile?.tempPath || selectedFile?.file?.name || 'unknown';
+    const unfoldFileKey = getFileAnalysisKey(selectedFile) || 'unknown';
+
+    // Only return early when the cached unfold result belongs to this file.
+    if (backendData?.__fileKey === unfoldFileKey && bendTree) return;
 
     // If the same file is already unfolding, avoid abort/restart loops that produce nginx 499.
     if (unfoldAbortControllerRef.current && unfoldRequestFileKeyRef.current === unfoldFileKey) {
@@ -1286,7 +1374,8 @@ const InstantPricing = () => {
         setUnfoldProgress(100);
         setUnfoldStage('Completed');
         setBendTree(d.bendTree);
-        setBackendData(d); // Keep backendData for other compatibility
+        const keyedBackendData = { ...d, __fileKey: unfoldFileKey };
+        setBackendData(keyedBackendData); // Keep backendData for other compatibility
 
         const unfoldDepthIn = toFiniteNumber(d?.thickness) > 0 ? (toFiniteNumber(d.thickness) / 25.4) : (2 / 25.4);
         const unfoldHoles = Array.isArray(d?.detectedHoles) ? d.detectedHoles : [];
@@ -1327,8 +1416,9 @@ const InstantPricing = () => {
                 && verifyData.nonFlatFeatures.hasRaisedFeatures
               ) {
                 setBackendData((prev) => ({
-                  ...(prev || d),
+                  ...((prev?.__fileKey === unfoldFileKey ? prev : keyedBackendData) || keyedBackendData),
                   nonFlatFeatures: verifyData.nonFlatFeatures,
+                  __fileKey: unfoldFileKey,
                 }));
               }
             }
@@ -1532,6 +1622,13 @@ const InstantPricing = () => {
         .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e8f0; gap:2px; }
         .ip-pill-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; }
         .ip-pill-btn.active { background:#1a1a2e; color:#ffffff; }
+        .ip-unit-toggle { display:inline-flex; align-items:center; gap:3px; padding:3px; border-radius:10px; background:#f8fafc; border:1px solid #dbe3ee; box-shadow:inset 0 1px 0 rgba(255,255,255,0.85); }
+        .ip-unit-toggle.compact { padding:2px; border-radius:8px; }
+        .ip-unit-btn { min-width:36px; height:26px; border:0; border-radius:7px; background:transparent; color:#52657a; font-size:10px; font-weight:900; letter-spacing:0; cursor:pointer; line-height:1; transition:background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
+        .ip-unit-toggle.compact .ip-unit-btn { min-width:30px; height:22px; font-size:9px; border-radius:6px; }
+        .ip-unit-btn:hover { color:#1e293b; background:#ffffff; }
+        .ip-unit-btn.active { background:#111827; color:#ffffff; box-shadow:0 2px 7px rgba(15,23,42,0.22); }
+        .ip-unit-btn:focus-visible { outline:2px solid #ef4444; outline-offset:2px; }
         .ip-axis-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; text-transform:uppercase; }
         .ip-axis-btn.active { background:#ef4444; color:#ffffff; }
         .ip-stat-chip { background:#f8fafc; border:1px solid #e8eaed; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
@@ -1746,7 +1843,8 @@ const InstantPricing = () => {
                     ))}
                   </AnimatePresence>
                 </div>
-                <button className="ip-add-btn" {...getRootProps()}>
+                <input {...getInputProps()} />
+                <button type="button" className="ip-add-btn" onClick={openFilePicker}>
                   <Plus size={13} /> Add more files
                 </button>
               </div>
@@ -1757,7 +1855,7 @@ const InstantPricing = () => {
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
                       <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); } }}>3D View</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!backendData || !bendTree) handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
                     </div>
                     <div className="ip-pill-toggle">
                       {['top', 'front', 'side', 'flat']
@@ -1767,10 +1865,7 @@ const InstantPricing = () => {
                         ))}
                     </div>
                   </div>
-                  <div className="ip-pill-toggle">
-                    <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
-                    <button className={`ip-pill-btn ${unit === 'inch' ? 'active' : ''}`} onClick={() => setUnit('inch')}>INCH</button>
-                  </div>
+                  {renderUnitToggle()}
                 </div>
                 <div className="ip-viewer-frame qf-main-canvas">
 
@@ -1782,6 +1877,7 @@ const InstantPricing = () => {
                       viewMode={viewMode}
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
+                      selectedThicknessMm={selectedThicknessMM}
                       activeFinishColor={activeFinishColor}
                       isFinishPowderCoating={isFinishPowderCoating}
                       isModelFadedManually={isModelFadedManually}
@@ -1808,9 +1904,9 @@ const InstantPricing = () => {
                     />
                   )}
                   {currentIsStep && viewMode === '2d' && (
-                    backendData ? (
+                    currentUnfoldReady ? (
                       <FlatPatternViewer
-                        backendData={backendData}
+                        backendData={currentBackendData}
                         holes={detectedHoles}
                       />
                     ) : (
@@ -1884,7 +1980,7 @@ const InstantPricing = () => {
               <div className="ip-right-panel">
                 <PricingSidebar
                   selectedFile={selectedFile}
-                  dimensions={displayDimensions || dimensions}
+                  dimensions={displayDimensions}
                   unit={unit}
                   measurementMetrics={measurementMetrics}
                   dimensionSourceLabel={dimensionSourceLabel}
@@ -1939,7 +2035,7 @@ const InstantPricing = () => {
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <div className="ip-pill-toggle">
                       <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D VIEW</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!backendData || !bendTree) handleUnfold(); }}>2D FLAT</button>
+                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); }}>2D FLAT</button>
                     </div>
                     <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
                     {isCountersinkingActive && isGeneratingConfiguredPreview && (
@@ -1962,6 +2058,7 @@ const InstantPricing = () => {
                       viewMode={viewMode}
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
+                      selectedThicknessMm={selectedThicknessMM}
                       activeFinishColor={activeFinishColor}
                       isFinishPowderCoating={isFinishPowderCoating}
                       isModelFadedManually={isModelFadedManually}
@@ -1981,15 +2078,15 @@ const InstantPricing = () => {
                       isCountersinkingActive={isCountersinkingActive}
                       dimensions={displayDimensions || dimensions}
                       allServices={allServices}
-                      backendData={backendData}
+                      backendData={currentUnfoldReady ? currentBackendData : null}
                       onProgress={handleStepViewerProgress}
                       onModelLoaded={handleStepViewerLoaded}
                     />
                   ) : null}
                   {currentIsStep && viewMode === '2d' && (
-                    backendData ? (
+                    currentUnfoldReady ? (
                       <FlatPatternViewer
-                        backendData={backendData}
+                        backendData={currentBackendData}
                         holes={detectedHoles}
                       />
                     ) : (
@@ -2059,10 +2156,7 @@ const InstantPricing = () => {
                   <div className="ip-qf-dims">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>{unit === 'mm' ? 'Metric' : 'Imperial'} Dims</span>
-                      <div className="ip-pill-toggle">
-                        <button className={`ip-pill-btn ${unit === 'mm' ? 'active' : ''}`} onClick={() => setUnit('mm')}>MM</button>
-                        <button className={`ip-pill-btn ${unit === 'inch' ? 'active' : ''}`} onClick={() => setUnit('inch')}>INCH</button>
-                      </div>
+                      {renderUnitToggle('compact')}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                       {[
@@ -2185,9 +2279,8 @@ const InstantPricing = () => {
                     <div className="wizard-screen">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select production method:</h2>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <div className="ip-badge metric">MM</div>
-                          <div className="ip-badge outline">IN</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {renderUnitToggle('compact')}
                           <div className="ip-badge red">{files.length} ACTIVE</div>
                         </div>
                       </div>
@@ -2229,6 +2322,9 @@ const InstantPricing = () => {
                           const isTooSmall = dim && ((cfg.min_x && dL < cfg.min_x) || (cfg.min_y && dW < cfg.min_y));
                           const isTooThick = dim && hasThickness && cfg.max_z && dT > cfg.max_z;
                           const isTooThin = dim && hasThickness && cfg.min_z && dT < cfg.min_z;
+                          const maxSizeLabel = formatRulePairMm(cfg.max_x || 3048, cfg.max_y || 1524);
+                          const minSizeLabel = formatRulePairMm(cfg.min_x || 6.3, cfg.min_y || 6.3);
+                          const thicknessRangeLabel = formatRuleRangeMm(cfg.min_z || 0.5, cfg.max_z || 25.4);
                           const lockReasons = [];
                           if (isTooThick) lockReasons.push(`Part thickness ${dT.toFixed(3)} mm exceeds max ${parseFloat(cfg.max_z).toFixed(3)} mm.`);
                           if (isTooThin) lockReasons.push(`Part thickness ${dT.toFixed(3)} mm is below min ${parseFloat(cfg.min_z).toFixed(3)} mm.`);
@@ -2296,15 +2392,15 @@ const InstantPricing = () => {
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
                                     <div className="card-stat">
                                       <Check size={10} color="#10b981" />
-                                      <span>MAX: {parseFloat(cfg.max_x || '3048').toFixed(3)}×{parseFloat(cfg.max_y || '1524').toFixed(3)}mm</span>
+                                      <span>MAX: {maxSizeLabel}</span>
                                     </div>
                                     <div className="card-stat">
                                       <ChevronLeft size={10} color="#6366f1" />
-                                      <span>MIN: {parseFloat(cfg.min_x || '6.3').toFixed(3)}×{parseFloat(cfg.min_y || '6.3').toFixed(3)}mm</span>
+                                      <span>MIN: {minSizeLabel}</span>
                                     </div>
                                     <div className="card-stat">
                                       <Layers size={10} color="#f59e0b" />
-                                      <span>T: {parseFloat(cfg.min_z || '0.5').toFixed(3)}–{parseFloat(cfg.max_z || '25.4').toFixed(3)}mm</span>
+                                      <span>T: {thicknessRangeLabel}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -2401,6 +2497,8 @@ const InstantPricing = () => {
                           const minYmm = minYIn * 25.4;
                           const maxZmm = met.max_z ? parseFloat(met.max_z) * 25.4 : null;
                           const minZmm = met.min_z ? parseFloat(met.min_z) * 25.4 : null;
+                          const materialMinLabel = formatRulePairMm(minXmm, minYmm);
+                          const materialMaxLabel = formatRulePairMm(maxXmm, maxYmm);
 
                           // Check if part fits in either orientation
                           const fitsNormal = (mL <= maxXmm && mW <= maxYmm);
@@ -2451,8 +2549,8 @@ const InstantPricing = () => {
                                   )}
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     <div className="card-stat" style={{ color: '#10b981' }}>IN STOCK</div>
-                                    <div className="card-stat">MIN: {adminMin?.size || `${minXIn}" × ${minYIn}"`}</div>
-                                    <div className="card-stat">MAX: {adminMax?.size || `${maxXIn}" × ${maxYIn}"`}</div>
+                                    <div className="card-stat">MIN: {materialMinLabel}</div>
+                                    <div className="card-stat">MAX: {materialMaxLabel}</div>
                                   </div>
                                 </div>
                                 {!isLocked && <ChevronRight size={20} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />}

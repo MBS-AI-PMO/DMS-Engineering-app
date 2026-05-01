@@ -434,8 +434,10 @@ const FlatPatternViewer = forwardRef(function FlatPatternViewer(
       group.add(grid);
     }
 
-    // Holes (if any)
-    if (holes && holes.length > 0) {
+    // Hole contours are already represented by cut edges in backend flat data.
+    // Only draw this legacy overlay when a caller explicitly asks to highlight
+    // an active hole; otherwise 3D hole coordinates can appear as stray circles.
+    if (activeHoleId !== null && holes && holes.length > 0) {
       holes.forEach(hole => {
         const isActive = hole.id === activeHoleId;
         const radius = (hole.diameterInches || 0.1) * 0.5 * 25.4; // assume model in mm
