@@ -8,6 +8,8 @@ import { fetchMetals } from '../utils/api';
 const Metals = () => {
     const [metals, setMetals] = useState(metalsData);
     const [loading, setLoading] = useState(true);
+    const metalCount = metals.length;
+    const metalCountLabel = `${metalCount} ${metalCount === 1 ? 'Metal' : 'Metals'} in stock`;
 
     useEffect(() => {
         async function loadMetals() {
@@ -62,8 +64,14 @@ const Metals = () => {
                     viewport={{ once: true }}
                     transition={{ duration: 0.8 }}
                 >
-                    <h2 className="metals-title">60+ Metals in stock</h2>
+                    <div className="metals-stock-eyebrow">Premium sheet stock</div>
+                    <h2 className="metals-title">{metalCountLabel}</h2>
                     <p className="metals-subtitle">Choose from our wide range of premium metals for your custom parts.</p>
+                    <div className="metals-meta">
+                        <span>{metalCount} available finishes</span>
+                        <span>Compact stock cards</span>
+                        <span>Fast quoting ready</span>
+                    </div>
                 </motion.div>
 
                 <motion.div
@@ -85,7 +93,7 @@ const Metals = () => {
                                     className="metal-card"
                                     whileHover={{
                                         y: -5,
-                                        boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+                                        boxShadow: "0 18px 40px rgba(0,0,0,0.32)",
                                         transition: { duration: 0.2 }
                                     }}
                                 >

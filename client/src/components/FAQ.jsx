@@ -22,7 +22,7 @@ const FAQData = [
     },
     {
         question: "Why won't my part file upload?",
-        answer: "There are a few reasons why your part file may not be uploading successfully to DMS Engineering’s website. We'll cover these scenarios and give you tips in our full FAQ."
+        answer: "There are a few reasons why your part file may not be uploading successfully to DMS Engineering's website. We'll cover these scenarios and give you tips in our full FAQ."
     }
 ];
 
@@ -30,17 +30,18 @@ const FAQ = () => {
     const [activeIndex, setActiveIndex] = useState(null);
 
     const toggleAccordion = (index) => {
-        setActiveIndex(activeIndex === index ? null : index);
+        setActiveIndex((current) => (current === index ? null : index));
     };
 
     return (
-        <section id="faq" className="faq-section">
+        <section id="faq" className="faq-section faq-landing-section">
             <div className="faq-container">
                 <div className="faq-header">
                     <div className="faq-icon-wrapper">
                         <div className="faq-icon">?</div>
                     </div>
                     <h2 className="faq-title">Frequently asked questions</h2>
+                    <p className="faq-subtitle">Quick answers to the most common questions about ordering, quoting, and production.</p>
                 </div>
 
                 <div className="faq-list">
@@ -53,25 +54,44 @@ const FAQ = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
+                                transition={{ duration: 0.28, delay: index * 0.04, ease: 'easeOut' }}
                             >
-                                <div className="faq-question-row" onClick={() => toggleAccordion(index)}>
-                                    <div className="faq-icon-circle">
-                                        {isOpen ? '−' : '+'}
-                                    </div>
+                                <motion.button
+                                    type="button"
+                                    className="faq-question-row"
+                                    onClick={() => toggleAccordion(index)}
+                                    aria-expanded={isOpen}
+                                    whileTap={{ scale: 0.995 }}
+                                >
+                                    <motion.div
+                                        className="faq-icon-circle"
+                                        animate={{ rotate: isOpen ? 135 : 0, scale: isOpen ? 1.04 : 1 }}
+                                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                                    >
+                                        +
+                                    </motion.div>
                                     <h3 className="faq-question-text">{item.question}</h3>
-                                </div>
-                                <AnimatePresence>
+                                </motion.button>
+                                <AnimatePresence initial={false}>
                                     {isOpen && (
                                         <motion.div
                                             initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: "auto", opacity: 1 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
                                             exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.3, ease: "easeInOut" }}
+                                            transition={{ duration: 0.2, ease: 'easeOut' }}
                                             className="faq-answer-row"
+                                            style={{ overflow: 'hidden' }}
                                         >
-                                            <p className="faq-answer-text">{item.answer}</p>
-                                            <Link to="/faq" className="faq-link">READ FULL FAQ →</Link>
+                                            <motion.div
+                                                className="faq-answer-inner"
+                                                initial={{ y: -6, opacity: 0 }}
+                                                animate={{ y: 0, opacity: 1 }}
+                                                exit={{ y: -4, opacity: 0 }}
+                                                transition={{ duration: 0.16, ease: 'easeOut' }}
+                                            >
+                                                <p className="faq-answer-text">{item.answer}</p>
+                                                <Link to="/faq" className="faq-link">READ FULL FAQ -&gt;</Link>
+                                            </motion.div>
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
@@ -81,7 +101,7 @@ const FAQ = () => {
                 </div>
 
                 <div className="faq-footer">
-                    <Link to="/faq" className="view-all-faq">VIEW ALL FAQS →</Link>
+                    <Link to="/faq" className="view-all-faq">VIEW ALL FAQS -&gt;</Link>
                 </div>
             </div>
         </section>
