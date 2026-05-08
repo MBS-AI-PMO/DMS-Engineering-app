@@ -5,7 +5,7 @@ import { fetchSheetCostRates, createSheetCostRate, updateSheetCostRate, deleteSh
 import { useToast } from '../../context/ToastContext';
 
 const INCH_TO_MM = 25.4;
-const EMPTY_FORM = { family: '', thickness_in: '', thickness_mm: '', ga: '', sheet_cost_4x8: '', sheet_cost_5x10: '' };
+const EMPTY_FORM = { family: '', thickness_in: '', thickness_mm: '', ga: '', sheet_cost_4x8: '' };
 
 const INP = { width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontWeight: 600, fontSize: '0.9rem', background: 'white', color: '#1e293b', outline: 'none' };
 
@@ -76,7 +76,6 @@ export default function SheetCostRatesAdmin() {
             thickness_mm: thicknessMm != null ? fmt(thicknessMm, 3) : '',
             ga: row.ga != null ? String(row.ga) : '',
             sheet_cost_4x8: row.sheet_cost_4x8 != null ? fmt(row.sheet_cost_4x8, 4) : '',
-            sheet_cost_5x10: row.sheet_cost_5x10 != null ? fmt(row.sheet_cost_5x10, 4) : '',
         });
         setModalOpen(true);
     };
@@ -106,19 +105,18 @@ export default function SheetCostRatesAdmin() {
         const thicknessMm = parseNum(form.thickness_mm);
         const resolvedThicknessIn = thicknessIn != null ? thicknessIn : (thicknessMm != null ? (thicknessMm / INCH_TO_MM) : null);
         const cost4x8 = parseNum(form.sheet_cost_4x8);
-        const cost5x10 = parseNum(form.sheet_cost_5x10);
         const parsedGauge = form.ga === '' ? null : parseInt(form.ga, 10);
 
-        if (!form.family || resolvedThicknessIn == null || (cost4x8 == null && cost5x10 == null)) {
-            toast('Family, thickness, and at least one sheet cost are required.', 'error');
+        if (!form.family || resolvedThicknessIn == null || cost4x8 == null) {
+            toast('Family, thickness, and 4x8 sheet cost are required.', 'error');
             return;
         }
         if (resolvedThicknessIn <= 0) {
             toast('Thickness must be greater than zero.', 'error');
             return;
         }
-        if ((cost4x8 != null && cost4x8 < 0) || (cost5x10 != null && cost5x10 < 0)) {
-            toast('Sheet costs cannot be negative.', 'error');
+        if (cost4x8 <= 0) {
+            toast('4x8 sheet cost must be greater than zero.', 'error');
             return;
         }
         if (form.ga !== '' && !Number.isFinite(parsedGauge)) {
@@ -130,8 +128,7 @@ export default function SheetCostRatesAdmin() {
             family: form.family,
             thickness: resolvedThicknessIn,
             ga: parsedGauge,
-            sheet_cost_4x8: cost4x8 || 0,
-            sheet_cost_5x10: cost5x10 || 0,
+            sheet_cost_4x8: cost4x8,
         };
 
         try {
@@ -246,7 +243,7 @@ export default function SheetCostRatesAdmin() {
             <header className="admin-page-header">
                 <div>
                     <h1 className="admin-page-title">Sheet Material Costs</h1>
-                    <p className="admin-page-subtitle">5x10 sheet price per material family and thickness, shown in both inches and millimeters.</p>
+                    <p className="admin-page-subtitle">4x8 sheet price per material family and thickness, shown in both inches and millimeters.</p>
                 </div>
                 <button
                     onClick={openNew}
@@ -270,7 +267,7 @@ export default function SheetCostRatesAdmin() {
                         {[
                             { step: '1', label: 'Part dimensions come from the uploaded file', sub: 'length, width, and thickness are all known' },
                             { step: '2', label: 'Look up sheet cost by metal category and thickness', sub: 'uses category first, then nearest configured thickness if needed' },
-                            { step: '3', label: 'Calculate how many parts fit on one 5x10 sheet', sub: 'accounting for edge buffer, part gap, and kerf' },
+                            { step: '3', label: 'Calculate 4x8 sheet nesting', sub: 'tries horizontal and vertical part orientation, then uses the higher fit count' },
                             { step: '4', label: 'Material cost = sheet cost ÷ parts per sheet', sub: 'each part pays its proportional share' },
                         ].map(s => (
                             <div key={s.step} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -293,20 +290,20 @@ export default function SheetCostRatesAdmin() {
                         <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nesting Formula</span>
                     </div>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.9 }}>
-                        <div><span style={{ color: '#38bdf8' }}>buffered_L</span> = part_L + 0.0625 + 0.01</div>
-                        <div><span style={{ color: '#38bdf8' }}>buffered_W</span> = part_W + 0.0625 + 0.01</div>
-                        <div><span style={{ color: '#38bdf8' }}>usable_L</span> = 120 - 2*0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 119.8125)</span></div>
-                        <div><span style={{ color: '#38bdf8' }}>usable_W</span> = 60 - 2*0.125 + 0.0625 <span style={{ color: '#64748b' }}>(= 59.8125)</span></div>
-                        <div style={{ marginTop: 4 }}><span style={{ color: '#34d399' }}>pps</span> = floor(usable_L / buffered_L) * floor(usable_W / buffered_W)</div>
-                        <div><span style={{ color: '#f59e0b' }}>cost/unit</span> = sheet_cost_5x10 / pps</div>
+                        <div><span style={{ color: '#38bdf8' }}>buffered_L</span> = part_L + 0.15 + 0.005</div>
+                        <div><span style={{ color: '#38bdf8' }}>buffered_W</span> = part_W + 0.15 + 0.005</div>
+                        <div><span style={{ color: '#38bdf8' }}>usable_L</span> = sheet_L - 2*0.15 + 0.15</div>
+                        <div><span style={{ color: '#38bdf8' }}>usable_W</span> = sheet_W - 2*0.15 + 0.15</div>
+                        <div style={{ marginTop: 4 }}><span style={{ color: '#34d399' }}>pps</span> = max(horizontal_fit, vertical_fit) on a 4x8 sheet</div>
+                        <div><span style={{ color: '#f59e0b' }}>cost/unit</span> = sheet_cost_4x8 / pps</div>
                     </div>
                     <div style={{ marginTop: 14, padding: '10px 14px', background: '#1e293b', borderRadius: 10, border: '1px solid #334155' }}>
                         <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Example</div>
                         <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.8 }}>
                             Part: 10in x 5in | Sheet cost: $90<br />
-                            buffered: 10.0725 x 5.0725<br />
-                            pps = floor(119.8125/10.0725) * floor(59.8125/5.0725) = <span style={{ color: '#34d399' }}>11 * 11 = 121</span><br />
-                            <strong style={{ color: '#f59e0b' }}>cost/unit = $90 / 121 = $0.74</strong>
+                            buffered: 10.155 x 5.155<br />
+                            best 4x8 orientation wins by parts per sheet<br />
+                            <strong style={{ color: '#f59e0b' }}>cost/unit = sheet_cost_4x8 / best pps</strong>
                         </div>
                     </div>
                 </div>
@@ -387,7 +384,6 @@ export default function SheetCostRatesAdmin() {
                                 <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (in)</th>
                                 <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Thickness (mm)</th>
                                 <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 4x8 ($)</th>
-                                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Sheet Cost 5x10 ($)</th>
                                 <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', background: '#fafafa' }}>Actions</th>
                             </tr>
                         </thead>
@@ -438,13 +434,6 @@ export default function SheetCostRatesAdmin() {
                                         <td style={{ padding: '16px 24px' }}>
                                             <span style={{ fontWeight: 700, color: '#64748b', fontSize: '0.95rem' }}>
                                                 {row.sheet_cost_4x8 != null && parseFloat(row.sheet_cost_4x8) > 0 ? `$${parseFloat(row.sheet_cost_4x8).toFixed(2)}` : '—'}
-                                            </span>
-                                        </td>
-
-                                        {/* Sheet cost 5x10 */}
-                                        <td style={{ padding: '16px 24px' }}>
-                                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
-                                                {row.sheet_cost_5x10 != null && parseFloat(row.sheet_cost_5x10) > 0 ? `$${parseFloat(row.sheet_cost_5x10).toFixed(2)}` : '—'}
                                             </span>
                                         </td>
 
@@ -536,18 +525,14 @@ export default function SheetCostRatesAdmin() {
                                 </div>
 
                                 {/* Sheet costs */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                         <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 4x8 ($)</label>
                                         <input type="number" step="0.01" min="0" value={form.sheet_cost_4x8} onChange={e => setForm(f => ({ ...f, sheet_cost_4x8: e.target.value }))} placeholder="e.g. 60.00" style={INP} />
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sheet Cost 5x10 ($)</label>
-                                        <input type="number" step="0.01" min="0" value={form.sheet_cost_5x10} onChange={e => setForm(f => ({ ...f, sheet_cost_5x10: e.target.value }))} placeholder="e.g. 90.00" style={{ ...INP, fontWeight: 700 }} />
-                                    </div>
                                 </div>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>
-                                    Prices for standard 4x8 (48"x96") and 5x10 (60"x120") sheets.
+                                    Price for the standard 4x8 (48"x96") sheet.
                                 </div>
                             </div>
 

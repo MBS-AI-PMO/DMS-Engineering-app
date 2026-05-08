@@ -924,11 +924,19 @@ const StepModelViewer = ({
             const axisNorm = axisVec.clone().normalize();
             const faceSign = face === 'down' ? -1 : 1;
             const shouldUsePhysicalNutResize = Boolean(modelUrlOverride);
-            const surfaceLift = Math.max(0.35, origT * 0.08) / Math.max(scaleFactor, 1e-6);
             const thinDiscH = Math.max(0.06, 0.16 / Math.max(scaleFactor, 1e-6));
+            const holeDepthRawMm = Number(hole.depthMm ?? hole.depth_mm ?? NaN);
+            const holeDepthFromInches = Number(hole.depthInches) > 0 ? Number(hole.depthInches) * 25.4 : NaN;
+            const placementDepthMm = Number.isFinite(holeDepthRawMm) && holeDepthRawMm > 0
+              ? holeDepthRawMm
+              : holeDepthFromInches;
+            const hasPlacementDepth = Number.isFinite(placementDepthMm) && placementDepthMm > 0.1;
+            const placementThicknessMm = hasPlacementDepth ? placementDepthMm : origT;
+            const placementHalfDepth = hasPlacementDepth ? placementDepthMm * 0.5 : 0;
+            const surfaceOverlap = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
             const baseCenter = new THREE.Vector3(...hole.position);
-            const basePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 + surfaceLift)));
-            const backSurfacePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * (origT * 0.5 + surfaceLift)));
+            const basePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(faceSign * Math.max(0, placementHalfDepth - surfaceOverlap)));
+            const backSurfacePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(-faceSign * Math.max(0, placementHalfDepth - surfaceOverlap)));
 
             const maxAllowedHoleR = item?.max_hole_diameter ? (parseFloat(item.max_hole_diameter) * 25.4 / 2) : null;
 
@@ -987,8 +995,8 @@ const StepModelViewer = ({
                 hardwareOuterR ? (hardwareOuterR * 1.02) : (innerR * 1.18)
               );
               const outerR = Math.max(innerR + 0.06, Math.min(holeR * 1.005, outerROverride || autoOuterR));
-              const sleeveH = Math.min(Math.max(sleeveDepthMm, thinDiscH * 2.0), Math.max(0.6, origT * 0.24));
-              const sleeveCenterOffset = Math.max(0.0, (origT * 0.5) - (sleeveH * 0.5) + 0.02);
+              const sleeveH = Math.min(Math.max(sleeveDepthMm, thinDiscH * 2.0), Math.max(0.6, placementThicknessMm * 0.24));
+              const sleeveCenterOffset = Math.max(0.0, placementHalfDepth - (sleeveH * 0.5) + 0.02);
               const sleevePos = baseCenter.clone().add(axisNorm.clone().multiplyScalar(faceSign * sleeveCenterOffset));
               addMesh(makeRing(innerR, outerR, sleeveH), fillMat, sleevePos, axisVec);
               return true;
@@ -1076,10 +1084,10 @@ const StepModelViewer = ({
               const hexHeadR = Math.max(hwOuterR, standoffOuterR * 1.05);
               const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
               const selectedSurfaceContact = baseCenter.clone().add(
-                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+                axisNorm.clone().multiplyScalar(faceSign * Math.max(0, placementHalfDepth - contactInset))
               );
               const oppositeSurfaceContact = baseCenter.clone().add(
-                axisNorm.clone().multiplyScalar(-faceSign * (origT * 0.5 - contactInset))
+                axisNorm.clone().multiplyScalar(-faceSign * Math.max(0, placementHalfDepth - contactInset))
               );
               const standoffBodyCenter = selectedSurfaceContact.clone().add(
                 axisNorm.clone().multiplyScalar(faceSign * (bodyH * 0.5 - contactInset))
@@ -1173,7 +1181,7 @@ const StepModelViewer = ({
               const clinchInnerR = Math.max(0.2, Math.min(hwBoreR * 0.92, clinchOuterR - 0.14));
               const hexHeadR = Math.max(hwOuterR, clinchOuterR * 1.08);
               const headInnerR = Math.max(0.2, Math.min(clinchInnerR * 1.02, hexHeadR * 0.82));
-              const clinchBodyH = Math.max(0.55, Math.min(Math.max(0.95, origT * 0.36), 1.5));
+              const clinchBodyH = Math.max(0.55, Math.min(Math.max(0.95, placementThicknessMm * 0.36), 1.5));
               const hexHeadH = Math.max(0.38, Math.min(0.95, hexHeadR * 0.18));
 
               if (!shouldUsePhysicalNutResize) {
@@ -1185,14 +1193,14 @@ const StepModelViewer = ({
                   useMaxAllowedLimit: false,
                 });
                 addFrontHoleReducerSleeve(targetFitR, {
-                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, origT * 0.11)),
+                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, placementThicknessMm * 0.11)),
                   hardwareOuterR: hexHeadR,
                 });
               }
 
               const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
               const selectedSurfaceContact = baseCenter.clone().add(
-                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+                axisNorm.clone().multiplyScalar(faceSign * Math.max(0, placementHalfDepth - contactInset))
               );
               const flushNutBodyPos = selectedSurfaceContact.clone().add(
                 axisNorm.clone().multiplyScalar(-faceSign * (clinchBodyH * 0.5 - contactInset * 0.35))
@@ -1297,17 +1305,17 @@ const StepModelViewer = ({
                   useMaxAllowedLimit: false,
                 });
                 addFrontHoleReducerSleeve(studCoreR, {
-                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, origT * 0.1)),
+                  sleeveDepthMm: Math.max(0.5, Math.min(1.15, placementThicknessMm * 0.1)),
                   hardwareOuterR: flushHeadR,
                 });
               }
 
               const contactInset = Math.max(0.01, 0.03 / Math.max(scaleFactor, 1e-6));
               const selectedSurfaceContact = baseCenter.clone().add(
-                axisNorm.clone().multiplyScalar(faceSign * (origT * 0.5 - contactInset))
+                axisNorm.clone().multiplyScalar(faceSign * Math.max(0, placementHalfDepth - contactInset))
               );
               const oppositeSurfaceContact = baseCenter.clone().add(
-                axisNorm.clone().multiplyScalar(-faceSign * (origT * 0.5 - contactInset))
+                axisNorm.clone().multiplyScalar(-faceSign * Math.max(0, placementHalfDepth - contactInset))
               );
               const studBodyCenter = selectedSurfaceContact.clone().add(
                 axisNorm.clone().multiplyScalar(faceSign * (studH * 0.5 - contactInset))

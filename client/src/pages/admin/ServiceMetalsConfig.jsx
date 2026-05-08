@@ -114,29 +114,112 @@ export default function ServiceMetalsConfig() {
                     <div className="skeleton-box" style={{ width: 160, height: 40, borderRadius: 10 }} />
                 </div>
 
-                <div className="admin-card" style={{ padding: '24px' }}>
-                    <div className="admin-section-header" style={{ marginBottom: '20px' }}>
-                        <div className="skeleton-box" style={{ width: 220, height: 20, marginBottom: 8 }} />
-                        <div className="skeleton-box" style={{ width: 420, height: 13 }} />
+                <div className="admin-card service-metals-loading-card">
+                    <div className="service-metals-loading-section">
+                        <div>
+                            <div className="skeleton-box" style={{ width: 220, height: 20, marginBottom: 8 }} />
+                            <div className="skeleton-box" style={{ width: 420, maxWidth: '100%', height: 13 }} />
+                        </div>
+                        <div className="skeleton-box service-metals-loading-filter" />
                     </div>
 
-                    <div className="service-metals-page-grid">
-                        {[...Array(6)].map((_, i) => (
-                            <div key={`svc-metal-skel-${i}`} className="service-assignment-item" style={{ borderColor: '#f1f5f9' }}>
-                                <div className="assignment-item-header">
-                                    <div className="assignment-item-main">
-                                        <div className="skeleton-box" style={{ width: 18, height: 18, borderRadius: 6 }} />
-                                        <div className="assignment-item-info" style={{ gap: 8 }}>
-                                            <div className="skeleton-box" style={{ width: 140, height: 14 }} />
-                                            <div className="skeleton-box" style={{ width: 112, height: 12 }} />
+                    <div className="service-metals-loading-grid">
+                        {[...Array(8)].map((_, i) => (
+                            <div key={`svc-metal-skel-${i}`} className="service-metals-loading-item">
+                                <div className="service-metals-loading-item-header">
+                                    <div className="service-metals-loading-main">
+                                        <div className="skeleton-box" style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0 }} />
+                                        <div className="service-metals-loading-copy">
+                                            <div className="skeleton-box" style={{ width: i % 2 === 0 ? 150 : 118, height: 16 }} />
+                                            <div className="skeleton-box" style={{ width: i % 3 === 0 ? 130 : 104, height: 12 }} />
                                         </div>
                                     </div>
-                                    <div className="skeleton-box" style={{ width: 86, height: 28, borderRadius: 8 }} />
+                                    <div className="skeleton-box" style={{ width: 86, height: 30, borderRadius: 8, flexShrink: 0 }} />
+                                </div>
+                                <div className="service-metals-loading-pills">
+                                    {[72, 58, 66, 54].map((width, pillIndex) => (
+                                        <div
+                                            key={`svc-metal-pill-${i}-${pillIndex}`}
+                                            className="skeleton-box"
+                                            style={{ width, height: 28, borderRadius: 8 }}
+                                        />
+                                    ))}
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
+                <style>{`
+                    .service-metals-loading-card {
+                        padding: 24px;
+                    }
+                    .service-metals-loading-section {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 18px;
+                        margin-bottom: 22px;
+                        padding-bottom: 20px;
+                        border-bottom: 1px solid #e2e8f0;
+                    }
+                    .service-metals-loading-filter {
+                        width: 160px;
+                        height: 40px;
+                        border-radius: 10px;
+                        flex-shrink: 0;
+                    }
+                    .service-metals-loading-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                        gap: 16px;
+                    }
+                    .service-metals-loading-item {
+                        min-height: 118px;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 12px;
+                        background: #fff;
+                        overflow: hidden;
+                    }
+                    .service-metals-loading-item-header {
+                        padding: 20px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 14px;
+                    }
+                    .service-metals-loading-main {
+                        display: flex;
+                        align-items: center;
+                        gap: 16px;
+                        min-width: 0;
+                    }
+                    .service-metals-loading-copy {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 8px;
+                    }
+                    .service-metals-loading-pills {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 10px;
+                        padding: 0 20px 18px 60px;
+                    }
+                    @media (max-width: 720px) {
+                        .service-metals-loading-section {
+                            align-items: stretch;
+                            flex-direction: column;
+                        }
+                        .service-metals-loading-filter {
+                            width: 100%;
+                        }
+                        .service-metals-loading-grid {
+                            grid-template-columns: 1fr;
+                        }
+                        .service-metals-loading-pills {
+                            padding-left: 20px;
+                        }
+                    }
+                `}</style>
             </div>
         );
     }

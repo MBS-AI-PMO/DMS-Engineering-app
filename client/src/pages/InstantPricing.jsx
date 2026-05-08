@@ -2912,23 +2912,18 @@ const InstantPricing = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
+                          {priceEstimate?.breakdown?.material_nesting?.parts_per_sheet > 0 && (
+                            <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginTop: 3, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                              {Number(priceEstimate.breakdown.material_nesting.parts_per_sheet).toFixed(0)} parts per 4x8 sheet
+                            </div>
+                          )}
                           {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
                         </div>
                         {isCalculatingPrice
                           ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
-                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(priceEstimate?.breakdown?.material_cost ?? 0).toFixed(2)}</span>
+                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(((priceEstimate?.breakdown?.material_cost ?? 0) * quantity) || 0).toFixed(2)}</span>
                         }
                       </div>
-
-                      {/* Unit Price (only if qty > 1) */}
-                      {quantity > 1 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Unit Price (Discounted)</span>
-                          <span style={{ fontSize: 13, fontWeight: 900, color: '#10b981' }}>
-                            ${(priceEstimate?.breakdown?.final_unit_price || 0).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
 
                       {(() => {
                         const rows = priceEstimate?.breakdown?.service_breakdown || [];
@@ -2936,11 +2931,13 @@ const InstantPricing = () => {
                         return (
                           <div style={{ paddingBottom: 12 }}>
                             {rows.map((r, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
+                                </div>
                                 {isCalculatingPrice
                                   ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
-                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(parseFloat(r.price) || 0).toFixed(2)}</span>
+                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(((parseFloat(r.price) || 0) * quantity) || 0).toFixed(2)}</span>
                                 }
                               </div>
                             ))}
@@ -2970,8 +2967,31 @@ const InstantPricing = () => {
 
                       <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4 }} />
 
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                          Gross Total
+                        </span>
+                        {isCalculatingPrice
+                          ? <div className="skeleton-price" style={{ width: 78, height: 16, borderRadius: 4 }} />
+                          : <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>
+                            ${(parseFloat(priceEstimate?.breakdown?.subtotal_before_discount || 0)).toFixed(2)}
+                          </span>
+                        }
+                      </div>
+
+                      {priceEstimate?.breakdown?.discount_percent > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '9px 12px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.28)', borderRadius: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', textTransform: 'uppercase' }}>
+                            Discount Applied ({parseFloat(priceEstimate?.breakdown?.discount_percent || 0).toFixed(2)}%)
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: '#d1fae5' }}>
+                            -${(parseFloat(priceEstimate?.breakdown?.discount_amount || 0)).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
                       <div style={{ marginTop: 16, marginBottom: 18 }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 }}>Total Project Estimate</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 }}>Discounted Total</div>
                         {isCalculatingPrice
                           ? <div className="skeleton-price" style={{ width: 130, height: 32, borderRadius: 6 }} />
                           : <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>

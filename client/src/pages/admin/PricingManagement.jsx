@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    ChevronRight, Loader2, DollarSign, Trash2, Info
+    ChevronRight, Loader2, DollarSign, Trash2, Info, Power
 } from 'lucide-react';
 import {
-    fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier
+    fetchAdminDiscounts, saveDiscountTier, deleteDiscountTier, fetchSettings, updateSetting
 } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import PricingSkeleton from '../../components/admin/PricingSkeleton';
@@ -26,6 +26,16 @@ const DiscountRowSkeleton = () => (
     </tr>
 );
 
+const parseBooleanSetting = (value, fallback = true) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const normalized = String(value).trim().toLowerCase();
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    return fallback;
+};
+
 export default function PricingManagement() {
     const toast = useToast();
     const [loading, setLoading] = useState(true);
@@ -37,12 +47,18 @@ export default function PricingManagement() {
     const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
     const [discountDisplayMode, setDiscountDisplayMode] = useState('range');
     const [selectedDiscountTier, setSelectedDiscountTier] = useState(null);
+    const [discountsEnabled, setDiscountsEnabled] = useState(true);
+    const [savingDiscountToggle, setSavingDiscountToggle] = useState(false);
 
     const loadDiscounts = useCallback(async () => {
         try {
             setLoadingDiscounts(true);
-            const discRes = await fetchAdminDiscounts();
+            const [discRes, settingsRes] = await Promise.all([
+                fetchAdminDiscounts(),
+                fetchSettings()
+            ]);
             setDiscounts(discRes || []);
+            setDiscountsEnabled(parseBooleanSetting(settingsRes.discounts_enabled, true));
         } catch (err) {
             toast('Failed to load discounts: ' + err.message, 'error');
         } finally {
@@ -103,6 +119,21 @@ export default function PricingManagement() {
         }
     };
 
+    const handleToggleDiscounts = async () => {
+        const nextEnabled = !discountsEnabled;
+        setSavingDiscountToggle(true);
+        setDiscountsEnabled(nextEnabled);
+        try {
+            await updateSetting('discounts_enabled', nextEnabled);
+            toast(nextEnabled ? 'Discounts turned on' : 'Discounts turned off', 'success');
+        } catch (err) {
+            setDiscountsEnabled(!nextEnabled);
+            toast(`Failed to update discount switch: ${err.message}`, 'error');
+        } finally {
+            setSavingDiscountToggle(false);
+        }
+    };
+
     // Helper to format quantity arrays as ranges (e.g. 10-15)
     // Now accepts allDiscounts to identify the global max trigger for infinity representation (e.g. 500+)
     const getRangeString = (nums, allDiscounts = []) => {
@@ -160,6 +191,31 @@ export default function PricingManagement() {
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                type="button"
+                                onClick={handleToggleDiscounts}
+                                disabled={loading || savingDiscountToggle}
+                                title={discountsEnabled ? 'Turn off all discounts' : 'Turn on all discounts'}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    padding: '8px 12px',
+                                    borderRadius: 10,
+                                    border: `1.5px solid ${discountsEnabled ? '#bbf7d0' : '#fecaca'}`,
+                                    background: discountsEnabled ? '#f0fdf4' : '#fff1f2',
+                                    color: discountsEnabled ? '#047857' : '#be123c',
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.02em',
+                                    cursor: loading || savingDiscountToggle ? 'not-allowed' : 'pointer',
+                                    opacity: loading || savingDiscountToggle ? 0.65 : 1
+                                }}
+                            >
+                                {savingDiscountToggle ? <Loader2 size={14} className="spin" /> : <Power size={14} />}
+                                {discountsEnabled ? 'Discounts On' : 'Discounts Off'}
+                            </button>
                             <div className="display-toggle-group" style={{
                                 background: '#ecf2f8', padding: '4px', borderRadius: '10px',
                                 display: 'flex', gap: '4px', border: '1px solid #e2e8f0',

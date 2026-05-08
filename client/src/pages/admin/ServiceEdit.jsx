@@ -681,8 +681,8 @@ export default function ServiceEdit() {
                                                 </div>
                                             </div>
                                             <p className="admin-card-tip" style={{ marginTop: '12px' }}>
-                                                Formula: <code>cost/unit = (setup_time × shop_rate / 60 + batches × batch_cost) / qty</code>.
-                                                Parts per batch = floor(oven_dim / (part_width + part_gap)) × floor(other_oven_dim / (thickness + rack_clearance)), taking the better of the two oven orientations.
+                                                Formula: <code>cost/unit = setup_hours x shop_rate + batch_cost</code>.
+                                                Parts per batch = floor(oven_dim / (part_width + 6)) x floor(other_oven_dim / (thickness + 24)), taking the better of the two oven orientations.
                                             </p>
                                         </div>
                                     )}
@@ -943,7 +943,7 @@ export default function ServiceEdit() {
                                                 <input
                                                     type="number"
                                                     step="0.001"
-                                                    value={service.pricing_config?.edge_buffer ?? 0.125}
+                                                    value={service.pricing_config?.edge_buffer ?? 0.15}
                                                     onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, edge_buffer: parseFloat(e.target.value) || 0 } }))}
                                                 />
                                             </div>
@@ -952,7 +952,7 @@ export default function ServiceEdit() {
                                                 <input
                                                     type="number"
                                                     step="0.001"
-                                                    value={service.pricing_config?.part_buffer ?? 0.0625}
+                                                    value={service.pricing_config?.part_buffer ?? 0.15}
                                                     onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, part_buffer: parseFloat(e.target.value) || 0 } }))}
                                                 />
                                             </div>
@@ -961,7 +961,7 @@ export default function ServiceEdit() {
                                                 <input
                                                     type="number"
                                                     step="0.001"
-                                                    value={service.pricing_config?.kerf_width ?? 0.01}
+                                                    value={service.pricing_config?.kerf_width ?? 0.005}
                                                     onChange={e => setService(s => ({ ...s, pricing_config: { ...s.pricing_config, kerf_width: parseFloat(e.target.value) || 0 } }))}
                                                 />
                                             </div>
@@ -1217,8 +1217,9 @@ export default function ServiceEdit() {
                                                 </div>
                                                 <code>setup_cost = labor_rate x setup_time</code><br />
                                                 <code>runtime = unique_bends x time_per_bend_sec / 3600</code><br />
+                                                <code>runtime_labor_cost = labor_rate x runtime x part.qty</code><br />
                                                 <code>machine_cost = part.qty x (other_formed_feature_count x other_formed_feature_rate + large_bend_count x large_bend_rate + small_bend_count x small_bend_rate + med_bend_count x med_bend_rate)</code><br />
-                                                <code>TOTAL_COST = setup_cost + machine_cost</code><br />
+                                                <code>TOTAL_COST = setup_cost + runtime_labor_cost + machine_cost</code><br />
                                                 <code>DAYS = ceil((setup_time + runtime x part.qty) / daily_capacity_hours)</code>
                                             </div>
                                         </section>
@@ -1324,8 +1325,8 @@ export default function ServiceEdit() {
                                             <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase' }}>Formula Summary</h4>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', color: '#0369a1', lineHeight: '1.6' }}>
-                                            <code>Operation Cost = (Runtime × Quantity + Setup) × Shop Rate</code><br />
-                                            <code>TOTAL CNC COST = SUM(Saw, Lathe, Mill, Deburr, Inspect)</code>
+                                            <code>Operation Cost / Part = (Runtime + Setup) × Shop Rate</code><br />
+                                            <code>TOTAL CNC COST = SUM(Saw, Lathe, Mill, Deburr, Inspect) × Quantity</code>
                                         </div>
                                     </div>
                                 </div>

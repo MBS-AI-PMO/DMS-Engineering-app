@@ -28,6 +28,81 @@ const getConfigNumber = (config, keys, fallback = 0) => {
     return fallback;
 };
 
+const parseBooleanSetting = (value, fallback = true) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const normalized = String(value).trim().toLowerCase();
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    return fallback;
+};
+
+const calculateSheetNestOption = ({
+    label,
+    sheetCost,
+    sheetLength,
+    sheetWidth,
+    partLength,
+    partWidth,
+    thickness,
+    edgeBuffer,
+    partBuffer,
+    kerfWidth,
+    quantity
+}) => {
+    const cost = toFiniteNumber(sheetCost);
+    if (cost <= 0) return null;
+
+    const sL = Math.max(sheetLength, sheetWidth);
+    const sW = Math.min(sheetLength, sheetWidth);
+    const usableL = sL - 2 * edgeBuffer + partBuffer;
+    const usableW = sW - 2 * edgeBuffer + partBuffer;
+    const buffL = partLength + partBuffer + kerfWidth;
+    const buffW = partWidth + partBuffer + kerfWidth;
+    const orientations = [
+        { orientation: 'horizontal', x: buffL, y: buffW },
+        { orientation: 'vertical', x: buffW, y: buffL }
+    ].map((option) => {
+        const xCount = option.x > 0 ? Math.floor(usableL / option.x) : 0;
+        const yCount = option.y > 0 ? Math.floor(usableW / option.y) : 0;
+        return {
+            ...option,
+            x_count: Math.max(0, xCount),
+            y_count: Math.max(0, yCount),
+            parts_per_sheet: Math.max(0, xCount) * Math.max(0, yCount)
+        };
+    });
+
+    const bestOrientation = orientations.sort((a, b) => b.parts_per_sheet - a.parts_per_sheet)[0];
+    const pps = bestOrientation?.parts_per_sheet || 0;
+
+    return {
+        sheet_label: label,
+        sheet_length: sL,
+        sheet_width: sW,
+        sheet_thickness: thickness,
+        sheet_cost: cost,
+        edge_buffer: edgeBuffer,
+        part_buffer: partBuffer,
+        kerf_width: kerfWidth,
+        part_length: partLength,
+        part_width: partWidth,
+        buffered_part_length: buffL,
+        buffered_part_width: buffW,
+        usable_sheet_length: usableL,
+        usable_sheet_width: usableW,
+        orientation: bestOrientation?.orientation || 'horizontal',
+        x_count: bestOrientation?.x_count || 0,
+        y_count: bestOrientation?.y_count || 0,
+        parts_per_sheet: pps,
+        sheets_for_quantity: pps > 0 ? quantity / pps : 0,
+        material_unit_cost: pps > 0 ? cost / pps : 0,
+        material_total_cost: pps > 0 ? (cost / pps) * quantity : 0,
+        orientations
+    };
+};
+
 const toBendLengthInches = (bend) => {
     const explicitIn = getConfigNumber(bend, ['length_in', 'lengthIn'], NaN);
     if (Number.isFinite(explicitIn)) return explicitIn;
@@ -177,12 +252,14 @@ const calculateBendingPricing = (config = {}, techData = {}, qty = 1) => {
     const uniqueBends = bendRadii.size;
     const operationRuntime = (timePerBendSec * uniqueBends) / 3600;
     const setupCost = laborRate * setupTime;
-    const machineCostTotal = quantity * (
+    const formedFeatureCostTotal = quantity * (
         (smallBendCount * smallBendRate)
         + (medBendCount * medBendRate)
         + (largeBendCount * largeBendRate)
         + (otherFormedFeatureCount * otherFormedFeatureRate)
     );
+    const runtimeLaborCostTotal = quantity * laborRate * operationRuntime;
+    const machineCostTotal = formedFeatureCostTotal + runtimeLaborCostTotal;
     const totalCost = setupCost + machineCostTotal;
     const unitCost = totalCost / quantity;
     const days = dailyCapacityHours > 0
@@ -209,6 +286,9 @@ const calculateBendingPricing = (config = {}, techData = {}, qty = 1) => {
             unique_hems: uniqueHems,
             unique_bends: uniqueBends,
             setup_time: setupTime,
+            setup_cost: setupCost,
+            formed_feature_cost: formedFeatureCostTotal,
+            runtime_labor_cost: runtimeLaborCostTotal,
             cost_per_small_bend: smallBendRate,
             cost_per_med_bend: medBendRate,
             cost_per_large_bend: largeBendRate,
@@ -726,9 +806,10 @@ const parseSheetCostRatePayload = (body = {}) => {
         }
     }
 
-    // Support both sheet sizes. Use 0 as default if missing.
     const cost4x8 = parseFloat(body.sheet_cost_4x8 || 0);
-    const cost5x10 = parseFloat(body.sheet_cost_5x10 || 0);
+    if (!Number.isFinite(cost4x8) || cost4x8 <= 0) {
+        return { error: 'sheet_cost_4x8 must be a positive number' };
+    }
 
     let gauge = null;
     if (body.ga != null && String(body.ga).trim() !== '') {
@@ -744,7 +825,6 @@ const parseSheetCostRatePayload = (body = {}) => {
         maxThick,
         gauge,
         cost4x8,
-        cost5x10,
         thickness: (minThick + maxThick) / 2
     };
 };
@@ -776,9 +856,9 @@ router.post('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, r
 
     try {
         const result = await db.query(
-            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8, sheet_cost_5x10, thickness)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.cost5x10, parsed.thickness]
+            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8, thickness)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.thickness]
         );
         res.json({
             success: true,
@@ -803,9 +883,9 @@ router.put('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req
     try {
         const result = await db.query(
             `UPDATE sheet_cost_rates
-             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, sheet_cost_5x10 = $6, thickness = $7, updated_at = NOW()
-             WHERE id = $8 RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.cost5x10, parsed.thickness, id]
+             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, thickness = $6, updated_at = NOW()
+             WHERE id = $7 RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.thickness, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Rate not found' });
         res.json({
@@ -835,6 +915,12 @@ router.delete('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (
 // ── Public Discount Tiers (no auth required) ────────────────
 router.get('/discounts', async (req, res) => {
     try {
+        const settingsRes = await db.query("SELECT value FROM site_settings WHERE key = 'discounts_enabled'");
+        const discountsEnabled = parseBooleanSetting(settingsRes.rows[0]?.value, true);
+        if (!discountsEnabled) {
+            return res.json({ success: true, data: [] });
+        }
+
         const result = await db.query('SELECT * FROM quantity_discounts WHERE is_active = true ORDER BY (quantities->>0)::int ASC');
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -983,9 +1069,9 @@ router.post('/configure-preview', async (req, res) => {
  * Pricing engine based on CSV formulas:
  *
  * MATERIAL COST  — Sheet nesting formula (sheet metal material.csv)
- *   material_cost = sheet_cost_5x10 / parts_per_sheet
+ *   material_cost = sheet_cost_4x8 / best_parts_per_sheet
  *   parts_per_sheet = floor(usable_L / buffered_L) × floor(usable_W / buffered_W)
- *   Sheet = 120x60 in (5x10). Buffers: edge=0.125, part=0.0625, kerf=0.01
+ *   Sheet = 96x48 (4x8), tested horizontally and vertically.
  *
  * LASER CUTTING  — Time-based formula (laser.csv)
  *   runtime_h = (perimeter_mm / cut_rate_mm_s / 3600) + (pierce_count × pierce_time_s / 3600)
@@ -1075,7 +1161,7 @@ router.post('/calculate', async (req, res) => {
 
         // ── MATERIAL COST (Sheet Nesting Formula) ─────────────────────────────
         // Source: sheet metal material.csv
-        // Cost = sheet_cost_5x10 / parts_per_sheet (per unit)
+        // Cost = 4x8 sheet cost / parts per sheet (per unit)
         // Lookup priority:
         // 1) exact/range match in selected family
         // 2) closest thickness in selected family
@@ -1083,13 +1169,15 @@ router.post('/calculate', async (req, res) => {
         let material_cost = 0;
         let lead_days = 0;
         let laser_warning = false;
+        let material_nesting = null;
+        let powder_coating_breakdown = null;
 
         if (metal && thickness_value && parseFloat(length_in) > 0 && parseFloat(height_in) > 0) {
             const thickNum = parseFloat(thickness_value);
             const family = metal.material_family || 'generic';
 
             let sheetRes = await db.query(
-                `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
+                `SELECT sheet_cost_4x8 FROM sheet_cost_rates
                  WHERE family = $1 AND min_thick < $2 - 0.001 AND max_thick >= $2
                  ORDER BY max_thick ASC, min_thick ASC
                  LIMIT 1`,
@@ -1098,7 +1186,7 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length === 0) {
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
+                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
                      WHERE family = $1
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $2) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -1109,7 +1197,7 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length === 0 && family !== 'generic') {
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8, sheet_cost_5x10 FROM sheet_cost_rates
+                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
                      WHERE family = 'generic'
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $1) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -1120,45 +1208,42 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length > 0) {
                 const row = sheetRes.rows[0];
-                let active_sheet_cost = 0;
-                let active_L = 96;
-                let active_W = 48;
+                const EDGE_BUFFER = getConfigNumber(config, ['edge_buffer'], 0.15);
+                const PART_BUFFER = getConfigNumber(config, ['part_buffer'], 0.15);
+                const KERF_WIDTH = getConfigNumber(config, ['kerf_width'], 0.005);
+                const pL = Math.max(parseFloat(length_in), parseFloat(height_in));
+                const pW = Math.min(parseFloat(length_in), parseFloat(height_in));
 
-                // Priority: 5x10 if cost > 0, else 4x8
-                if (parseFloat(row.sheet_cost_5x10) > 0) {
-                    active_sheet_cost = parseFloat(row.sheet_cost_5x10);
-                    active_L = 120;
-                    active_W = 60;
-                } else if (parseFloat(row.sheet_cost_4x8) > 0) {
-                    active_sheet_cost = parseFloat(row.sheet_cost_4x8);
-                    active_L = 96;
-                    active_W = 48;
-                }
+                const nestOptions = [
+                    calculateSheetNestOption({
+                        label: '4x8',
+                        sheetCost: row.sheet_cost_4x8,
+                        sheetLength: 96,
+                        sheetWidth: 48,
+                        partLength: pL,
+                        partWidth: pW,
+                        thickness: thickNum,
+                        edgeBuffer: EDGE_BUFFER,
+                        partBuffer: PART_BUFFER,
+                        kerfWidth: KERF_WIDTH,
+                        quantity: qty
+                    })
+                ].filter(Boolean);
 
-                if (active_sheet_cost > 0) {
-                    // Buffers from config or formula defaults
-                    const EDGE_BUFFER = parseFloat(config.edge_buffer) || 0.125;
-                    const PART_BUFFER = parseFloat(config.part_buffer) || 0.0625;
-                    const KERF_WIDTH = parseFloat(config.kerf_width) || 0.01;
+                if (nestOptions.length > 0) {
+                    const bestNest = nestOptions.sort((a, b) => {
+                        if (b.parts_per_sheet !== a.parts_per_sheet) {
+                            return b.parts_per_sheet - a.parts_per_sheet;
+                        }
+                        return a.material_unit_cost - b.material_unit_cost;
+                    })[0];
 
-                    // Orientation-agnostic part dims
-                    const pL = Math.max(parseFloat(length_in), parseFloat(height_in));
-                    const pW = Math.min(parseFloat(length_in), parseFloat(height_in));
-
-                    const buffL = pL + PART_BUFFER + KERF_WIDTH;
-                    const buffW = pW + PART_BUFFER + KERF_WIDTH;
-
-                    // Usable sheet dimensions (subtract edge buffers, add one part_buffer back)
-                    const sL = Math.max(active_L, active_W);
-                    const sW = Math.min(active_L, active_W);
-
-                    const usableL = sL - 2 * EDGE_BUFFER + PART_BUFFER;
-                    const usableW = sW - 2 * EDGE_BUFFER + PART_BUFFER;
-
-                    const pps = Math.floor(usableL / buffL) * Math.floor(usableW / buffW);
-                    if (pps > 0) {
-                        material_cost = active_sheet_cost / pps;
-                    } else {
+                    material_nesting = {
+                        ...bestNest,
+                        evaluated_sheet_options: nestOptions
+                    };
+                    material_cost = bestNest.material_unit_cost;
+                    if (bestNest.parts_per_sheet <= 0) {
                         material_cost = 0;
                         laser_warning = true;
                     }
@@ -1280,7 +1365,7 @@ router.post('/calculate', async (req, res) => {
 
             // ── CNC MACHINING (Multi-Operation Formula) ──────────────────────
             if (isCNC) {
-                let totalCncProductionCost = 0;
+                let cncUnitCost = 0;
                 const operations = ['saw', 'lathe', 'mill', 'deburr', 'inspect'];
 
                 operations.forEach(op => {
@@ -1296,21 +1381,19 @@ router.post('/calculate', async (req, res) => {
                     if (runtimeUnit === 'Minutes') runtime /= 60;
                     else if (runtimeUnit === 'Seconds') runtime /= 3600;
 
-                    // PRICE = (runtime * qty + setup) * shop_rate
-                    const opCostTotal = (runtime * qty + setup) * rate;
-
-                    if (qty > 0) {
-                        totalCncProductionCost += (opCostTotal / qty);
-                    }
+                    // Each configured CNC operation is priced per part, then the
+                    // global quote math multiplies the unit cost by quantity.
+                    cncUnitCost += (runtime + setup) * rate;
                 });
 
-                if (totalCncProductionCost > 0) {
+                if (cncUnitCost > 0) {
                     console.log(`[Debug] CNC Production Cost Breakdown:`, {
-                        totalUnit: totalCncProductionCost,
+                        unitCost: cncUnitCost,
+                        totalCost: cncUnitCost * qty,
                         qty
                     });
                 }
-                main_service_cost = totalCncProductionCost;
+                main_service_cost = cncUnitCost;
             }
 
             // ── GENERIC SERVICE FALLBACK ──────────────────────────────────────
@@ -1320,7 +1403,6 @@ router.post('/calculate', async (req, res) => {
         }
 
         // ── ADDITIONAL SERVICES COST ──────────────────────────────────────────
-        let additional_cost = 0;
         const service_breakdown = [];
 
         if (Array.isArray(additional_services) && additional_services.length > 0) {
@@ -1346,16 +1428,23 @@ router.post('/calculate', async (req, res) => {
                 // ── POWDER COATING (powder coating.csv) ──────────────────────
                 // Two orientations tried; use the one that fits more parts per batch.
                 // Hanging dimension uses part THICKNESS + 24" (rack clearance), NOT length.
-                // cost/unit = (setup_charge + num_batches × batch_cost) / qty
+                // cost/unit = setup_charge + batch_cost, then global quote math multiplies by quantity.
                 if (isPowder && s.pricing_config) {
                     const cfg = s.pricing_config;
-                    const ovenW = parseFloat(cfg.oven_width) || 0;
-                    const ovenL = parseFloat(cfg.oven_length) || 0;
+                    const dimUnit = String(cfg.pc_dim_unit || cfg.dimension_unit || 'in').toLowerCase();
+                    const dimDivisor = dimUnit === 'mm' ? 25.4 : 1;
+                    const ovenW = (parseFloat(cfg.oven_width) || 0) / dimDivisor;
+                    const ovenL = (parseFloat(cfg.oven_length) || 0) / dimDivisor;
                     const batchCost = parseFloat(cfg.batch_cost) || 0;
-                    const setupCharge = (parseFloat(cfg.setup_time) || 0) * (parseFloat(cfg.shop_rate) || 0) / 60;
+                    const setupTimeRaw = parseFloat(cfg.setup_time) || 0;
+                    const pcTimeUnit = String(cfg.pc_time_unit || 'hr').toLowerCase();
+                    const setupHours = pcTimeUnit === 'min' || pcTimeUnit === 'minutes'
+                        ? setupTimeRaw / 60
+                        : setupTimeRaw;
+                    const setupCharge = setupHours * (parseFloat(cfg.shop_rate) || 0);
 
-                    const partGap = parseFloat(cfg.part_gap) || 0;
-                    const rackClearance = parseFloat(cfg.rack_clearance) || 0;
+                    const partGap = (parseFloat(cfg.part_gap) || 6) / dimDivisor;
+                    const rackClearance = (parseFloat(cfg.rack_clearance) || 24) / dimDivisor;
 
                     const pW = (parseFloat(height_in) || 10) + partGap;              // part width + horizontal gap
                     const pThick = (parseFloat(thickness_value) || 0.1) + rackClearance; // thickness + rack clearance
@@ -1368,7 +1457,26 @@ router.post('/calculate', async (req, res) => {
                     const perBatch = Math.max(1, s1, s2);
                     const numBatches = Math.ceil(qty / perBatch);
 
-                    sPrice = (setupCharge + numBatches * batchCost) / qty;
+                    sPrice = setupCharge + batchCost;
+                    powder_coating_breakdown = {
+                        service_id: s.id,
+                        oven_width_in: ovenW,
+                        oven_length_in: ovenL,
+                        part_width_in: parseFloat(height_in) || 0,
+                        part_thickness_in: parseFloat(thickness_value) || 0,
+                        part_gap_in: partGap,
+                        rack_clearance_in: rackClearance,
+                        scenario_1_parts: s1,
+                        scenario_2_parts: s2,
+                        parts_per_batch: perBatch,
+                        number_of_batches: numBatches,
+                        setup_hours: setupHours,
+                        setup_charge: setupCharge,
+                        batch_cost: batchCost,
+                        pricing_mode: 'per_part',
+                        unit_cost: sPrice,
+                        total_cost: sPrice * qty
+                    };
                 }
 
                 // Option/colour mapping
@@ -1401,8 +1509,12 @@ router.post('/calculate', async (req, res) => {
                     }
                 }
 
-                additional_cost += sPrice;
-                service_breakdown.push({ name: sName, price: sPrice });
+                service_breakdown.push({
+                    service_id: s.id,
+                    base_name: s.title,
+                    name: sName,
+                    price: sPrice
+                });
             }
         }
 
@@ -1414,30 +1526,29 @@ router.post('/calculate', async (req, res) => {
 
         if (Array.isArray(taps) && taps.length > 0) {
             const tapTotal = taps.reduce((acc, t) => acc + parseManualPrice(t.price), 0);
-            additional_cost += tapTotal;
-            service_breakdown.push({ name: 'Tapping', price: tapTotal });
+            service_breakdown.push({ base_name: 'Tapping', name: 'Tapping', price: tapTotal });
         }
 
         if (Array.isArray(hardware) && hardware.length > 0) {
             const hwTotal = hardware.reduce((acc, h) => acc + parseManualPrice(h.price), 0);
-            additional_cost += hwTotal;
-            service_breakdown.push({ name: 'Hardware', price: hwTotal });
+            service_breakdown.push({ base_name: 'Hardware', name: 'Hardware', price: hwTotal });
         }
 
         if (Array.isArray(countersinks) && countersinks.length > 0) {
             const csTotal = countersinks.reduce((acc, c) => acc + parseManualPrice(c.price), 0);
-            additional_cost += csTotal;
-            service_breakdown.push({ name: 'Countersinking', price: csTotal });
+            service_breakdown.push({ base_name: 'Countersinking', name: 'Countersinking', price: csTotal });
         }
 
         // ── MARKUPS & FINAL TOTALS ──────────────────────────────────────────
-        const settingsRes = await db.query("SELECT key, value FROM site_settings WHERE key IN ('general_markup', 'inside_labor_markup', 'material_markup', 'overhead_markup', 'markup_enabled_services')");
+        const settingsRes = await db.query("SELECT key, value FROM site_settings WHERE key IN ('general_markup', 'inside_labor_markup', 'material_markup', 'overhead_markup', 'markup_enabled_services', 'discounts_enabled')");
         const settings = {};
         settingsRes.rows.forEach(r => {
             if (r.key === 'markup_enabled_services') {
                 try {
                     settings[r.key] = typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
                 } catch (e) { settings[r.key] = []; }
+            } else if (r.key === 'discounts_enabled') {
+                settings[r.key] = parseBooleanSetting(r.value, true);
             } else {
                 settings[r.key] = toFiniteNumber(r.value);
             }
@@ -1448,6 +1559,7 @@ router.post('/calculate', async (req, res) => {
         const matMU = settings.material_markup || 0;
         const ovhMU = settings.overhead_markup || 0;
         const markupServices = Array.isArray(settings.markup_enabled_services) ? settings.markup_enabled_services : [];
+        const discountsEnabled = parseBooleanSetting(settings.discounts_enabled, true);
 
         // Factors
         const material_factor = 1 + matMU / 100;
@@ -1458,10 +1570,10 @@ router.post('/calculate', async (req, res) => {
         const main_mu_factor = applyToMain ? inside_factor : 1;
 
         const material_marked_up = material_cost * material_factor;
+        const material_markup_amount = Math.max(0, material_marked_up - material_cost);
         const production_marked_up = main_service_cost * main_mu_factor;
 
         const marked_service_breakdown = [];
-        let total_additional_marked_up = 0;
         let total_sub_services_marked_up = 0;
 
         // 1. Add Main Service (e.g. Laser Cutting)
@@ -1474,7 +1586,7 @@ router.post('/calculate', async (req, res) => {
 
         // 2. Add existing labor items (Bending, Tapping, Hardware, etc.)
         for (const item of service_breakdown) {
-            const applyToSvc = markupServices.includes(item.name);
+            const applyToSvc = markupServices.includes(item.base_name || item.name) || markupServices.includes(item.name);
             const svc_mu_factor = applyToSvc ? inside_factor : 1;
             const price_mu = item.price * svc_mu_factor;
 
@@ -1487,32 +1599,18 @@ router.post('/calculate', async (req, res) => {
             }
         }
 
-        // 3. Add Additional Services (e.g. Powder Coating)
-        for (const svc of additional_services) {
-            const applyToSvc = markupServices.includes(svc.service_title);
-            const svc_mu_factor = applyToSvc ? inside_factor : 1;
-            const price_mu = svc.price_raw * svc_mu_factor;
-
-            if (price_mu > 0.001) {
-                total_additional_marked_up += price_mu;
-                marked_service_breakdown.push({
-                    name: svc.service_title,
-                    price: price_mu
-                });
-            }
-        }
-
-        let unit_total = material_marked_up + production_marked_up + total_sub_services_marked_up + total_additional_marked_up;
+        let unit_total = material_marked_up + production_marked_up + total_sub_services_marked_up;
+        const subtotal_before_discount = Number.isFinite(unit_total * qty) ? (unit_total * qty) : 0;
 
         // ── QUANTITY DISCOUNTS ────────────────────────────────────────────────
         let discount_percent = 0;
         let applied_tier = null;
 
-        const discountRes = await db.query(`
+        const discountRes = discountsEnabled ? await db.query(`
                 SELECT * FROM quantity_discounts
                 WHERE is_active = true
                 ORDER BY (quantities->>0)::int DESC
-            `);
+            `) : { rows: [] };
 
         if (discountRes.rows.length > 0) {
             const matchedTier = discountRes.rows.find(tier => {
@@ -1528,16 +1626,19 @@ router.post('/calculate', async (req, res) => {
             }
         }
 
-        const unit_discount_amount = unit_total * (discount_percent / 100);
-        const final_unit_price = Math.max(0, unit_total - unit_discount_amount);
-        const final_total = Number.isFinite(final_unit_price * qty) ? (final_unit_price * qty) : 0;
+        const discount_amount = subtotal_before_discount * (discount_percent / 100);
+        const final_total = Math.max(0, subtotal_before_discount - discount_amount);
+        const final_unit_price = qty > 0 ? final_total / qty : 0;
 
         console.log('[Debug] Price Calculation:', {
+            material_raw: material_cost,
             material: material_marked_up,
+            material_markup_amount,
             production: production_marked_up,
             sub_services: total_sub_services_marked_up,
-            additional: total_additional_marked_up,
+            additional_services: total_sub_services_marked_up,
             unit_total,
+            subtotal_before_discount,
             final_unit_price,
             qty,
             final_total
@@ -1546,7 +1647,7 @@ router.post('/calculate', async (req, res) => {
         const warnings = Array.from(new Set([
             ...(boundsWarning ? [boundsWarning] : []),
             ...(laser_warning ? ['Part dimensions or thickness exceed standard limits. Please verify capability.'] : []),
-            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard 5x10 sheet.'] : []),
+            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard sheet.'] : []),
             ...pricingWarnings
         ].filter(Boolean)));
 
@@ -1555,16 +1656,23 @@ router.post('/calculate', async (req, res) => {
             total_price: final_total,
             lead_days: lead_days || 0,
             breakdown: {
-                material_cost: material_marked_up,
+                material_cost,
+                material_cost_with_markup: material_marked_up,
+                material_markup_percent: matMU,
+                material_markup_amount,
                 production_cost: production_marked_up,
-                additional_services_cost: total_additional_marked_up,
+                additional_services_cost: total_sub_services_marked_up,
                 service_breakdown: marked_service_breakdown,
                 unit_total,
+                subtotal_before_discount,
                 final_unit_price,
                 discount_percent,
-                discount_amount: unit_discount_amount * qty,
+                discounts_enabled: discountsEnabled,
+                discount_amount,
                 applied_tier,
                 warnings,
+                material_nesting,
+                powder_coating: powder_coating_breakdown,
                 bending: bending_breakdown ? bending_breakdown.variables : null
             }
         });

@@ -224,7 +224,15 @@ const HierarchicalProjectViewer = ({
           const color = HW_COLORS[typeId] || 0xB8860B;
           const mat = getMarkerMat(`hw_${color}`, () => new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
           const faceSign = face === 'down' ? -1 : 1;
-          const basePos = pos.clone().add(axis.clone().multiplyScalar(faceSign * origT * 0.5));
+          const holeDepthMm = Number(hole.depthMm ?? hole.depth_mm ?? NaN);
+          const holeDepthInches = Number(hole.depthInches);
+          const placementDepthMm = Number.isFinite(holeDepthMm) && holeDepthMm > 0
+            ? holeDepthMm
+            : (Number.isFinite(holeDepthInches) && holeDepthInches > 0 ? holeDepthInches * 25.4 : NaN);
+          const placementHalfDepth = Number.isFinite(placementDepthMm) && placementDepthMm > 0.1
+            ? placementDepthMm * 0.5
+            : 0;
+          const basePos = pos.clone().add(axis.clone().multiplyScalar(faceSign * placementHalfDepth));
           const hR = mmDia / 2;
           const hwOuterR = hR * 1.5; const hwBoreR = hR * 0.9;
 
