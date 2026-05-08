@@ -1,180 +1,23 @@
-# DMS Project Handoff (CNC Phase 4 + Project Scan)
+# DMS Project Handoff
 
-Last updated: 2026-05-01
+Last updated: 2026-05-08
 Workspace: `D:\Frontend\DMS`
 
 ## Purpose
 
-This document combines the CNC Phase 4 handoff and the broader project scan into a single reference for ongoing work.
+This document describes the current position of the DMS manufacturing quoting site after the latest pricing, viewer, FAQ, and admin updates. It is meant to be the first reference for future work on the app.
 
-## 1. CNC Phase 4 Summary
+## Current Product Shape
 
-### Current CNC State
+DMS is a manufacturing quote, checkout, and admin platform. It is not only a marketing site.
 
-Completed phases:
-- Phase 1: configurable 5-operation CNC engine
-- Phase 2: smart admin-configurable rules engine
-- Phase 3: STEP topology-driven CNC feature extraction
+Core areas:
+- Public site for metals, services, guidelines, FAQ, contact, privacy policy, and terms.
+- Instant pricing workflow for CAD uploads, material selection, production services, add-on services, hardware, finish color, cart, checkout, and order history.
+- Admin panel for metals, categories, FAQs, services, pricing rules, discounts, markups, laser rates, sheet costs, guidelines, legal content, orders, customers, email, payment methods, and site/contact settings.
+- Backend CAD pipeline for STEP/DXF analysis, sheet-metal unfold, hole detection, configured previews, and pricing payload calculation.
 
-The CNC quote flow supports:
-- Operations: `Saw`, `Lathe`, `Mill`, `Deburr`, `Inspect`
-- Modes: `manual` and `smart`
-- Admin-controlled enable rules, runtime factors, setup multipliers, setup-count rules, and risk surcharges
-- Quote warnings, setup context, risk breakdown, and per-operation breakdown in the UI
-
-### Key Files (CNC)
-
-Primary pricing engine:
-- `backend/routes/pricing.js`
-
-STEP/CAD analysis:
-- `backend/unfold_lib.py`
-- `backend/main.py`
-
-Frontend quote flow:
-- `client/src/pages/InstantPricing.jsx`
-- `client/src/components/pricing/PricingSidebar.jsx`
-
-Admin CNC configuration:
-- `client/src/pages/admin/ServiceEdit.jsx`
-
-### CAD-Derived CNC Signals
-
-The STEP analysis returns `cncFeatures` with:
-- `pocketCount`
-- `slotCount`
-- `recessedFaceCount`
-- `deepPocketCount`
-- `pocketDepthMmMax`
-- `throughHoleCount`
-- `blindHoleCount`
-- `machiningDirectionCount`
-- `setupCountEstimate`
-- `verticalWallFaceCount`
-- `cylindricalFaceCount`
-- `planarFaceCount`
-- `cylindricalAreaRatio`
-- `rotationalCandidate`
-
-These are fed into:
-- smart operation enable rules
-- smart runtime calculation
-- smart setup count floor logic
-- smart risk/warning logic
-
-### Phase 4 Definition
-
-Phase 4 is calibration, not architecture.
-
-Goal:
-- tune the CNC engine against real jobs so quotes match shop reality
-
-Calibration targets:
-- setup-count rules
-- per-operation runtime factors
-- shop rates
-- risk surcharge thresholds
-- warning thresholds
-- lathe vs mill activation rules
-
-### Recommended Phase 4 Work Order
-
-1. Build a calibration dataset from real quotes/orders
-   - part id / file
-   - material
-   - quantity
-   - detected CNC metrics
-   - operation breakdown
-   - quoted unit price
-   - actual or expected shop cost
-
-2. Add a calibration snapshot to each quote/order
-   - save exact pricing inputs and derived CNC metrics
-   - save exact operation breakdown used at quote time
-   - make later comparison possible even if admin settings change
-
-3. Add admin visibility for calibration
-   - inspect quote inputs
-   - inspect CNC metrics
-   - inspect operation/risk/setup breakdown
-   - compare quoted vs target/actual
-
-4. Tune coefficients iteratively
-   - adjust one rule family at a time
-   - validate on a batch of representative jobs
-
-### Practical Next Step (CNC)
-
-Persist a CNC calibration snapshot with orders/quotes so every real job becomes tuning data.
-
-Snapshot should include:
-- `pricingTechnicalData`
-- returned `cnc_derived_metrics`
-- returned `cnc_setup_context`
-- returned `cnc_risk_breakdown`
-- returned `cnc_operation_breakdown`
-- final unit/total price
-
-### Known Boundary
-
-The system is a topology-aware quoting engine, but it is not a CAM simulator. It does not generate real toolpaths, actual cycle time, or machine-specific tool strategy.
-
-## 2. Project Scan Summary
-
-### What this project is
-
-This repository is a manufacturing quoting platform, not just a marketing site.
-
-Core product areas:
-- Public marketing website for services, metals, FAQs, guidelines, legal pages, and contact
-- Instant pricing workflow for CAD uploads with STEP/DXF support
-- Customer auth, cart, checkout, and order history
-- Admin panel for managing metals, services, FAQs, guidelines, legal content, pricing, orders, customers, payment settings, and contact/site settings
-- Backend CAD analysis pipeline that uses Node + Python to detect holes, unfold sheet-metal parts, and generate configured previews
-
-Business domain inferred from the code:
-- Laser cutting
-- CNC machining
-- Bending / flat pattern handling
-- Tapping
-- Countersinking
-- Hardware insertion
-- Finishes such as anodizing, plating, powder coating, tumbling, deburring
-
-### High-level architecture
-
-Top-level structure:
-- `client/`: Vite + React frontend
-- `backend/`: Express API + PostgreSQL access + Python CAD worker integration
-- `db_backup.sql`: database dump present in repo root
-
-Runtime architecture:
-1. React frontend talks to `/api/...`.
-2. Express backend serves JSON APIs, uploads, auth cookies, and proxies CAD work to Python.
-3. Python service performs STEP analysis/unfold operations.
-4. PostgreSQL stores application state and configuration.
-5. Uploaded/generated files are stored under backend `uploads/` and `temp_uploads/`.
-
-### Frontend scan
-
-Frontend stack:
-- React 19
-- React Router 7
-- Vite 8
-- Bootstrap + custom CSS
-- Framer Motion
-- Three.js + online-3d-viewer + OCCT import
-- PayPal React SDK
-
-Important frontend files:
-- `client/src/App.jsx`: route map
-- `client/src/pages/InstantPricing.jsx`: main pricing workflow
-- `client/src/utils/api.js`: API client
-- `client/src/context/AuthContext.jsx`: customer auth
-- `client/src/context/AdminAuthContext.jsx`: admin auth
-- `client/src/context/CartProvider.jsx`: cart persistence and repricing
-
-Public routes:
+Important public routes:
 - `/`
 - `/metals`
 - `/metal/:slug`
@@ -195,169 +38,272 @@ Public routes:
 - `/checkout`
 - `/orders`
 
-Admin routes:
-- `/admin/login`
+Important admin routes:
 - `/admin`
 - `/admin/metals`
 - `/admin/categories`
 - `/admin/faqs`
 - `/admin/faq-categories`
 - `/admin/services`
-- `/admin/admins`
-- `/admin/email`
-- `/admin/payment`
-- `/admin/subscribers`
-- `/admin/contact`
-- `/admin/guidelines`
-- `/admin/customers`
+- `/admin/services/:id/metals`
 - `/admin/pricing`
 - `/admin/pricing-calculator`
 - `/admin/laser-rates`
 - `/admin/sheet-cost-rates`
+- `/admin/guidelines`
 - `/admin/legal`
 - `/admin/orders`
+- `/admin/customers`
+- `/admin/email`
+- `/admin/payment`
+- `/admin/subscribers`
+- `/admin/contact`
+- `/admin/admins`
 
-Frontend subsystems:
-- Viewer stack under `client/src/components/viewer/`
-- Cart and order pricing persistence
-- Dynamic site settings for logos/contact/footer/socials
-- Admin CMS/editor flows for metals, services, legal docs, and guidelines
-- PayPal checkout integration
+## Architecture
 
-Frontend state/persistence:
-- Auth uses cookie-backed API sessions via `credentials: 'include'`
-- Cart persists in `localStorage` key `dms_cart`
-- Some UI state also uses local storage:
-  - navbar/footer logos
-  - viewer mode
+Top-level structure:
+- `client/`: Vite + React frontend.
+- `backend/`: Express API, PostgreSQL access, upload handling, and Python CAD worker integration.
+- `docs/`: project handoff and implementation notes.
+- `db_backup.sql`: database backup present in the repository root.
 
-Frontend complexity hotspots:
+Runtime flow:
+1. React frontend calls `/api/...`.
+2. Express handles auth, uploads, database reads/writes, pricing, orders, and asset serving.
+3. Python CAD worker handles STEP analysis, unfold jobs, hole detection, and preview geometry work.
+4. PostgreSQL stores content, configuration, pricing tables, users, orders, hardware, discounts, and site settings.
+5. Uploaded/generated files live under backend `uploads/` and `temp_uploads/`.
+
+Key frontend files:
+- `client/src/App.jsx`
 - `client/src/pages/InstantPricing.jsx`
-- `client/src/components/viewer/StepModelViewer.jsx`
-- `client/src/components/viewer/ProjectViewer.jsx`
 - `client/src/pages/admin/ServiceEdit.jsx`
 - `client/src/pages/admin/PricingManagement.jsx`
-- `client/src/pages/admin/OrdersList.jsx`
+- `client/src/pages/admin/SheetCostRatesAdmin.jsx`
+- `client/src/components/viewer/StepModelViewer.jsx`
+- `client/src/components/viewer/FlatPatternViewer.jsx`
+- `client/src/components/viewer/HierarchicalProjectViewer.jsx`
+- `client/src/utils/api.js`
 
-### Backend scan
-
-Backend stack:
-- Express 5
-- PostgreSQL via `pg`
-- JWT auth in cookies
-- Multer uploads
-- Sharp image optimization
-- Python subprocess / HTTP worker integration for CAD tasks
-
-Main backend entrypoints:
-- `backend/server.js`: Express app and route mounting
-- `backend/db.js`: PostgreSQL pool setup
-- `backend/main.py`: Python HTTP server for unfold and hole-detection jobs
-
-Mounted API groups:
-- `/api/auth`
-- `/api/metals`
-- `/api/categories`
-- `/api/faqs`
-- `/api/quote`
-- `/api/services`
-- `/api/users`
-- `/api/email`
-- `/api/newsletter`
-- `/api/settings`
-- `/api/guidelines`
-- `/api/configurations`
-- `/api/pricing`
-- `/api/orders`
-- `/api/hardware`
-- `/api/payment`
-- `/api/legal`
-
-Standalone backend endpoints in `server.js`:
-- `GET /health`
-- `GET /api/health`
-- `POST /api/upload-asset`
-- `GET /api/db-check`
-- `POST /api/detect-holes-by-temp`
-- `POST /api/detect-holes`
-- `POST /api/unfold`
-- `POST /api/unfold-job/start`
-- `GET /api/unfold-job/:jobId`
-
-Auth model:
-- JWT secret comes from `JWT_SECRET` with an insecure fallback default in code
-- Middleware checks `token`, then `admin_token`, then bearer auth
-- Admin routes use `requireAdmin`, which retries with `admin_token` if needed
-- Customer and admin auth are maintained separately in the frontend
-
-File storage behavior:
-- Permanent assets under backend `uploads/`
-- Temporary CAD assets under backend `temp_uploads/`
-- Order files finalized into `uploads/orders/`
-- Static serving:
-  - `/uploads`
-  - `/temp_uploads`
-  - `/api/temp_uploads`
-
-Image upload areas:
-- metals
-- services
-- hardware
-- logos / hero assets
-
-### CAD and pricing pipeline
-
-Observed flow:
-1. User uploads CAD file from `InstantPricing.jsx`.
-2. Frontend sends file to `POST /api/upload-asset`.
-3. Node stores temp file and returns `tempPath`.
-4. Frontend can call hole detection or unfold endpoints.
-5. Node forwards STEP work to Python service running on `PYTHON_PORT` (default `8000`).
-6. Python analyzes geometry, handles async job state, and returns dimensions / bends / flat-pattern data.
-7. Frontend combines geometry data, selected services, hardware, finishes, and quantity into a pricing payload.
-8. Backend pricing routes calculate totals and optional configured previews.
-9. Cart stores a serialized configuration for later checkout and order submission.
-
-Important implementation files:
+Key backend files:
+- `backend/server.js`
+- `backend/routes/pricing.js`
+- `backend/routes/orders.js`
 - `backend/main.py`
 - `backend/unfold.py`
 - `backend/unfold_lib.py`
 - `backend/process_configured.py`
+
+## Current Pricing Position
+
+The main pricing contract is `POST /api/pricing/calculate` in `backend/routes/pricing.js`.
+
+Current total model:
+1. Calculate unit material cost.
+2. Calculate unit production cost.
+3. Calculate unit add-on service costs.
+4. Apply configured material/labor markups to the selected cost families.
+5. Multiply the marked-up unit subtotal by quantity.
+6. Apply the matched quantity discount globally to the gross total.
+7. Return `subtotal_before_discount`, `discount_amount`, `total_price`, `final_unit_price`, and display breakdown data.
+
+### Material Sheet Cost
+
+Material cost uses only the standard 4x8 sheet.
+
+Current behavior:
+- Sheet size is `96 x 48 in`.
+- The engine checks horizontal and vertical part orientation.
+- The orientation with the most parts per sheet wins.
+- Ties choose the lower unit material cost.
+- Unit material cost is `sheet_cost_4x8 / best_parts_per_sheet`.
+- Edge buffer, part buffer, and kerf width are configurable from service pricing config, with current defaults of `0.15`, `0.15`, and `0.005`.
+- Public quote breakdown no longer shows the helper text like `10 parts per 4x8 sheet`; it only shows the Material Cost line.
+
+Admin source:
+- `client/src/pages/admin/SheetCostRatesAdmin.jsx`
+- `sheet_cost_rates`
+
+Backend output:
+- `breakdown.material_cost`
+- `breakdown.material_cost_with_markup`
+- `breakdown.material_nesting`
+
+### CNC Machining
+
+CNC remains a configurable five-operation model.
+
+Operations:
+- `saw`
+- `lathe`
+- `mill`
+- `deburr`
+- `inspect`
+
+Current behavior:
+- Each operation has setup, runtime, rate, and display unit fields.
+- Setup/runtime units can be hours, minutes, or seconds.
+- CNC cost is calculated as a per-part unit cost from the configured operations.
+- The global pricing model multiplies CNC unit cost by quantity, so CNC increases correctly when quantity increases.
+
+Key files:
 - `backend/routes/pricing.js`
-- `backend/routes/orders.js`
+- `client/src/pages/admin/ServiceEdit.jsx`
+
+### Bending
+
+Current behavior:
+- Bending eligibility is checked against metal/service support and selected thickness support.
+- Unsupported bending is removed/blocked and returns warnings instead of charging.
+- Bending cost uses the configured setup/runtime/rate structure.
+- The current approved behavior is setup labor plus quantity-scaled bend/runtime cost.
+- The Project Breakdown row shows the real extended price after quantity and markup, while discounts apply later to the total.
+
+Key files:
+- `backend/routes/pricing.js`
 - `client/src/pages/InstantPricing.jsx`
+- `client/src/pages/admin/ServiceEdit.jsx`
 
-Notable CAD features inferred from code:
-- STEP/STP support
-- DXF workflow
-- hole detection
-- sheet-metal unfold
-- async unfold jobs with polling
-- configured preview generation
-- hardware insertion config
-- tapping / countersinking config
-- bend tree / flat pattern visualization
+### Powder Coating
 
-Caching / job control present:
-- Node-side hole detection cache
-- Node-side configured preview cache
-- Python-side unfold job registry and result cache
-- queue limiting and worker timeout controls in Python
+Powder coating is independent of sheet nesting. It is treated as a configured service cost in the quote breakdown, not as a material-sheet coating optimization.
 
-### Data model scan
+Current behavior:
+- Admin supports oven width/length, dimension unit, setup time, setup time unit, shop rate, batch cost, part gap, and rack clearance.
+- The backend still computes batch capacity metadata using two orientations for reference.
+- Approved visible pricing behavior is service unit cost multiplied by quantity by the global quote math.
+- The Project Breakdown no longer shows the helper line like `1 batch / 15 parts per batch`.
 
-Base tables from migrations / bootstrapping:
+Key files:
+- `backend/routes/pricing.js`
+- `client/src/pages/InstantPricing.jsx`
+- `client/src/pages/admin/ServiceEdit.jsx`
+
+### Tapping, Hardware, And Countersinking
+
+Current behavior:
+- Tapping, hardware, and countersinking are selected from detected holes and configured admin options.
+- Their manual/selected prices are summarized into the service breakdown.
+- Hardware placement in the 3D viewer uses detected hole depth/face placement so inserted hardware touches the model more reliably instead of floating above or below it.
+
+Key files:
+- `client/src/pages/InstantPricing.jsx`
+- `client/src/components/viewer/StepModelViewer.jsx`
+- `client/src/components/viewer/HierarchicalProjectViewer.jsx`
+- `backend/process_configured.py`
+
+### Markups
+
+Current behavior:
+- Markup settings are stored in `site_settings`.
+- Supported settings include `general_markup`, `inside_labor_markup`, `material_markup`, `overhead_markup`, and `markup_enabled_services`.
+- Material markup applies to material.
+- Labor/overhead/general markup applies only to services selected in `markup_enabled_services`.
+- The quote breakdown shows service rows after markup so the customer sees real line prices.
+
+Admin source:
+- `/admin/pricing-calculator`
+- `client/src/pages/admin/PricingCalculator.jsx`
+
+### Quantity Discounts
+
+Current behavior:
+- Discounts are configured in `/admin/pricing`.
+- The admin page has a global on/off switch for all discounts.
+- Public `/api/pricing/discounts` returns no discount tiers when `discounts_enabled` is false.
+- Quote calculation also respects `discounts_enabled`.
+- Discounts apply globally after the gross total is formed, not individually per service.
+- The quote UI shows Gross Total, Discount Applied, and Discounted Total when a discount is active.
+
+Example:
+- Bending extended price: `$100`
+- Material extended price: `$100`
+- Gross total: `$200`
+- Discount applies to `$200`
+
+Key files:
+- `backend/routes/pricing.js`
+- `client/src/pages/InstantPricing.jsx`
+- `client/src/pages/admin/PricingManagement.jsx`
+
+## Instant Pricing UI
+
+Current visible behavior:
+- Project Breakdown shows real extended prices per row.
+- Material, CNC, bending, powder coating, tapping, hardware, and countersinking rows are displayed when present.
+- Gross Total is shown before discounts.
+- Discount Applied is shown as a separate negative row.
+- Discounted Total is shown as the final customer-facing total.
+- Removed helper notes under Material Cost and Powder Coating.
+- Loading skeletons in admin service/metals configuration have been tightened so they do not stretch awkwardly across the page.
+
+Important implementation note:
+- `InstantPricing.jsx` is large and central. Keep future edits narrow and verify both the frontend display and backend breakdown payload before changing formulas.
+
+## FAQ Page Position
+
+Current behavior:
+- The FAQ hero uses a full-width background image.
+- Hero content is centered.
+- The duplicate desktop `Categories` label was removed by hiding the mobile category header on desktop.
+- The FAQ content section is separated below the hero with a light background.
+- Logo fallback now removes a broken stored logo and falls back to `/logo.webp`.
+
+Key files:
+- `client/src/pages/FAQPage.jsx`
+- `client/src/components/Navbar.jsx`
+- `client/src/index.css`
+
+## CAD And Viewer Position
+
+Current capabilities:
+- STEP/STP and DXF upload workflows.
+- STEP model viewing with online-3d-viewer/OCCT/Three.js stack.
+- 2D flat/unfold view for sheet-metal parts.
+- Hole detection for tapping, hardware, and countersinking selection.
+- Configured preview generation after selected operations.
+- Hardware placement accounts for detected hole face/depth so components sit on the model surface.
+
+Unfold notes:
+- `backend/unfold_lib.py` contains sheet-metal root/flat-pattern logic.
+- `backend/main.py` owns Python worker endpoints, job state, cache, and analysis versioning.
+- If unfold behavior changes, bump `UNFOLD_ANALYSIS_VERSION` or otherwise invalidate stale analysis cache.
+
+## Admin Position
+
+Main admin areas:
+- Metals and metal categories.
+- Services and per-service configuration.
+- Service-to-metal/thickness availability.
+- Discounts with global enable/disable.
+- Markups.
+- Laser rates.
+- Sheet cost rates for 4x8 sheets.
+- FAQ and FAQ categories.
+- Guidelines and legal content.
+- Orders, customers, admins, email, contact/site settings, subscribers, and payment methods.
+
+Service edit now covers:
+- General service fields and production toggle.
+- Powder coating units and batch fields.
+- Bending thresholds, setup/runtime unit display, and rate configuration.
+- CNC five-operation setup/runtime/rate configuration.
+- Tap and countersink option configuration.
+- Hardware type/item configuration with active status and dimensional fields.
+
+## Data Tables To Know
+
+Core tables:
 - `users`
 - `metal_categories`
 - `metals`
+- `metal_configs`
+- `services`
+- `service_configs`
+- `service_metal_assignments`
 - `faq_categories`
 - `faqs`
-- `services`
-- `email_config`
-- `newsletter_subscribers`
-- `service_configs`
-- `metal_configs`
-- `service_metal_assignments`
 - `orders`
 - `order_items`
 - `site_settings`
@@ -371,24 +317,20 @@ Base tables from migrations / bootstrapping:
 - `legal_documents`
 - `service_relationships`
 
-Important data patterns:
-- `metals` stores many rich content sections in JSONB
-- `order_items.configuration_json` stores serialized quote/order configuration
-- `site_settings` is a generic key/value JSONB table
-- pricing relies on multiple tables:
-  - `pricing_rules`
-  - `quantity_discounts`
-  - `laser_cut_rates`
-  - `sheet_cost_rates`
-- service/metal eligibility is driven by assignment/config tables rather than hardcoded logic alone
+Pricing tables/settings:
+- `sheet_cost_rates`: 4x8 material sheet pricing by family/thickness.
+- `laser_cut_rates`: material/thickness cut and pierce rates.
+- `quantity_discounts`: quantity tiers and percentages.
+- `site_settings.discounts_enabled`: global discount switch.
+- `site_settings.markup_enabled_services`: service names that receive labor/overhead/general markup.
 
-### Environment and runtime expectations
+## Environment
 
-Frontend env vars referenced:
+Frontend env vars:
 - `VITE_API_BASE_URL`
 - `VITE_API_URL`
 
-Backend env vars referenced:
+Backend env vars:
 - `PORT`
 - `DB_USER`
 - `DB_HOST`
@@ -406,7 +348,7 @@ Backend env vars referenced:
 - `PYTHON_STATUS_TIMEOUT_MS`
 - `PYTHON_PATH`
 
-Python/CAD env vars referenced:
+Python/CAD env vars:
 - `UNFOLD_RESULT_CACHE_TTL_SECONDS`
 - `UNFOLD_RESULT_CACHE_MAX`
 - `UNFOLD_ANALYSIS_VERSION`
@@ -418,64 +360,64 @@ Python/CAD env vars referenced:
 - `ENABLE_LEGACY_UNFOLD_FALLBACK`
 - `FREECAD_PATH`
 
-Runtime assumptions found in code:
-- PostgreSQL must be available for backend startup to be fully useful
-- Python CAD service is expected locally and is part of backend dev workflow
-- The backend `dev` script hardcodes a Windows Conda Python path
+## Local Commands
 
-### Verification snapshot (2026-04-28)
+Frontend:
+- `cd client`
+- `npm install`
+- `npm run dev`
+- `npm run build`
+- `npm run lint`
 
-Checks run during scan:
-- frontend `npm.cmd run build`
-- frontend `npm.cmd run lint`
-- backend syntax check: `node --check`
-- python syntax check: `python -m py_compile`
+Backend:
+- `cd backend`
+- `npm install`
+- `npm run dev`
+- `npm run dev:node`
+- `npm run dev:python`
+- `npm run migrate`
+- `npm run create:admin`
 
-Results:
-- Frontend build did not complete due to Vite config loading hitting a sandbox/process permission error: `spawn EPERM`
-- Frontend lint is failing
-- Backend JS syntax checks passed for sampled critical files:
-  - `backend/server.js`
-  - `backend/routes/pricing.js`
-  - `backend/routes/orders.js`
-- Python syntax compilation passed for:
-  - `backend/main.py`
-  - `backend/unfold.py`
-  - `backend/process_configured.py`
-  - `backend/unfold_lib.py`
+Note:
+- The backend `dev` and `dev:python` scripts currently reference a Windows Conda Python path. Update those scripts or `PYTHON_PATH` if the environment changes.
 
-Frontend lint findings observed:
-- Minified vendor file `client/public/ov-libs-v1/three.min.js` is being linted and creates many errors
-- Several unused imports/variables exist in app source files
-- React hook rule violations exist in `client/src/components/QuoteFlow.jsx`
-- Fast-refresh rule violations exist in the auth/toast context files
-- `client/src/data/reindex.js` uses `require` under a config that expects ESM/browser globals
+## Verification Snapshot
 
-### Risks and likely future friction
+Latest doc refresh did not run a build because the user requested not to build.
 
-High-probability friction areas:
-- `InstantPricing.jsx` is very large and likely difficult to change safely without targeted refactoring
-- Pricing logic is distributed across frontend payload assembly, backend route calculation, DB rate tables, and Python/CAD-derived geometry
-- Upload/temp/permanent file path handling is critical and spread across several places
-- Backend startup does schema mutation in `server.js`, which can blur boot/runtime responsibilities
-- Hardcoded Windows Python path in backend dev script reduces portability
-- JWT secret fallback and other fallback secrets should be treated as production risk if still in use
-- Lint noise from vendored/minified assets will hide real issues until excluded
+Recent lightweight verification used during this session:
+- `git diff --check` passed for touched frontend files.
+- Earlier targeted syntax/lint checks were used for pricing/viewer files when needed.
 
-Performance / repo health observations:
-- Large image assets are present directly in `client/src/assets`, including many multi-megabyte files
-- Scratch/debug files exist in `backend/scratch/`
-- The repo includes both generated/static assets and application code, so tooling may be noisier/slower than necessary
+Known historical issue:
+- Full frontend build has previously hit `spawn EPERM` in this sandboxed environment. Treat that as an environment/process limitation until confirmed outside the sandbox.
 
-### Good starting points for future work
+## Current Risks And Friction
 
-If we work on:
-- Pricing bugs: start with `client/src/pages/InstantPricing.jsx`, `client/src/context/CartProvider.jsx`, `backend/routes/pricing.js`, and pricing tables
-- Order bugs: start with `backend/routes/orders.js`, `client/src/pages/Checkout.jsx`, `client/src/pages/Orders.jsx`
-- Content/admin issues: start with `client/src/pages/admin/*`, `backend/routes/settings.js`, `backend/routes/services.js`, `backend/routes/metals.js`, `backend/routes/legal.js`
-- CAD/unfold issues: start with `backend/server.js`, `backend/main.py`, `backend/unfold.py`, `backend/unfold_lib.py`, and viewer components
-- Auth/session issues: start with `backend/routes/auth.js`, `backend/middleware/auth.js`, `client/src/context/AuthContext.jsx`, `client/src/context/AdminAuthContext.jsx`
+High-risk files:
+- `client/src/pages/InstantPricing.jsx`
+- `backend/routes/pricing.js`
+- `client/src/pages/admin/ServiceEdit.jsx`
+- `backend/main.py`
+- `backend/unfold_lib.py`
 
-## 3. Summary
+Known friction:
+- Pricing behavior spans frontend payload assembly, backend calculation, database settings, and CAD-derived geometry.
+- `InstantPricing.jsx` is very large and should be changed carefully.
+- Some pricing comments in code may lag behind business-approved behavior after calibration changes; prefer the actual calculation and this doc over stale comments.
+- Backend startup and schema/runtime responsibilities are mixed in places.
+- The development Python path is machine-specific.
+- Vendored/minified frontend assets can create noisy lint output if not excluded.
 
-This codebase is a full quoting/order platform with a CAD engine. The center of gravity is `InstantPricing.jsx` + `backend/routes/pricing.js` + `backend/routes/orders.js` + `backend/main.py`. Phase 4 work is calibration against real jobs rather than architectural changes.
+## Recommended Next Work
+
+Best next improvements:
+- Add focused tests or fixtures for material nesting, discounts, CNC quantity scaling, bending, and powder coating.
+- Persist pricing snapshots on quote/order creation so future Paperless Parts comparisons have exact historical inputs.
+- Split `InstantPricing.jsx` into smaller quote-flow, viewer, service-selection, and breakdown components.
+- Add admin-facing pricing preview examples for common quantities.
+- Review stale inline comments in `backend/routes/pricing.js` after final pricing calibration.
+
+## Summary
+
+The current system is a CAD-aware quoting and order platform. The active center of gravity is still `InstantPricing.jsx`, `backend/routes/pricing.js`, `ServiceEdit.jsx`, the viewer components, and the CAD Python worker. The current business-critical behavior is 4x8-only material nesting, quantity-scaled CNC/services, global post-subtotal discounts, visible gross/discounted totals, and Paperless Parts-style pricing presentation.
