@@ -6703,6 +6703,21 @@ body.light-mode .faq-section {
     }
 }
 
+.faq-page-header {
+    position: relative;
+    min-height: clamp(500px, 56vh, 660px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    overflow: hidden;
+    background-color: #050505;
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    text-align: center;
+}
+
 .faq-hero-overlay {
     position: absolute;
     inset: 0;
@@ -6713,13 +6728,26 @@ body.light-mode .faq-section {
 .faq-hero-container {
     position: relative;
     z-index: 2;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.faq-hero-content {
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto;
+    text-align: center;
 }
 
 .faq-page-title {
-    font-size: 4.5rem;
+    font-size: clamp(3.5rem, 6vw, 5.75rem);
     font-weight: 900;
     margin-bottom: 25px;
-    letter-spacing: -2px;
+    letter-spacing: 0;
+    line-height: 0.98;
+    color: #fff;
+    text-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
 }
 
 .faq-page-subtitle {
@@ -6777,7 +6805,10 @@ body.light-mode .faq-section {
 }
 
 .faq-page-content {
+    position: relative;
+    z-index: 2;
     padding: 80px 0;
+    background: #f8fafc;
 }
 
 .faq-layout {
@@ -7240,6 +7271,7 @@ body.light-mode .faq-section {
 }
 
 /* Global: Hide Mobile UI Elements on Desktop */
+.category-mobile-select-wrapper,
 .category-mobile-select,
 .category-mobile-select-dropdown {
     display: none !important;

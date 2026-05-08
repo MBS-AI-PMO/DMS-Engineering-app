@@ -73,6 +73,10 @@ const Navbar = () => {
     };
 
     const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Account';
+    const handleLogoError = () => {
+        localStorage.removeItem('navbar_logo');
+        setLogo('/logo.webp');
+    };
 
     const navLinks = [
         { name: 'Metals', path: '/metals' },
@@ -87,7 +91,7 @@ const Navbar = () => {
             <div className="container navbar-container">
                 <div className="navbar-left">
                     <Link to="/" className="logo">
-                        <img src={logo} alt="DMS Logo" className="logo-img" decoding="async" />
+                        <img src={logo} alt="DMS Logo" className="logo-img" decoding="async" onError={handleLogoError} />
                     </Link>
                 </div>
 
@@ -218,7 +222,7 @@ const Navbar = () => {
                     >
                         <div className="mobile-menu-header">
                             <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
-                                <img src={logo} alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" />
+                                <img src={logo} alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" onError={handleLogoError} />
                             </Link>
                             <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
                                 <X size={24} />

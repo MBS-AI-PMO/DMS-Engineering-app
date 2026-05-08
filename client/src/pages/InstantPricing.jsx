@@ -2912,11 +2912,6 @@ const InstantPricing = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
-                          {priceEstimate?.breakdown?.material_nesting?.parts_per_sheet > 0 && (
-                            <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginTop: 3, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-                              {Number(priceEstimate.breakdown.material_nesting.parts_per_sheet).toFixed(0)} parts per 4x8 sheet
-                            </div>
-                          )}
                           {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
                         </div>
                         {isCalculatingPrice
