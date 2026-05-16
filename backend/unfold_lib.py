@@ -609,7 +609,19 @@ def _detect_cnc_features(fc_shape, thickness, root_idx=None, holes_data=None, no
         return result
 
 
-def _detect_holes_from_planar_loops(fc_shape):
+def _hole_pair_depth_limit(material_thickness_mm):
+    try:
+        t = float(material_thickness_mm or 0.0)
+    except (TypeError, ValueError):
+        t = 0.0
+    if t <= 0:
+        return None
+    # Opposing loops on the same sheet wall should be roughly one material
+    # thickness apart. Distant coaxial holes on opposite walls are separate holes.
+    return max(t * 2.25, t + 1.0, 4.0)
+
+
+def _detect_holes_from_planar_loops(fc_shape, material_thickness_mm=None):
     """
     Fallback hole detector for models where holes are not represented as
     cylindrical faces (e.g. conical/countersunk-only or non-analytic exports).
@@ -718,6 +730,12 @@ def _detect_holes_from_planar_loops(fc_shape):
     if not candidates:
         return []
 
+    max_pair_depth_mm = _hole_pair_depth_limit(material_thickness_mm)
+    try:
+        thickness_value = float(material_thickness_mm or 0.0)
+    except (TypeError, ValueError):
+        thickness_value = 0.0
+    fallback_depth_mm = thickness_value if thickness_value > 0 else None
     used = set()
     holes = []
 
@@ -747,6 +765,8 @@ def _detect_holes_from_planar_loops(fc_shape):
 
             if axial < 0.15:
                 continue
+            if max_pair_depth_mm is not None and axial > max_pair_depth_mm:
+                continue
             if radial > max(0.4, c1["diameter_mm"] * 0.2):
                 continue
 
@@ -771,7 +791,7 @@ def _detect_holes_from_planar_loops(fc_shape):
             used.add(i)
             pos = c1["center"]
             axis = _normalize(c1["axis"])
-            depth_mm = max(0.5, c1["diameter_mm"] * 0.3)
+            depth_mm = fallback_depth_mm or max(0.5, c1["diameter_mm"] * 0.3)
             diameter_mm = c1["diameter_mm"]
             face_id = c1["face_id"]
 
@@ -790,7 +810,7 @@ def _detect_holes_from_planar_loops(fc_shape):
         h["id"] = f"hole_{idx + 1}"
     return holes
 
-def detect_holes_fc(fc_shape):
+def detect_holes_fc(fc_shape, material_thickness_mm=None):
     """
     Detect holes using FreeCAD native classification.
     """
@@ -829,6 +849,7 @@ def detect_holes_fc(fc_shape):
         for e in f.Edges:
             e2f.setdefault(e.hashCode(), []).append(fi)
 
+    max_cluster_span_mm = _hole_pair_depth_limit(material_thickness_mm)
     seen = set()
     clusters = []
     for i, c1 in enumerate(cyl_faces):
@@ -846,6 +867,9 @@ def detect_holes_fc(fc_shape):
                 continue
             # Collinear
             diff = c2["center"] - c1["center"]
+            axial = abs(float(np.dot(diff, c1["axis"])))
+            if max_cluster_span_mm is not None and axial > max_cluster_span_mm:
+                continue
             perp = diff - np.dot(diff, c1["axis"]) * c1["axis"]
             if np.linalg.norm(perp) > c1["radius"] + 1.0:
                 continue
@@ -1019,7 +1043,7 @@ def detect_holes_fc(fc_shape):
     # Always also run planar-loop detection and merge unique holes.
     # This catches holes that don't have cylindrical face topology
     # (e.g. small mounting holes in some STEP exports).
-    loop_holes = _detect_holes_from_planar_loops(fc_shape)
+    loop_holes = _detect_holes_from_planar_loops(fc_shape, material_thickness_mm)
     sys.stderr.write(
         f"[Hole Detection] Planar-loop method found {len(loop_holes)} holes "
         f"(diameters: {[round(h['diameter_mm'],2) for h in loop_holes]})\n"
@@ -1328,7 +1352,7 @@ def unfold_with_lib(filepath, profile="full"):
         holes_data = []
         if include_holes:
             emit_progress(58 if estimate_thickness else 42, "Detecting holes")
-            holes_data = detect_holes_fc(fc_shape)
+            holes_data = detect_holes_fc(fc_shape, thickness)
 
         emit_progress(96, "Finalizing analysis")
         return _json_safe({
@@ -1902,7 +1926,7 @@ def unfold_with_lib(filepath, profile="full"):
     if include_holes:
         t_holes = time.time()
         emit_progress(92, "Detecting holes")
-        holes_data = detect_holes_fc(fc_shape)
+        holes_data = detect_holes_fc(fc_shape, thickness)
         sys.stderr.write(f"[Profiling] Hole Detection: {time.time() - t_holes:.3f}s\n")
 
     sys.stderr.write(f"[Profiling] Total unfold_with_lib: {time.time() - t_start:.3f}s\n")

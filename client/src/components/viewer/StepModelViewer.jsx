@@ -773,6 +773,20 @@ const StepModelViewer = ({
           : 1;
         const _ta = modelData?.thicknessAxis || 'y';
         const origT = modelData?.origThicknessMM || 2.0;
+        const getLocalHoleDepthMm = (hole) => {
+          const rawDepthMm = Number(hole?.depthMm ?? hole?.depth_mm ?? NaN);
+          const rawDepthInches = Number(hole?.depthInches);
+          const depthMm = Number.isFinite(rawDepthMm) && rawDepthMm > 0
+            ? rawDepthMm
+            : (Number.isFinite(rawDepthInches) && rawDepthInches > 0 ? rawDepthInches * 25.4 : NaN);
+          const fallback = origT > 0 ? origT : 2.0;
+          if (!Number.isFinite(depthMm) || depthMm <= 0) return fallback;
+
+          // Distant coaxial holes on opposite walls can be detected as one long
+          // bore. Hardware should sit in the local wall, not bridge the gap.
+          const suspiciousLimit = Math.max(fallback * 2.25, fallback + 1.0, 4.0);
+          return depthMm > suspiciousLimit ? fallback : depthMm;
+        };
 
         // Shared axis logic
         let hwThicknessVec;
@@ -855,10 +869,7 @@ const StepModelViewer = ({
               side: THREE.DoubleSide
             }));
 
-            const depthRawMm = Number(hole.depthMm ?? hole.depth_mm ?? 0);
-            let markerHeightMm = Number.isFinite(depthRawMm) && depthRawMm > 0
-              ? depthRawMm
-              : (thicknessHintMm || origT);
+            let markerHeightMm = getLocalHoleDepthMm(hole) || thicknessHintMm || origT;
             if (Number.isFinite(thicknessHintMm) && thicknessHintMm > 0) {
               markerHeightMm = Math.min(markerHeightMm, Math.max(0.8, thicknessHintMm * 1.15));
             }
@@ -925,11 +936,7 @@ const StepModelViewer = ({
             const faceSign = face === 'down' ? -1 : 1;
             const shouldUsePhysicalNutResize = Boolean(modelUrlOverride);
             const thinDiscH = Math.max(0.06, 0.16 / Math.max(scaleFactor, 1e-6));
-            const holeDepthRawMm = Number(hole.depthMm ?? hole.depth_mm ?? NaN);
-            const holeDepthFromInches = Number(hole.depthInches) > 0 ? Number(hole.depthInches) * 25.4 : NaN;
-            const placementDepthMm = Number.isFinite(holeDepthRawMm) && holeDepthRawMm > 0
-              ? holeDepthRawMm
-              : holeDepthFromInches;
+            const placementDepthMm = getLocalHoleDepthMm(hole);
             const hasPlacementDepth = Number.isFinite(placementDepthMm) && placementDepthMm > 0.1;
             const placementThicknessMm = hasPlacementDepth ? placementDepthMm : origT;
             const placementHalfDepth = hasPlacementDepth ? placementDepthMm * 0.5 : 0;

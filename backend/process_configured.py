@@ -81,6 +81,26 @@ def parse_inches_to_mm(value):
     return parsed * 25.4
 
 
+def resolve_local_hole_depth_mm(hole_data, fallback_thickness_mm):
+    """Return a sane local wall depth for sheet operations."""
+    hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
+    if hole_depth_mm is None:
+        hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
+    if hole_depth_mm is None:
+        hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
+
+    fallback = fallback_thickness_mm if (fallback_thickness_mm and fallback_thickness_mm > 0) else 2.0
+    if hole_depth_mm is None or hole_depth_mm <= 0:
+        return fallback
+
+    # A depth much larger than sheet thickness usually means detection merged
+    # two coaxial wall holes across empty space. Cut only through the local wall.
+    suspicious_limit = max(fallback * 2.25, fallback + 1.0, 4.0)
+    if hole_depth_mm > suspicious_limit:
+        return fallback
+    return hole_depth_mm
+
+
 SCREW_GAUGE_MAJOR_IN = {
     0: 0.060,
     1: 0.073,
@@ -438,12 +458,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                     print(f"[CAD-KERNEL] Skip tap {tap_id}: missing hole diameter")
                     continue
 
-                hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
-                local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+                local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
 
                 tap_cut_depth = max(local_thickness + 0.08, 0.7)
                 tap_radius = max((target_dia_mm / 2.0) - 0.002, 0.01)
@@ -540,12 +555,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                     }
                     continue
 
-                hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
-                local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+                local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
 
                 try:
                     if radius_delta > 0:
@@ -654,12 +664,7 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                     print(f"[CAD-KERNEL] Skip countersink {cs_id}: non-positive cone depth")
                     continue
 
-                hole_depth_mm = parse_numeric(hole_data.get('depth_mm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_numeric(hole_data.get('depthMm'))
-                if hole_depth_mm is None:
-                    hole_depth_mm = parse_inches_to_mm(hole_data.get('depthInches'))
-                local_thickness = hole_depth_mm if (hole_depth_mm and hole_depth_mm > 0) else thickness_mm
+                local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
 
                 # If the existing hole is larger than the countersink's minor diameter,
                 # rebuild that bore first so the countersink fits correctly.

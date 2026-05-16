@@ -16,14 +16,15 @@
 }
 
 .ip-left-panel {
-  width: 200px;
-  min-width: 200px;
+  width: clamp(176px, 13vw, 210px);
+  min-width: 176px;
   background: #ffffff;
   border-right: 1.5px solid #e8eaed;
   display: flex;
   flex-direction: column;
-  padding: 14px 12px;
+  padding: 12px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .ip-center-panel {
@@ -37,27 +38,36 @@
 }
 
 .ip-right-panel {
-  width: 290px;
-  min-width: 290px;
+  width: clamp(300px, 22vw, 340px);
+  min-width: 300px;
   background: #ffffff;
   border-left: 1.5px solid #e8eaed;
   display: flex;
   flex-direction: column;
-  padding: 18px 16px;
+  padding: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.ip-sidebar {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Desktop: floating card with padding from edges */
 .ip-panel-layout {
   display: flex;
   position: fixed;
-  top: 48px;
-  left: 48px;
-  right: 48px;
-  bottom: 48px;
+  top: clamp(18px, 3vw, 48px);
+  left: clamp(18px, 3vw, 48px);
+  right: clamp(18px, 3vw, 48px);
+  bottom: clamp(18px, 3vw, 48px);
   z-index: 50;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
   border: 1.5px solid #e2e6ea;
 }
@@ -419,6 +429,50 @@ body.qf-active {
   background: #f8fafc;
 }
 
+.ip-left-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.ip-back-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.ip-back-mini:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.ip-clear-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
 .ip-badge {
   display: inline-flex;
   align-items: center;
@@ -432,8 +486,8 @@ body.qf-active {
 
 /* Quote Flow Active panels */
 .ip-qf-left {
-  width: 50%;
-  min-width: 400px;
+  width: clamp(360px, 42vw, 760px);
+  min-width: 360px;
   background: #ffffff;
   border-right: 1.5px solid #e8eaed;
 }
@@ -441,36 +495,129 @@ body.qf-active {
 /* ── Wizard Flow System (Global in QF) ──────────────── */
 
 .ip-wizard-card {
-  background: #ffffff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  border: 1px solid #dbe5f1;
+  border-radius: 14px;
+  padding: 22px 24px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
 }
 
 .ip-wizard-card:hover {
-  border-color: #ef4444;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  border-color: #b8c7d9;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.07);
 }
 
 .ip-wizard-card.active {
   border-color: #ef4444;
-  background: #fffafa;
-  box-shadow: 0 0 0 1px #ef4444;
+  background: linear-gradient(180deg, #ffffff 0%, #fff8f8 100%);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.65), 0 18px 38px rgba(239, 68, 68, 0.08);
+}
+
+.ip-wizard-card.locked {
+  background: linear-gradient(180deg, #ffffff 0%, #fffafa 100%);
+}
+
+.ip-card-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 7px;
+}
+
+.ip-card-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #1e293b;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.ip-card-description {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.ip-spec-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid #edf2f7;
+  padding-top: 12px;
+}
+
+.ip-spec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.ip-spec-chip.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.ip-spec-chip.limit {
+  border-color: #dbeafe;
+  background: #eff6ff;
+}
+
+.ip-spec-chip.thickness {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.ip-spec-label {
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.ip-spec-value {
+  font-size: 11px;
+  font-weight: 900;
+  color: #334155;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.ip-spec-chip.success .ip-spec-value {
+  color: #047857;
+}
+
+.ip-spec-chip.thickness .ip-spec-value {
+  color: #9a3412;
+}
+
+.ip-spec-chip.limit .ip-spec-value {
+  color: #1d4ed8;
 }
 
 .icon-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .icon-box.red {
@@ -497,6 +644,16 @@ body.qf-active {
   color: #64748b;
   letter-spacing: 0.3px;
   text-transform: uppercase;
+}
+
+@media (max-width: 1280px) {
+  .ip-wizard-card {
+    padding: 18px 20px;
+  }
+
+  .ip-spec-chip {
+    flex: 1 1 150px;
+  }
 }
 
 /* ── Selection Header ── */
@@ -767,4 +924,36 @@ body.qf-active {
 .instant-pricing-container {
   scrollbar-width: thin;
   scrollbar-color: #e2e8f0 transparent;
+}
+
+@media (max-height: 820px) and (min-width: 1025px) {
+  .ip-panel-layout {
+    top: 16px;
+    left: 24px;
+    right: 24px;
+    bottom: 16px;
+    border-radius: 14px;
+  }
+
+  .ip-toolbar {
+    padding: 8px 10px;
+  }
+
+  .ip-left-panel {
+    padding: 10px;
+  }
+
+  .ip-right-panel {
+    padding: 8px;
+    width: 310px;
+    min-width: 310px;
+  }
+
+  .ip-sidebar {
+    padding: 14px !important;
+  }
+
+  .ip-file-card {
+    padding: 7px 9px;
+  }
 }

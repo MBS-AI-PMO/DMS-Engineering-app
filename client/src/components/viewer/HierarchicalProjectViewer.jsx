@@ -184,6 +184,17 @@ const HierarchicalProjectViewer = ({
 
       const origT = (backendData?.thickness || 2.0);
       const hwThicknessVec = new THREE.Vector3(0, 1, 0); // Default for sheet
+      const getLocalHoleDepthMm = (hole) => {
+        const rawDepthMm = Number(hole?.depthMm ?? hole?.depth_mm ?? NaN);
+        const rawDepthInches = Number(hole?.depthInches);
+        const depthMm = Number.isFinite(rawDepthMm) && rawDepthMm > 0
+          ? rawDepthMm
+          : (Number.isFinite(rawDepthInches) && rawDepthInches > 0 ? rawDepthInches * 25.4 : NaN);
+        const fallback = origT > 0 ? origT : 2.0;
+        if (!Number.isFinite(depthMm) || depthMm <= 0) return fallback;
+        const suspiciousLimit = Math.max(fallback * 2.25, fallback + 1.0, 4.0);
+        return depthMm > suspiciousLimit ? fallback : depthMm;
+      };
 
       const getMarkerMat = (key, creator) => {
         if (!matCache.current.has(key)) matCache.current.set(key, creator());
@@ -224,11 +235,7 @@ const HierarchicalProjectViewer = ({
           const color = HW_COLORS[typeId] || 0xB8860B;
           const mat = getMarkerMat(`hw_${color}`, () => new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
           const faceSign = face === 'down' ? -1 : 1;
-          const holeDepthMm = Number(hole.depthMm ?? hole.depth_mm ?? NaN);
-          const holeDepthInches = Number(hole.depthInches);
-          const placementDepthMm = Number.isFinite(holeDepthMm) && holeDepthMm > 0
-            ? holeDepthMm
-            : (Number.isFinite(holeDepthInches) && holeDepthInches > 0 ? holeDepthInches * 25.4 : NaN);
+          const placementDepthMm = getLocalHoleDepthMm(hole);
           const placementHalfDepth = Number.isFinite(placementDepthMm) && placementDepthMm > 0.1
             ? placementDepthMm * 0.5
             : 0;

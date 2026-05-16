@@ -414,7 +414,7 @@ const InstantPricing = () => {
   const isLaserBlockedByBends = bendCountTotal > 0;
   const isLaserBlockedByNonFlatFeatures = currentIsStep && nonFlatFeatureInfo.hasRaisedFeatures;
 
-  const modelComplexityFactors = useMemo(() => {
+  useMemo(() => {
     const areaMm2 = measurementMetrics.areaMm2;
     const thicknessMm = measurementMetrics.thicknessMm;
     const minSpan = Math.max(1, Math.min(measurementMetrics.lengthMm || 0, measurementMetrics.widthMm || 0));
@@ -1581,12 +1581,21 @@ const InstantPricing = () => {
         .qf-active, .qf-active .app-container, .qf-active .main-content, .qf-active #root, .qf-active .instant-pricing-container { background-color: #ffffff !important; background: #ffffff !important; }
         .qf-main-canvas > div { background-color: #ffffff !important; }
         .qf-preview-container { height: 0 !important; }
-        .ip-left-panel { width: 200px; min-width: 200px; background: #ffffff; border-right: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 14px 12px; overflow: hidden; }
+        .ip-left-panel { width: clamp(176px, 13vw, 210px); min-width: 176px; background: #ffffff; border-right: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 12px 12px; overflow: hidden; min-height:0; }
         .ip-center-panel { flex: 1; display: flex; flex-direction: column; background: #ffffff; min-width: 0; min-height: 0; overflow: hidden; }
-        .ip-right-panel { width: 340px; min-width: 340px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 12px; overflow: visible; box-sizing: border-box; }
+        .ip-right-panel { width: clamp(300px, 22vw, 340px); min-width: 300px; background: #ffffff; border-left: 1.5px solid #e8eaed; display: flex; flex-direction: column; padding: 10px; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; min-height:0; }
+        .ip-sidebar { height:100%; min-height:0; overflow-y:auto; overflow-x:hidden; }
         /* Desktop: floating card with padding from edges */
-        .ip-panel-layout { display: flex; position: fixed; top: 48px; left: 48px; right: 48px; bottom: 48px; z-index: 50; overflow: hidden; border-radius: 20px; box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1.5px solid #e2e6ea; }
+        .ip-panel-layout { display: flex; position: fixed; top: clamp(18px, 3vw, 48px); left: clamp(18px, 3vw, 48px); right: clamp(18px, 3vw, 48px); bottom: clamp(18px, 3vw, 48px); z-index: 50; overflow: hidden; border-radius: 16px; box-shadow: 0 8px 40px rgba(0,0,0,0.12); border: 1.5px solid #e2e6ea; }
         body.qf-active { overflow: hidden !important; background: #e8eaed !important; }
+        @media (max-height: 820px) and (min-width: 1025px) {
+          .ip-panel-layout { top: 16px; left: 24px; right: 24px; bottom: 16px; border-radius: 14px; }
+          .ip-toolbar { padding: 8px 10px; }
+          .ip-left-panel { padding: 10px; }
+          .ip-right-panel { padding: 8px; width: 310px; min-width: 310px; }
+          .ip-sidebar { padding: 14px !important; }
+          .ip-file-card { padding: 7px 9px; }
+        }
         /* Tablet + Mobile: switch to scrollable vertical stack */
         @media (max-width: 1024px) {
           .ip-panel-layout { position: static; flex-direction: column; height: auto; min-height: unset; overflow: visible; border-radius: 0; box-shadow: none; border: none; top: auto; left: auto; right: auto; bottom: auto; }
@@ -1636,11 +1645,16 @@ const InstantPricing = () => {
         .ip-proceed-btn:hover { background:linear-gradient(135deg,#dc2626,#b91c1c); transform:translateY(-1px); box-shadow:0 6px 20px rgba(239,68,68,0.35); }
         .ip-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border-radius:8px; border:1.5px dashed #cbd5e1; background:transparent; color:#64748b; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.15s; width:100%; margin-top:8px; }
         .ip-add-btn:hover { border-color:#94a3b8; background:#f8fafc; }
+        .ip-left-topline { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:10px 0; }
+        .ip-back-mini { display:inline-flex; align-items:center; justify-content:center; gap:4px; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; border-radius:7px; padding:5px 8px; font-size:10px; font-weight:900; letter-spacing:0.4px; text-transform:uppercase; cursor:pointer; transition:all 0.15s ease; width:100%; }
+        .ip-back-mini:hover { background:#ffffff; border-color:#cbd5e1; color:#0f172a; }
+        .ip-file-tools { display:flex; align-items:center; gap:8px; }
+        .ip-clear-btn { background:none; border:none; color:#ef4444; font-size:11px; font-weight:800; cursor:pointer; padding:0; white-space:nowrap; }
         .ip-badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; }
         /* Quote Flow Active panels */
-        .ip-qf-left { width:50%; min-width:400px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
+        .ip-qf-left { width:clamp(360px, 42vw, 760px); min-width:360px; background:#ffffff; border-right:1.5px solid #e8eaed; display:flex; flex-direction:column; overflow:hidden; }
         .ip-qf-mid { flex:1; background:#ffffff; border-right:1.5px solid #e8eaed; overflow-y:auto; padding:24px 20px; min-width:0; }
-        .ip-qf-right { width: 340px; min-width: 340px; background: #ffffff; display: flex; flex-direction: column; padding: 12px; overflow: visible; box-sizing: border-box; }
+        .ip-qf-right { width: clamp(300px, 22vw, 340px); min-width: 300px; background: #ffffff; display: flex; flex-direction: column; padding: 10px; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; min-height:0; }
         .ip-qf-viewer { flex:1; position:relative; overflow:hidden; min-height:0; display: flex; flex-direction: column; }
         .ip-qf-dims { padding:12px 14px; border-top:1.5px solid #e8eaed; background:#ffffff; flex-shrink:0; }
         .ip-back-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; border:1.5px solid #e8eaed; background:#ffffff; color:#1e293b; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s; }
@@ -1808,11 +1822,14 @@ const InstantPricing = () => {
 
               {/* ── LEFT PANEL: File List ── */}
               <div className="ip-left-panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <button type="button" className="ip-back-mini" onClick={() => navigate(-1)}>
+                  <ChevronLeft size={13} /> Back
+                </button>
+                <div className="ip-left-topline">
                   <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>
                     Files <span style={{ background: '#f1f5f9', color: '#64748b', borderRadius: '4px', padding: '1px 5px', marginLeft: '4px' }}>{files.length}</span>
                   </span>
-                  <button style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }} onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
+                  <button className="ip-clear-btn" onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                   <AnimatePresence mode="popLayout">
@@ -2240,7 +2257,7 @@ const InstantPricing = () => {
                 </div>
                 <div style={{ padding: '24px 20px', flex: 1, overflowY: 'auto' }}>
                   {/* ── Wizard Progress Stepper ── */}
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22, overflowX: 'auto', paddingBottom: 4 }}>
                     {[
                       { label: 'Method', num: 0 },
                       { label: 'Category', num: 1 },
@@ -2277,35 +2294,8 @@ const InstantPricing = () => {
 
                   {configStep === 0 && (
                     <div className="wizard-screen">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 18 }}>
                         <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select production method:</h2>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          {renderUnitToggle('compact')}
-                          <div className="ip-badge red">{files.length} ACTIVE</div>
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#f8fafc', padding: '12px 14px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 900, color: '#1e293b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Model Process Factors</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {modelComplexityFactors.map((factor) => {
-                            const palette = factor.status === 'fail'
-                              ? { bg: '#fff1f2', border: '#fecdd3', text: '#be123c' }
-                              : factor.status === 'warn'
-                                ? { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c' }
-                                : { bg: '#ecfdf5', border: '#bbf7d0', text: '#166534' };
-                            return (
-                              <div key={factor.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 0.8fr', gap: 8, alignItems: 'center', background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 8, padding: '8px 10px' }}>
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#334155' }}>{factor.label}</div>
-                                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{factor.reason}</div>
-                                </div>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', textAlign: 'right', fontFamily: 'monospace' }}>{factor.value}</div>
-                                <div style={{ fontSize: 10, fontWeight: 900, color: palette.text, textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{factor.impact}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -2352,13 +2342,13 @@ const InstantPricing = () => {
                                 setConfigStep(1);
                               }}
                             >
-                              <div style={{ display: 'flex', gap: 16 }}>
+                              <div style={{ display: 'flex', gap: 18 }}>
                                 <div className={`icon-box ${svc.title.toLowerCase().includes('cnc') ? 'blue' : 'red'}`}>
                                   {svc.title.toLowerCase().includes('cnc') ? <Box size={20} /> : <Zap size={20} />}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                                    <div style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{svc.title}</div>
+                                  <div className="ip-card-title-row">
+                                    <div className="ip-card-title">{svc.title}</div>
                                     {isLocked && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fee2e2', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
                                         <AlertCircle size={11} color="#ef4444" />
@@ -2378,7 +2368,7 @@ const InstantPricing = () => {
                                       </div>
                                     )}
                                   </div>
-                                  <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.4, marginBottom: isLocked ? 8 : 12 }}>{svc.description || 'Precision production.'}</div>
+                                  <div className="ip-card-description" style={{ marginBottom: isLocked ? 8 : 14 }}>{svc.description || 'Precision production.'}</div>
                                   {isLocked && (
                                     <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                       {lockReasons.map((reason, reasonIdx) => (
@@ -2389,18 +2379,21 @@ const InstantPricing = () => {
                                       ))}
                                     </div>
                                   )}
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-                                    <div className="card-stat">
-                                      <Check size={10} color="#10b981" />
-                                      <span>MAX: {maxSizeLabel}</span>
+                                  <div className="ip-spec-strip">
+                                    <div className="ip-spec-chip limit">
+                                      <Check size={13} color="#2563eb" strokeWidth={3} />
+                                      <span className="ip-spec-label">Max</span>
+                                      <span className="ip-spec-value">{maxSizeLabel}</span>
                                     </div>
-                                    <div className="card-stat">
-                                      <ChevronLeft size={10} color="#6366f1" />
-                                      <span>MIN: {minSizeLabel}</span>
+                                    <div className="ip-spec-chip">
+                                      <ChevronLeft size={13} color="#64748b" strokeWidth={3} />
+                                      <span className="ip-spec-label">Min</span>
+                                      <span className="ip-spec-value">{minSizeLabel}</span>
                                     </div>
-                                    <div className="card-stat">
-                                      <Layers size={10} color="#f59e0b" />
-                                      <span>T: {thicknessRangeLabel}</span>
+                                    <div className="ip-spec-chip thickness">
+                                      <Layers size={13} color="#f59e0b" strokeWidth={3} />
+                                      <span className="ip-spec-label">Thick</span>
+                                      <span className="ip-spec-value">{thicknessRangeLabel}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -2528,11 +2521,11 @@ const InstantPricing = () => {
                                 setConfigStep(3);
                               }}
                             >
-                              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                              <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
                                 <div className="icon-box green"><Box size={20} /></div>
                                 <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                                    <div style={{ fontSize: 17, fontWeight: 800, color: '#1e293b' }}>{met.name}</div>
+                                  <div className="ip-card-title-row">
+                                    <div className="ip-card-title">{met.name}</div>
                                     {isLocked && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fee2e2', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
                                         <AlertCircle size={10} color="#ef4444" />
@@ -2547,10 +2540,19 @@ const InstantPricing = () => {
                                       ))}
                                     </div>
                                   )}
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                    <div className="card-stat" style={{ color: '#10b981' }}>IN STOCK</div>
-                                    <div className="card-stat">MIN: {materialMinLabel}</div>
-                                    <div className="card-stat">MAX: {materialMaxLabel}</div>
+                                  <div className="ip-spec-strip">
+                                    <div className="ip-spec-chip success">
+                                      <Check size={13} color="#10b981" strokeWidth={3} />
+                                      <span className="ip-spec-value">In stock</span>
+                                    </div>
+                                    <div className="ip-spec-chip">
+                                      <span className="ip-spec-label">Min</span>
+                                      <span className="ip-spec-value">{materialMinLabel}</span>
+                                    </div>
+                                    <div className="ip-spec-chip limit">
+                                      <span className="ip-spec-label">Max</span>
+                                      <span className="ip-spec-value">{materialMaxLabel}</span>
+                                    </div>
                                   </div>
                                 </div>
                                 {!isLocked && <ChevronRight size={20} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />}
