@@ -5407,6 +5407,12 @@ input:checked+.slider:before {
     box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
     position: relative;
     overflow: hidden;
+    transform: translateZ(0);
+    transition:
+        border-color 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+        background 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.42s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 .faq-landing-section .faq-item-custom::before {
@@ -5417,7 +5423,7 @@ input:checked+.slider:before {
         linear-gradient(90deg, rgba(227, 27, 35, 0.30), transparent 34%),
         linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 44%);
     opacity: 0;
-    transition: opacity 0.28s ease;
+    transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
 }
 
@@ -5433,11 +5439,12 @@ input:checked+.slider:before {
 }
 
 .faq-landing-section .faq-question-row {
-    min-height: 108px;
-    padding: 22px 42px !important;
+    min-height: 76px;
+    padding: 14px 42px !important;
     gap: 16px !important;
     position: relative;
     z-index: 1;
+    transition: min-height 0.34s cubic-bezier(0.22, 1, 0.36, 1), padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .faq-landing-section .faq-icon-circle {
@@ -5448,6 +5455,12 @@ input:checked+.slider:before {
     color: #f8fafc !important;
     font-size: 1rem !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    transition:
+        background-color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.32s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 .faq-landing-section .faq-item-custom.active .faq-icon-circle {
@@ -5463,14 +5476,22 @@ input:checked+.slider:before {
 }
 
 .faq-landing-section .faq-answer-row {
-    padding: 0 42px 28px 94px !important;
+    display: grid;
+    grid-template-rows: 0fr;
+    padding: 0 42px 0 94px !important;
     position: relative;
     z-index: 1;
+    overflow: hidden;
+    will-change: grid-template-rows, opacity;
 }
 
 .faq-landing-section .faq-answer-inner {
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 0;
+    overflow: hidden;
     padding-top: 18px;
+    padding-bottom: 28px;
+    will-change: transform, opacity;
 }
 
 .faq-landing-section .faq-answer-text {

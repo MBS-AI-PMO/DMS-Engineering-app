@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 // eslint-disable-next-line no-unused-vars
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 
 const FAQData = [
@@ -66,35 +66,30 @@ const FAQ = () => {
                                     <motion.div
                                         className="faq-icon-circle"
                                         animate={{ rotate: isOpen ? 135 : 0, scale: isOpen ? 1.04 : 1 }}
-                                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                                        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
                                     >
                                         +
                                     </motion.div>
                                     <h3 className="faq-question-text">{item.question}</h3>
                                 </motion.button>
-                                <AnimatePresence initial={false}>
-                                    {isOpen && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.2, ease: 'easeOut' }}
-                                            className="faq-answer-row"
-                                            style={{ overflow: 'hidden' }}
-                                        >
-                                            <motion.div
-                                                className="faq-answer-inner"
-                                                initial={{ y: -6, opacity: 0 }}
-                                                animate={{ y: 0, opacity: 1 }}
-                                                exit={{ y: -4, opacity: 0 }}
-                                                transition={{ duration: 0.16, ease: 'easeOut' }}
-                                            >
-                                                <p className="faq-answer-text">{item.answer}</p>
-                                                <Link to="/faq" className="faq-link">READ FULL FAQ -&gt;</Link>
-                                            </motion.div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                <motion.div
+                                    className="faq-answer-row"
+                                    animate={{
+                                        gridTemplateRows: isOpen ? '1fr' : '0fr',
+                                        opacity: isOpen ? 1 : 0
+                                    }}
+                                    initial={false}
+                                    transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
+                                >
+                                    <motion.div
+                                        className="faq-answer-inner"
+                                        animate={{ y: isOpen ? 0 : -4 }}
+                                        transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                                    >
+                                        <p className="faq-answer-text">{item.answer}</p>
+                                        <Link to="/faq" className="faq-link">READ FULL FAQ -&gt;</Link>
+                                    </motion.div>
+                                </motion.div>
                             </motion.div>
                         );
                     })}
