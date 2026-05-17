@@ -10,36 +10,36 @@ const pool = new Pool({
 });
 
 const rawData = `
-Aluminum	10	0	0	0.13	0.137
-Aluminum	11	283	0	0.117	0.125
-Aluminum	12	220	0	0.096	0.11
-Aluminum	14	180	0	0.072	0.085
-Aluminum	11	283	0	0.117	0.125
-Aluminum	12	220	0	0.096	0.11
-Aluminum	14	180	0	0.072	0.085
-Aluminum	16	115	0	0.058	0.065
-Aluminum	250	650	0	0.25	0.25
-Aluminum	18	0	0	0.043	0.053
-Carbon Steel	500	650	800	0.45	0.55
-Carbon Steel	10	160	0	0.13	0.137
-Carbon Steel	11	120	0	0.117	0.125
-Carbon Steel	12	95	0	0.096	0.11
-Carbon Steel	14	86	0	0.072	0.085
-Carbon Steel	16	72	0	0.058	0.065
-Carbon Steel	18	55	0	0.043	0.053
-Stainless Steel	10	160	0	0.13	0.137
-Stainless Steel	11	600	0	0.117	0.125
-Stainless Steel	12	560	0	0.096	0.11
-Stainless Steel	14	440	0	0.072	0.085
-Stainless Steel	16	250	0	0.058	0.065
-Stainless Steel	18	180	0	0.043	0.053
-Steel	500	650	800	0.45	0.55
-Steel	10	160	0	0.13	0.137
-Steel	11	120	0	0.117	0.125
-Steel	12	95	0	0.096	0.11
-Steel	14	86	0	0.072	0.085
-Steel	16	72	0	0.058	0.065
-Steel	18	55	0	0.043	0.053
+Aluminum	10	0	0.13	0.137
+Aluminum	11	283	0.117	0.125
+Aluminum	12	220	0.096	0.11
+Aluminum	14	180	0.072	0.085
+Aluminum	11	283	0.117	0.125
+Aluminum	12	220	0.096	0.11
+Aluminum	14	180	0.072	0.085
+Aluminum	16	115	0.058	0.065
+Aluminum	250	650	0.25	0.25
+Aluminum	18	0	0.043	0.053
+Carbon Steel	500	650	0.45	0.55
+Carbon Steel	10	160	0.13	0.137
+Carbon Steel	11	120	0.117	0.125
+Carbon Steel	12	95	0.096	0.11
+Carbon Steel	14	86	0.072	0.085
+Carbon Steel	16	72	0.058	0.065
+Carbon Steel	18	55	0.043	0.053
+Stainless Steel	10	160	0.13	0.137
+Stainless Steel	11	600	0.117	0.125
+Stainless Steel	12	560	0.096	0.11
+Stainless Steel	14	440	0.072	0.085
+Stainless Steel	16	250	0.058	0.065
+Stainless Steel	18	180	0.043	0.053
+Steel	500	650	0.45	0.55
+Steel	10	160	0.13	0.137
+Steel	11	120	0.117	0.125
+Steel	12	95	0.096	0.11
+Steel	14	86	0.072	0.085
+Steel	16	72	0.058	0.065
+Steel	18	55	0.043	0.053
 `;
 
 async function seed() {
@@ -53,19 +53,18 @@ async function seed() {
         const lines = rawData.trim().split('\n');
 
         for (const line of lines) {
-            const [family, ga, cost4x8, cost5x10, min, max] = line.split('\t');
+            const [family, ga, cost4x8, min, max] = line.split('\t');
             if (!family) continue;
 
             const thickness = (parseFloat(min) + parseFloat(max)) / 2;
 
             await pool.query(
-                `INSERT INTO sheet_cost_rates (family, ga, sheet_cost_4x8, sheet_cost_5x10, min_thick, max_thick, thickness)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                `INSERT INTO sheet_cost_rates (family, ga, sheet_cost_4x8, min_thick, max_thick, thickness)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                     family,
                     parseInt(ga) || null,
                     parseFloat(cost4x8) || 0,
-                    parseFloat(cost5x10) || 0,
                     parseFloat(min) || 0,
                     parseFloat(max) || 0,
                     thickness

@@ -1137,7 +1137,18 @@ const InstantPricing = () => {
           quantity: quantity,
           additional_services: quoteAdditionalServices.map(s => {
             const opt = selectedFinishColors[s.id];
-            return { id: s.id, option_id: opt?.id ?? opt?.index ?? null };
+            const options = Array.isArray(s.service_options) ? s.service_options : [];
+            const optIndex = opt
+              ? options.findIndex(o =>
+                (opt.id != null && o.id === opt.id) ||
+                (opt.name && o.name === opt.name) ||
+                (opt.color && o.color === opt.color)
+              )
+              : -1;
+            return {
+              id: s.id,
+              option_id: opt?.id ?? opt?.index ?? (optIndex >= 0 ? optIndex : (opt?.name || null))
+            };
           }),
           taps: Object.values(selectedTaps).map(t => ({
             name: t.name,
@@ -2705,6 +2716,20 @@ const InstantPricing = () => {
                               : kind === 'bend' ? bendCount
                                 : kind === 'finish' ? 1
                                   : 0;
+                            const baseServicePrice = parseFloat(svc.base_price || 0) || 0;
+                            const serviceOptions = Array.isArray(svc.service_options) ? svc.service_options : [];
+                            const selectedFinish = selectedFinishColors?.[svc.id];
+                            const selectedFinishUpcharge = selectedFinish ? (parseFloat(selectedFinish.price || 0) || 0) : 0;
+                            const minFinishUpcharge = serviceOptions.length > 0
+                              ? Math.min(...serviceOptions.map(opt => parseFloat(opt.price || 0) || 0))
+                              : 0;
+                            const displayServicePrice = kind === 'finish'
+                              ? baseServicePrice + (selectedFinish ? selectedFinishUpcharge : minFinishUpcharge)
+                              : baseServicePrice;
+                            const shouldShowPriceBadge = !isUnsupported
+                              && displayServicePrice > 0
+                              && !(svcTitle.includes('powder') || svcTitle.includes('coat'));
+                            const priceBadgeLabel = selectedFinish ? 'selected' : 'from';
 
                             return (
                               <React.Fragment key={svc.id}>
@@ -2749,9 +2774,9 @@ const InstantPricing = () => {
                                           </span>
                                         </div>
                                       )}
-                                      {!isUnsupported && parseFloat(svc.base_price || 0) > 0 && !svcTitle.includes('powder') && !svcTitle.includes('coat') && (
+                                      {shouldShowPriceBadge && (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>
-                                          from ${parseFloat(svc.base_price).toFixed(2)}
+                                          {priceBadgeLabel} ${displayServicePrice.toFixed(2)}
                                         </span>
                                       )}
                                     </div>
@@ -3720,7 +3745,7 @@ const InstantPricing = () => {
                         return options.map((opt, i) => {
                           const isActive = selectedFinishColors[svc?.id]?.name === opt.name;
                           return (
-                            <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedFinishColors(p => ({ ...p, [svc.id]: opt })); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
+                            <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedFinishColors(p => ({ ...p, [svc.id]: { ...opt, index: i } })); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
                               <div className="position-relative">
                                 <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ ...wrinkleSwatchStyle(opt.color, !!opt.is_wrinkled, 18), width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
                                 {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}

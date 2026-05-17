@@ -60,6 +60,7 @@ async function up() {
                 updated_at TIMESTAMP DEFAULT NOW()
             );
         `);
+        await db.query(`ALTER TABLE sheet_cost_rates DROP COLUMN IF EXISTS sheet_cost_5x10;`);
         console.log('  ✓ Created sheet_cost_rates table (empty — populate via admin UI)');
 
         console.log('✅ CSV Formula Pricing migration completed successfully.');

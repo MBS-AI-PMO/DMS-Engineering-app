@@ -101,10 +101,21 @@ export const CartProvider = ({ children }) => {
         length_in: configuration.dimensions?.inches?.l,
         height_in: configuration.dimensions?.inches?.w,
         quantity: newQuantity,
-        additional_services: (configuration.additionalServices || []).map(s => ({
-          id: s.id,
-          option_id: configuration.selectedFinishColors?.[s.id]?.id || null
-        })),
+        additional_services: (configuration.additionalServices || []).map(s => {
+          const opt = configuration.selectedFinishColors?.[s.id];
+          const options = Array.isArray(s.service_options) ? s.service_options : [];
+          const optIndex = opt
+            ? options.findIndex(o =>
+              (opt.id != null && o.id === opt.id) ||
+              (opt.name && o.name === opt.name) ||
+              (opt.color && o.color === opt.color)
+            )
+            : -1;
+          return {
+            id: s.id,
+            option_id: opt?.id ?? opt?.index ?? (optIndex >= 0 ? optIndex : (opt?.name || null))
+          };
+        }),
         taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price })),
         hardware: Object.values(configuration.selectedHardware || {}).map(h => ({ name: h?.item?.name, price: h?.item?.price || 0 })),
         countersinks: Object.values(configuration.selectedCountersinks || {}).map(cs => ({ name: cs?.name, price: cs?.price || 0 })),
