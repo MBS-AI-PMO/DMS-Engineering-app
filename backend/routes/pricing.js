@@ -45,9 +45,199 @@ const parseBooleanSetting = (value, fallback = true) => {
     return fallback;
 };
 
+const getObjectValue = (obj, keys) => {
+    if (!obj || typeof obj !== 'object') return undefined;
+    for (const key of keys) {
+        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+            return obj[key];
+        }
+    }
+    return undefined;
+};
+
+const getQuantitySpecificNestValue = (source, quantity, quantities = [1, 5, 10, 15, 20]) => {
+    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    if (!source) return 0;
+
+    if (typeof source === 'string') {
+        const trimmed = source.trim();
+        if (!trimmed) return 0;
+        try {
+            return getQuantitySpecificNestValue(JSON.parse(trimmed), qty, quantities);
+        } catch (e) {
+            const values = trimmed.split(',').map(item => toFiniteNumber(item.trim()));
+            return getQuantitySpecificNestValue(values, qty, quantities);
+        }
+    }
+
+    if (Array.isArray(source)) {
+        const objectMatch = source.find(item => {
+            if (!item || typeof item !== 'object') return false;
+            return parseInt(item.quantity ?? item.qty ?? item.make_quantity, 10) === qty;
+        });
+        if (objectMatch) {
+            return toFiniteNumber(objectMatch.value ?? objectMatch.sheets ?? objectMatch.number_of_sheets ?? objectMatch.numberOfSheets);
+        }
+
+        const scalarIndex = quantities.findIndex(q => parseInt(q, 10) === qty);
+        if (scalarIndex >= 0) return toFiniteNumber(source[scalarIndex]);
+        return 0;
+    }
+
+    if (typeof source === 'object') {
+        return toFiniteNumber(source[qty] ?? source[String(qty)]);
+    }
+
+    return toFiniteNumber(source);
+};
+
+const estimatePaperlessSheetNest = ({
+    sheetLength,
+    sheetWidth,
+    partLength,
+    partWidth,
+    edgeBuffer,
+    partBuffer,
+    kerfWidth,
+    quantity
+}) => {
+    const qty = Math.max(1, Math.round(toFiniteNumber(quantity)) || 1);
+    const sL = Math.max(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const sW = Math.min(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const pL = Math.max(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    const pW = Math.min(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    if (sL <= 0 || sW <= 0 || pL <= 0 || pW <= 0) return null;
+    if (pL > sL || pW > sW) return null;
+
+    const edge = Math.max(0, toFiniteNumber(edgeBuffer));
+    const spacing = Math.max(0, toFiniteNumber(partBuffer) + toFiniteNumber(kerfWidth));
+    const orientations = [
+        { orientation: 'long-x', x: pL, y: pW },
+        { orientation: 'short-x', x: pW, y: pL }
+    ].filter((option, index, list) => (
+        index === 0 || Math.abs(option.x - list[0].x) > 0.0001 || Math.abs(option.y - list[0].y) > 0.0001
+    ));
+
+    const capacityForOrientation = (option) => {
+        const maxColumns = Math.floor((sL - edge + spacing) / (option.x + spacing));
+        const maxRows = Math.floor((sW - edge + spacing) / (option.y + spacing));
+        return {
+            ...option,
+            max_columns: Math.max(0, maxColumns),
+            max_rows: Math.max(0, maxRows),
+            capacity: Math.max(0, maxColumns) * Math.max(0, maxRows)
+        };
+    };
+
+    const orientationCapacities = orientations.map(capacityForOrientation);
+    const fullSheetCapacity = Math.max(0, ...orientationCapacities.map(option => option.capacity));
+    if (fullSheetCapacity <= 0) return null;
+
+    const estimateCountOnOneSheet = (count) => {
+        const target = Math.max(1, Math.round(toFiniteNumber(count)) || 1);
+        const longX = orientationCapacities.find(option => option.orientation === 'long-x');
+        if (longX && target <= longX.max_columns && longX.max_rows >= 1) {
+            const occupiedLength = target * longX.x + Math.max(0, target - 1) * spacing + edge;
+            const occupiedWidth = longX.y + edge;
+            const lengthStrip = occupiedLength / sL;
+            const widthStrip = occupiedWidth / sW;
+            const rawContribution = Math.min(lengthStrip, widthStrip);
+            return {
+                raw_contribution: rawContribution,
+                contribution: roundTo(rawContribution, 3),
+                pattern: rawContribution === lengthStrip ? 'length_strip' : 'width_strip',
+                orientation: longX.orientation,
+                rows: 1,
+                columns: target,
+                parts_on_sheet: target,
+                occupied_length: occupiedLength,
+                occupied_width: occupiedWidth,
+                parts_per_sheet: longX.capacity
+            };
+        }
+
+        let best = null;
+
+        for (const option of orientationCapacities) {
+            if (option.capacity <= 0) continue;
+            const maxColumns = Math.min(option.max_columns, target);
+
+            for (let columns = 1; columns <= maxColumns; columns += 1) {
+                const rows = Math.ceil(target / columns);
+                if (rows > option.max_rows) continue;
+
+                const occupiedLength = columns * option.x + Math.max(0, columns - 1) * spacing + edge;
+                const occupiedWidth = rows * option.y + Math.max(0, rows - 1) * spacing + edge;
+                if (occupiedLength > sL + 1e-6 || occupiedWidth > sW + 1e-6) continue;
+
+                const lengthStrip = occupiedLength / sL;
+                const widthStrip = occupiedWidth / sW;
+                const rawContribution = Math.min(lengthStrip, widthStrip);
+                const candidate = {
+                    raw_contribution: rawContribution,
+                    contribution: roundTo(rawContribution, 3),
+                    pattern: rawContribution === lengthStrip ? 'length_strip' : 'width_strip',
+                    orientation: option.orientation,
+                    rows,
+                    columns,
+                    parts_on_sheet: target,
+                    occupied_length: occupiedLength,
+                    occupied_width: occupiedWidth,
+                    parts_per_sheet: option.capacity
+                };
+
+                if (
+                    !best
+                    || candidate.raw_contribution < best.raw_contribution
+                    || (
+                        Math.abs(candidate.raw_contribution - best.raw_contribution) < 1e-6
+                        && candidate.parts_per_sheet > best.parts_per_sheet
+                    )
+                ) {
+                    best = candidate;
+                }
+            }
+        }
+
+        return best;
+    };
+
+    const fullSheets = Math.floor(qty / fullSheetCapacity);
+    const remainder = qty % fullSheetCapacity;
+    const fullLayout = estimateCountOnOneSheet(fullSheetCapacity);
+    const partial = remainder > 0 ? estimateCountOnOneSheet(remainder) : null;
+    if (!fullLayout || (remainder > 0 && !partial)) return null;
+
+    const rawContribution = (fullSheets * fullLayout.raw_contribution) + (partial?.raw_contribution || 0);
+    const contribution = roundTo(rawContribution, 3);
+
+    return {
+        quantity: qty,
+        contribution,
+        raw_contribution: rawContribution,
+        full_sheets: fullSheets,
+        remainder_quantity: remainder,
+        pattern: partial?.pattern || fullLayout.pattern,
+        orientation: partial?.orientation || fullLayout.orientation,
+        full_sheet_capacity: fullSheetCapacity,
+        full_sheet_contribution: fullLayout.contribution,
+        rows: partial?.rows || fullLayout.rows,
+        columns: partial?.columns || fullLayout.columns,
+        parts_per_strip: partial?.parts_per_sheet || fullLayout.parts_per_sheet,
+        occupied_length: partial?.occupied_length || fullLayout.occupied_length,
+        occupied_width: partial?.occupied_width || fullLayout.occupied_width,
+        partial_sheet: partial,
+        full_sheet_layout: fullLayout,
+        orientation_capacities: orientationCapacities,
+        strip_sheet_length: sL,
+        strip_sheet_width: sW
+    };
+};
+
 const calculateSheetNestOption = ({
     label,
     sheetCost,
+    nestSheetCost,
     sheetLength,
     sheetWidth,
     partLength,
@@ -58,18 +248,31 @@ const calculateSheetNestOption = ({
     kerfWidth,
     quantity,
     nest,
-    minimumSheetContribution = 0
+    estimateNest = false
 }) => {
-    const cost = toFiniteNumber(sheetCost);
+    const explicitNestSheetCost = getObjectValue(nest, ['sheet_cost_rate', 'sheetCostRate', 'sheet_cost', 'sheetCost']);
+    const cost = toFiniteNumber(explicitNestSheetCost ?? (estimateNest ? nestSheetCost : null) ?? sheetCost);
     if (cost <= 0) return null;
     const qty = Math.max(1, parseFloat(quantity) || 1);
 
-    const sL = Math.max(sheetLength, sheetWidth);
-    const sW = Math.min(sheetLength, sheetWidth);
-    const usableL = sL - 2 * edgeBuffer + partBuffer;
-    const usableW = sW - 2 * edgeBuffer + partBuffer;
-    const buffL = partLength + partBuffer + kerfWidth;
-    const buffW = partWidth + partBuffer + kerfWidth;
+    const nestSheetLength = toFiniteNumber(getObjectValue(nest, ['sheet_length', 'sheetLength']));
+    const nestSheetWidth = toFiniteNumber(getObjectValue(nest, ['sheet_width', 'sheetWidth']));
+    const nestEdgeBuffer = toFiniteNumber(getObjectValue(nest, ['edge_buffer', 'edgeBuffer']));
+    const nestPartBuffer = toFiniteNumber(getObjectValue(nest, ['part_buffer', 'partBuffer']));
+    const nestKerfWidth = toFiniteNumber(getObjectValue(nest, ['kerf_width', 'kerfWidth']));
+
+    const resolvedSheetLength = nestSheetLength > 0 ? nestSheetLength : sheetLength;
+    const resolvedSheetWidth = nestSheetWidth > 0 ? nestSheetWidth : sheetWidth;
+    const resolvedEdgeBuffer = nestEdgeBuffer > 0 ? nestEdgeBuffer : edgeBuffer;
+    const resolvedPartBuffer = nestPartBuffer > 0 ? nestPartBuffer : partBuffer;
+    const resolvedKerfWidth = nestKerfWidth > 0 ? nestKerfWidth : kerfWidth;
+
+    const sL = Math.max(resolvedSheetLength, resolvedSheetWidth);
+    const sW = Math.min(resolvedSheetLength, resolvedSheetWidth);
+    const usableL = sL - 2 * resolvedEdgeBuffer + resolvedPartBuffer;
+    const usableW = sW - 2 * resolvedEdgeBuffer + resolvedPartBuffer;
+    const buffL = partLength + resolvedPartBuffer + resolvedKerfWidth;
+    const buffW = partWidth + resolvedPartBuffer + resolvedKerfWidth;
     const orientations = [
         { orientation: 'horizontal', x: buffL, y: buffW },
         { orientation: 'vertical', x: buffW, y: buffL }
@@ -89,12 +292,27 @@ const calculateSheetNestOption = ({
     let sheetsByComponent = pps > 0 ? roundTo(qty / pps, 2) : 0;
     let sheetsForNest = 0;
     let usesSheetNest = false;
+    let estimatedNest = null;
 
     if (nest && typeof nest === 'object') {
+        const quantityList = getObjectValue(nest, ['quantities', 'make_quantities', 'makeQuantities']) || [1, 5, 10, 15, 20];
+        const quantitySheets = getObjectValue(nest, [
+            'quantity_sheets',
+            'quantitySheets',
+            'sheets_by_quantity',
+            'sheetsByQuantity',
+            'number_of_sheets_by_quantity',
+            'numberOfSheetsByQuantity',
+            'number_of_sheets_by_component',
+            'numberOfSheetsByComponent'
+        ]);
+        const quantitySheetContribution = getQuantitySpecificNestValue(quantitySheets, qty, quantityList);
         const contributionPct = toFiniteNumber(nest.contribution_pct ?? nest.contributionPercent);
         const totalSheetsUsed = toFiniteNumber(nest.total_sheets_used ?? nest.totalSheetsUsed);
         const totalSheetsPurchased = toFiniteNumber(nest.total_sheets_purchased ?? nest.totalSheetsPurchased);
-        const sheetContribution = contributionPct * totalSheetsUsed;
+        const sheetContribution = quantitySheetContribution > 0
+            ? quantitySheetContribution
+            : contributionPct * totalSheetsUsed;
 
         if (sheetContribution > 0) {
             usesSheetNest = true;
@@ -104,12 +322,24 @@ const calculateSheetNestOption = ({
         }
     }
 
-    const minContribution = Math.max(0, toFiniteNumber(minimumSheetContribution));
-    let isMinimumSheetContribution = false;
-    if (!usesSheetNest && minContribution > 0 && minContribution > sheetsByComponent) {
-        isMinimumSheetContribution = true;
-        sheetsByComponent = roundTo(minContribution, 4);
-        pps = sheetsByComponent > 0 ? qty / sheetsByComponent : 0;
+    if (!usesSheetNest && estimateNest) {
+        estimatedNest = estimatePaperlessSheetNest({
+            sheetLength: sL,
+            sheetWidth: sW,
+            partLength,
+            partWidth,
+            edgeBuffer: resolvedEdgeBuffer,
+            partBuffer: resolvedPartBuffer,
+            kerfWidth: resolvedKerfWidth,
+            quantity: qty
+        });
+
+        if (estimatedNest?.contribution > 0) {
+            usesSheetNest = true;
+            pps = roundTo(qty / estimatedNest.contribution, 1);
+            sheetsByComponent = estimatedNest.contribution;
+            sheetsForNest = Math.max(1, Math.ceil(qty / Math.max(1, estimatedNest.full_sheet_capacity || 1)));
+        }
     }
 
     const materialTotalCost = pps > 0
@@ -122,9 +352,11 @@ const calculateSheetNestOption = ({
         sheet_width: sW,
         sheet_thickness: thickness,
         sheet_cost: cost,
-        edge_buffer: edgeBuffer,
-        part_buffer: partBuffer,
-        kerf_width: kerfWidth,
+        sheet_cost_from_table: toFiniteNumber(sheetCost),
+        nest_sheet_cost_4x8: toFiniteNumber(nestSheetCost),
+        edge_buffer: resolvedEdgeBuffer,
+        part_buffer: resolvedPartBuffer,
+        kerf_width: resolvedKerfWidth,
         part_length: partLength,
         part_width: partWidth,
         buffered_part_length: buffL,
@@ -139,8 +371,8 @@ const calculateSheetNestOption = ({
         sheets_for_quantity: sheetsByComponent,
         number_of_sheets_by_component: sheetsByComponent,
         number_of_sheets_for_nest: sheetsForNest,
-        is_estimated_sheet_nest: usesSheetNest && !(nest && typeof nest === 'object'),
-        is_minimum_sheet_contribution: isMinimumSheetContribution,
+        is_estimated_sheet_nest: Boolean(estimatedNest),
+        estimated_nest: estimatedNest,
         material_unit_cost: qty > 0 ? materialTotalCost / qty : 0,
         material_total_cost: materialTotalCost,
         orientations
@@ -822,6 +1054,20 @@ router.delete('/admin/laser-rates/:id', authenticate, requireAdmin, async (req, 
 
 // ── Sheet Cost Rates Admin CRUD ───────────────────────────
 
+let sheetCostRateSchemaPromise = null;
+const ensureSheetCostRateSchema = () => {
+    if (!sheetCostRateSchemaPromise) {
+        sheetCostRateSchemaPromise = db.query(`
+            ALTER TABLE sheet_cost_rates
+            ADD COLUMN IF NOT EXISTS nest_sheet_cost_4x8 NUMERIC(10,4)
+        `).catch((err) => {
+            sheetCostRateSchemaPromise = null;
+            throw err;
+        });
+    }
+    return sheetCostRateSchemaPromise;
+};
+
 const parseSheetCostRatePayload = (body = {}) => {
     const family = typeof body.family === 'string' ? body.family.trim() : '';
     if (!family) {
@@ -855,6 +1101,14 @@ const parseSheetCostRatePayload = (body = {}) => {
         return { error: 'sheet_cost_4x8 must be a positive number' };
     }
 
+    let nestCost4x8 = null;
+    if (body.nest_sheet_cost_4x8 != null && String(body.nest_sheet_cost_4x8).trim() !== '') {
+        nestCost4x8 = parseFloat(body.nest_sheet_cost_4x8);
+        if (!Number.isFinite(nestCost4x8) || nestCost4x8 <= 0) {
+            return { error: 'nest_sheet_cost_4x8 must be a positive number when provided' };
+        }
+    }
+
     let gauge = null;
     if (body.ga != null && String(body.ga).trim() !== '') {
         gauge = parseInt(body.ga, 10);
@@ -869,6 +1123,7 @@ const parseSheetCostRatePayload = (body = {}) => {
         maxThick,
         gauge,
         cost4x8,
+        nestCost4x8,
         thickness: (minThick + maxThick) / 2
     };
 };
@@ -878,6 +1133,7 @@ const parseSheetCostRatePayload = (body = {}) => {
  */
 router.get('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, res) => {
     try {
+        await ensureSheetCostRateSchema();
         const result = await db.query(
             `SELECT * FROM sheet_cost_rates
              ORDER BY family, COALESCE(max_thick, min_thick, thickness) ASC`
@@ -899,10 +1155,11 @@ router.post('/admin/sheet-cost-rates', authenticate, requireAdmin, async (req, r
     }
 
     try {
+        await ensureSheetCostRateSchema();
         const result = await db.query(
-            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8, thickness)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.thickness]
+            `INSERT INTO sheet_cost_rates (family, min_thick, max_thick, ga, sheet_cost_4x8, nest_sheet_cost_4x8, thickness)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.nestCost4x8, parsed.thickness]
         );
         res.json({
             success: true,
@@ -925,11 +1182,12 @@ router.put('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req
     }
 
     try {
+        await ensureSheetCostRateSchema();
         const result = await db.query(
             `UPDATE sheet_cost_rates
-             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, thickness = $6, updated_at = NOW()
-             WHERE id = $7 RETURNING *`,
-            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.thickness, id]
+             SET family = $1, min_thick = $2, max_thick = $3, ga = $4, sheet_cost_4x8 = $5, nest_sheet_cost_4x8 = $6, thickness = $7, updated_at = NOW()
+             WHERE id = $8 RETURNING *`,
+            [parsed.family, parsed.minThick, parsed.maxThick, parsed.gauge, parsed.cost4x8, parsed.nestCost4x8, parsed.thickness, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Rate not found' });
         res.json({
@@ -948,6 +1206,7 @@ router.put('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req
 router.delete('/admin/sheet-cost-rates/:id', authenticate, requireAdmin, async (req, res) => {
     const { id } = req.params;
     try {
+        await ensureSheetCostRateSchema();
         await db.query('DELETE FROM sheet_cost_rates WHERE id = $1', [id]);
         res.json({ success: true, message: 'Sheet cost rate deleted' });
     } catch (err) {
@@ -1187,17 +1446,6 @@ router.post('/calculate', async (req, res) => {
         const metalConfig = metalConfigRes.rows[0] || null;
         const config = mainService?.pricing_config || {};
         const pricingWarnings = [];
-        const materialPricingSettingsRes = await db.query(
-            "SELECT key, value FROM site_settings WHERE key IN ('minimum_sheet_contribution_percent')"
-        );
-        const materialPricingSettings = {};
-        materialPricingSettingsRes.rows.forEach(r => {
-            materialPricingSettings[r.key] = toFiniteNumber(r.value);
-        });
-        const minimumSheetContribution = Math.max(
-            0,
-            materialPricingSettings.minimum_sheet_contribution_percent || 0
-        ) / 100;
 
         const metalValidationError = validateMetalBounds({
             metal,
@@ -1218,7 +1466,8 @@ router.post('/calculate', async (req, res) => {
 
         // ── MATERIAL COST (Sheet Nesting Formula) ─────────────────────────────
         // Source: sheet metal material.csv
-        // Cost = 4x8 sheet cost / parts per sheet (per unit)
+        // Cost = nest sheet cost * sheet contribution when a nest exists or is estimated.
+        // Fallback remains 4x8 sheet cost / parts per sheet.
         // Lookup priority:
         // 1) exact/range match in selected family
         // 2) closest thickness in selected family
@@ -1226,15 +1475,20 @@ router.post('/calculate', async (req, res) => {
         let material_cost = 0;
         let lead_days = 0;
         let laser_warning = false;
+        let material_warning = null;
+        let material_no_fit = false;
         let material_nesting = null;
         let powder_coating_breakdown = null;
 
         if (metal && thickness_value && parseFloat(length_in) > 0 && parseFloat(height_in) > 0) {
             const thickNum = parseFloat(thickness_value);
             const family = metal.material_family || 'generic';
+            await ensureSheetCostRateSchema();
 
+            let sheetRateMatchType = 'configured range';
             let sheetRes = await db.query(
-                `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                `SELECT ga, min_thick, max_thick, sheet_cost_4x8, COALESCE(nest_sheet_cost_4x8, sheet_cost_4x8) AS nest_sheet_cost_4x8
+                 FROM sheet_cost_rates
                  WHERE family = $1 AND min_thick < $2 - 0.001 AND max_thick >= $2
                  ORDER BY max_thick ASC, min_thick ASC
                  LIMIT 1`,
@@ -1242,8 +1496,10 @@ router.post('/calculate', async (req, res) => {
             );
 
             if (sheetRes.rows.length === 0) {
+                sheetRateMatchType = 'nearest configured thickness';
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                    `SELECT ga, min_thick, max_thick, sheet_cost_4x8, COALESCE(nest_sheet_cost_4x8, sheet_cost_4x8) AS nest_sheet_cost_4x8
+                     FROM sheet_cost_rates
                      WHERE family = $1
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $2) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -1253,8 +1509,10 @@ router.post('/calculate', async (req, res) => {
             }
 
             if (sheetRes.rows.length === 0 && family !== 'generic') {
+                sheetRateMatchType = 'generic fallback';
                 sheetRes = await db.query(
-                    `SELECT sheet_cost_4x8 FROM sheet_cost_rates
+                    `SELECT ga, min_thick, max_thick, sheet_cost_4x8, COALESCE(nest_sheet_cost_4x8, sheet_cost_4x8) AS nest_sheet_cost_4x8
+                     FROM sheet_cost_rates
                      WHERE family = 'generic'
                      ORDER BY ABS(COALESCE(max_thick, min_thick) - $1) ASC,
                               COALESCE(max_thick, min_thick) ASC
@@ -1265,29 +1523,42 @@ router.post('/calculate', async (req, res) => {
 
             if (sheetRes.rows.length > 0) {
                 const row = sheetRes.rows[0];
-                const EDGE_BUFFER = getConfigNumber(config, ['edge_buffer'], 0.15);
-                const PART_BUFFER = getConfigNumber(config, ['part_buffer'], 0.15);
-                const KERF_WIDTH = getConfigNumber(config, ['kerf_width'], 0.005);
+                const tableSheetCost = toFiniteNumber(row.sheet_cost_4x8);
+                const nestSheetCost = toFiniteNumber(row.nest_sheet_cost_4x8);
+                const EDGE_BUFFER = getConfigNumber(config, ['edge_buffer'], 0.125);
+                const PART_BUFFER = getConfigNumber(config, ['part_buffer'], 0.0625);
+                const KERF_WIDTH = getConfigNumber(config, ['kerf_width'], 0.01);
+                const NEST_PART_BUFFER = sheetNestData
+                    ? PART_BUFFER
+                    : getConfigNumber(config, ['nest_part_buffer', 'estimated_nest_part_buffer'], 0.125);
                 const pL = Math.max(parseFloat(length_in), parseFloat(height_in));
                 const pW = Math.min(parseFloat(length_in), parseFloat(height_in));
 
-                const nestOptions = [
-                    calculateSheetNestOption({
-                        label: '4x8',
-                        sheetCost: row.sheet_cost_4x8,
-                        sheetLength: 96,
-                        sheetWidth: 48,
-                        partLength: pL,
-                        partWidth: pW,
-                        thickness: thickNum,
-                        edgeBuffer: EDGE_BUFFER,
-                        partBuffer: PART_BUFFER,
-                        kerfWidth: KERF_WIDTH,
-                        quantity: qty,
-                        nest: sheetNestData,
-                        minimumSheetContribution
-                    })
-                ].filter(Boolean);
+                if (tableSheetCost <= 0 && nestSheetCost <= 0) {
+                    const gaugeText = row.ga != null ? ` GA ${row.ga}` : '';
+                    material_warning = `No usable sheet cost is configured for ${family}${gaugeText} near ${roundTo(thickNum, 4)} in (${sheetRateMatchType}). Add a positive 4x8 or nest sheet cost for this thickness.`;
+                }
+
+                const nestOptions = tableSheetCost > 0 || nestSheetCost > 0
+                    ? [
+                        calculateSheetNestOption({
+                            label: '4x8',
+                            sheetCost: tableSheetCost,
+                            nestSheetCost,
+                            sheetLength: 96,
+                            sheetWidth: 48,
+                            partLength: pL,
+                            partWidth: pW,
+                            thickness: thickNum,
+                            edgeBuffer: EDGE_BUFFER,
+                            partBuffer: NEST_PART_BUFFER,
+                            kerfWidth: KERF_WIDTH,
+                            quantity: qty,
+                            nest: sheetNestData,
+                            estimateNest: !sheetNestData
+                        })
+                    ].filter(Boolean)
+                    : [];
 
                 if (nestOptions.length > 0) {
                     const bestNest = nestOptions.sort((a, b) => {
@@ -1304,9 +1575,11 @@ router.post('/calculate', async (req, res) => {
                     material_cost = bestNest.material_unit_cost;
                     if (bestNest.parts_per_sheet <= 0) {
                         material_cost = 0;
-                        laser_warning = true;
+                        material_no_fit = true;
                     }
                 }
+            } else {
+                material_warning = `No sheet cost is configured for ${family} at ${roundTo(thickNum, 4)} in. Add a 4x8 sheet cost row for this thickness.`;
             }
         }
 
@@ -1738,7 +2011,8 @@ router.post('/calculate', async (req, res) => {
         const warnings = Array.from(new Set([
             ...(boundsWarning ? [boundsWarning] : []),
             ...(laser_warning ? ['Part dimensions or thickness exceed standard limits. Please verify capability.'] : []),
-            ...(material_cost === 0 && (parseFloat(length_in) > 0 || parseFloat(height_in) > 0) ? ['Part is too large for a standard sheet.'] : []),
+            ...(material_no_fit ? ['Part is too large for a standard sheet.'] : []),
+            ...(material_warning ? [material_warning] : []),
             ...pricingWarnings
         ].filter(Boolean)));
 

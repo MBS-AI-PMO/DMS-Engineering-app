@@ -12,7 +12,8 @@ const pool = new Pool({
 const rawData = `
 Aluminum	10	0	0.13	0.137
 Aluminum	11	283	0.117	0.125
-Aluminum	12	220	0.096	0.11
+Aluminum	12	220	260	0.096	0.11
+Aluminum	13	220	0.086	0.095
 Aluminum	14	180	0.072	0.085
 Aluminum	16	115	0.058	0.065
 Aluminum	250	650	0.25	0.25
@@ -45,23 +46,33 @@ async function seed() {
 
         await pool.query('DELETE FROM sheet_cost_rates');
         console.log('Cleared existing sheet costs.');
+        await pool.query(`
+            ALTER TABLE sheet_cost_rates
+            ADD COLUMN IF NOT EXISTS nest_sheet_cost_4x8 NUMERIC(10,4)
+        `);
 
         // Split by lines and filter out empty
         const lines = rawData.trim().split('\n');
 
         for (const line of lines) {
-            const [family, ga, cost4x8, min, max] = line.split('\t');
+            const parts = line.split('\t');
+            const [family, ga, cost4x8] = parts;
             if (!family) continue;
+            const hasNestCost = parts.length >= 6;
+            const nestCost4x8 = hasNestCost ? parseFloat(parts[3]) : null;
+            const min = hasNestCost ? parts[4] : parts[3];
+            const max = hasNestCost ? parts[5] : parts[4];
 
             const thickness = (parseFloat(min) + parseFloat(max)) / 2;
 
             await pool.query(
-                `INSERT INTO sheet_cost_rates (family, ga, sheet_cost_4x8, min_thick, max_thick, thickness)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                `INSERT INTO sheet_cost_rates (family, ga, sheet_cost_4x8, nest_sheet_cost_4x8, min_thick, max_thick, thickness)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                     family,
                     parseInt(ga) || null,
                     parseFloat(cost4x8) || 0,
+                    Number.isFinite(nestCost4x8) && nestCost4x8 > 0 ? nestCost4x8 : null,
                     parseFloat(min) || 0,
                     parseFloat(max) || 0,
                     thickness

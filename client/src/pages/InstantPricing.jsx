@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, X, Info, Layers, Box, Boxes, ChevronLeft,
   ChevronRight, ChevronDown, AlertCircle, AlertTriangle, Loader2, Check, Shield, Calculator,
@@ -342,9 +342,10 @@ const InstantPricing = () => {
     return {
       totalPerimeter: perimeterMm,
       pierceCount,
-      bends: Array.isArray(currentBackendData?.bends) ? currentBackendData.bends : []
+      bends: Array.isArray(currentBackendData?.bends) ? currentBackendData.bends : [],
+      sheetNest: currentBackendData?.sheetNest || currentBackendData?.sheet_nest || null
     };
-  }, [perimeterMm, pierceCount, currentBackendData?.bends]);
+  }, [perimeterMm, pierceCount, currentBackendData?.bends, currentBackendData?.sheetNest, currentBackendData?.sheet_nest]);
 
   const measurementMetrics = useMemo(() => {
     const lengthMm = toFiniteNumber(displayDimensions?.mm?.l);

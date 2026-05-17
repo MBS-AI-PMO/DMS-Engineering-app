@@ -8,7 +8,6 @@ export default function PricingCalculator() {
     const [settings, setSettings] = useState({
         inside_labor_markup: 0,
         material_markup: 0,
-        minimum_sheet_contribution_percent: 0,
         overhead_markup: 0,
         general_markup: 0,
         markup_enabled_services: [] // Array of service titles or IDs
@@ -30,7 +29,6 @@ export default function PricingCalculator() {
                 const newSettings = {
                     inside_labor_markup: data.inside_labor_markup !== undefined ? data.inside_labor_markup : 0,
                     material_markup: data.material_markup !== undefined ? data.material_markup : 0,
-                    minimum_sheet_contribution_percent: data.minimum_sheet_contribution_percent !== undefined ? data.minimum_sheet_contribution_percent : 0,
                     overhead_markup: data.overhead_markup !== undefined ? data.overhead_markup : 0,
                     general_markup: data.general_markup !== undefined ? data.general_markup : 0,
                     markup_enabled_services: Array.isArray(data.markup_enabled_services) ? data.markup_enabled_services : []
@@ -52,7 +50,6 @@ export default function PricingCalculator() {
             await Promise.all([
                 updateSetting('inside_labor_markup', settings.inside_labor_markup),
                 updateSetting('material_markup', settings.material_markup),
-                updateSetting('minimum_sheet_contribution_percent', settings.minimum_sheet_contribution_percent),
                 updateSetting('overhead_markup', settings.overhead_markup),
                 updateSetting('general_markup', settings.general_markup),
                 updateSetting('markup_enabled_services', settings.markup_enabled_services),
@@ -229,79 +226,41 @@ export default function PricingCalculator() {
                                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Material Markups</h3>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
-                                    <div className="calc-input-group">
-                                        <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '12px' }}>
-                                            Global Material Markup (%)
-                                        </label>
-                                        {loadingSettings ? (
-                                            <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
-                                        ) : (
-                                            <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                                <input
-                                                    type="number"
-                                                    className="calc-input-field"
-                                                    value={settings.material_markup}
-                                                    onChange={(e) => setSettings(p => ({ ...p, material_markup: parseFloat(e.target.value) || 0 }))}
-                                                    placeholder="0"
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '12px 16px',
-                                                        paddingRight: '45px',
-                                                        fontSize: '16px',
-                                                        fontWeight: '600',
-                                                        color: '#1e293b',
-                                                        background: '#f8fafc',
-                                                        border: '2px solid #e2e8f0',
-                                                        borderRadius: '12px',
-                                                        outline: 'none',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                />
-                                                <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '600', color: '#94a3b8' }}>%</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="calc-input-group">
-                                        <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '12px' }}>
-                                            Minimum Sheet Contribution (%)
-                                        </label>
-                                        {loadingSettings ? (
-                                            <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
-                                        ) : (
-                                            <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    className="calc-input-field"
-                                                    value={settings.minimum_sheet_contribution_percent}
-                                                    onChange={(e) => setSettings(p => ({ ...p, minimum_sheet_contribution_percent: parseFloat(e.target.value) || 0 }))}
-                                                    placeholder="0"
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '12px 16px',
-                                                        paddingRight: '45px',
-                                                        fontSize: '16px',
-                                                        fontWeight: '600',
-                                                        color: '#1e293b',
-                                                        background: '#f8fafc',
-                                                        border: '2px solid #e2e8f0',
-                                                        borderRadius: '12px',
-                                                        outline: 'none',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                />
-                                                <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '600', color: '#94a3b8' }}>%</span>
-                                            </div>
-                                        )}
-                                    </div>
+                                <div className="calc-input-group">
+                                    <label className="calc-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '12px' }}>
+                                        Global Material Markup (%)
+                                    </label>
+                                    {loadingSettings ? (
+                                        <div className="skeleton-box" style={{ width: '100%', height: '48px', borderRadius: '12px' }} />
+                                    ) : (
+                                        <div className="input-with-unit" style={{ position: 'relative', display: 'flex', alignItems: 'center', maxWidth: '400px' }}>
+                                            <input
+                                                type="number"
+                                                className="calc-input-field"
+                                                value={settings.material_markup}
+                                                onChange={(e) => setSettings(p => ({ ...p, material_markup: parseFloat(e.target.value) || 0 }))}
+                                                placeholder="0"
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '12px 16px',
+                                                    paddingRight: '45px',
+                                                    fontSize: '16px',
+                                                    fontWeight: '600',
+                                                    color: '#1e293b',
+                                                    background: '#f8fafc',
+                                                    border: '2px solid #e2e8f0',
+                                                    borderRadius: '12px',
+                                                    outline: 'none',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                            />
+                                            <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '600', color: '#94a3b8' }}>%</span>
+                                        </div>
+                                    )}
+                                    <p style={{ margin: '12px 0 0 0', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                                        This markup is applied automatically to all material costs.
+                                    </p>
                                 </div>
-
-                                <p style={{ margin: '12px 0 0 0', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
-                                    Material uses 4x8 sheet cost divided by dynamic parts-per-sheet. The minimum contribution is a configurable floor for quoted sheet usage when no real nest data is available.
-                                </p>
                             </div>
 
                             {/* GLOBAL PRICING SECTION */}

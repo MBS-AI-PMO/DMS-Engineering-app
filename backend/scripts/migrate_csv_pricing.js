@@ -56,11 +56,13 @@ async function up() {
                 max_thick NUMERIC(10,6) NOT NULL,
                 ga INTEGER,
                 sheet_cost_4x8 NUMERIC(10,4) NOT NULL,
+                nest_sheet_cost_4x8 NUMERIC(10,4),
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             );
         `);
         await db.query(`ALTER TABLE sheet_cost_rates DROP COLUMN IF EXISTS sheet_cost_5x10;`);
+        await db.query(`ALTER TABLE sheet_cost_rates ADD COLUMN IF NOT EXISTS nest_sheet_cost_4x8 NUMERIC(10,4);`);
         console.log('  ✓ Created sheet_cost_rates table (empty — populate via admin UI)');
 
         console.log('✅ CSV Formula Pricing migration completed successfully.');
