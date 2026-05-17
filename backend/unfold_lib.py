@@ -297,10 +297,32 @@ def _build_process_eligibility(non_flat_features=None, bend_count=0):
     - CNC remains the fallback for complex 3D geometry.
     """
     info = non_flat_features if isinstance(non_flat_features, dict) else _empty_non_flat_features()
-    has_3d_features = bool(info.get("hasRaisedFeatures"))
-    reasons = [str(r) for r in (info.get("reasons") or []) if r]
-    primary_reason = reasons[0] if reasons else "Detected non-sheet 3D features. Laser supports only sheet profiles and bends."
     bend_count_int = int(bend_count or 0)
+    reasons = [str(r) for r in (info.get("reasons") or []) if r]
+    raised_count = int(info.get("raisedFeatureFaceCount") or 0)
+
+    # IMPORTANT:
+    # The raw raised-planar diagnostic compares every planar face against one
+    # chosen root face. On normal bent sheet-metal parts (U-channel, Z-bend,
+    # multi-flange parts), another flange can be parallel to the root face but
+    # far away in 3D space. That is NOT a boss/pocket; it is still a laser-cut
+    # flat profile + bending job. So when a valid bend graph exists, do not let
+    # these offset parallel planar faces lock Laser.
+    raised_planar_offset_only = bool(info.get("hasRaisedFeatures")) and raised_count > 0
+    ignore_raised_offsets_for_bent_sheet = bend_count_int > 0 and raised_planar_offset_only
+
+    has_3d_features = bool(info.get("hasRaisedFeatures")) and not ignore_raised_offsets_for_bent_sheet
+    primary_reason = reasons[0] if reasons else "Detected non-sheet 3D features. Laser supports only sheet profiles and bends."
+
+    if ignore_raised_offsets_for_bent_sheet:
+        allowed_reasons = [
+            "Valid sheet-metal bends detected. Offset parallel planar faces were treated as flanges, not CNC-only raised features.",
+            "Laser supports cutting the flat profile; bending is handled separately as a forming operation."
+        ]
+    else:
+        allowed_reasons = [
+            "Laser supports plain sheet profiles and sheet-metal bends; bends do not lock Laser."
+        ]
 
     return {
         "laser": {
@@ -309,10 +331,9 @@ def _build_process_eligibility(non_flat_features=None, bend_count=0):
             "supportsBends": True,
             "bendCount": bend_count_int,
             "bendCountIgnoredForLock": bend_count_int,
+            "ignoredRaisedPlanarOffsetsForBentSheet": bool(ignore_raised_offsets_for_bent_sheet),
             "lockReason": primary_reason if has_3d_features else "",
-            "reasons": reasons if has_3d_features else [
-                "Laser supports plain sheet profiles and sheet-metal bends; bends do not lock Laser."
-            ],
+            "reasons": reasons if has_3d_features else allowed_reasons,
         },
         "cnc": {
             "allowed": True,
@@ -321,7 +342,6 @@ def _build_process_eligibility(non_flat_features=None, bend_count=0):
             "reasons": ["CNC is recommended for complex 3D features."] if has_3d_features else [],
         },
     }
-
 
 def _empty_cnc_features():
     return {
@@ -1877,6 +1897,7 @@ def unfold_with_lib(filepath, profile="full"):
     cut_edges_2d = []
     bend_edges_2d = []
     flat_faces_2d = []  # collect transformed planar faces for 2D hole detection
+    flat_area_mm2 = 0.0
     cut_seg_counts = {}
     cut_seg_points = {}
     emit_progress(70, "Building bend hierarchy")
@@ -1884,6 +1905,7 @@ def unfold_with_lib(filepath, profile="full"):
     def build_frontend_tree(node_id, parent_id=None, accumulated_m=None):
         """O(n) traversal: accumulated_m is the product of unbend transforms from root to
         this node's parent, eliminating the per-node nx.shortest_path O(n²) call."""
+        nonlocal flat_area_mm2
         if accumulated_m is None:
             accumulated_m = Matrix()
 
@@ -1899,6 +1921,10 @@ def unfold_with_lib(filepath, profile="full"):
 
         # Apply global alignment to sit on XY plane (for 2D view)
         flat_face = flat_face.transformed(global_align_m)
+        try:
+            flat_area_mm2 += float(getattr(flat_face, "Area", 0.0) or 0.0)
+        except Exception:
+            pass
 
         # Tessellate for 2D View (deflection=1.0 — adequate for flat pattern display and reduced RAM)
         fv, ft = _tessellate_fc_face(flat_face, deflection=1.0)
@@ -2069,6 +2095,7 @@ def unfold_with_lib(filepath, profile="full"):
         "faceMeshes": face_meshes,
         "bends": bends_data,
         "bbox": {"width": width, "height": height},
+        "flatArea": round(float(flat_area_mm2), 4),
         "topEdges": views["top"]["edges"],
         "frontEdges": views["front"]["edges"],
         "sideEdges": views["side"]["edges"],

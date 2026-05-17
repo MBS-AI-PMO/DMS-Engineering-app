@@ -343,9 +343,20 @@ const InstantPricing = () => {
       totalPerimeter: perimeterMm,
       pierceCount,
       bends: Array.isArray(currentBackendData?.bends) ? currentBackendData.bends : [],
-      sheetNest: currentBackendData?.sheetNest || currentBackendData?.sheet_nest || null
+      sheetNest: currentBackendData?.sheetNest || currentBackendData?.sheet_nest || null,
+      // Used by backend smart nesting. cutEdges are the unfolded 2D profile segments in mm.
+      cutEdges: Array.isArray(currentBackendData?.cutEdges) ? currentBackendData.cutEdges : [],
+      flatArea: toFiniteNumber(currentBackendData?.flatArea)
     };
-  }, [perimeterMm, pierceCount, currentBackendData?.bends, currentBackendData?.sheetNest, currentBackendData?.sheet_nest]);
+  }, [
+    perimeterMm,
+    pierceCount,
+    currentBackendData?.bends,
+    currentBackendData?.sheetNest,
+    currentBackendData?.sheet_nest,
+    currentBackendData?.cutEdges,
+    currentBackendData?.flatArea
+  ]);
 
   const measurementMetrics = useMemo(() => {
     const lengthMm = toFiniteNumber(displayDimensions?.mm?.l);
@@ -416,10 +427,17 @@ const InstantPricing = () => {
   const laserEligibility = processEligibility?.laser || {};
 
   // Laser is allowed for plain sheet profiles and sheet-metal bends.
-  // It is blocked only when the backend detects non-sheet 3D features.
+  // Prefer backend processEligibility when present. Do NOT also OR with
+  // nonFlatFeatures.hasRaisedFeatures, because bent sheet parts can have
+  // offset parallel flanges that the raw diagnostic may still report as
+  // raised planar offsets. The final allow/block decision belongs to
+  // processEligibility.laser.blocked.
   const isLaserBlockedByBends = false;
+  const hasLaserEligibilityDecision = typeof laserEligibility.blocked === 'boolean';
   const isLaserBlockedByNonFlatFeatures = currentIsStep && (
-    laserEligibility.blocked === true || nonFlatFeatureInfo.hasRaisedFeatures
+    hasLaserEligibilityDecision
+      ? laserEligibility.blocked === true
+      : nonFlatFeatureInfo.hasRaisedFeatures
   );
 
   useMemo(() => {

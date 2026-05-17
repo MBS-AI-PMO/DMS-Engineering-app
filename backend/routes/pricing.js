@@ -292,6 +292,471 @@ const estimatePaperlessSheetNest = ({
     };
 };
 
+
+const MM_PER_INCH = 25.4;
+const MM2_PER_IN2 = MM_PER_INCH * MM_PER_INCH;
+
+const getProfilePointsInches = (techData = {}) => {
+    const source = techData.cutEdges || techData.cut_edges || techData.profileEdges || techData.profile_edges || techData.profilePoints || techData.profile_points;
+    if (!source) return [];
+
+    const points = [];
+    const pushPoint = (x, y, unit = 'mm') => {
+        const px = Number.parseFloat(x);
+        const py = Number.parseFloat(y);
+        if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+        const factor = String(unit).toLowerCase().includes('in') ? 1 : (1 / MM_PER_INCH);
+        points.push([px * factor, py * factor]);
+    };
+
+    if (Array.isArray(source) && source.length > 0 && typeof source[0] === 'number') {
+        // Python cutEdges format: [x1,y1,z1,x2,y2,z2, ...] in mm.
+        for (let i = 0; i + 4 < source.length; i += 6) {
+            pushPoint(source[i], source[i + 1], 'mm');
+            pushPoint(source[i + 3], source[i + 4], 'mm');
+        }
+    } else if (Array.isArray(source)) {
+        source.forEach((item) => {
+            if (Array.isArray(item)) {
+                if (item.length >= 6) {
+                    pushPoint(item[0], item[1], item.unit || 'mm');
+                    pushPoint(item[3], item[4], item.unit || 'mm');
+                } else if (item.length >= 2) {
+                    pushPoint(item[0], item[1], item.unit || 'mm');
+                }
+                return;
+            }
+            if (item && typeof item === 'object') {
+                if (item.x1 !== undefined || item.start) {
+                    const start = item.start || {};
+                    const end = item.end || {};
+                    pushPoint(item.x1 ?? start.x, item.y1 ?? start.y, item.unit || 'mm');
+                    pushPoint(item.x2 ?? end.x, item.y2 ?? end.y, item.unit || 'mm');
+                } else {
+                    pushPoint(item.x, item.y, item.unit || 'mm');
+                }
+            }
+        });
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    points.forEach(([x, y]) => {
+        const key = `${x.toFixed(4)},${y.toFixed(4)}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push([x, y]);
+        }
+    });
+    return deduped;
+};
+
+const getFlatAreaIn2 = (techData = {}) => {
+    const explicitIn2 = toFiniteNumber(techData.flatAreaIn2 ?? techData.flat_area_in2 ?? techData.areaIn2 ?? techData.area_in2);
+    if (explicitIn2 > 0) return explicitIn2;
+    const mm2 = toFiniteNumber(techData.flatArea ?? techData.flat_area ?? techData.areaMm2 ?? techData.area_mm2);
+    return mm2 > 0 ? mm2 / MM2_PER_IN2 : 0;
+};
+
+const estimateSmartRotatedSheetNest = ({
+    sheetLength,
+    sheetWidth,
+    partLength,
+    partWidth,
+    partArea,
+    profilePoints,
+    edgeBuffer,
+    partBuffer,
+    kerfWidth,
+    quantity,
+    scrapPct = 5.5,
+    bboxRelaxationFactor = 0.70,
+    angleStepDeg = 1
+}) => {
+    const qty = Math.max(1, Math.round(toFiniteNumber(quantity)) || 1);
+    const sL = Math.max(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const sW = Math.min(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const fallbackL = Math.max(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    const fallbackW = Math.min(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    const areaIn2 = toFiniteNumber(partArea);
+    const sheetArea = sL * sW;
+    if (sL <= 0 || sW <= 0 || sheetArea <= 0) return null;
+
+    const edge = Math.max(0, toFiniteNumber(edgeBuffer));
+    const spacing = Math.max(0, toFiniteNumber(partBuffer) + toFiniteNumber(kerfWidth));
+    const points = Array.isArray(profilePoints) ? profilePoints.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) : [];
+
+    const getRotatedBox = (deg) => {
+        if (points.length >= 2) {
+            const rad = (deg * Math.PI) / 180;
+            const c = Math.cos(rad);
+            const sn = Math.sin(rad);
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            points.forEach(([x, y]) => {
+                const rx = (x * c) - (y * sn);
+                const ry = (x * sn) + (y * c);
+                minX = Math.min(minX, rx);
+                maxX = Math.max(maxX, rx);
+                minY = Math.min(minY, ry);
+                maxY = Math.max(maxY, ry);
+            });
+            const w = maxX - minX;
+            const h = maxY - minY;
+            if (w > 0 && h > 0) {
+                return { angle: deg, w, h };
+            }
+        }
+        return { angle: 0, w: fallbackL, h: fallbackW };
+    };
+
+    const layoutForCount = (count, w, h, angle) => {
+        const target = Math.max(1, Math.round(toFiniteNumber(count)) || 1);
+        const orientations = [
+            { rotated: false, x: w, y: h },
+            { rotated: true, x: h, y: w }
+        ].filter((option, idx, arr) => idx === 0 || Math.abs(option.x - arr[0].x) > 0.0001 || Math.abs(option.y - arr[0].y) > 0.0001);
+
+        let best = null;
+        for (const orientation of orientations) {
+            if (orientation.x <= 0 || orientation.y <= 0) continue;
+            const usableL = sL - (2 * edge);
+            const usableW = sW - (2 * edge);
+            const maxColumns = Math.max(0, Math.floor((usableL + spacing) / (orientation.x + spacing)));
+            const maxRows = Math.max(0, Math.floor((usableW + spacing) / (orientation.y + spacing)));
+            const capacity = maxColumns * maxRows;
+            if (capacity <= 0) continue;
+
+            const maxColumnsForTarget = Math.min(maxColumns, target);
+            for (let columns = 1; columns <= maxColumnsForTarget; columns += 1) {
+                const rows = Math.ceil(target / columns);
+                if (rows > maxRows) continue;
+
+                const occupiedLength = (columns * orientation.x) + (Math.max(0, columns - 1) * spacing) + (2 * edge);
+                const occupiedWidth = (rows * orientation.y) + (Math.max(0, rows - 1) * spacing) + (2 * edge);
+                if (occupiedLength > sL + 1e-6 || occupiedWidth > sW + 1e-6) continue;
+
+                const bboxContribution = Math.min(1, (occupiedLength * occupiedWidth) / sheetArea);
+                const candidate = {
+                    angle,
+                    orientation: orientation.rotated ? 'rotated' : 'normal',
+                    rows,
+                    columns,
+                    parts_on_sheet: target,
+                    max_columns: maxColumns,
+                    max_rows: maxRows,
+                    capacity,
+                    occupied_length: occupiedLength,
+                    occupied_width: occupiedWidth,
+                    bbox_contribution: bboxContribution,
+                    raw_contribution: bboxContribution,
+                    contribution: roundTo(bboxContribution, 4),
+                    part_box_length: orientation.x,
+                    part_box_width: orientation.y
+                };
+
+                if (
+                    !best
+                    || candidate.raw_contribution < best.raw_contribution
+                    || (
+                        Math.abs(candidate.raw_contribution - best.raw_contribution) < 1e-6
+                        && candidate.capacity > best.capacity
+                    )
+                ) {
+                    best = candidate;
+                }
+            }
+        }
+        return best;
+    };
+
+    const angles = new Set([0, 90]);
+    const step = Math.max(0.5, toFiniteNumber(angleStepDeg) || 1);
+    for (let deg = 0; deg < 180; deg += step) {
+        angles.add(Number(deg.toFixed(3)));
+    }
+
+    let best = null;
+    for (const angle of angles) {
+        const box = getRotatedBox(angle);
+        if (!(box.w > 0) || !(box.h > 0)) continue;
+
+        const fullCapacityLayout = layoutForCount(999999, box.w, box.h, angle);
+        // layoutForCount with a huge target will usually fail, so compute capacity using one part.
+        const oneLayout = layoutForCount(1, box.w, box.h, angle);
+        if (!oneLayout || oneLayout.capacity <= 0) continue;
+
+        const capacity = oneLayout.capacity;
+        const fullSheets = Math.floor(qty / capacity);
+        const remainder = qty % capacity;
+        const fullLayout = fullSheets > 0 ? layoutForCount(capacity, box.w, box.h, angle) : null;
+        const partialLayout = remainder > 0 ? layoutForCount(remainder, box.w, box.h, angle) : null;
+        if (fullSheets > 0 && !fullLayout) continue;
+        if (remainder > 0 && !partialLayout) continue;
+
+        const bboxRaw = (fullSheets * (fullLayout?.raw_contribution || 0)) + (partialLayout?.raw_contribution || 0);
+        if (!(bboxRaw > 0)) continue;
+
+        const areaRaw = areaIn2 > 0 ? (areaIn2 * qty) / sheetArea : 0;
+        const areaWithScrap = areaRaw > 0 ? areaRaw * (1 + (Math.max(0, toFiniteNumber(scrapPct)) / 100)) : 0;
+        const relaxedBbox = bboxRaw * Math.min(1, Math.max(0.2, toFiniteNumber(bboxRelaxationFactor) || 0.70));
+        const smartRaw = areaWithScrap > 0
+            ? Math.min(bboxRaw, Math.max(areaWithScrap, relaxedBbox))
+            : bboxRaw;
+
+        const candidate = {
+            quantity: qty,
+            contribution: roundTo(smartRaw, 4),
+            raw_contribution: smartRaw,
+            bbox_contribution: roundTo(bboxRaw, 4),
+            area_contribution: roundTo(areaRaw, 4),
+            area_with_scrap_contribution: roundTo(areaWithScrap, 4),
+            pattern: 'smart_rotated_area_nest',
+            angle_degrees: angle,
+            orientation: partialLayout?.orientation || fullLayout?.orientation || oneLayout.orientation,
+            full_sheet_capacity: capacity,
+            full_sheets: fullSheets,
+            remainder_quantity: remainder,
+            full_sheet_contribution: fullLayout?.contribution || 0,
+            partial_sheet_contribution: partialLayout?.contribution || 0,
+            rows: partialLayout?.rows || fullLayout?.rows || oneLayout.rows,
+            columns: partialLayout?.columns || fullLayout?.columns || oneLayout.columns,
+            parts_per_strip: capacity,
+            occupied_length: partialLayout?.occupied_length || fullLayout?.occupied_length || oneLayout.occupied_length,
+            occupied_width: partialLayout?.occupied_width || fullLayout?.occupied_width || oneLayout.occupied_width,
+            partial_sheet: partialLayout,
+            full_sheet_layout: fullLayout,
+            number_of_sheets_for_nest: fullSheets + (remainder > 0 ? 1 : 0),
+            profile_points_used: points.length,
+            part_area_in2: roundTo(areaIn2, 4),
+            sheet_area_in2: sheetArea,
+            scrap_pct_assumed: Math.max(0, toFiniteNumber(scrapPct))
+        };
+
+        if (
+            !best
+            || candidate.raw_contribution < best.raw_contribution
+            || (
+                Math.abs(candidate.raw_contribution - best.raw_contribution) < 1e-6
+                && candidate.full_sheet_capacity > best.full_sheet_capacity
+            )
+        ) {
+            best = candidate;
+        }
+    }
+
+    return best;
+};
+
+
+// Fixed 4x8 nesting for our own quoting system.
+// Rules:
+// - Always use one sheet size only: 96 in x 48 in.
+// - Sheet price comes only from sheet_cost_rates.sheet_cost_4x8.
+// - Nest enough parts across one or more 4x8 sheets.
+// - Material charge is based only on the used nest footprint area,
+//   not the full purchased sheet and not Paperless band/remnant logic.
+const estimateFixed4x8UsedAreaNest = ({
+    sheetLength = 96,
+    sheetWidth = 48,
+    partLength,
+    partWidth,
+    profilePoints = [],
+    edgeBuffer = 0.125,
+    partBuffer = 0.125,
+    kerfWidth = 0.01,
+    quantity = 1,
+    angleStepDeg = 1
+}) => {
+    const qty = Math.max(1, Math.round(toFiniteNumber(quantity)) || 1);
+    const sL = Math.max(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const sW = Math.min(toFiniteNumber(sheetLength), toFiniteNumber(sheetWidth));
+    const fallbackL = Math.max(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    const fallbackW = Math.min(toFiniteNumber(partLength), toFiniteNumber(partWidth));
+    const sheetArea = sL * sW;
+
+    if (sL <= 0 || sW <= 0 || sheetArea <= 0 || fallbackL <= 0 || fallbackW <= 0) return null;
+
+    const edge = Math.max(0, toFiniteNumber(edgeBuffer));
+    const spacing = Math.max(0, toFiniteNumber(partBuffer) + toFiniteNumber(kerfWidth));
+    const points = Array.isArray(profilePoints)
+        ? profilePoints.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        : [];
+
+    const getRotatedBox = (deg) => {
+        if (points.length >= 2) {
+            const rad = (deg * Math.PI) / 180;
+            const c = Math.cos(rad);
+            const sn = Math.sin(rad);
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+
+            points.forEach(([x, y]) => {
+                const rx = (x * c) - (y * sn);
+                const ry = (x * sn) + (y * c);
+                minX = Math.min(minX, rx);
+                maxX = Math.max(maxX, rx);
+                minY = Math.min(minY, ry);
+                maxY = Math.max(maxY, ry);
+            });
+
+            const w = maxX - minX;
+            const h = maxY - minY;
+            if (w > 0 && h > 0) return { angle: deg, w, h };
+        }
+
+        return { angle: 0, w: fallbackL, h: fallbackW };
+    };
+
+    const layoutForCount = (count, boxW, boxH, angle) => {
+        const target = Math.max(1, Math.round(toFiniteNumber(count)) || 1);
+        const orientations = [
+            { orientation: 'normal', x: boxW, y: boxH },
+            { orientation: 'rotated_90', x: boxH, y: boxW }
+        ].filter((option, idx, arr) => (
+            idx === 0 || Math.abs(option.x - arr[0].x) > 0.0001 || Math.abs(option.y - arr[0].y) > 0.0001
+        ));
+
+        let best = null;
+
+        for (const option of orientations) {
+            if (option.x <= 0 || option.y <= 0) continue;
+
+            const usableL = sL - (2 * edge);
+            const usableW = sW - (2 * edge);
+            const maxColumns = Math.max(0, Math.floor((usableL + spacing) / (option.x + spacing)));
+            const maxRows = Math.max(0, Math.floor((usableW + spacing) / (option.y + spacing)));
+            const capacity = maxColumns * maxRows;
+            if (capacity <= 0) continue;
+
+            const columnsLimit = Math.min(maxColumns, target);
+            for (let columns = 1; columns <= columnsLimit; columns += 1) {
+                const rows = Math.ceil(target / columns);
+                if (rows > maxRows) continue;
+
+                const occupiedLength = (columns * option.x) + (Math.max(0, columns - 1) * spacing);
+                const occupiedWidth = (rows * option.y) + (Math.max(0, rows - 1) * spacing);
+                const usedArea = occupiedLength * occupiedWidth;
+                if (usedArea <= 0 || occupiedLength > sL || occupiedWidth > sW) continue;
+
+                const candidate = {
+                    angle_degrees: angle,
+                    orientation: option.orientation,
+                    rows,
+                    columns,
+                    parts_on_sheet: target,
+                    max_columns: maxColumns,
+                    max_rows: maxRows,
+                    capacity,
+                    occupied_length: occupiedLength,
+                    occupied_width: occupiedWidth,
+                    used_area_in2: usedArea,
+                    used_area_contribution: usedArea / sheetArea,
+                    part_box_length: option.x,
+                    part_box_width: option.y
+                };
+
+                if (
+                    !best
+                    || candidate.used_area_in2 < best.used_area_in2
+                    || (
+                        Math.abs(candidate.used_area_in2 - best.used_area_in2) < 1e-6
+                        && candidate.capacity > best.capacity
+                    )
+                ) {
+                    best = candidate;
+                }
+            }
+        }
+
+        return best;
+    };
+
+    const angles = new Set([0, 90]);
+    if (points.length >= 2) {
+        const step = Math.max(1, toFiniteNumber(angleStepDeg) || 1);
+        for (let deg = 0; deg < 180; deg += step) {
+            angles.add(Number(deg.toFixed(3)));
+        }
+    }
+
+    let best = null;
+
+    for (const angle of angles) {
+        const box = getRotatedBox(angle);
+        if (!(box.w > 0) || !(box.h > 0)) continue;
+
+        const oneLayout = layoutForCount(1, box.w, box.h, angle);
+        if (!oneLayout || oneLayout.capacity <= 0) continue;
+
+        const capacity = oneLayout.capacity;
+        const fullSheets = Math.floor(qty / capacity);
+        const remainder = qty % capacity;
+        const fullLayout = fullSheets > 0 ? layoutForCount(capacity, box.w, box.h, angle) : null;
+        const partialLayout = remainder > 0 ? layoutForCount(remainder, box.w, box.h, angle) : null;
+
+        if (fullSheets > 0 && !fullLayout) continue;
+        if (remainder > 0 && !partialLayout) continue;
+
+        const fullUsedArea = fullSheets * (fullLayout?.used_area_in2 || 0);
+        const partialUsedArea = partialLayout?.used_area_in2 || 0;
+        const totalUsedArea = fullUsedArea + partialUsedArea;
+        if (!(totalUsedArea > 0)) continue;
+
+        const totalSheets = fullSheets + (remainder > 0 ? 1 : 0);
+        const contribution = totalUsedArea / sheetArea;
+
+        const candidate = {
+            quantity: qty,
+            pattern: 'fixed_4x8_used_area_nest',
+            sheet_length: sL,
+            sheet_width: sW,
+            sheet_area_in2: sheetArea,
+            full_sheet_capacity: capacity,
+            parts_per_sheet: capacity,
+            number_of_sheets_for_nest: totalSheets,
+            full_sheets: fullSheets,
+            remainder_quantity: remainder,
+            total_used_area_in2: roundTo(totalUsedArea, 4),
+            full_sheets_used_area_in2: roundTo(fullUsedArea, 4),
+            partial_sheet_used_area_in2: roundTo(partialUsedArea, 4),
+            contribution: roundTo(contribution, 6),
+            raw_contribution: contribution,
+            used_area_percent_of_one_sheet: roundTo(contribution * 100, 4),
+            used_area_percent_of_required_sheets: totalSheets > 0 ? roundTo((totalUsedArea / (totalSheets * sheetArea)) * 100, 4) : 0,
+            angle_degrees: partialLayout?.angle_degrees ?? fullLayout?.angle_degrees ?? oneLayout.angle_degrees,
+            orientation: partialLayout?.orientation || fullLayout?.orientation || oneLayout.orientation,
+            rows: partialLayout?.rows || fullLayout?.rows || oneLayout.rows,
+            columns: partialLayout?.columns || fullLayout?.columns || oneLayout.columns,
+            occupied_length: partialLayout?.occupied_length || fullLayout?.occupied_length || oneLayout.occupied_length,
+            occupied_width: partialLayout?.occupied_width || fullLayout?.occupied_width || oneLayout.occupied_width,
+            part_box_length: partialLayout?.part_box_length || fullLayout?.part_box_length || oneLayout.part_box_length,
+            part_box_width: partialLayout?.part_box_width || fullLayout?.part_box_width || oneLayout.part_box_width,
+            full_sheet_layout: fullLayout,
+            partial_sheet: partialLayout,
+            profile_points_used: points.length,
+            material_charge_rule: 'sheet_cost_4x8 * (total_used_nest_footprint_area / 4608)'
+        };
+
+        if (
+            !best
+            || candidate.raw_contribution < best.raw_contribution
+            || (
+                Math.abs(candidate.raw_contribution - best.raw_contribution) < 1e-6
+                && candidate.full_sheet_capacity > best.full_sheet_capacity
+            )
+        ) {
+            best = candidate;
+        }
+    }
+
+    return best;
+};
+
 const calculateSheetNestOption = ({
     label,
     sheetCost,
@@ -306,24 +771,24 @@ const calculateSheetNestOption = ({
     kerfWidth,
     quantity,
     nest,
-    estimateNest = false
+    estimateNest = false,
+    profilePoints = [],
+    partArea = 0,
+    smartNestScrapPct = 5.5,
+    smartNestBboxRelaxationFactor = 0.70
 }) => {
-    const explicitNestSheetCost = getObjectValue(nest, ['sheet_cost_rate', 'sheetCostRate', 'sheet_cost', 'sheetCost']);
-    const cost = toFiniteNumber(explicitNestSheetCost ?? (estimateNest ? nestSheetCost : null) ?? sheetCost);
+    // Use only the 4x8 sheet cost from DB. Do not use Paperless/imported nest sheet costs.
+    const cost = toFiniteNumber(sheetCost);
     if (cost <= 0) return null;
     const qty = Math.max(1, parseFloat(quantity) || 1);
 
-    const nestSheetLength = toFiniteNumber(getObjectValue(nest, ['sheet_length', 'sheetLength']));
-    const nestSheetWidth = toFiniteNumber(getObjectValue(nest, ['sheet_width', 'sheetWidth']));
-    const nestEdgeBuffer = toFiniteNumber(getObjectValue(nest, ['edge_buffer', 'edgeBuffer']));
-    const nestPartBuffer = toFiniteNumber(getObjectValue(nest, ['part_buffer', 'partBuffer']));
-    const nestKerfWidth = toFiniteNumber(getObjectValue(nest, ['kerf_width', 'kerfWidth']));
-
-    const resolvedSheetLength = nestSheetLength > 0 ? nestSheetLength : sheetLength;
-    const resolvedSheetWidth = nestSheetWidth > 0 ? nestSheetWidth : sheetWidth;
-    const resolvedEdgeBuffer = nestEdgeBuffer > 0 ? nestEdgeBuffer : edgeBuffer;
-    const resolvedPartBuffer = nestPartBuffer > 0 ? nestPartBuffer : partBuffer;
-    const resolvedKerfWidth = nestKerfWidth > 0 ? nestKerfWidth : kerfWidth;
+    // Keep these fixed to our own 4x8 stock settings. Imported nest/sheet
+    // values are intentionally ignored here.
+    const resolvedSheetLength = sheetLength;
+    const resolvedSheetWidth = sheetWidth;
+    const resolvedEdgeBuffer = edgeBuffer;
+    const resolvedPartBuffer = partBuffer;
+    const resolvedKerfWidth = kerfWidth;
 
     const sL = Math.max(resolvedSheetLength, resolvedSheetWidth);
     const sW = Math.min(resolvedSheetLength, resolvedSheetWidth);
@@ -352,51 +817,32 @@ const calculateSheetNestOption = ({
     let usesSheetNest = false;
     let estimatedNest = null;
 
-    if (nest && typeof nest === 'object') {
-        const quantityList = getObjectValue(nest, ['quantities', 'make_quantities', 'makeQuantities']) || [1, 5, 10, 15, 20];
-        const quantitySheets = getObjectValue(nest, [
-            'quantity_sheets',
-            'quantitySheets',
-            'sheets_by_quantity',
-            'sheetsByQuantity',
-            'number_of_sheets_by_quantity',
-            'numberOfSheetsByQuantity',
-            'number_of_sheets_by_component',
-            'numberOfSheetsByComponent'
-        ]);
-        const quantitySheetContribution = getQuantitySpecificNestValue(quantitySheets, qty, quantityList);
-        const contributionPct = toFiniteNumber(nest.contribution_pct ?? nest.contributionPercent);
-        const totalSheetsUsed = toFiniteNumber(nest.total_sheets_used ?? nest.totalSheetsUsed);
-        const totalSheetsPurchased = toFiniteNumber(nest.total_sheets_purchased ?? nest.totalSheetsPurchased);
-        const sheetContribution = quantitySheetContribution > 0
-            ? quantitySheetContribution
-            : contributionPct * totalSheetsUsed;
-
-        if (sheetContribution > 0) {
-            usesSheetNest = true;
-            pps = roundTo(qty / sheetContribution, 1);
-            sheetsByComponent = roundTo(sheetContribution, 4);
-            sheetsForNest = roundTo(totalSheetsPurchased, 4);
-        }
-    }
-
-    if (!usesSheetNest && estimateNest) {
-        estimatedNest = estimatePaperlessSheetNest({
+    // Our own nesting mode: ignore Paperless/imported nest data and always
+    // calculate against the one stock size we sell: 4x8 (96 in x 48 in).
+    // Material is charged only for the used nested footprint area.
+    if (estimateNest) {
+        estimatedNest = estimateFixed4x8UsedAreaNest({
             sheetLength: sL,
             sheetWidth: sW,
             partLength,
             partWidth,
+            profilePoints,
             edgeBuffer: resolvedEdgeBuffer,
             partBuffer: resolvedPartBuffer,
             kerfWidth: resolvedKerfWidth,
-            quantity: qty
+            quantity: qty,
+            angleStepDeg: 1
         });
 
         if (estimatedNest?.contribution > 0) {
             usesSheetNest = true;
-            pps = roundTo(qty / estimatedNest.contribution, 1);
+            pps = Math.max(1, toFiniteNumber(estimatedNest.full_sheet_capacity || estimatedNest.parts_per_sheet));
             sheetsByComponent = estimatedNest.contribution;
-            sheetsForNest = Math.max(1, Math.ceil(qty / Math.max(1, estimatedNest.full_sheet_capacity || 1)));
+            sheetsForNest = Math.max(1, toFiniteNumber(estimatedNest.number_of_sheets_for_nest) || Math.ceil(qty / pps));
+        } else {
+            pps = 0;
+            sheetsByComponent = 0;
+            sheetsForNest = 0;
         }
     }
 
@@ -1472,6 +1918,8 @@ router.post('/calculate', async (req, res) => {
         const qty = parseInt(quantity) || 1;
         const techData = req.body.technical_data || {};
         const sheetNestData = techData.sheetNest || techData.sheet_nest || techData.nest || null;
+        const profilePointsInches = getProfilePointsInches(techData);
+        const flatAreaIn2 = getFlatAreaIn2(techData);
         const lengthInNum = toFiniteNumber(length_in);
         const heightInNum = toFiniteNumber(height_in);
         const thicknessInNum = toFiniteNumber(thickness_value);
@@ -1586,18 +2034,16 @@ router.post('/calculate', async (req, res) => {
                 const EDGE_BUFFER = getConfigNumber(config, ['edge_buffer'], 0.125);
                 const PART_BUFFER = getConfigNumber(config, ['part_buffer'], 0.0625);
                 const KERF_WIDTH = getConfigNumber(config, ['kerf_width'], 0.01);
-                const NEST_PART_BUFFER = sheetNestData
-                    ? PART_BUFFER
-                    : getConfigNumber(config, ['nest_part_buffer', 'estimated_nest_part_buffer'], 0.125);
+                const NEST_PART_BUFFER = getConfigNumber(config, ['nest_part_buffer', 'estimated_nest_part_buffer'], 0.125);
                 const pL = Math.max(parseFloat(length_in), parseFloat(height_in));
                 const pW = Math.min(parseFloat(length_in), parseFloat(height_in));
 
-                if (tableSheetCost <= 0 && nestSheetCost <= 0) {
+                if (tableSheetCost <= 0) {
                     const gaugeText = row.ga != null ? ` GA ${row.ga}` : '';
-                    material_warning = `No usable sheet cost is configured for ${family}${gaugeText} near ${roundTo(thickNum, 4)} in (${sheetRateMatchType}). Add a positive 4x8 or nest sheet cost for this thickness.`;
+                    material_warning = `No usable 4x8 sheet cost is configured for ${family}${gaugeText} near ${roundTo(thickNum, 4)} in (${sheetRateMatchType}). Add a positive 4x8 sheet cost for this thickness.`;
                 }
 
-                const nestOptions = tableSheetCost > 0 || nestSheetCost > 0
+                const nestOptions = tableSheetCost > 0
                     ? [
                         calculateSheetNestOption({
                             label: '4x8',
@@ -1612,8 +2058,10 @@ router.post('/calculate', async (req, res) => {
                             partBuffer: NEST_PART_BUFFER,
                             kerfWidth: KERF_WIDTH,
                             quantity: qty,
-                            nest: sheetNestData,
-                            estimateNest: !sheetNestData
+                            nest: null,
+                            estimateNest: true,
+                            profilePoints: profilePointsInches,
+                            partArea: flatAreaIn2
                         })
                     ].filter(Boolean)
                     : [];
