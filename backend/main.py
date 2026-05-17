@@ -31,7 +31,7 @@ UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
 UNFOLD_JOB_TTL_SECONDS = 15 * 60
 UNFOLD_RESULT_CACHE_TTL_SECONDS = int(os.getenv("UNFOLD_RESULT_CACHE_TTL_SECONDS", "1800"))
 UNFOLD_RESULT_CACHE_MAX = max(1, int(os.getenv("UNFOLD_RESULT_CACHE_MAX", "128")))
-UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-05-17-root-bend-scoring-v1")).strip() or "2026-05-17-root-bend-scoring-v1"
+UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-05-17-laser-bend-eligibility-v2")).strip() or "2026-05-17-laser-bend-eligibility-v2"
 GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
 FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
 FREECAD_KILL_GRACE_SECONDS = max(1, int(os.getenv("FREECAD_KILL_GRACE_SECONDS", "8")))
@@ -347,7 +347,9 @@ class CORSHandler(BaseHTTPRequestHandler):
                 "holes": r.get("detectedHoles", []),
                 "faceMeshes": r.get("faceMeshes", {}),
                 "bendTree": r.get("bendTree", None),
-                "thickness": r.get("thickness", 2.0)
+                "thickness": r.get("thickness", 2.0),
+                "nonFlatFeatures": r.get("nonFlatFeatures", None),
+                "processEligibility": r.get("processEligibility", None)
                 }
             )
         elif post_path == "/unfold-job/start":

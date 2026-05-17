@@ -412,8 +412,15 @@ const InstantPricing = () => {
     };
   }, [currentBackendData?.nonFlatFeatures]);
 
-  const isLaserBlockedByBends = bendCountTotal > 0;
-  const isLaserBlockedByNonFlatFeatures = currentIsStep && nonFlatFeatureInfo.hasRaisedFeatures;
+  const processEligibility = currentBackendData?.processEligibility || {};
+  const laserEligibility = processEligibility?.laser || {};
+
+  // Laser is allowed for plain sheet profiles and sheet-metal bends.
+  // It is blocked only when the backend detects non-sheet 3D features.
+  const isLaserBlockedByBends = false;
+  const isLaserBlockedByNonFlatFeatures = currentIsStep && (
+    laserEligibility.blocked === true || nonFlatFeatureInfo.hasRaisedFeatures
+  );
 
   useMemo(() => {
     const areaMm2 = measurementMetrics.areaMm2;
@@ -431,10 +438,10 @@ const InstantPricing = () => {
         id: 'bends',
         label: 'Bend Features',
         value: `${bendCountTotal}`,
-        status: bendCountTotal > 0 ? 'fail' : 'pass',
-        impact: bendCountTotal > 0 ? 'Locks Laser' : 'Laser OK',
+        status: 'pass',
+        impact: bendCountTotal > 0 ? 'Laser OK + Bending' : 'Laser OK',
         reason: bendCountTotal > 0
-          ? `Detected ${bendCountTotal} bend(s); formed geometry is not laser-cuttable.`
+          ? `Detected ${bendCountTotal} bend(s). Bends are allowed for Laser jobs; add/select the Bending service for forming cost.`
           : 'No bends detected.'
       },
       {
@@ -585,20 +592,20 @@ const InstantPricing = () => {
   useEffect(() => {
     if (!selectedProductionService) return;
     const { isLaser } = getProcessFlags(selectedProductionService.title);
-    if (!isLaser || (!isLaserBlockedByBends && !isLaserBlockedByNonFlatFeatures)) return;
+    if (!isLaser || !isLaserBlockedByNonFlatFeatures) return;
 
     setSelectedProductionService(null);
     setSelectedCategory(null);
     setSelectedMetal(null);
     setSelectedThickness(null);
     setConfigStep(0);
-    if (isLaserBlockedByBends) {
-      toast(`Detected ${bendCountTotal} bend(s). Laser cutting is locked for bent models.`, 'error');
-      return;
-    }
+
     const raisedCount = nonFlatFeatureInfo.raisedFeatureFaceCount;
-    toast(`Detected raised 3D features (${raisedCount}). Laser cutting is limited to flat 2D profiles.`, 'error');
-  }, [selectedProductionService, isLaserBlockedByBends, isLaserBlockedByNonFlatFeatures, bendCountTotal, nonFlatFeatureInfo.raisedFeatureFaceCount, toast]);
+    const reason = laserEligibility.lockReason
+      || nonFlatFeatureInfo.primaryReason
+      || `Detected raised 3D features (${raisedCount}). Laser cutting supports plain sheet profiles and bends only.`;
+    toast(reason, 'error');
+  }, [selectedProductionService, isLaserBlockedByNonFlatFeatures, nonFlatFeatureInfo.raisedFeatureFaceCount, nonFlatFeatureInfo.primaryReason, laserEligibility.lockReason, toast]);
 
   const stepHolesDetectedRef = useRef(false);
   const holeDetectionAttemptedRef = useRef(false);
@@ -1430,6 +1437,7 @@ const InstantPricing = () => {
                 setBackendData((prev) => ({
                   ...((prev?.__fileKey === unfoldFileKey ? prev : keyedBackendData) || keyedBackendData),
                   nonFlatFeatures: verifyData.nonFlatFeatures,
+                  ...(verifyData.processEligibility ? { processEligibility: verifyData.processEligibility } : {}),
                   __fileKey: unfoldFileKey,
                 }));
               }
@@ -2322,8 +2330,9 @@ const InstantPricing = () => {
                           const hasThickness = dT > 0;
                           const isTooLarge = dim && ((cfg.max_x && dL > cfg.max_x) || (cfg.max_y && dW > cfg.max_y));
                           const isTooSmall = dim && ((cfg.min_x && dL < cfg.min_x) || (cfg.min_y && dW < cfg.min_y));
-                          const isTooThick = dim && hasThickness && cfg.max_z && dT > cfg.max_z;
-                          const isTooThin = dim && hasThickness && cfg.min_z && dT < cfg.min_z;
+                          const ignoreThicknessForLaser = processFlags.isLaser;
+                          const isTooThick = !ignoreThicknessForLaser && dim && hasThickness && cfg.max_z && dT > cfg.max_z;
+                          const isTooThin = !ignoreThicknessForLaser && dim && hasThickness && cfg.min_z && dT < cfg.min_z;
                           const maxSizeLabel = formatRulePairMm(cfg.max_x || 3048, cfg.max_y || 1524);
                           const minSizeLabel = formatRulePairMm(cfg.min_x || 6.3, cfg.min_y || 6.3);
                           const thicknessRangeLabel = formatRuleRangeMm(cfg.min_z || 0.5, cfg.max_z || 25.4);
@@ -2332,9 +2341,8 @@ const InstantPricing = () => {
                           if (isTooThin) lockReasons.push(`Part thickness ${dT.toFixed(3)} mm is below min ${parseFloat(cfg.min_z).toFixed(3)} mm.`);
                           if (isTooLarge) lockReasons.push(`Part size ${dL.toFixed(3)} × ${dW.toFixed(3)} mm exceeds process max ${parseFloat(cfg.max_x).toFixed(3)} × ${parseFloat(cfg.max_y).toFixed(3)} mm.`);
                           if (isTooSmall) lockReasons.push(`Part size ${dL.toFixed(3)} × ${dW.toFixed(3)} mm is below process minimum ${parseFloat(cfg.min_x).toFixed(3)} × ${parseFloat(cfg.min_y).toFixed(3)} mm.`);
-                          if (processFlags.isLaser && isLaserBlockedByBends) {
-                            lockReasons.push(`Detected ${bendCountTotal} bend(s). Laser cutting cannot produce formed bends.`);
-                          }
+                          // Do not lock Laser because of bends. Laser can cut the flat profile;
+                          // Bending is handled as an additional forming operation.
                           if (processFlags.isLaser && isLaserBlockedByNonFlatFeatures) {
                             const raisedCount = nonFlatFeatureInfo.raisedFeatureFaceCount;
                             const maxOffset = nonFlatFeatureInfo.maxOffsetMm;
@@ -2373,7 +2381,7 @@ const InstantPricing = () => {
                                         <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>Selected</span>
                                       </div>
                                     )}
-                                    {!isLocked && !isActive && processFlags.isCnc && (isLaserBlockedByBends || isLaserBlockedByNonFlatFeatures) && (
+                                    {!isLocked && !isActive && processFlags.isCnc && isLaserBlockedByNonFlatFeatures && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#eff6ff', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
                                         <Check size={11} color="#2563eb" strokeWidth={3} />
                                         <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase' }}>Recommended</span>
@@ -2513,8 +2521,10 @@ const InstantPricing = () => {
                           // For minimums
                           const isTooSmall = (mL < minXmm && mW < minXmm) || (mL < minYmm && mW < minYmm);
 
-                          const isTooThick = hasThickness && maxZmm && mT > maxZmm;
-                          const isTooThin = hasThickness && minZmm && mT < minZmm;
+                          const selectedProcessFlags = getProcessFlags(selectedProductionService?.title);
+                          const ignoreThicknessForLaserMaterial = selectedProcessFlags.isLaser;
+                          const isTooThick = !ignoreThicknessForLaserMaterial && hasThickness && maxZmm && mT > maxZmm;
+                          const isTooThin = !ignoreThicknessForLaserMaterial && hasThickness && minZmm && mT < minZmm;
 
                           const lockReasons = [];
                           if (isTooThick) lockReasons.push(`Part thickness ${mT.toFixed(3)} mm exceeds max ${maxZmm.toFixed(3)} mm.`);

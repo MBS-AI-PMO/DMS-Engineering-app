@@ -175,7 +175,7 @@ const PYTHON_REQUEST_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_REQUEST_TI
 const PYTHON_SYNC_UNFOLD_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_SYNC_UNFOLD_TIMEOUT_MS, 900_000);
 const PYTHON_STATUS_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_STATUS_TIMEOUT_MS, 120_000);
 const getPythonTimeoutMs = (subpath) => (subpath === '/unfold' ? PYTHON_SYNC_UNFOLD_TIMEOUT_MS : PYTHON_REQUEST_TIMEOUT_MS);
-const DETECT_HOLES_ENGINE_VERSION = 'v2-planar-loop-fallback';
+const DETECT_HOLES_ENGINE_VERSION = 'v3-laser-eligibility';
 const DETECT_HOLES_CACHE_TTL_MS = 8 * 60 * 1000;
 const DETECT_HOLES_CACHE_MAX = 256;
 const detectHolesCache = new Map();

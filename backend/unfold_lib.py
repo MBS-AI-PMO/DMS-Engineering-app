@@ -279,8 +279,47 @@ def _empty_non_flat_features():
         "hasRaisedFeatures": False,
         "raisedFeatureFaceCount": 0,
         "parallelPlanarFaceCount": 0,
+        "ignoredSheetFaceCount": 0,
         "maxOffsetMm": 0.0,
         "reasons": [],
+    }
+
+
+def _build_process_eligibility(non_flat_features=None, bend_count=0):
+    """
+    Process suitability summary consumed by the pricing UI.
+
+    Business rule:
+    - Laser is allowed for plain sheet profiles and sheet-metal parts with bends.
+    - Laser is blocked only when the model contains non-sheet 3D features
+      such as raised bosses, embosses, pockets, or other geometry that is not
+      part of the unfoldable sheet body.
+    - CNC remains the fallback for complex 3D geometry.
+    """
+    info = non_flat_features if isinstance(non_flat_features, dict) else _empty_non_flat_features()
+    has_3d_features = bool(info.get("hasRaisedFeatures"))
+    reasons = [str(r) for r in (info.get("reasons") or []) if r]
+    primary_reason = reasons[0] if reasons else "Detected non-sheet 3D features. Laser supports only sheet profiles and bends."
+    bend_count_int = int(bend_count or 0)
+
+    return {
+        "laser": {
+            "allowed": not has_3d_features,
+            "blocked": has_3d_features,
+            "supportsBends": True,
+            "bendCount": bend_count_int,
+            "bendCountIgnoredForLock": bend_count_int,
+            "lockReason": primary_reason if has_3d_features else "",
+            "reasons": reasons if has_3d_features else [
+                "Laser supports plain sheet profiles and sheet-metal bends; bends do not lock Laser."
+            ],
+        },
+        "cnc": {
+            "allowed": True,
+            "blocked": False,
+            "recommended": has_3d_features,
+            "reasons": ["CNC is recommended for complex 3D features."] if has_3d_features else [],
+        },
     }
 
 
@@ -309,13 +348,21 @@ def _empty_cnc_features():
     }
 
 
-def _detect_non_flat_features(fc_shape, root_idx, thickness):
+def _detect_non_flat_features(fc_shape, root_idx, thickness, sheet_face_indices=None):
     """
     Detect raised planar features (boss/emboss-like geometry) on otherwise flat sheet parts.
     Returns conservative metadata used by the frontend to lock laser-cut process selection.
     """
     result = _empty_non_flat_features()
     try:
+        sheet_face_set = set()
+        if sheet_face_indices:
+            try:
+                sheet_face_set = {int(i) for i in sheet_face_indices}
+            except Exception:
+                sheet_face_set = set()
+        result["ignoredSheetFaceCount"] = len(sheet_face_set)
+
         if root_idx is None or root_idx < 0 or root_idx >= len(fc_shape.Faces):
             return result
 
@@ -354,6 +401,11 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness):
 
         for fi, face in enumerate(fc_shape.Faces):
             if fi == root_idx:
+                continue
+            # Faces that belong to the unfoldable sheet graph are allowed for Laser.
+            # This is important for U/Z-channel parts where valid flanges may be
+            # parallel to the root face and offset by more than material thickness.
+            if fi in sheet_face_set:
                 continue
             if face.Surface.TypeId != "Part::GeomPlane":
                 continue
@@ -1362,6 +1414,7 @@ def unfold_with_lib(filepath, profile="full"):
             "bendEdges": [],
             "thickness": round(float(thickness), 4),
             "nonFlatFeatures": non_flat_features,
+            "processEligibility": _build_process_eligibility(non_flat_features, bend_count=0),
             "bendTree": None,
             "faceMeshes": {},
             "bends": [],
@@ -1803,7 +1856,15 @@ def unfold_with_lib(filepath, profile="full"):
     root_normal = root_face.normalAt(0,0)
     root_center = root_face.CenterOfMass
 
-    non_flat_features = _detect_non_flat_features(fc_shape, chosen_root, thickness)
+    # Ignore all faces that are part of the valid unfoldable sheet graph.
+    # Bends and flanges are sheet-metal geometry, not CNC-only 3D features.
+    sheet_face_indices = set(dg.nodes)
+    non_flat_features = _detect_non_flat_features(
+        fc_shape,
+        chosen_root,
+        thickness,
+        sheet_face_indices=sheet_face_indices,
+    )
     
     # 1. Move to origin
     global_align_m.move(root_center * -1.0)
@@ -2003,6 +2064,7 @@ def unfold_with_lib(filepath, profile="full"):
         "bendEdges": bend_edges_2d,
         "thickness": round(float(thickness), 4),
         "nonFlatFeatures": non_flat_features,
+        "processEligibility": _build_process_eligibility(non_flat_features, bend_count=len(bends_data)),
         "bendTree": root_node,
         "faceMeshes": face_meshes,
         "bends": bends_data,

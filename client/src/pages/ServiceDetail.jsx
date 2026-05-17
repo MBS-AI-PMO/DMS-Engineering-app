@@ -20,6 +20,44 @@ import { fetchServiceBySlug, fetchMetalsByServiceId, fetchAllHardwareWithItems, 
 import './ServiceDetail.css';
 import serviceHeroBg from '../assets/services/service-hero-bg.webp';
 
+const normalizeHeroImage = (value) => {
+    if (!value) return null;
+
+    if (typeof value === 'string') {
+        const src = value.trim().replace(/^"(.*)"$/, '$1');
+        return src ? { src } : null;
+    }
+
+    if (typeof value === 'object') {
+        return {
+            avif: value.avif || '',
+            webp: value.webp || '',
+            jpg: value.jpg || value.jpeg || value.png || '',
+            src: value.src || value.url || ''
+        };
+    }
+
+    return null;
+};
+
+const resolveServiceHero = (value) => {
+    const normalized = normalizeHeroImage(value);
+
+    if (!normalized) {
+        return {
+            avif: '',
+            webp: serviceHeroBg,
+            jpg: serviceHeroBg
+        };
+    }
+
+    return {
+        avif: normalized.avif || '',
+        webp: normalized.webp || normalized.src || serviceHeroBg,
+        jpg: normalized.jpg || normalized.src || normalized.webp || serviceHeroBg
+    };
+};
+
 const ServiceDetail = () => {
     // ... logic remains same ...
     const { slug } = useParams();
@@ -159,6 +197,7 @@ const ServiceDetail = () => {
             </div>
         );
     }
+    const heroSources = resolveServiceHero(service?.hero_image);
 
     // Safely parse service_options (may be a JSON string or already an array)
     const serviceOptions = (() => {
@@ -178,6 +217,20 @@ const ServiceDetail = () => {
         <div className="service-detail-page">
             {/* ── Hero Section ──────────────────────────────── */}
             <section className="service-hero">
+    <picture className="service-hero-bg">
+        {heroSources.avif && <source srcSet={heroSources.avif} type="image/avif" />}
+        {heroSources.webp && <source srcSet={heroSources.webp} type="image/webp" />}
+        <img
+            src={heroSources.jpg || heroSources.webp || serviceHeroBg}
+            alt=""
+            aria-hidden="true"
+            loading="eager"
+            decoding="async"
+        />
+    </picture>
+
+    <div className="service-hero-overlay"></div>
+
                 <div className="hero-content">
                     <nav className="detail-breadcrumb">
                         <Link to="/">Home</Link>

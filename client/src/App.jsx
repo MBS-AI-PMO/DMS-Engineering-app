@@ -43,6 +43,7 @@ import PricingCalculator from './pages/admin/PricingCalculator';
 import LaserRatesAdmin from './pages/admin/LaserRatesAdmin';
 import SheetCostRatesAdmin from './pages/admin/SheetCostRatesAdmin';
 import TermsAndPolicy from './pages/admin/TermsAndPolicy';
+import HeroSections from './pages/admin/HeroSections';
 
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -130,6 +131,15 @@ function App() {
                 <Route path="/admin/services" element={
                   <ProtectedRoute><AdminLayout><div className="px-desktop"><ServicesList /></div></AdminLayout></ProtectedRoute>
                 } />
+                <Route path="/admin/hero-sections" element={
+  <ProtectedRoute>
+    <AdminLayout>
+      <div className="px-desktop">
+        <HeroSections />
+      </div>
+    </AdminLayout>
+  </ProtectedRoute>
+} />
                 <Route path="/admin/services/new" element={
                   <ProtectedRoute><AdminLayout><div className="px-desktop"><ServiceEdit /></div></AdminLayout></ProtectedRoute>
                 } />

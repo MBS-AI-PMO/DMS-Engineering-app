@@ -22,7 +22,7 @@ async function request(url, options = {}) {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error || `API error: ${response.status}`);
+        throw new Error(data.error || `API   error: ${response.status}`);
     }
     return data;
 }
@@ -216,6 +216,37 @@ export async function uploadServiceImage(file) {
         method: 'POST',
         body: formData,
         headers: {} // Let fetch set the boundary
+    });
+}
+
+// ── Admin: Hero Sections ───────────────────────────────
+
+export async function fetchHeroSections() {
+    const { data } = await request('/hero-sections/admin');
+    return data;
+}
+
+export async function uploadHeroSectionImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    return request('/hero-sections/admin/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {}
+    });
+}
+
+export async function updateHeroSection(serviceId, heroImage) {
+    return request(`/hero-sections/admin/${serviceId}`, {
+        method: 'PUT',
+        body: { hero_image: heroImage }
+    });
+}
+
+export async function deleteHeroSection(serviceId) {
+    return request(`/hero-sections/admin/${serviceId}`, {
+        method: 'DELETE'
     });
 }
 

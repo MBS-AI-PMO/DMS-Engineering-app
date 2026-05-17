@@ -102,6 +102,18 @@ async function migrate() {
         `);
         console.log('  ✓ services table');
 
+        // Hero sections table for service detail pages
+await db.query(`
+    CREATE TABLE IF NOT EXISTS hero_sections (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER UNIQUE NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+        hero_image JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+`);
+console.log('  ✓ hero_sections table');
+
         // Email config table
         await db.query(`
             CREATE TABLE IF NOT EXISTS email_config (
@@ -229,7 +241,18 @@ async function migrate() {
         `);
 
         // Apply triggers
-        const tablesWithUpdatedAt = ['users', 'metals', 'metal_categories', 'faq_categories', 'faqs', 'email_config', 'service_configs', 'metal_configs', 'orders'];
+        const tablesWithUpdatedAt = [
+    'users',
+    'metals',
+    'metal_categories',
+    'faq_categories',
+    'faqs',
+    'email_config',
+    'service_configs',
+    'metal_configs',
+    'orders',
+    'hero_sections'
+];
         for (const table of tablesWithUpdatedAt) {
             await db.query(`
                 DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table};

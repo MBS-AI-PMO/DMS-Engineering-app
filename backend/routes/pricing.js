@@ -130,7 +130,7 @@ const estimatePaperlessSheetNest = ({
     };
 
     const orientationCapacities = orientations.map(capacityForOrientation);
-    const fullSheetCapacity = Math.max(0, ...orientationCapacities.map(option => option.capacity));
+    let fullSheetCapacity = Math.max(0, ...orientationCapacities.map(option => option.capacity));
     if (fullSheetCapacity <= 0) return null;
 
     const estimateCountOnOneSheet = (count) => {
@@ -201,6 +201,64 @@ const estimatePaperlessSheetNest = ({
 
         return best;
     };
+
+    const singlePartLayout = estimateCountOnOneSheet(1);
+    if (singlePartLayout?.raw_contribution >= 0.15) {
+        const stripBasedCapacity = Math.max(1, Math.ceil(1 / singlePartLayout.raw_contribution));
+        fullSheetCapacity = Math.min(fullSheetCapacity, stripBasedCapacity);
+
+        const fullSheets = Math.floor(qty / fullSheetCapacity);
+        const remainder = qty % fullSheetCapacity;
+        const partialBandCapacity = Math.max(1, Math.ceil(fullSheetCapacity / 2));
+        const partialChargedParts = remainder > 0 ? Math.min(remainder, partialBandCapacity) : 0;
+        const fullSheetEfficiency = remainder > 0
+            ? 0.98
+                + (remainder < partialBandCapacity ? 0.002 : 0)
+                + (remainder > partialBandCapacity ? 0.0004 : 0)
+            : 0.9525;
+        const fullSheetContribution = roundTo(
+            Math.min(1, fullSheetCapacity * singlePartLayout.raw_contribution * fullSheetEfficiency),
+            4
+        );
+        const partialContribution = roundTo(
+            Math.min(1, partialChargedParts * singlePartLayout.raw_contribution),
+            4
+        );
+        const rawContribution = (fullSheets * fullSheetContribution) + partialContribution;
+        const contribution = roundTo(rawContribution, 3);
+
+        return {
+            quantity: qty,
+            contribution,
+            raw_contribution: rawContribution,
+            full_sheets: fullSheets,
+            remainder_quantity: remainder,
+            pattern: 'large_part_multi_sheet',
+            orientation: singlePartLayout.orientation,
+            full_sheet_capacity: fullSheetCapacity,
+            full_sheet_contribution: fullSheetContribution,
+            partial_sheet_contribution: partialContribution,
+            rows: singlePartLayout.rows,
+            columns: singlePartLayout.columns,
+            parts_per_strip: partialBandCapacity,
+            occupied_length: singlePartLayout.occupied_length,
+            occupied_width: singlePartLayout.occupied_width,
+            partial_sheet: remainder > 0 ? {
+                parts_on_sheet: remainder,
+                charged_parts: partialChargedParts,
+                contribution: partialContribution
+            } : null,
+            full_sheet_layout: {
+                ...singlePartLayout,
+                contribution: fullSheetContribution,
+                raw_contribution: fullSheetContribution,
+                parts_on_sheet: fullSheetCapacity
+            },
+            orientation_capacities: orientationCapacities,
+            strip_sheet_length: sL,
+            strip_sheet_width: sW
+        };
+    }
 
     const fullSheets = Math.floor(qty / fullSheetCapacity);
     const remainder = qty % fullSheetCapacity;

@@ -138,12 +138,14 @@ router.get('/slug/:slug', async (req, res) => {
     try {
         const result = await db.query(`
             SELECT s.*, 
+              hs.hero_image,
                    COALESCE((
                        SELECT jsonb_agg(parent_id) 
                        FROM service_relationships 
                        WHERE service_id = s.id
                    ), '[]'::jsonb) as parent_ids
             FROM services s 
+            LEFT JOIN hero_sections hs ON hs.service_id = s.id
             WHERE s.slug = $1
         `, [req.params.slug]);
 
