@@ -1393,6 +1393,7 @@ def unfold_with_lib(filepath, profile="full"):
     
     # Sort by area descending
     potential_roots.sort(key=lambda x: -x["area"])
+    largest_planar_area = float(potential_roots[0]["area"]) if potential_roots else 0.0
     
     chosen_root = potential_roots[0]["index"] # Fallback to largest
 
@@ -1400,12 +1401,15 @@ def unfold_with_lib(filepath, profile="full"):
     # Very thick/bent solids can have larger side faces than their true top/bottom
     # skins; choosing only by area makes the 2D flat view unfold the wrong surface.
     thin_axis_idx = None
+    model_min_span = 0.0
     try:
         bb = fc_shape.BoundBox
         spans = [float(bb.XLength), float(bb.YLength), float(bb.ZLength)]
+        model_min_span = min(span for span in spans if span > 1e-6)
         thin_axis_idx = int(np.argmin(np.asarray(spans, dtype=float)))
     except Exception:
         thin_axis_idx = None
+        model_min_span = 0.0
 
     best_thin_axis_pair = None
     best_thin_axis_score = -1.0
@@ -1440,13 +1444,18 @@ def unfold_with_lib(filepath, profile="full"):
     
     success = False
     last_error = None
+    best_unfold_state = None
+    best_unfold_score = -1
     
-    # Try multiple planar faces as potential roots if the first one fails (cap at 5)
+    # Try multiple planar faces as potential roots.  Do not accept the first
+    # non-crashing root blindly: for formed parts, a projected skin face can
+    # return a valid but useless "flat" with zero bends while a later root
+    # unfolds the real bend chain.
     root_candidates = [chosen_root] + [p["index"] for p in potential_roots if p["index"] != chosen_root]
     
-    for root_idx in root_candidates[:5]:
+    for candidate_idx, root_idx in enumerate(root_candidates[:10]):
         try:
-            emit_progress(20 + (root_candidates.index(root_idx) * 4), f"Evaluating unfold root {root_idx}")
+            emit_progress(20 + (candidate_idx * 4), f"Evaluating unfold root {root_idx}")
             # Adjacency and Thickness
             print(f"[Debug] Testing root {root_idx} (area {fc_shape.Faces[root_idx].Area:.2f})", file=sys.stderr)
             root_face = fc_shape.Faces[root_idx]
@@ -1456,6 +1465,21 @@ def unfold_with_lib(filepath, profile="full"):
             print(f"[Debug] Graph built with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges", file=sys.stderr)
             thickness = _estimate_sheet_thickness(fc_shape, root_idx)
             print(f"[Debug] Detected thickness: {thickness}", file=sys.stderr)
+            min_plausible_thickness = 0.05
+            if thickness <= min_plausible_thickness:
+                print(
+                    f"[Debug] Root {root_idx} rejected: detected thickness {thickness:.6f} "
+                    f"is below plausible sheet thickness {min_plausible_thickness:.3f}",
+                    file=sys.stderr,
+                )
+                continue
+            if model_min_span > 0 and thickness > (model_min_span * 1.75):
+                print(
+                    f"[Debug] Root {root_idx} rejected: detected thickness {thickness:.3f} "
+                    f"exceeds plausible sheet span {model_min_span:.3f}",
+                    file=sys.stderr,
+                )
+                continue
             bac = BendAllowanceCalculator.from_single_value(0.44) # Standard K-factor
             
             # Spanning Tree
@@ -1721,17 +1745,57 @@ def unfold_with_lib(filepath, profile="full"):
             sys.stderr.write(f"[Profiling] Unfold traversal: {time.time() - t_unfold_start:.3f}s\n")
             emit_progress(62, "Generating flat pattern geometry")
             
-            # If we reach here without exception, this root worked!
-            chosen_root = root_idx
-            success = True
-            break
+            real_bend_count = sum(
+                1 for node_id in dg.nodes
+                if dg.nodes[node_id].get("is_real_bend", False)
+            )
+            min_bend_root_area = max(50.0, largest_planar_area * 0.02)
+            if real_bend_count > 0 and root_area < min_bend_root_area:
+                sys.stderr.write(
+                    f"[Debug] Root {root_idx} rejected: bend root area {root_area:.1f} "
+                    f"is too small for primary sheet root threshold {min_bend_root_area:.1f}\n"
+                )
+                continue
+
+            unfold_score = (real_bend_count * 10000) + dg.number_of_nodes()
+            if unfold_score > best_unfold_score:
+                best_unfold_score = unfold_score
+                best_unfold_state = {
+                    "root_idx": root_idx,
+                    "dg": dg,
+                    "thickness": thickness,
+                    "real_bend_count": real_bend_count,
+                    "graph_nodes": dg.number_of_nodes(),
+                }
+
+            if real_bend_count > 0:
+                sys.stderr.write(
+                    f"[Debug] Selected root {root_idx}: "
+                    f"{real_bend_count} real bend(s), {dg.number_of_nodes()} graph node(s)\n"
+                )
+                break
+
+            sys.stderr.write(
+                f"[Debug] Root {root_idx} produced no real bends; "
+                f"continuing root search\n"
+            )
         except Exception as e:
             last_error = f"{str(e)}\n{traceback.format_exc()}"
             sys.stderr.write(f"[Debug] Root {root_idx} failed: {last_error}\n")
             continue
             
-    if not success:
+    if best_unfold_state is None:
         raise RuntimeError(f"Could not find a valid root face for unfolding. Last error: {last_error}")
+
+    chosen_root = best_unfold_state["root_idx"]
+    dg = best_unfold_state["dg"]
+    thickness = best_unfold_state["thickness"]
+    success = True
+    if best_unfold_state["real_bend_count"] == 0:
+        sys.stderr.write(
+            f"[Debug] Falling back to best non-bend root {chosen_root}: "
+            f"{best_unfold_state['graph_nodes']} graph node(s)\n"
+        )
 
     # 4. Calulate Global Alignment (to ensure the root face is parallel to XY plane)
     global_align_m = Matrix()
@@ -1854,7 +1918,7 @@ def unfold_with_lib(filepath, profile="full"):
 
         return tree_node
 
-    root_node = build_frontend_tree(root_idx)
+    root_node = build_frontend_tree(chosen_root)
 
     # Keep only boundary segments in the flat cut profile.
     # Shared segments are internal seams between unfolded faces and should not be shown as cut lines.

@@ -2723,8 +2723,9 @@ const InstantPricing = () => {
                             const minFinishUpcharge = serviceOptions.length > 0
                               ? Math.min(...serviceOptions.map(opt => parseFloat(opt.price || 0) || 0))
                               : 0;
+                            const finishPrice = selectedFinish ? selectedFinishUpcharge : minFinishUpcharge;
                             const displayServicePrice = kind === 'finish'
-                              ? baseServicePrice + (selectedFinish ? selectedFinishUpcharge : minFinishUpcharge)
+                              ? (finishPrice > 0 ? finishPrice : baseServicePrice)
                               : baseServicePrice;
                             const shouldShowPriceBadge = !isUnsupported
                               && displayServicePrice > 0
@@ -2949,7 +2950,13 @@ const InstantPricing = () => {
 
                       {(() => {
                         const rows = priceEstimate?.breakdown?.service_breakdown || [];
-                        if (rows.length === 0) return null;
+                        const markupRows = [
+                          { name: 'Material Markup', amount: priceEstimate?.breakdown?.material_markup_amount },
+                          { name: 'Inside Labor Markup', amount: priceEstimate?.breakdown?.inside_labor_markup_amount },
+                          { name: 'Overhead Markup', amount: priceEstimate?.breakdown?.overhead_markup_amount },
+                          { name: 'General Markup', amount: priceEstimate?.breakdown?.general_markup_amount },
+                        ].filter(row => (parseFloat(row.amount || 0) || 0) > 0.001);
+                        if (rows.length === 0 && markupRows.length === 0) return null;
                         return (
                           <div style={{ paddingBottom: 12 }}>
                             {rows.map((r, i) => (
@@ -2959,7 +2966,24 @@ const InstantPricing = () => {
                                 </div>
                                 {isCalculatingPrice
                                   ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
-                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(((parseFloat(r.price) || 0) * quantity) || 0).toFixed(2)}</span>
+                                  : (
+                                    <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>
+                                      ${((r.pricing_mode === 'fixed_total'
+                                        ? (parseFloat(r.price) || 0)
+                                        : ((parseFloat(r.price) || 0) * quantity)) || 0).toFixed(2)}
+                                    </span>
+                                  )
+                                }
+                              </div>
+                            ))}
+                            {markupRows.map((r) => (
+                              <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
+                                </div>
+                                {isCalculatingPrice
+                                  ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
+                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(parseFloat(r.amount || 0) || 0).toFixed(2)}</span>
                                 }
                               </div>
                             ))}

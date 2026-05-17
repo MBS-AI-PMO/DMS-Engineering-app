@@ -28,6 +28,13 @@ const getConfigNumber = (config, keys, fallback = 0) => {
     return fallback;
 };
 
+const roundTo = (value, decimals = 2) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    const factor = 10 ** decimals;
+    return Math.round(number * factor) / factor;
+};
+
 const parseBooleanSetting = (value, fallback = true) => {
     if (value === undefined || value === null || value === '') return fallback;
     if (typeof value === 'boolean') return value;
@@ -49,10 +56,13 @@ const calculateSheetNestOption = ({
     edgeBuffer,
     partBuffer,
     kerfWidth,
-    quantity
+    quantity,
+    nest,
+    minimumSheetContribution = 0
 }) => {
     const cost = toFiniteNumber(sheetCost);
     if (cost <= 0) return null;
+    const qty = Math.max(1, parseFloat(quantity) || 1);
 
     const sL = Math.max(sheetLength, sheetWidth);
     const sW = Math.min(sheetLength, sheetWidth);
@@ -75,7 +85,36 @@ const calculateSheetNestOption = ({
     });
 
     const bestOrientation = orientations.sort((a, b) => b.parts_per_sheet - a.parts_per_sheet)[0];
-    const pps = bestOrientation?.parts_per_sheet || 0;
+    let pps = bestOrientation?.parts_per_sheet || 0;
+    let sheetsByComponent = pps > 0 ? roundTo(qty / pps, 2) : 0;
+    let sheetsForNest = 0;
+    let usesSheetNest = false;
+
+    if (nest && typeof nest === 'object') {
+        const contributionPct = toFiniteNumber(nest.contribution_pct ?? nest.contributionPercent);
+        const totalSheetsUsed = toFiniteNumber(nest.total_sheets_used ?? nest.totalSheetsUsed);
+        const totalSheetsPurchased = toFiniteNumber(nest.total_sheets_purchased ?? nest.totalSheetsPurchased);
+        const sheetContribution = contributionPct * totalSheetsUsed;
+
+        if (sheetContribution > 0) {
+            usesSheetNest = true;
+            pps = roundTo(qty / sheetContribution, 1);
+            sheetsByComponent = roundTo(sheetContribution, 4);
+            sheetsForNest = roundTo(totalSheetsPurchased, 4);
+        }
+    }
+
+    const minContribution = Math.max(0, toFiniteNumber(minimumSheetContribution));
+    let isMinimumSheetContribution = false;
+    if (!usesSheetNest && minContribution > 0 && minContribution > sheetsByComponent) {
+        isMinimumSheetContribution = true;
+        sheetsByComponent = roundTo(minContribution, 4);
+        pps = sheetsByComponent > 0 ? qty / sheetsByComponent : 0;
+    }
+
+    const materialTotalCost = pps > 0
+        ? (usesSheetNest ? cost * sheetsByComponent : (cost / pps) * qty)
+        : 0;
 
     return {
         sheet_label: label,
@@ -96,9 +135,14 @@ const calculateSheetNestOption = ({
         x_count: bestOrientation?.x_count || 0,
         y_count: bestOrientation?.y_count || 0,
         parts_per_sheet: pps,
-        sheets_for_quantity: pps > 0 ? quantity / pps : 0,
-        material_unit_cost: pps > 0 ? cost / pps : 0,
-        material_total_cost: pps > 0 ? (cost / pps) * quantity : 0,
+        is_using_sheet_nest: usesSheetNest,
+        sheets_for_quantity: sheetsByComponent,
+        number_of_sheets_by_component: sheetsByComponent,
+        number_of_sheets_for_nest: sheetsForNest,
+        is_estimated_sheet_nest: usesSheetNest && !(nest && typeof nest === 'object'),
+        is_minimum_sheet_contribution: isMinimumSheetContribution,
+        material_unit_cost: qty > 0 ? materialTotalCost / qty : 0,
+        material_total_cost: materialTotalCost,
         orientations
     };
 };
@@ -1109,6 +1153,8 @@ router.post('/calculate', async (req, res) => {
 
     try {
         const qty = parseInt(quantity) || 1;
+        const techData = req.body.technical_data || {};
+        const sheetNestData = techData.sheetNest || techData.sheet_nest || techData.nest || null;
         const lengthInNum = toFiniteNumber(length_in);
         const heightInNum = toFiniteNumber(height_in);
         const thicknessInNum = toFiniteNumber(thickness_value);
@@ -1141,6 +1187,17 @@ router.post('/calculate', async (req, res) => {
         const metalConfig = metalConfigRes.rows[0] || null;
         const config = mainService?.pricing_config || {};
         const pricingWarnings = [];
+        const materialPricingSettingsRes = await db.query(
+            "SELECT key, value FROM site_settings WHERE key IN ('minimum_sheet_contribution_percent')"
+        );
+        const materialPricingSettings = {};
+        materialPricingSettingsRes.rows.forEach(r => {
+            materialPricingSettings[r.key] = toFiniteNumber(r.value);
+        });
+        const minimumSheetContribution = Math.max(
+            0,
+            materialPricingSettings.minimum_sheet_contribution_percent || 0
+        ) / 100;
 
         const metalValidationError = validateMetalBounds({
             metal,
@@ -1226,7 +1283,9 @@ router.post('/calculate', async (req, res) => {
                         edgeBuffer: EDGE_BUFFER,
                         partBuffer: PART_BUFFER,
                         kerfWidth: KERF_WIDTH,
-                        quantity: qty
+                        quantity: qty,
+                        nest: sheetNestData,
+                        minimumSheetContribution
                     })
                 ].filter(Boolean);
 
@@ -1253,7 +1312,6 @@ router.post('/calculate', async (req, res) => {
 
         // ── MAIN SERVICE COST ──────────────────────────────────────────────────
         let main_service_cost = 0;
-        const techData = req.body.technical_data || {};
         let bending_breakdown = null;
         let skipMainServiceFallback = false;
 
@@ -1424,6 +1482,7 @@ router.post('/calculate', async (req, res) => {
                 let sName = s.title;
 
                 const isPowder = sTitleLower.includes('powder') || sTitleLower.includes('coating');
+                const isOptionPricedFinish = sTitleLower.includes('anodiz') || sTitleLower.includes('plating');
 
                 // ── POWDER COATING (powder coating.csv) ──────────────────────
                 // Two orientations tried; use the one that fits more parts per batch.
@@ -1487,7 +1546,10 @@ router.post('/calculate', async (req, res) => {
                         // For Powder Coating, the enging covers the cost. 
                         // For others (Anodizing, etc.), they might have a fixed price surcharge.
                         if (!isPowder) {
-                            sPrice += parseFloat(opt.price || 0);
+                            const optionPrice = parseFloat(opt.price || 0) || 0;
+                            sPrice = isOptionPricedFinish && optionPrice > 0
+                                ? optionPrice
+                                : sPrice + optionPrice;
                         }
                     }
                 }
@@ -1513,7 +1575,8 @@ router.post('/calculate', async (req, res) => {
                     service_id: s.id,
                     base_name: s.title,
                     name: sName,
-                    price: sPrice
+                    price: sPrice,
+                    pricing_mode: isOptionPricedFinish ? 'fixed_total' : 'per_unit'
                 });
             }
         }
@@ -1561,46 +1624,69 @@ router.post('/calculate', async (req, res) => {
         const markupServices = Array.isArray(settings.markup_enabled_services) ? settings.markup_enabled_services : [];
         const discountsEnabled = parseBooleanSetting(settings.discounts_enabled, true);
 
-        // Factors
-        const material_factor = 1 + matMU / 100;
-        const inside_factor = 1 + (genMU + insMU + ovhMU) / 100;
+        const isMarkupEnabledFor = (name) => markupServices.includes(name);
 
-        // Apply markup selectively to Main Service
-        const applyToMain = markupServices.includes(mainService?.title);
-        const main_mu_factor = applyToMain ? inside_factor : 1;
+        // Paperless-style costing: first compute raw cost buckets, then add
+        // markups as pricing rows against their intended buckets.
+        const raw_material_total = material_cost * qty;
+        const raw_production_total = main_service_cost * qty;
+        const material_markup_amount = raw_material_total * (matMU / 100);
+        const production_markup_amount = isMarkupEnabledFor(mainService?.title)
+            ? raw_production_total * (insMU / 100)
+            : 0;
 
-        const material_marked_up = material_cost * material_factor;
-        const material_markup_amount = Math.max(0, material_marked_up - material_cost);
-        const production_marked_up = main_service_cost * main_mu_factor;
+        const material_marked_up = raw_material_total + material_markup_amount;
+        const production_marked_up = raw_production_total + production_markup_amount;
 
         const marked_service_breakdown = [];
-        let total_sub_services_marked_up = 0;
+        let total_sub_services_raw = 0;
+        let fixed_sub_services_raw = 0;
+        let service_markup_amount = 0;
 
         // 1. Add Main Service (e.g. Laser Cutting)
-        if (production_marked_up > 0.001) {
+        if (main_service_cost > 0.001) {
             marked_service_breakdown.push({
                 name: mainService?.title || 'Production',
-                price: production_marked_up
+                price: main_service_cost,
+                pricing_mode: 'per_unit',
+                markup_amount: production_markup_amount,
+                price_with_markup: qty > 0 ? production_marked_up / qty : main_service_cost
             });
         }
 
         // 2. Add existing labor items (Bending, Tapping, Hardware, etc.)
         for (const item of service_breakdown) {
-            const applyToSvc = markupServices.includes(item.base_name || item.name) || markupServices.includes(item.name);
-            const svc_mu_factor = applyToSvc ? inside_factor : 1;
-            const price_mu = item.price * svc_mu_factor;
+            const applyToSvc = isMarkupEnabledFor(item.base_name || item.name) || isMarkupEnabledFor(item.name);
+            const isFixedTotal = item.pricing_mode === 'fixed_total';
+            const rawTotal = isFixedTotal ? item.price : item.price * qty;
+            const itemMarkup = applyToSvc ? rawTotal * (insMU / 100) : 0;
 
-            if (price_mu > 0.001) {
-                total_sub_services_marked_up += price_mu;
+            if (item.price > 0.001) {
+                if (isFixedTotal) {
+                    fixed_sub_services_raw += item.price;
+                } else {
+                    total_sub_services_raw += item.price * qty;
+                }
+                service_markup_amount += itemMarkup;
                 marked_service_breakdown.push({
                     name: item.name,
-                    price: price_mu
+                    price: item.price,
+                    pricing_mode: item.pricing_mode || 'per_unit',
+                    markup_amount: itemMarkup,
+                    price_with_markup: isFixedTotal
+                        ? item.price + itemMarkup
+                        : item.price + (qty > 0 ? itemMarkup / qty : 0)
                 });
             }
         }
 
-        let unit_total = material_marked_up + production_marked_up + total_sub_services_marked_up;
-        const subtotal_before_discount = Number.isFinite(unit_total * qty) ? (unit_total * qty) : 0;
+        const inside_labor_markup_amount = production_markup_amount + service_markup_amount;
+        const total_estimated_cost = raw_material_total + raw_production_total + total_sub_services_raw + fixed_sub_services_raw;
+        const overhead_markup_amount = total_estimated_cost * (ovhMU / 100);
+        const general_markup_amount = total_estimated_cost * (genMU / 100);
+        const total_markup_amount = material_markup_amount + inside_labor_markup_amount + overhead_markup_amount + general_markup_amount;
+        const subtotal_before_discount = total_estimated_cost + total_markup_amount;
+        let unit_total = qty > 0 ? subtotal_before_discount / qty : subtotal_before_discount;
 
         // ── QUANTITY DISCOUNTS ────────────────────────────────────────────────
         let discount_percent = 0;
@@ -1632,11 +1718,16 @@ router.post('/calculate', async (req, res) => {
 
         console.log('[Debug] Price Calculation:', {
             material_raw: material_cost,
-            material: material_marked_up,
+            material: raw_material_total,
             material_markup_amount,
-            production: production_marked_up,
-            sub_services: total_sub_services_marked_up,
-            additional_services: total_sub_services_marked_up,
+            production: raw_production_total,
+            production_markup_amount,
+            sub_services: total_sub_services_raw,
+            fixed_sub_services: fixed_sub_services_raw,
+            inside_labor_markup_amount,
+            overhead_markup_amount,
+            general_markup_amount,
+            additional_services: total_sub_services_raw + fixed_sub_services_raw,
             unit_total,
             subtotal_before_discount,
             final_unit_price,
@@ -1657,11 +1748,25 @@ router.post('/calculate', async (req, res) => {
             lead_days: lead_days || 0,
             breakdown: {
                 material_cost,
-                material_cost_with_markup: material_marked_up,
+                material_total_cost: raw_material_total,
+                material_cost_with_markup: qty > 0 ? material_marked_up / qty : material_marked_up,
+                material_total_with_markup: material_marked_up,
                 material_markup_percent: matMU,
                 material_markup_amount,
-                production_cost: production_marked_up,
-                additional_services_cost: total_sub_services_marked_up,
+                production_cost: main_service_cost,
+                production_total_cost: raw_production_total,
+                production_markup_amount,
+                additional_services_cost: total_sub_services_raw + fixed_sub_services_raw,
+                additional_services_unit_cost: total_sub_services_raw,
+                additional_services_fixed_total: fixed_sub_services_raw,
+                inside_labor_markup_percent: insMU,
+                inside_labor_markup_amount,
+                overhead_markup_percent: ovhMU,
+                overhead_markup_amount,
+                general_markup_percent: genMU,
+                general_markup_amount,
+                total_estimated_cost,
+                total_markup_amount,
                 service_breakdown: marked_service_breakdown,
                 unit_total,
                 subtotal_before_discount,

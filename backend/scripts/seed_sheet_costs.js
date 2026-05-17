@@ -14,9 +14,6 @@ Aluminum	10	0	0.13	0.137
 Aluminum	11	283	0.117	0.125
 Aluminum	12	220	0.096	0.11
 Aluminum	14	180	0.072	0.085
-Aluminum	11	283	0.117	0.125
-Aluminum	12	220	0.096	0.11
-Aluminum	14	180	0.072	0.085
 Aluminum	16	115	0.058	0.065
 Aluminum	250	650	0.25	0.25
 Aluminum	18	0	0.043	0.053
