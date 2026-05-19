@@ -27,6 +27,7 @@ const orderRoutes = require('./routes/orders');
 const hardwareRoutes = require('./routes/hardware');
 const paymentRoutes = require('./routes/payment');
 const legalRoutes = require('./routes/legal');
+const heroSectionsRoutes = require('./routes/heroSections');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -88,6 +89,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/legal', legalRoutes);
+app.use('/api/hero-sections', heroSectionsRoutes);
 
 // Global Error Handler for Multer errors
 app.use((err, req, res, next) => {
