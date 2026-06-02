@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict zW4RBxZctzuv5qgRA3SKi53KtGazokJfeQsZa4jgYpi0fSV8abk5BFyC3kkFRWE
+\restrict s3IvxhibadTFdBAUDeO27PFW4NTPTHNxVaAgBmcEX6YA2tXhGVaektNz1ba4Pwd
 
 -- Dumped from database version 15.16
 -- Dumped by pg_dump version 18.3
@@ -1694,12 +1694,13 @@ COPY public.site_settings (key, value, updated_at) FROM stdin;
 hero_image	{"jpg": "/uploads/logos/logo_1776340546207.jpg", "avif": "/uploads/logos/logo_1776340546207.avif", "webp": "/uploads/logos/logo_1776340546207.webp"}	2026-04-16 11:56:31.273696
 navbar_logo	"/uploads/logos/logo_1775941995141.png"	2026-04-11 21:13:15.145781
 discounts_enabled	false	2026-05-17 06:34:11.124177
+footer_contact	{"email": "adnan@dynmfgsol.com", "phone": "+1(347)553 7830", "address": "10723 Colewood ln Dallas Texas, 75243"}	2026-06-02 11:30:41.784181
+social_links	[{"url": "https://linkedin.com", "enabled": true, "platform": "linkedin"}, {"url": "https://facebook.com", "enabled": true, "platform": "facebook"}, {"url": "https://instagram.com", "enabled": true, "platform": "instagram"}]	2026-06-02 11:30:42.053992
+top_metals	[{"name": "5052 H32 ALUMINUM", "slug": "5052-h32-aluminum"}, {"name": "G90 STEEL", "slug": "g90-steel"}, {"name": "7075 T6 ALUMINUM", "slug": "7075-t6-aluminum"}, {"name": "6061 T6 ALUMINUM", "slug": "6061-t6-aluminum"}, {"name": "STAINLESS STEEL (304)", "slug": "stainless-steel-304"}, {"name": "STAINLESS STEEL (316)", "slug": "stainless-steel-316"}, {"name": "HOT ROLLED (A36)", "slug": "hot-rolled-a36"}]	2026-06-02 11:30:42.296509
+show_service_breakdown	false	2026-06-02 11:30:42.771546
 minimum_sheet_contribution_percent	0	2026-05-17 08:12:26.576297
 footer_logo	"/uploads/logos/logo_1775941956093.png"	2026-04-11 21:12:36.112037
 site_logo	"/uploads/logos/logo_1775941969264.png"	2026-04-11 21:12:49.281278
-footer_contact	{"email": "adnan@dynmfgsol.com", "phone": "+1(347)553 7830", "address": "10723 Colewood ln Dallas Texas, 75243"}	2026-05-16 19:45:24.699104
-social_links	[{"url": "https://linkedin.com", "enabled": true, "platform": "linkedin"}, {"url": "https://facebook.com", "enabled": true, "platform": "facebook"}, {"url": "https://instagram.com", "enabled": true, "platform": "instagram"}]	2026-05-16 19:45:24.746512
-top_metals	[{"name": "5052 H32 ALUMINUM", "slug": "5052-h32-aluminum"}, {"name": "G90 STEEL", "slug": "g90-steel"}, {"name": "7075 T6 ALUMINUM", "slug": "7075-t6-aluminum"}, {"name": "6061 T6 ALUMINUM", "slug": "6061-t6-aluminum"}, {"name": "STAINLESS STEEL (304)", "slug": "stainless-steel-304"}, {"name": "STAINLESS STEEL (316)", "slug": "stainless-steel-316"}, {"name": "HOT ROLLED (A36)", "slug": "hot-rolled-a36"}]	2026-05-16 19:45:24.800717
 inside_labor_markup	30	2026-05-17 21:07:42.763624
 overhead_markup	10	2026-05-17 21:07:42.767968
 general_markup	25	2026-05-17 21:07:42.768634
@@ -1835,7 +1836,7 @@ SELECT pg_catalog.setval('public.quantity_discounts_id_seq', 26, true);
 -- Name: service_configs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.service_configs_id_seq', 76515, true);
+SELECT pg_catalog.setval('public.service_configs_id_seq', 76519, true);
 
 
 --
@@ -2409,5 +2410,5 @@ ALTER TABLE ONLY public.services
 -- PostgreSQL database dump complete
 --
 
-\unrestrict zW4RBxZctzuv5qgRA3SKi53KtGazokJfeQsZa4jgYpi0fSV8abk5BFyC3kkFRWE
+\unrestrict s3IvxhibadTFdBAUDeO27PFW4NTPTHNxVaAgBmcEX6YA2tXhGVaektNz1ba4Pwd
 

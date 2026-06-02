@@ -66,3 +66,8 @@ $info = Get-Item $backupFile
 Write-Host ("Backup updated: {0} ({1} bytes) {2}" -f $info.FullName, $info.Length, $info.LastWriteTime)
 
 # .\db_backup_script.ps1
+
+# chmod +x deploy-backend.sh
+# sudo ./deploy-backend.sh ~/backend.zip
+# chmod +x deploy-frontend.sh
+# ./deploy-frontend.sh ~/frontend.zip
