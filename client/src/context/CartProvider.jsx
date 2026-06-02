@@ -67,6 +67,18 @@ export const CartProvider = ({ children }) => {
     });
   };
 
+  const addManyToCart = (items = []) => {
+    setCartItems(prev => {
+      const now = Date.now();
+      const newItems = items.map((item, index) => ({
+        ...item,
+        cartId: now + index + Math.random(),
+        quantity: item.quantity || 1
+      }));
+      return [...prev, ...newItems];
+    });
+  };
+
   const removeFromCart = (cartId) => {
     setCartItems(prev => prev.filter(item => item.cartId !== cartId));
   };
@@ -186,6 +198,7 @@ export const CartProvider = ({ children }) => {
       cartItems,
       allDiscounts,
       addToCart,
+      addManyToCart,
       removeFromCart,
       updateQuantity,
       clearCart,

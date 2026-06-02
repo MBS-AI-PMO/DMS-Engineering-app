@@ -13,7 +13,6 @@ import {
   fetchCncPricingConfig, fetchMetalsByServiceId
 } from '../utils/api';
 import { useCart } from '../context/CartContext.js';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import StepModelViewer from '../components/viewer/StepModelViewer';
 import DxfModelViewer from '../components/viewer/DxfModelViewer';
@@ -21,6 +20,7 @@ import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
 import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
 import PricingSidebar from '../components/pricing/PricingSidebar';
 import { wrinkleSwatchStyle } from '../utils/wrinkleTexture';
+import { analyzeDxfFile } from '../utils/dxfAnalysis';
 import '../styles/PremiumPricing.css';
 
 const BACKEND_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -95,10 +95,323 @@ const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
 );
 
+const makeEmptyQuoteConfig = () => ({
+  productionService: null,
+  category: null,
+  metal: null,
+  selectedThickness: null,
+  selectedAdditionalServices: [],
+  selectedFinishColors: {},
+  selectedTaps: {},
+  selectedHardware: {},
+  selectedCountersinks: {},
+  selectedBends: {},
+  quantity: 1,
+  configStep: 0,
+});
+
+const makeEmptyQuoteAnalysis = () => ({
+  dimensions: null,
+  dxfSvg: null,
+  dxfTechData: null,
+  backendData: null,
+  bendTree: null,
+  detectedHoles: [],
+  detectedBends: [],
+});
+
+const makeEmptyQuotePricing = () => ({
+  estimate: null,
+  status: 'idle',
+  error: '',
+  key: '',
+});
+
+const cloneQuoteConfig = (config = {}) => ({
+  productionService: config.productionService || null,
+  category: config.category || null,
+  metal: config.metal || null,
+  selectedThickness: config.selectedThickness ?? null,
+  selectedAdditionalServices: Array.isArray(config.selectedAdditionalServices) ? [...config.selectedAdditionalServices] : [],
+  selectedFinishColors: { ...(config.selectedFinishColors || {}) },
+  selectedTaps: { ...(config.selectedTaps || {}) },
+  selectedHardware: { ...(config.selectedHardware || {}) },
+  selectedCountersinks: { ...(config.selectedCountersinks || {}) },
+  selectedBends: { ...(config.selectedBends || {}) },
+  quantity: Math.max(1, parseInt(config.quantity, 10) || 1),
+  configStep: Number.isFinite(Number(config.configStep)) ? Number(config.configStep) : 0,
+});
+
+const cloneQuoteAnalysis = (analysis = {}) => ({
+  dimensions: analysis.dimensions || null,
+  dxfSvg: analysis.dxfSvg || null,
+  dxfTechData: analysis.dxfTechData || null,
+  backendData: analysis.backendData || null,
+  bendTree: analysis.bendTree || null,
+  detectedHoles: Array.isArray(analysis.detectedHoles) ? analysis.detectedHoles : [],
+  detectedBends: Array.isArray(analysis.detectedBends) ? analysis.detectedBends : [],
+});
+
+const getApiUrl = (path) => BACKEND_URL ? `${BACKEND_URL}${path}` : path;
+
+const getSelectedThicknessMmFromConfig = (config = {}) => {
+  const metal = config.metal;
+  const selectedThickness = config.selectedThickness;
+  if (!metal || selectedThickness == null) return 0;
+  const t = (metal.quick_look?.thicknesses || []).find(th => String(th.value) === String(selectedThickness));
+  if (!t) return 0;
+  return t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
+};
+
+const getSelectedThicknessDisplayFromConfig = (config = {}) => {
+  const selectedThickness = config.selectedThickness;
+  if (selectedThickness == null) return null;
+  const mm = getSelectedThicknessMmFromConfig(config);
+  if (mm > 0) return `${mm.toFixed(3)} mm (${(mm / 25.4).toFixed(3)} in)`;
+  return String(selectedThickness);
+};
+
+const getActiveFinishColorFromConfig = (config = {}) => {
+  const selectedFinishColors = config.selectedFinishColors || {};
+  const keys = Object.keys(selectedFinishColors);
+  if (keys.length === 0) {
+    if (config.metal?.color) {
+      return { color: config.metal.color, name: config.metal.name || 'Base Material', isBaseMaterialFallback: true };
+    }
+    return null;
+  }
+  const firstWithColor = keys.find(k => selectedFinishColors[k]?.color || selectedFinishColors[k]?.hex);
+  return selectedFinishColors[firstWithColor || keys[0]];
+};
+
+const flattenBendTree = (bendTree) => {
+  const list = [];
+  const flatten = (node) => {
+    if (!node) return;
+    if (node.bendAxis) list.push(node);
+    if (node.children) node.children.forEach(flatten);
+  };
+  flatten(bendTree);
+  return list;
+};
+
+const getBendSupportForConfig = (config = {}, allServices = [], selectedThicknessDisplay = null) => {
+  const bendService = allServices.find(s => s.title?.toLowerCase().includes('bend')) || null;
+  if (!bendService || !config.metal) return { supported: false, warning: '' };
+
+  const bendServiceId = Number(bendService.id);
+  const selectedThicknessObj = (config.metal.quick_look?.thicknesses || []).find(t => String(t.value) === String(config.selectedThickness)) || null;
+  const metalServiceIds = parseServiceIds(config.metal.services);
+  const thicknessServiceIds = parseServiceIds(selectedThicknessObj?.services);
+  const hasMetalGrant = metalServiceIds.includes(bendServiceId);
+  const hasThicknessGrant = thicknessServiceIds.includes(bendServiceId);
+  const selectedLabel = selectedThicknessDisplay || config.selectedThickness || 'selected thickness';
+
+  if (!hasMetalGrant && !hasThicknessGrant) {
+    return { supported: false, warning: `Bending is not available for ${config.metal.name} at ${selectedLabel}.` };
+  }
+  if (config.metal.is_bendable === false && !hasThicknessGrant) {
+    return { supported: false, warning: `${config.metal.name} at ${selectedLabel} is not bendable, so bending cost was removed.` };
+  }
+  return { supported: true, warning: '' };
+};
+
+const getQuoteAdditionalServicesForConfig = (config = {}, allServices = [], selectedThicknessDisplay = null) => {
+  const bendSupport = getBendSupportForConfig(config, allServices, selectedThicknessDisplay);
+  return (config.selectedAdditionalServices || []).filter((svc) => {
+    const title = String(svc?.title || '').toLowerCase();
+    return !(title.includes('bend') && !bendSupport.supported);
+  });
+};
+
+const deriveQuoteItem = (item, config = {}, allServices = []) => {
+  const analysis = cloneQuoteAnalysis(item?.analysis);
+  const fileName = item?.file?.name || item?.fileName || '';
+  const currentIsStepFile = isStepFile(fileName);
+  const currentIsDxfFile = is2DFile(fileName);
+  const backend = currentIsStepFile ? analysis.backendData : null;
+  const selectedThicknessMM = getSelectedThicknessMmFromConfig(config);
+  const selectedThicknessDisplay = getSelectedThicknessDisplayFromConfig(config);
+
+  const modelThicknessFrom2dMm = currentIsStepFile ? toFiniteNumber(backend?.thickness) : 0;
+  const modelThicknessFrom3dMm = toFiniteNumber(analysis.dimensions?.mm?.t);
+  const thicknessResolution = (() => {
+    if (currentIsStepFile && modelThicknessFrom2dMm > 0) return { value: modelThicknessFrom2dMm, source: 'Sheet stock from STEP' };
+    if (currentIsStepFile && modelThicknessFrom3dMm > 0) return { value: modelThicknessFrom3dMm, source: '3D bounding box' };
+    if (selectedThicknessMM > 0) return { value: selectedThicknessMM, source: 'Selected stock' };
+    return { value: 0, source: currentIsStepFile ? '3D model unavailable' : 'Unknown' };
+  })();
+
+  const modelLenMm = toFiniteNumber(analysis.dimensions?.mm?.l);
+  const modelWidMm = toFiniteNumber(analysis.dimensions?.mm?.w);
+  const flatWidth = currentIsStepFile ? toFiniteNumber(backend?.bbox?.width) : 0;
+  const flatHeight = currentIsStepFile ? toFiniteNumber(backend?.bbox?.height) : 0;
+  const hasFlatSize = flatWidth > 0 && flatHeight > 0;
+  const useFlatSize = currentIsStepFile && hasFlatSize;
+  const lengthMm = useFlatSize ? Math.max(flatWidth, flatHeight) : modelLenMm;
+  const widthMm = useFlatSize ? Math.min(flatWidth, flatHeight) : modelWidMm;
+  const volumeMm3 = toFiniteNumber(analysis.dimensions?.mm?.volume);
+
+  const displayDimensions = (() => {
+    if (currentIsStepFile && !useFlatSize) return null;
+    if (!(lengthMm > 0) || !(widthMm > 0)) return null;
+    const thicknessMm = thicknessResolution.value;
+    return {
+      mm: {
+        l: lengthMm.toFixed(2),
+        w: widthMm.toFixed(2),
+        t: thicknessMm > 0 ? thicknessMm.toFixed(3) : '0.000',
+        volume: volumeMm3.toFixed(2)
+      },
+      inches: {
+        l: (lengthMm / 25.4).toFixed(3),
+        w: (widthMm / 25.4).toFixed(3),
+        t: thicknessMm > 0 ? (thicknessMm / 25.4).toFixed(3) : '0.000',
+        volume: (volumeMm3 / 16387).toFixed(3)
+      }
+    };
+  })();
+
+  const perimeterMm = (() => {
+    const direct = toFiniteNumber(backend?.totalPerimeter);
+    if (direct > 0) return direct;
+    const dxfPerimeter = toFiniteNumber(analysis.dxfTechData?.totalPerimeter);
+    if (dxfPerimeter > 0) return dxfPerimeter;
+    const edgePerimeter = sumSegmentLengths(backend?.cutEdges);
+    if (edgePerimeter > 0) return edgePerimeter;
+    return lengthMm > 0 && widthMm > 0 ? ((lengthMm + widthMm) * 2) : 0;
+  })();
+
+  const pierceCount = (() => {
+    const direct = Number.parseInt(backend?.pierceCount, 10);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+    const dxfCount = Number.parseInt(analysis.dxfTechData?.pierceCount, 10);
+    if (Number.isFinite(dxfCount) && dxfCount > 0) return dxfCount;
+    return Math.max(1, (analysis.detectedHoles || []).length || 1);
+  })();
+
+  const pricingTechnicalData = {
+    totalPerimeter: perimeterMm,
+    pierceCount,
+    bends: Array.isArray(backend?.bends) ? backend.bends : [],
+    sheetNest: backend?.sheetNest || backend?.sheet_nest || null,
+    cutEdges: Array.isArray(backend?.cutEdges) ? backend.cutEdges : [],
+    flatArea: toFiniteNumber(backend?.flatArea)
+  };
+
+  const quoteAdditionalServices = getQuoteAdditionalServicesForConfig(config, allServices, selectedThicknessDisplay);
+  const bendList = flattenBendTree(analysis.bendTree);
+
+  return {
+    analysis,
+    displayDimensions,
+    selectedThicknessMM,
+    selectedThicknessDisplay,
+    dimensionSourceLabel: currentIsDxfFile ? '2D drawing' : useFlatSize ? '2D flat pattern' : '3D bounding box',
+    thicknessSourceLabel: thicknessResolution.source,
+    pricingTechnicalData,
+    quoteAdditionalServices,
+    activeFinishColor: getActiveFinishColorFromConfig(config),
+    bendList,
+  };
+};
+
+const buildPricingPayloadForQuoteItem = (item, config = {}, allServices = [], derived = null) => {
+  const info = derived || deriveQuoteItem(item, config, allServices);
+  if (!info.displayDimensions || (!config.metal && !config.productionService)) return null;
+  if (config.metal && !(info.selectedThicknessMM > 0)) return null;
+  const thicknessValueIn = info.selectedThicknessMM > 0 ? (info.selectedThicknessMM / 25.4).toFixed(6) : null;
+
+  return {
+    metal_id: config.metal?.id || null,
+    service_id: config.productionService?.id || null,
+    thickness_value: thicknessValueIn,
+    length_in: info.displayDimensions.inches.l,
+    height_in: info.displayDimensions.inches.w,
+    quantity: Math.max(1, parseInt(config.quantity, 10) || 1),
+    additional_services: info.quoteAdditionalServices.map(s => {
+      const opt = config.selectedFinishColors?.[s.id];
+      const options = Array.isArray(s.service_options) ? s.service_options : [];
+      const optIndex = opt
+        ? options.findIndex(o =>
+          (opt.id != null && o.id === opt.id) ||
+          (opt.name && o.name === opt.name) ||
+          (opt.color && o.color === opt.color)
+        )
+        : -1;
+      return {
+        id: s.id,
+        option_id: opt?.id ?? opt?.index ?? (optIndex >= 0 ? optIndex : (opt?.name || null))
+      };
+    }),
+    taps: Object.values(config.selectedTaps || {}).map(t => ({ name: t.name, price: t.price || 0 })),
+    hardware: Object.values(config.selectedHardware || {}).map(h => ({ name: h.item?.name, price: h.item?.price || 0 })),
+    countersinks: Object.values(config.selectedCountersinks || {}).map(cs => ({ name: cs.name, price: cs.price || 0 })),
+    technical_data: info.pricingTechnicalData
+  };
+};
+
+const buildPricingKeyForQuoteItem = (item, config = {}, allServices = [], derived = null) => {
+  const payload = buildPricingPayloadForQuoteItem(item, config, allServices, derived);
+  if (!payload) return '';
+  return JSON.stringify({ fileId: item.id, payload });
+};
+
+const buildCartItemFromQuoteItem = (item, config = {}, allServices = []) => {
+  const info = deriveQuoteItem(item, config, allServices);
+  const estimate = item.pricing?.estimate;
+  if (!estimate?.breakdown || !info.displayDimensions) return null;
+
+  const qty = Math.max(1, parseInt(config.quantity, 10) || 1);
+  const unitBasePrice = parseFloat(estimate.breakdown?.unit_total || 0);
+  const unitFinalPrice = parseFloat(
+    estimate.breakdown?.final_unit_price ||
+    (qty > 0 ? (parseFloat(estimate?.total_price || 0) / qty) : 0)
+  );
+  const discountPercent = parseFloat(estimate.breakdown?.discount_percent || 0);
+
+  return {
+    fileName: item.file?.name || item.fileName,
+    file: item.file,
+    tempPath: item.tempPath,
+    configuration: {
+      productionService: config.productionService,
+      metal: config.metal,
+      thickness: info.displayDimensions.mm.t,
+      selectedThickness: config.selectedThickness,
+      selectedThicknessDisplay: info.selectedThicknessDisplay,
+      modelDimensionSource: info.dimensionSourceLabel,
+      modelThicknessSource: info.thicknessSourceLabel,
+      anodizingColor: info.activeFinishColor,
+      selectedTaps: config.selectedTaps || {},
+      selectedHardware: config.selectedHardware || {},
+      selectedCountersinks: config.selectedCountersinks || {},
+      selectedBends: config.selectedBends || {},
+      bendTree: info.analysis.bendTree,
+      bendCount: info.bendList?.length || 0,
+      detectedHoles: info.analysis.detectedHoles || [],
+      detectedBends: info.analysis.detectedBends || [],
+      additionalServices: info.quoteAdditionalServices,
+      dimensions: info.displayDimensions,
+      dxfSvg: info.analysis.dxfSvg,
+      selectedFinishColors: config.selectedFinishColors || {},
+      pricingTechnicalData: info.pricingTechnicalData,
+    },
+    pricing: {
+      baseUnit: unitBasePrice,
+      discount_percent: discountPercent,
+      finish: 0,
+      total: unitFinalPrice
+    },
+    quantity: qty
+  };
+};
+
 // ─── Component ──────────────────────────────────────────
 const InstantPricing = () => {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [sharedConfig, setSharedConfig] = useState(() => makeEmptyQuoteConfig());
   const [dimensions, setDimensions] = useState(null);
   const [viewMode, setViewMode] = useState('3d');
   const [activeAxis, setActiveAxis] = useState('top');
@@ -130,10 +443,15 @@ const InstantPricing = () => {
   const [allCategories, setAllCategories] = useState([]);
   const [allMetals, setAllMetals] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const { addToCart } = useCart();
-  const { user } = useAuth();
+  const { addManyToCart } = useCart();
   const navigate = useNavigate();
   const toast = useToast();
+  const filesRef = useRef(files);
+  const selectedFileRef = useRef(selectedFile);
+  const sharedConfigRef = useRef(sharedConfig);
+  const restoringQuoteItemRef = useRef(false);
+  const backgroundAnalysisRef = useRef(new Set());
+  const backgroundPricingRef = useRef(new Set());
 
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
@@ -187,6 +505,13 @@ const InstantPricing = () => {
   const [bendTree, setBendTree] = useState(null);
   const [detectedBends, setDetectedBends] = useState([]);
   const [selectedBends, setSelectedBends] = useState({});
+  const activeQuoteItem = useMemo(
+    () => files.find(f => f.id === selectedFile?.id) || null,
+    [files, selectedFile?.id]
+  );
+  const activeQuoteConfig = activeQuoteItem?.customized
+    ? cloneQuoteConfig(activeQuoteItem.config)
+    : cloneQuoteConfig(sharedConfig);
   const currentBackendData = (
     currentIsStep && selectedFileKey && backendData?.__fileKey === selectedFileKey
       ? backendData
@@ -195,6 +520,82 @@ const InstantPricing = () => {
   const currentUnfoldReady = Boolean(
     currentBackendData && bendTree
   );
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  useEffect(() => {
+    selectedFileRef.current = selectedFile;
+  }, [selectedFile]);
+
+  useEffect(() => {
+    sharedConfigRef.current = sharedConfig;
+  }, [sharedConfig]);
+
+  const buildCurrentQuoteConfig = useCallback(() => cloneQuoteConfig({
+    productionService: selectedProductionService,
+    category: selectedCategory,
+    metal: selectedMetal,
+    selectedThickness,
+    selectedAdditionalServices,
+    selectedFinishColors,
+    selectedTaps,
+    selectedHardware,
+    selectedCountersinks,
+    selectedBends,
+    quantity,
+    configStep,
+  }), [
+    selectedProductionService,
+    selectedCategory,
+    selectedMetal,
+    selectedThickness,
+    selectedAdditionalServices,
+    selectedFinishColors,
+    selectedTaps,
+    selectedHardware,
+    selectedCountersinks,
+    selectedBends,
+    quantity,
+    configStep,
+  ]);
+
+  const applyQuoteConfigToUi = useCallback((config = {}) => {
+    const next = cloneQuoteConfig(config);
+    setSelectedProductionService(next.productionService);
+    setSelectedCategory(next.category);
+    setSelectedMetal(next.metal);
+    setSelectedThickness(next.selectedThickness);
+    setSelectedAdditionalServices(next.selectedAdditionalServices);
+    setSelectedFinishColors(next.selectedFinishColors);
+    setSelectedTaps(next.selectedTaps);
+    setSelectedHardware(next.selectedHardware);
+    setSelectedCountersinks(next.selectedCountersinks);
+    setSelectedBends(next.selectedBends);
+    setQuantity(next.quantity);
+    setConfigStep(next.configStep);
+  }, []);
+
+  const clearActiveTransientUi = useCallback(() => {
+    setActiveTapHole(null);
+    setActiveHwHole(null);
+    setActiveCSHole(null);
+    setActiveFinishSvcId(null);
+    setIsAnodizingModalOpen(false);
+    setConfiguredPreviewUrl(null);
+    setConfiguredHardwareResizeReport({});
+    setIsGeneratingConfiguredPreview(false);
+    setIsDetectingHoles(false);
+    setIsLoadingUnfold(false);
+    setUnfoldProgress(0);
+    setUnfoldStage('');
+    setStepModelProgress(0);
+    setIsStepModelLoading(false);
+    stepHolesDetectedRef.current = false;
+    holeDetectionAttemptedRef.current = false;
+    qty1PriceRef.current = null;
+  }, []);
 
   const selectedThicknessMM = useMemo(() => {
     if (!selectedMetal || !selectedThickness) return 0;
@@ -952,30 +1353,69 @@ const InstantPricing = () => {
       .catch(() => { /* Backend is handled per-request */ });
   }, []);
 
-  // ── Reset quoting flow when file changes ──────────────
+  // ── Restore quote state when the active file changes ──────────────
   useEffect(() => {
-    setSelectedProductionService(null);
-    setSelectedCategory(null);
-    setSelectedMetal(null);
-    setQuantity(1);
-    // PRESERVE selectedAdditionalServices and service-specific selections (hardware, taps, countersinks, finishes)
-    // They will only be cleared when the user explicitly unchecks the service in the UI
-    setDetectedHoles([]);
-    setIsDetectingHoles(false);
-    setSelectedThickness(null);
-    setBackendData(null);
-    setBendTree(null);
-    setDetectedBends([]);
-    setSelectedBends({});
-    setDxfTechData(null);
-    setUnfoldProgress(0);
-    setUnfoldStage('');
-    setStepModelProgress(0);
-    setIsStepModelLoading(false);
-    stepHolesDetectedRef.current = false;
-    holeDetectionAttemptedRef.current = false;
-    qty1PriceRef.current = null;
-  }, [selectedFile]);
+    if (!selectedFile) return;
+    const item = filesRef.current.find(f => f.id === selectedFile.id);
+    const config = item?.customized ? item.config : sharedConfigRef.current;
+    const analysis = cloneQuoteAnalysis(item?.analysis);
+    restoringQuoteItemRef.current = true;
+    applyQuoteConfigToUi(config);
+    setDimensions(analysis.dimensions);
+    setDxfSvg(analysis.dxfSvg);
+    setDxfTechData(analysis.dxfTechData);
+    setBackendData(analysis.backendData);
+    setBendTree(analysis.bendTree);
+    setDetectedHoles(analysis.detectedHoles);
+    setDetectedBends(analysis.detectedBends);
+    setPriceEstimate(item?.pricing?.estimate || null);
+    setIsCalculatingPrice(item?.pricing?.status === 'calculating');
+    clearActiveTransientUi();
+    setViewMode(is2DFile(selectedFile.file?.name) ? '2d' : '3d');
+    setActiveAxis(is2DFile(selectedFile.file?.name) ? 'flat' : 'top');
+  }, [selectedFile?.id, applyQuoteConfigToUi, clearActiveTransientUi]);
+
+  useEffect(() => {
+    if (!selectedFile) return;
+    if (restoringQuoteItemRef.current) {
+      restoringQuoteItemRef.current = false;
+      return;
+    }
+
+    const nextConfig = buildCurrentQuoteConfig();
+    const active = filesRef.current.find(f => f.id === selectedFile.id);
+
+    if (active?.customized) {
+      setFiles(prev => prev.map(f => (
+        f.id === selectedFile.id
+          ? { ...f, config: cloneQuoteConfig(nextConfig), pricing: makeEmptyQuotePricing() }
+          : f
+      )));
+      return;
+    }
+
+    setSharedConfig(cloneQuoteConfig(nextConfig));
+    setFiles(prev => prev.map(f => (
+      f.customized
+        ? f
+        : { ...f, config: cloneQuoteConfig(nextConfig), pricing: makeEmptyQuotePricing() }
+    )));
+  }, [
+    selectedFile?.id,
+    buildCurrentQuoteConfig,
+    selectedProductionService,
+    selectedCategory,
+    selectedMetal,
+    selectedThickness,
+    selectedAdditionalServices,
+    selectedFinishColors,
+    selectedTaps,
+    selectedHardware,
+    selectedCountersinks,
+    selectedBends,
+    quantity,
+    configStep,
+  ]);
 
   // ── STEP Hole Detection (pierce count + tapping/hardware) ───────
   // Split into two effects so that backendData arriving (from handleUnfold)
@@ -1153,6 +1593,22 @@ const InstantPricing = () => {
       setIsCalculatingPrice(true);
       try {
         const thicknessValueIn = pricingThicknessInches > 0 ? pricingThicknessInches.toFixed(6) : null;
+        const activePricingKey = buildPricingKeyForQuoteItem(
+          {
+            ...selectedFile,
+            analysis: {
+              dimensions,
+              dxfSvg,
+              dxfTechData,
+              backendData,
+              bendTree,
+              detectedHoles,
+              detectedBends,
+            }
+          },
+          buildCurrentQuoteConfig(),
+          allServices
+        );
 
         const payload = {
           metal_id: selectedMetal?.id || null,
@@ -1192,7 +1648,7 @@ const InstantPricing = () => {
         };
         const res = await calculatePrice(payload);
         if (res.success) {
-          setPriceEstimate(res);
+          setPriceEstimate({ ...res, __pricingKey: activePricingKey });
           // Anchor the Qty 1 price for cart subtotal transparency établissements
           if (quantity === 1) {
             qty1PriceRef.current = res.breakdown?.final_unit_price || 0;
@@ -1223,6 +1679,57 @@ const InstantPricing = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMetal, selectedProductionService, selectedAdditionalServices, quoteAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData]);
 
+  useEffect(() => {
+    if (!selectedFile) return;
+    const analysis = cloneQuoteAnalysis({
+      dimensions,
+      dxfSvg,
+      dxfTechData,
+      backendData,
+      bendTree,
+      detectedHoles,
+      detectedBends,
+    });
+    const config = buildCurrentQuoteConfig();
+    const itemForKey = { ...selectedFile, analysis };
+    const pricingKey = priceEstimate?.success
+      ? (priceEstimate.__pricingKey || buildPricingKeyForQuoteItem(itemForKey, config, allServices))
+      : '';
+    const status = isCalculatingPrice
+      ? 'calculating'
+      : priceEstimate?.success
+        ? 'ready'
+        : 'idle';
+
+    setFiles(prev => prev.map(f => (
+      f.id === selectedFile.id
+        ? {
+          ...f,
+          analysis,
+          pricing: {
+            estimate: priceEstimate,
+            status,
+            error: '',
+            key: pricingKey,
+          }
+        }
+        : f
+    )));
+  }, [
+    selectedFile?.id,
+    dimensions,
+    dxfSvg,
+    dxfTechData,
+    backendData,
+    bendTree,
+    detectedHoles,
+    detectedBends,
+    priceEstimate,
+    isCalculatingPrice,
+    buildCurrentQuoteConfig,
+    allServices,
+  ]);
+
   // ── Dimension Validation Helper ────────────────────────
 
   const onDrop = useCallback(async acceptedFiles => {
@@ -1231,6 +1738,9 @@ const InstantPricing = () => {
 
     const newFiles = await Promise.all(acceptedFiles.map(async file => {
       let tempPath = '';
+      let analysis = makeEmptyQuoteAnalysis();
+      let analysisStatus = isStepFile(file.name) ? 'idle' : 'ready';
+      let analysisError = '';
       try {
         const fd = new FormData();
         fd.append('file', file);
@@ -1242,11 +1752,32 @@ const InstantPricing = () => {
         console.error('File ingestion failed Establishment établissements:', err);
       }
 
+      if (is2DFile(file.name)) {
+        try {
+          const dxfAnalysis = await analyzeDxfFile(file);
+          analysis = cloneQuoteAnalysis({
+            dimensions: dxfAnalysis.dimensions,
+            dxfSvg: dxfAnalysis.svg,
+            dxfTechData: dxfAnalysis.techData,
+            detectedHoles: dxfAnalysis.holes,
+          });
+        } catch (err) {
+          analysisStatus = 'error';
+          analysisError = err.message || 'DXF analysis failed';
+        }
+      }
+
       return {
         file,
         id: Math.random().toString(36).substr(2, 9),
         preview: URL.createObjectURL(file),
-        tempPath: tempPath // Essential for world-class order finalization
+        tempPath: tempPath, // Essential for world-class order finalization
+        customized: false,
+        config: cloneQuoteConfig(sharedConfigRef.current),
+        analysis,
+        analysisStatus,
+        analysisError,
+        pricing: makeEmptyQuotePricing(),
       };
     }));
 
@@ -1258,6 +1789,163 @@ const InstantPricing = () => {
     }
     setIsImporting(false);
   }, []);
+
+  const analyzeStepQuoteItem = useCallback(async (item) => {
+    if (!item?.id || !item.file || !isStepFile(item.file.name)) return;
+    if (backgroundAnalysisRef.current.has(item.id)) return;
+
+    backgroundAnalysisRef.current.add(item.id);
+    setFiles(prev => prev.map(f => (
+      f.id === item.id
+        ? { ...f, analysisStatus: 'analyzing', analysisError: '' }
+        : f
+    )));
+
+    try {
+      const fd = new FormData();
+      fd.append('file', item.file);
+      const startResponse = await fetch(getApiUrl('/api/unfold-job/start'), {
+        method: 'POST',
+        body: fd,
+      });
+      if (!startResponse.ok) throw new Error(`Server responded with ${startResponse.status}`);
+      const startData = await startResponse.json();
+      if (!startData.success || !startData.jobId) throw new Error(startData.error || 'Unable to start STEP analysis');
+
+      let result = null;
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const statusResponse = await fetch(getApiUrl(`/api/unfold-job/${encodeURIComponent(startData.jobId)}?ts=${Date.now()}`));
+        if (!statusResponse.ok) throw new Error(`Analysis status failed with ${statusResponse.status}`);
+        const statusData = await statusResponse.json();
+        if (statusData.status === 'completed' && statusData.result) {
+          result = statusData.result;
+          break;
+        }
+        if (statusData.status === 'failed') {
+          throw new Error(statusData.error || 'STEP analysis failed');
+        }
+      }
+      if (!result) throw new Error('STEP analysis timed out');
+
+      const keyedBackendData = { ...result, __fileKey: getFileAnalysisKey(item) };
+      const mappedHoles = (result.detectedHoles || []).map((h, idx) => ({
+        id: idx,
+        diameterInches: h.diameter_in,
+        diameter_mm: h.diameter_mm,
+        depthMm: h.depth_mm || 0,
+        depthInches: h.depth_mm ? h.depth_mm / 25.4 : 2 / 25.4,
+        position: h.position,
+        axis: h.axis,
+        parent_face_id: h.face_id,
+      }));
+      const nextAnalysis = cloneQuoteAnalysis({
+        ...(item.analysis || {}),
+        backendData: keyedBackendData,
+        bendTree: result.bendTree || null,
+        detectedHoles: mappedHoles,
+        detectedBends: Array.isArray(result.bends) ? result.bends : [],
+      });
+
+      setFiles(prev => prev.map(f => (
+        f.id === item.id
+          ? { ...f, analysis: nextAnalysis, analysisStatus: 'ready', analysisError: '' }
+          : f
+      )));
+
+      if (selectedFileRef.current?.id === item.id) {
+        setBackendData(keyedBackendData);
+        setBendTree(result.bendTree || null);
+        setDetectedHoles(mappedHoles);
+        setDetectedBends(Array.isArray(result.bends) ? result.bends : []);
+      }
+    } catch (err) {
+      setFiles(prev => prev.map(f => (
+        f.id === item.id
+          ? { ...f, analysisStatus: 'error', analysisError: err.message || 'STEP analysis failed' }
+          : f
+      )));
+    } finally {
+      backgroundAnalysisRef.current.delete(item.id);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (backgroundAnalysisRef.current.size > 0) return;
+    const nextStep = files.find(f =>
+      isStepFile(f.file?.name) &&
+      (f.analysisStatus === 'idle' || !f.analysisStatus) &&
+      !f.analysis?.backendData
+    );
+    if (nextStep) analyzeStepQuoteItem(nextStep);
+  }, [files, analyzeStepQuoteItem]);
+
+  const priceQuoteItem = useCallback(async (item) => {
+    if (!item?.id || item.id === selectedFileRef.current?.id) return;
+    const config = item.customized ? cloneQuoteConfig(item.config) : cloneQuoteConfig(sharedConfigRef.current);
+    const derived = deriveQuoteItem(item, config, allServices);
+    const key = buildPricingKeyForQuoteItem(item, config, allServices, derived);
+    if (!key) return;
+    if (item.pricing?.key === key && item.pricing?.estimate?.success) return;
+    if (backgroundPricingRef.current.has(item.id)) return;
+
+    backgroundPricingRef.current.add(item.id);
+    setFiles(prev => prev.map(f => (
+      f.id === item.id
+        ? { ...f, pricing: { ...(f.pricing || makeEmptyQuotePricing()), status: 'calculating', error: '' } }
+        : f
+    )));
+
+    try {
+      const payload = buildPricingPayloadForQuoteItem(item, config, allServices, derived);
+      const res = await calculatePrice(payload);
+      if (!res.success) throw new Error(res.error || 'Pricing failed');
+      setFiles(prev => prev.map(f => (
+        f.id === item.id
+          ? {
+            ...f,
+            pricing: {
+              estimate: { ...res, __pricingKey: key },
+              status: 'ready',
+              error: '',
+              key,
+            }
+          }
+          : f
+      )));
+    } catch (err) {
+      setFiles(prev => prev.map(f => (
+        f.id === item.id
+          ? {
+            ...f,
+            pricing: {
+              ...(f.pricing || makeEmptyQuotePricing()),
+              estimate: null,
+              status: 'error',
+              error: err.message || 'Pricing failed',
+              key: '',
+            }
+          }
+          : f
+      )));
+    } finally {
+      backgroundPricingRef.current.delete(item.id);
+    }
+  }, [allServices]);
+
+  useEffect(() => {
+    if (backgroundPricingRef.current.size > 0) return;
+    const nextItem = files.find(f => {
+      if (f.id === selectedFile?.id) return false;
+      if (f.analysisStatus === 'analyzing' || f.analysisStatus === 'error') return false;
+      const config = f.customized ? cloneQuoteConfig(f.config) : cloneQuoteConfig(sharedConfig);
+      const derived = deriveQuoteItem(f, config, allServices);
+      const key = buildPricingKeyForQuoteItem(f, config, allServices, derived);
+      if (!key) return false;
+      return !(f.pricing?.key === key && f.pricing?.estimate?.success);
+    });
+    if (nextItem) priceQuoteItem(nextItem);
+  }, [files, sharedConfig, allServices, selectedFile?.id, priceQuoteItem]);
 
   const { getRootProps, getInputProps, isDragActive, open: openFilePicker } = useDropzone({
     onDrop,
