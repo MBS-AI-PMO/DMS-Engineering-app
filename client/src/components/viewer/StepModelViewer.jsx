@@ -43,68 +43,6 @@ const parseSizeSpecMajorIn = (sizeSpec) => {
   return null;
 };
 
-const parseTapRangeIn = (value) => {
-  if (value === null || value === undefined) return null;
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return value > 2 ? (value / 25.4) : value;
-  }
-
-  const raw = String(value).trim().toLowerCase();
-  if (!raw) return null;
-
-  const hasMmUnit = raw.includes('mm');
-  const cleaned = raw
-    .replace(/inches|inch|in|mm|"/g, '')
-    .trim();
-  if (!cleaned) return null;
-
-  let parsed = null;
-  if (cleaned.includes('/')) {
-    const [nRaw, dRaw] = cleaned.split('/', 2);
-    const n = Number(nRaw);
-    const d = Number(dRaw);
-    if (Number.isFinite(n) && Number.isFinite(d) && d !== 0) {
-      parsed = n / d;
-    }
-  }
-  if (parsed === null) {
-    const n = Number(cleaned);
-    if (Number.isFinite(n)) parsed = n;
-  }
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-
-  if (hasMmUnit || parsed > 2) return parsed / 25.4;
-  return parsed;
-};
-
-const isTapOptionCompatible = (diaIn, tapOption, toleranceIn = 0.0015) => {
-  if (!Number.isFinite(diaIn) || diaIn <= 0 || !tapOption) return false;
-
-  const minRaw = tapOption.min_diameter ?? tapOption.minDiameter ?? tapOption.min;
-  const maxRaw = tapOption.max_diameter ?? tapOption.maxDiameter ?? tapOption.max;
-  const singleRaw = tapOption.diameter ?? tapOption.size ?? null;
-
-  let minIn = parseTapRangeIn(minRaw);
-  let maxIn = parseTapRangeIn(maxRaw);
-
-  if (!Number.isFinite(minIn) && !Number.isFinite(maxIn)) {
-    const singleIn = parseTapRangeIn(singleRaw);
-    if (!Number.isFinite(singleIn)) return false;
-    minIn = singleIn;
-    maxIn = singleIn;
-  } else if (!Number.isFinite(minIn)) {
-    minIn = maxIn;
-  } else if (!Number.isFinite(maxIn)) {
-    maxIn = minIn;
-  }
-
-  const low = Math.min(minIn, maxIn) - toleranceIn;
-  const high = Math.max(minIn, maxIn) + toleranceIn;
-  return diaIn >= low && diaIn <= high;
-};
-
 const resolveNutBoreMm = (item) => {
   const minorDiaIn = item?.minor_dia ? Number(item.minor_dia) : null;
   if (Number.isFinite(minorDiaIn) && minorDiaIn > 0) return minorDiaIn * 25.4;
@@ -170,6 +108,17 @@ const REDUCED_HARDWARE_HEX = 0xC62828;
 const VIEWER_MIN_ZOOM_STEP = 0.04;
 const VIEWER_MAX_ZOOM_STEP = 0.22;
 
+const makeViewerHostRemovalSafe = (element) => {
+  if (!element || element.__dmsRemoveChildSafe) return;
+
+  const nativeRemoveChild = element.removeChild.bind(element);
+  element.removeChild = (child) => {
+    if (!child || child.parentNode !== element) return child || null;
+    return nativeRemoveChild(child);
+  };
+  element.__dmsRemoveChildSafe = true;
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const getCoordPoint = (coord) => ({
@@ -201,8 +150,6 @@ const StepModelViewer = ({
   tapOptions = [],
   selectedHardware = {},
   hardwareResizeReport = {},
-  isHardwareActive = false,
-  hwItemsByType = {},
   modelUrlOverride = null,
   selectedCountersinks = {},
   showCountersinkMarkers = true,
@@ -218,14 +165,10 @@ const StepModelViewer = ({
   isModelFadedManually = false,
   isAnodizingModalOpen = false,
   dimensions = null,
-  allServices = [],
-  backendData = null,
   onModelLoaded = () => { },
   onModelLoadFailed = () => { },
   onProgress = () => { },
   onDimensionsExtracted = () => { },
-  viewMode = '3d',
-  setViewMode = () => { },
 }) => {
   const containerRef = useRef(null);
   const viewerInstance = useRef(null);
@@ -285,6 +228,7 @@ const StepModelViewer = ({
   useEffect(() => {
     if (!selectedFile || !containerRef.current) return;
     const currentRef = containerRef.current;
+    makeViewerHostRemovalSafe(currentRef);
 
     // Cleanup previous instance
     if (viewerInstance.current) {
@@ -886,7 +830,6 @@ const StepModelViewer = ({
         // --- Hardware ---
         if (hasHwAssigned) {
           const HW_COLORS = { 1: 0x059669, 2: 0x6366f1, 3: 0xB8860B, 4: 0xDC2626 };
-          const boreMat = getMarkerMat('bore', () => new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.4 }));
 
           Object.entries(selectedHardware).forEach(([holeId, hw]) => {
             const hole = detectedHoles.find(h => h.id.toString() === holeId.toString());
@@ -925,10 +868,6 @@ const StepModelViewer = ({
             } else if (type !== 2) {
               hwBoreR = Math.min(hwBoreR, holeR * 0.99, hwOuterR * 0.85);
             }
-
-            const defaultColor = HW_COLORS[type] || 0xB8860B;
-            const mat = getMarkerMat(`hw_${defaultColor}`, () => new THREE.MeshStandardMaterial({ color: defaultColor, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
-            const soMat = getMarkerMat(`so_${defaultColor}`, () => new THREE.MeshStandardMaterial({ color: defaultColor, metalness: 0.75, roughness: 0.25 }));
 
             let axisVec = hole.axis ? new THREE.Vector3(...hole.axis) : hwThicknessVec.clone();
             if (axisVec.dot(hwThicknessVec) < 0) axisVec.negate();

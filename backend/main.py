@@ -19,6 +19,7 @@ import shlex
 import math
 import shutil
 import hashlib
+import socket
 import numpy as np
 import threading
 import uuid
@@ -286,6 +287,14 @@ PORT = int(os.getenv("PYTHON_PORT", 8000))
 # Add Threading support so the server doesn't freeze during heavy 3D math
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+    allow_reuse_address = False
+
+    def server_bind(self):
+        # Windows can otherwise allow multiple python main.py processes to
+        # listen on the same port, which makes Node hit stale CAD servers.
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 class CORSHandler(BaseHTTPRequestHandler):
     """Minimal handler with CORS support for the React frontend."""

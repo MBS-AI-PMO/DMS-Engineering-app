@@ -20,6 +20,19 @@ import { fetchServiceBySlug, fetchMetalsByServiceId, fetchAllHardwareWithItems, 
 import './ServiceDetail.css';
 import serviceHeroBg from '../assets/services/service-hero-bg.webp';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const BACKEND_URL = (() => {
+    const explicit = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+    if (explicit) return explicit;
+
+    const fromApiBase = String(API_BASE_URL || '');
+    if (/^https?:\/\//i.test(fromApiBase)) {
+        return fromApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    }
+
+    return '';
+})();
+
 const normalizeHeroImage = (value) => {
     if (!value) return null;
 
@@ -38,6 +51,53 @@ const normalizeHeroImage = (value) => {
     }
 
     return null;
+};
+
+const parseMaybeJson = (value, fallback = null) => {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value;
+    if (typeof value !== 'string') return fallback;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
+};
+
+const toBackendAssetUrl = (value) => {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (!raw) return '';
+    if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('blob:') || raw.startsWith('data:')) {
+        return raw;
+    }
+
+    const cleaned = raw.replace(/^\/+/, '');
+    return BACKEND_URL ? `${BACKEND_URL}/${cleaned}` : `/${cleaned}`;
+};
+
+const getMetalImagePath = (metal) => {
+    const direct = metal?.image_path || metal?.image || '';
+    if (direct) return toBackendAssetUrl(direct);
+
+    const about = parseMaybeJson(metal?.about_section, {});
+    if (about?.image) return toBackendAssetUrl(about.image);
+
+    const specs = parseMaybeJson(metal?.thickness_specs, {});
+    const firstSpecImage = Object.values(specs || {}).find(spec =>
+        Array.isArray(spec?.showcaseImages) && spec.showcaseImages.length > 0
+    )?.showcaseImages?.[0];
+
+    return firstSpecImage ? toBackendAssetUrl(firstSpecImage) : '';
+};
+
+const getMetalThicknessCount = (metal) => {
+    const quickLook = parseMaybeJson(metal?.quick_look, {});
+    const quickThicknesses = Array.isArray(quickLook?.thicknesses) ? quickLook.thicknesses.length : 0;
+    if (quickThicknesses > 0) return quickThicknesses;
+
+    const specs = parseMaybeJson(metal?.thickness_specs, {});
+    return Object.keys(specs || {}).length;
 };
 
 const resolveServiceHero = (value) => {
@@ -338,18 +398,33 @@ const ServiceDetail = () => {
                                     <p>The following metals can be processed using our {service.title.toLowerCase()} capabilities.</p>
                                 </div>
                                 <div className="metals-grid-simple">
-                                    {compatibleMetals.length > 0 ? compatibleMetals.map(metal => (
-                                        <Link to={`/metal/${metal.slug}`} key={metal.id} className="metal-thumb-card">
-                                            <div className="img-wrapper">
-                                                <img src={serviceHeroBg} alt={metal.name} />
-                                            </div>
-                                            <div className="metal-info">
-                                                <h4>{metal.name}</h4>
-                                                <p>{metal.category_name}</p>
-                                            </div>
-                                            <ArrowRight size={16} className="arrow" />
-                                        </Link>
-                                    )) : (
+                                    {compatibleMetals.length > 0 ? compatibleMetals.map(metal => {
+                                        const imageSrc = getMetalImagePath(metal);
+                                        const thicknessCount = getMetalThicknessCount(metal);
+
+                                        return (
+                                            <Link to={`/metal/${metal.slug}`} key={metal.id} className="metal-thumb-card">
+                                                <div className="metal-card-media">
+                                                    {imageSrc ? (
+                                                        <img src={imageSrc} alt={metal.name} loading="lazy" decoding="async" />
+                                                    ) : (
+                                                        <div className="metal-image-fallback">
+                                                            <Layers size={22} />
+                                                        </div>
+                                                    )}
+                                                    <span className="metal-category-pill">{metal.category_name || 'Material'}</span>
+                                                </div>
+                                                <div className="metal-info">
+                                                    <p>{metal.category_name || 'Material'}</p>
+                                                    <h4>{metal.name}</h4>
+                                                    <div className="metal-card-meta">
+                                                        <span>{thicknessCount > 0 ? `${thicknessCount} thickness${thicknessCount === 1 ? '' : 'es'}` : 'Configured material'}</span>
+                                                        <ArrowRight size={15} className="arrow" />
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        );
+                                    }) : (
                                         <div className="empty-state">
                                             <Info size={32} />
                                             <p>No specific metals linked yet. Contact us for custom material requests.</p>

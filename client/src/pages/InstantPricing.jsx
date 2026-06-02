@@ -78,6 +78,19 @@ const sumSegmentLengths = (flatEdgePoints = []) => {
   return total;
 };
 
+const normalizePierceCount = (directCount, dxfCount, detectedHoleCount, subtractOuterProfile = false) => {
+  const direct = Number.parseInt(directCount, 10);
+  if (Number.isFinite(direct) && direct >= 0) {
+    return Math.max(0, direct - (subtractOuterProfile ? 1 : 0));
+  }
+
+  const dxf = Number.parseInt(dxfCount, 10);
+  if (Number.isFinite(dxf) && dxf >= 0) return dxf;
+
+  const holes = Number.parseInt(detectedHoleCount, 10);
+  return Number.isFinite(holes) && holes > 0 ? holes : 0;
+};
+
 const getProcessFlags = (serviceTitle = '') => {
   const normalized = String(serviceTitle || '').toLowerCase();
   return {
@@ -94,6 +107,7 @@ const getFileAnalysisKey = (fileEntry) => (
 const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
   <div className={`skeleton-price ${className}`} style={{ width, height, display: 'inline-block', verticalAlign: 'middle' }} />
 );
+const MotionDiv = motion.div;
 
 const makeEmptyQuoteConfig = () => ({
   productionService: null,
@@ -151,8 +165,6 @@ const cloneQuoteAnalysis = (analysis = {}) => ({
   detectedHoles: Array.isArray(analysis.detectedHoles) ? analysis.detectedHoles : [],
   detectedBends: Array.isArray(analysis.detectedBends) ? analysis.detectedBends : [],
 });
-
-const getApiUrl = (path) => BACKEND_URL ? `${BACKEND_URL}${path}` : path;
 
 const getSelectedThicknessMmFromConfig = (config = {}) => {
   const metal = config.metal;
@@ -253,7 +265,6 @@ const deriveQuoteItem = (item, config = {}, allServices = []) => {
   const volumeMm3 = toFiniteNumber(analysis.dimensions?.mm?.volume);
 
   const displayDimensions = (() => {
-    if (currentIsStepFile && !useFlatSize) return null;
     if (!(lengthMm > 0) || !(widthMm > 0)) return null;
     const thicknessMm = thicknessResolution.value;
     return {
@@ -283,11 +294,12 @@ const deriveQuoteItem = (item, config = {}, allServices = []) => {
   })();
 
   const pierceCount = (() => {
-    const direct = Number.parseInt(backend?.pierceCount, 10);
-    if (Number.isFinite(direct) && direct > 0) return direct;
-    const dxfCount = Number.parseInt(analysis.dxfTechData?.pierceCount, 10);
-    if (Number.isFinite(dxfCount) && dxfCount > 0) return dxfCount;
-    return Math.max(1, (analysis.detectedHoles || []).length || 1);
+    return normalizePierceCount(
+      backend?.pierceCount,
+      analysis.dxfTechData?.pierceCount,
+      (analysis.detectedHoles || []).length,
+      currentIsStepFile
+    );
   })();
 
   const pricingTechnicalData = {
@@ -450,15 +462,21 @@ const InstantPricing = () => {
   const selectedFileRef = useRef(selectedFile);
   const sharedConfigRef = useRef(sharedConfig);
   const restoringQuoteItemRef = useRef(false);
-  const backgroundAnalysisRef = useRef(new Set());
   const backgroundPricingRef = useRef(new Set());
 
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
   const [selectedThickness, setSelectedThickness] = useState(null);
-  const currentIsStep = useMemo(() => isStepFile(selectedFile?.file?.name), [selectedFile]);
-  const currentIsDxf = useMemo(() => is2DFile(selectedFile?.file?.name), [selectedFile]);
-  const selectedFileKey = useMemo(() => getFileAnalysisKey(selectedFile), [selectedFile]);
+  const selectedFileId = selectedFile?.id || null;
+  const selectedRawFile = selectedFile?.file || null;
+  const selectedFileName = selectedRawFile?.name || '';
+  const selectedFilePreview = selectedFile?.preview || null;
+  const selectedFileTempPath = selectedFile?.tempPath || '';
+  const currentIsStep = useMemo(() => isStepFile(selectedFileName), [selectedFileName]);
+  const currentIsDxf = useMemo(() => is2DFile(selectedFileName), [selectedFileName]);
+  const selectedFileKey = useMemo(() => (
+    selectedFileId || selectedFileTempPath || selectedFileName || ''
+  ), [selectedFileId, selectedFileTempPath, selectedFileName]);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
   const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
@@ -509,9 +527,15 @@ const InstantPricing = () => {
     () => files.find(f => f.id === selectedFile?.id) || null,
     [files, selectedFile?.id]
   );
-  const activeQuoteConfig = activeQuoteItem?.customized
-    ? cloneQuoteConfig(activeQuoteItem.config)
-    : cloneQuoteConfig(sharedConfig);
+  const selectedViewerFile = useMemo(() => {
+    if (!selectedFileId && !selectedRawFile) return null;
+    return {
+      id: selectedFileId,
+      file: selectedRawFile,
+      preview: selectedFilePreview,
+      tempPath: selectedFileTempPath,
+    };
+  }, [selectedFileId, selectedRawFile, selectedFilePreview, selectedFileTempPath]);
   const currentBackendData = (
     currentIsStep && selectedFileKey && backendData?.__fileKey === selectedFileKey
       ? backendData
@@ -686,7 +710,6 @@ const InstantPricing = () => {
     const thicknessMm = resolvedModelThicknessMm;
     const volumeMm3 = toFiniteNumber(dimensions?.mm?.volume);
 
-    if (currentIsStep && !useFlatSize) return null;
     if (!(lengthMm > 0) || !(widthMm > 0)) return null;
 
     return {
@@ -704,7 +727,6 @@ const InstantPricing = () => {
       }
     };
   }, [
-    currentIsStep,
     modelSize.l,
     modelSize.w,
     flatSize.max,
@@ -730,14 +752,13 @@ const InstantPricing = () => {
   }, [currentBackendData?.totalPerimeter, currentBackendData?.cutEdges, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
 
   const pierceCount = useMemo(() => {
-    const direct = Number.parseInt(currentBackendData?.pierceCount, 10);
-    if (Number.isFinite(direct) && direct > 0) return direct;
-
-    const dxfCount = Number.parseInt(dxfTechData?.pierceCount, 10);
-    if (Number.isFinite(dxfCount) && dxfCount > 0) return dxfCount;
-
-    return Math.max(1, detectedHoles.length || 1);
-  }, [currentBackendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length]);
+    return normalizePierceCount(
+      currentBackendData?.pierceCount,
+      dxfTechData?.pierceCount,
+      detectedHoles.length,
+      currentIsStep
+    );
+  }, [currentBackendData?.pierceCount, dxfTechData?.pierceCount, detectedHoles.length, currentIsStep]);
 
   const pricingTechnicalData = useMemo(() => {
     return {
@@ -833,7 +854,6 @@ const InstantPricing = () => {
   // offset parallel flanges that the raw diagnostic may still report as
   // raised planar offsets. The final allow/block decision belongs to
   // processEligibility.laser.blocked.
-  const isLaserBlockedByBends = false;
   const hasLaserEligibilityDecision = typeof laserEligibility.blocked === 'boolean';
   const isLaserBlockedByNonFlatFeatures = currentIsStep && (
     hasLaserEligibilityDecision
@@ -1174,64 +1194,9 @@ const InstantPricing = () => {
     return csSvc?.service_options || [];
   }, [allServices]);
 
-  const handleProceedToReview = () => {
-    if (!selectedFile || !selectedMetal || !displayDimensions) return;
-    if (!priceEstimate?.breakdown) {
-      toast('Pricing is not ready yet. Please wait a moment and try again.', 'error');
-      return;
-    }
-
-    // Backend breakdown is the source of truth for per-unit prices at current quantity.
-    const unitBasePrice = parseFloat(priceEstimate.breakdown?.unit_total || 0);
-    const unitFinalPrice = parseFloat(
-      priceEstimate.breakdown?.final_unit_price ||
-      (quantity > 0 ? (parseFloat(priceEstimate?.total_price || 0) / quantity) : 0)
-    );
-    const discountPercent = parseFloat(priceEstimate.breakdown?.discount_percent || 0);
-    const config = {
-      productionService: selectedProductionService,
-      metal: selectedMetal,
-      thickness: displayDimensions.mm.t,
-      selectedThickness: selectedThickness, // Store string value for Laser établissements
-      selectedThicknessDisplay,
-      modelDimensionSource: dimensionSourceLabel,
-      modelThicknessSource: thicknessSourceLabel,
-      anodizingColor: activeFinishColor,
-      selectedTaps,
-      selectedHardware,
-      selectedCountersinks,
-      selectedBends,
-      bendTree,
-      bendCount: bendList?.length || 0,
-      detectedHoles,
-      detectedBends,
-      additionalServices: quoteAdditionalServices,
-      dimensions: displayDimensions,
-      dxfSvg: dxfSvg,
-      selectedFinishColors,
-      pricingTechnicalData,
-    };
-
-    addToCart({
-      fileName: selectedFile.file.name,
-      file: selectedFile.file,
-      tempPath: selectedFile.tempPath,
-      configuration: config,
-      pricing: {
-        baseUnit: unitBasePrice,
-        discount_percent: discountPercent,
-        finish: 0,
-        total: unitFinalPrice
-      },
-      quantity: quantity
-    });
-
-    if (user) {
-      navigate('/checkout');
-    } else {
-      navigate('/cart');
-    }
-  };
+  function handleProceedToReview() {
+    handleAddAllToCart();
+  }
 
   // ── Fetch all hardware types when hardware service is selected ──────────
   useEffect(() => {
@@ -1373,7 +1338,7 @@ const InstantPricing = () => {
     clearActiveTransientUi();
     setViewMode(is2DFile(selectedFile.file?.name) ? '2d' : '3d');
     setActiveAxis(is2DFile(selectedFile.file?.name) ? 'flat' : 'top');
-  }, [selectedFile?.id, applyQuoteConfigToUi, clearActiveTransientUi]);
+  }, [selectedFile, selectedFile?.id, applyQuoteConfigToUi, clearActiveTransientUi]);
 
   useEffect(() => {
     if (!selectedFile) return;
@@ -1385,10 +1350,12 @@ const InstantPricing = () => {
     const nextConfig = buildCurrentQuoteConfig();
     const active = filesRef.current.find(f => f.id === selectedFile.id);
 
-    if (active?.customized) {
+    const shouldKeepShared = filesRef.current.length <= 1 && !active?.customized;
+
+    if (!shouldKeepShared) {
       setFiles(prev => prev.map(f => (
         f.id === selectedFile.id
-          ? { ...f, config: cloneQuoteConfig(nextConfig), pricing: makeEmptyQuotePricing() }
+          ? { ...f, customized: true, config: cloneQuoteConfig(nextConfig), pricing: makeEmptyQuotePricing() }
           : f
       )));
       return;
@@ -1402,6 +1369,7 @@ const InstantPricing = () => {
     )));
   }, [
     selectedFile?.id,
+    selectedFile,
     buildCurrentQuoteConfig,
     selectedProductionService,
     selectedCategory,
@@ -1717,6 +1685,7 @@ const InstantPricing = () => {
     )));
   }, [
     selectedFile?.id,
+    selectedFile,
     dimensions,
     dxfSvg,
     dxfTechData,
@@ -1790,96 +1759,6 @@ const InstantPricing = () => {
     setIsImporting(false);
   }, []);
 
-  const analyzeStepQuoteItem = useCallback(async (item) => {
-    if (!item?.id || !item.file || !isStepFile(item.file.name)) return;
-    if (backgroundAnalysisRef.current.has(item.id)) return;
-
-    backgroundAnalysisRef.current.add(item.id);
-    setFiles(prev => prev.map(f => (
-      f.id === item.id
-        ? { ...f, analysisStatus: 'analyzing', analysisError: '' }
-        : f
-    )));
-
-    try {
-      const fd = new FormData();
-      fd.append('file', item.file);
-      const startResponse = await fetch(getApiUrl('/api/unfold-job/start'), {
-        method: 'POST',
-        body: fd,
-      });
-      if (!startResponse.ok) throw new Error(`Server responded with ${startResponse.status}`);
-      const startData = await startResponse.json();
-      if (!startData.success || !startData.jobId) throw new Error(startData.error || 'Unable to start STEP analysis');
-
-      let result = null;
-      for (let attempt = 0; attempt < 240; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        const statusResponse = await fetch(getApiUrl(`/api/unfold-job/${encodeURIComponent(startData.jobId)}?ts=${Date.now()}`));
-        if (!statusResponse.ok) throw new Error(`Analysis status failed with ${statusResponse.status}`);
-        const statusData = await statusResponse.json();
-        if (statusData.status === 'completed' && statusData.result) {
-          result = statusData.result;
-          break;
-        }
-        if (statusData.status === 'failed') {
-          throw new Error(statusData.error || 'STEP analysis failed');
-        }
-      }
-      if (!result) throw new Error('STEP analysis timed out');
-
-      const keyedBackendData = { ...result, __fileKey: getFileAnalysisKey(item) };
-      const mappedHoles = (result.detectedHoles || []).map((h, idx) => ({
-        id: idx,
-        diameterInches: h.diameter_in,
-        diameter_mm: h.diameter_mm,
-        depthMm: h.depth_mm || 0,
-        depthInches: h.depth_mm ? h.depth_mm / 25.4 : 2 / 25.4,
-        position: h.position,
-        axis: h.axis,
-        parent_face_id: h.face_id,
-      }));
-      const nextAnalysis = cloneQuoteAnalysis({
-        ...(item.analysis || {}),
-        backendData: keyedBackendData,
-        bendTree: result.bendTree || null,
-        detectedHoles: mappedHoles,
-        detectedBends: Array.isArray(result.bends) ? result.bends : [],
-      });
-
-      setFiles(prev => prev.map(f => (
-        f.id === item.id
-          ? { ...f, analysis: nextAnalysis, analysisStatus: 'ready', analysisError: '' }
-          : f
-      )));
-
-      if (selectedFileRef.current?.id === item.id) {
-        setBackendData(keyedBackendData);
-        setBendTree(result.bendTree || null);
-        setDetectedHoles(mappedHoles);
-        setDetectedBends(Array.isArray(result.bends) ? result.bends : []);
-      }
-    } catch (err) {
-      setFiles(prev => prev.map(f => (
-        f.id === item.id
-          ? { ...f, analysisStatus: 'error', analysisError: err.message || 'STEP analysis failed' }
-          : f
-      )));
-    } finally {
-      backgroundAnalysisRef.current.delete(item.id);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (backgroundAnalysisRef.current.size > 0) return;
-    const nextStep = files.find(f =>
-      isStepFile(f.file?.name) &&
-      (f.analysisStatus === 'idle' || !f.analysisStatus) &&
-      !f.analysis?.backendData
-    );
-    if (nextStep) analyzeStepQuoteItem(nextStep);
-  }, [files, analyzeStepQuoteItem]);
-
   const priceQuoteItem = useCallback(async (item) => {
     if (!item?.id || item.id === selectedFileRef.current?.id) return;
     const config = item.customized ? cloneQuoteConfig(item.config) : cloneQuoteConfig(sharedConfigRef.current);
@@ -1887,12 +1766,13 @@ const InstantPricing = () => {
     const key = buildPricingKeyForQuoteItem(item, config, allServices, derived);
     if (!key) return;
     if (item.pricing?.key === key && item.pricing?.estimate?.success) return;
+    if (item.pricing?.key === key && (item.pricing?.status === 'calculating' || item.pricing?.status === 'error')) return;
     if (backgroundPricingRef.current.has(item.id)) return;
 
     backgroundPricingRef.current.add(item.id);
     setFiles(prev => prev.map(f => (
       f.id === item.id
-        ? { ...f, pricing: { ...(f.pricing || makeEmptyQuotePricing()), status: 'calculating', error: '' } }
+        ? { ...f, pricing: { ...(f.pricing || makeEmptyQuotePricing()), status: 'calculating', error: '', key } }
         : f
     )));
 
@@ -1923,7 +1803,7 @@ const InstantPricing = () => {
               estimate: null,
               status: 'error',
               error: err.message || 'Pricing failed',
-              key: '',
+              key,
             }
           }
           : f
@@ -1942,6 +1822,7 @@ const InstantPricing = () => {
       const derived = deriveQuoteItem(f, config, allServices);
       const key = buildPricingKeyForQuoteItem(f, config, allServices, derived);
       if (!key) return false;
+      if (f.pricing?.key === key && (f.pricing?.status === 'calculating' || f.pricing?.status === 'error')) return false;
       return !(f.pricing?.key === key && f.pricing?.estimate?.success);
     });
     if (nextItem) priceQuoteItem(nextItem);
@@ -2186,10 +2067,10 @@ const InstantPricing = () => {
   // ── Fast Analysis Stage (Holes/Dimensions) ────────────────────────────────
   // ── Analysis Orchestrator ────────────────────────────────────────────────
   useEffect(() => {
-    if (!selectedFile || !currentIsStep) return;
-    // Trigger heavy unfold in background once per selected STEP file.
+    if (!selectedFile || !currentIsStep || viewMode !== '2d') return;
+    // Trigger heavy unfold only when the user is actively requesting the flat view.
     handleUnfold(true);
-  }, [selectedFile, currentIsStep, handleUnfold]);
+  }, [selectedFile, currentIsStep, viewMode, handleUnfold]);
 
   // ── Real Configured-Cut STEP Preview (debounced + abortable) ─────────────
   useEffect(() => {
@@ -2269,13 +2150,13 @@ const InstantPricing = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedFile || !currentIsStep || viewMode !== '3d') {
+    if (!selectedFileId || !currentIsStep || viewMode !== '3d') {
       setIsStepModelLoading(false);
       return;
     }
     setIsStepModelLoading(true);
     setStepModelProgress(0);
-  }, [selectedFile, currentIsStep, viewMode, configuredPreviewUrl]);
+  }, [selectedFileId, currentIsStep, viewMode, configuredPreviewUrl]);
 
   const handleStepViewerProgress = useCallback((nextValue) => {
     const num = Number(nextValue);
@@ -2289,6 +2170,134 @@ const InstantPricing = () => {
     setStepModelProgress(100);
     setIsStepModelLoading(false);
   }, []);
+
+  const quoteQueueRows = useMemo(() => {
+    return files.map((file) => {
+      const config = file.customized ? cloneQuoteConfig(file.config) : cloneQuoteConfig(sharedConfig);
+      const derived = deriveQuoteItem(file, config, allServices);
+      const pricingKey = buildPricingKeyForQuoteItem(file, config, allServices, derived);
+      const ready = Boolean(
+        pricingKey &&
+        file.pricing?.estimate?.success &&
+        file.pricing?.key === pricingKey
+      );
+      const analysisStatus = file.analysisStatus || 'idle';
+      const pricingStatus = file.pricing?.status || 'idle';
+      const status = analysisStatus === 'error'
+        ? 'Error'
+        : analysisStatus === 'analyzing'
+          ? 'Analyzing'
+          : pricingStatus === 'error'
+            ? 'Error'
+            : pricingStatus === 'calculating'
+              ? 'Calculating'
+              : ready
+                ? 'Ready'
+                : 'Needs config';
+      return {
+        id: file.id,
+        file,
+        config,
+        derived,
+        pricingKey,
+        ready,
+        status,
+        error: file.analysisError || file.pricing?.error || '',
+        total: ready ? (parseFloat(file.pricing?.estimate?.total_price || 0) || 0) : 0,
+      };
+    });
+  }, [files, sharedConfig, allServices]);
+
+  const queueReadyCount = quoteQueueRows.filter(row => row.ready).length;
+  const queueTotal = quoteQueueRows.reduce((sum, row) => sum + row.total, 0);
+  const allQueueItemsReady = files.length > 0 && queueReadyCount === files.length;
+  const blockedQueueRow = quoteQueueRows.find(row => !row.ready);
+  const queueBlockedReason = !files.length
+    ? 'Upload files first'
+    : blockedQueueRow?.status === 'Error'
+      ? (blockedQueueRow.error || 'Fix the errored file before adding all items')
+      : blockedQueueRow?.status === 'Analyzing'
+        ? 'Waiting for file analysis'
+        : blockedQueueRow?.status === 'Calculating'
+          ? 'Waiting for pricing'
+          : 'Configure and price all files';
+
+  const getFilesWithActiveSnapshot = () => {
+    const activeId = selectedFileRef.current?.id;
+    const activeAnalysis = cloneQuoteAnalysis({
+      dimensions,
+      dxfSvg,
+      dxfTechData,
+      backendData,
+      bendTree,
+      detectedHoles,
+      detectedBends,
+    });
+    const activeConfig = buildCurrentQuoteConfig();
+
+    return filesRef.current.map(f => {
+      if (f.id !== activeId) return f;
+      const activeKey = priceEstimate?.success
+        ? (priceEstimate.__pricingKey || buildPricingKeyForQuoteItem({ ...f, analysis: activeAnalysis }, activeConfig, allServices))
+        : '';
+      return {
+        ...f,
+        config: f.customized ? activeConfig : f.config,
+        analysis: activeAnalysis,
+        pricing: {
+          estimate: priceEstimate,
+          status: isCalculatingPrice ? 'calculating' : priceEstimate?.success ? 'ready' : 'idle',
+          error: '',
+          key: activeKey,
+        }
+      };
+    });
+  };
+
+  function handleAddAllToCart() {
+    const latestFiles = getFilesWithActiveSnapshot();
+    const rows = latestFiles.map((file) => {
+      const config = file.customized ? cloneQuoteConfig(file.config) : cloneQuoteConfig(sharedConfigRef.current);
+      const derived = deriveQuoteItem(file, config, allServices);
+      const pricingKey = buildPricingKeyForQuoteItem(file, config, allServices, derived);
+      const ready = Boolean(pricingKey && file.pricing?.estimate?.success && file.pricing?.key === pricingKey);
+      return { file, config, ready, cartItem: ready ? buildCartItemFromQuoteItem(file, config, allServices) : null };
+    });
+
+    const blocked = rows.find(row => !row.ready || !row.cartItem);
+    if (blocked) {
+      toast(queueBlockedReason || 'Every uploaded file must be configured and priced first.', 'error');
+      return;
+    }
+
+    addManyToCart(rows.map(row => row.cartItem));
+    navigate('/cart');
+  }
+
+  const markActiveFileCustom = () => {
+    if (!selectedFile) return;
+    const nextConfig = buildCurrentQuoteConfig();
+    setFiles(prev => prev.map(f => (
+      f.id === selectedFile.id
+        ? { ...f, customized: true, config: cloneQuoteConfig(nextConfig) }
+        : f
+    )));
+    toast('This file now has its own configuration.', 'success');
+  };
+
+  const applyActiveConfigToAllFiles = () => {
+    if (!selectedFile) return;
+    const nextConfig = buildCurrentQuoteConfig();
+    setSharedConfig(cloneQuoteConfig(nextConfig));
+    setFiles(prev => prev.map(f => ({
+      ...f,
+      customized: false,
+      config: cloneQuoteConfig(nextConfig),
+      pricing: makeEmptyQuotePricing(),
+    })));
+    setPriceEstimate(null);
+    toast('Active configuration applied to all files.', 'success');
+  };
 
   const showStepModelLoadingOverlay = currentIsStep && viewMode === '3d' && isStepModelLoading;
   const showGlobalViewerOverlay = isDetectingHoles || isCalculatingPrice || isGeneratingConfiguredPreview || showStepModelLoadingOverlay;
@@ -2555,41 +2564,110 @@ const InstantPricing = () => {
                   <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>
                     Files <span style={{ background: '#f1f5f9', color: '#64748b', borderRadius: '4px', padding: '1px 5px', marginLeft: '4px' }}>{files.length}</span>
                   </span>
-                  <button className="ip-clear-btn" onClick={() => { setFiles([]); setIsQuoteFlowActive(false); }}>Clear all</button>
+                  <button className="ip-clear-btn" onClick={() => { setFiles([]); setSelectedFile(null); setIsQuoteFlowActive(false); }}>Clear all</button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                   <AnimatePresence mode="popLayout">
-                    {files.map(f => (
-                      <motion.div
-                        layout
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -12 }}
-                        key={f.id}
-                        className={`ip-file-card ${selectedFile?.id === f.id ? 'active' : ''}`}
-                        onClick={() => setSelectedFile(f)}
-                      >
-                        <div className={`ip-file-icon ${selectedFile?.id === f.id ? 'active' : 'inactive'}`}>
-                          <FileText size={14} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.file.name}</div>
-                          <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '1px' }}>
-                            {f.file.name.split('.').pop().toUpperCase()}
+                    {files.map(f => {
+                      const queueRow = quoteQueueRows.find(row => row.id === f.id);
+                      const status = queueRow?.status || 'Needs config';
+                      const statusColor = status === 'Ready'
+                        ? '#059669'
+                        : status === 'Error'
+                          ? '#dc2626'
+                          : status === 'Calculating' || status === 'Analyzing'
+                            ? '#d97706'
+                            : '#64748b';
+                      return (
+                        <MotionDiv
+                          layout
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -12 }}
+                          key={f.id}
+                          className={`ip-file-card ${selectedFile?.id === f.id ? 'active' : ''}`}
+                          onClick={() => setSelectedFile(f)}
+                        >
+                          <div className={`ip-file-icon ${selectedFile?.id === f.id ? 'active' : 'inactive'}`}>
+                            <FileText size={14} />
                           </div>
-                        </div>
-                        {selectedFile?.id === f.id
-                          ? <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={9} color="#fff" /></div>
-                          : <X size={13} color="#cbd5e1" style={{ flexShrink: 0, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} />
-                        }
-                      </motion.div>
-                    ))}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.file.name}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                              <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {f.file.name.split('.').pop().toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: 8, fontWeight: 900, color: statusColor, background: `${statusColor}14`, border: `1px solid ${statusColor}30`, borderRadius: 999, padding: '1px 5px', textTransform: 'uppercase' }}>
+                                {status}
+                              </span>
+                              {f.customized && (
+                                <span style={{ fontSize: 8, fontWeight: 900, color: '#7c3aed', background: '#f3e8ff', border: '1px solid #ddd6fe', borderRadius: 999, padding: '1px 5px', textTransform: 'uppercase' }}>
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            {queueRow?.ready && (
+                              <div style={{ fontSize: 10, fontWeight: 900, color: '#0f172a', marginTop: 3 }}>
+                                ${queueRow.total.toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                          {selectedFile?.id === f.id
+                            ? <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={9} color="#fff" /></div>
+                            : <X size={13} color="#cbd5e1" style={{ flexShrink: 0, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} />
+                          }
+                        </MotionDiv>
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
                 <input {...getInputProps()} />
                 <button type="button" className="ip-add-btn" onClick={openFilePicker}>
                   <Plus size={13} /> Add more files
                 </button>
+                <div style={{ marginTop: 10, padding: 10, border: '1.5px solid #e8eaed', borderRadius: 10, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 9, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Quote Queue</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{queueReadyCount}/{files.length} ready</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 9, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</div>
+                      <div style={{ fontSize: 15, fontWeight: 950, color: allQueueItemsReady ? '#059669' : '#0f172a' }}>${queueTotal.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  {!allQueueItemsReady && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', lineHeight: 1.35 }}>
+                      {queueBlockedReason}
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={markActiveFileCustom}
+                      disabled={!selectedFile || activeQuoteItem?.customized}
+                      style={{ border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 8, padding: '7px 8px', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', cursor: selectedFile && !activeQuoteItem?.customized ? 'pointer' : 'not-allowed', opacity: selectedFile && !activeQuoteItem?.customized ? 1 : 0.55 }}
+                    >
+                      Customize
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyActiveConfigToAllFiles}
+                      disabled={!selectedFile}
+                      style={{ border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 8, padding: '7px 8px', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', cursor: selectedFile ? 'pointer' : 'not-allowed', opacity: selectedFile ? 1 : 0.55 }}
+                    >
+                      Apply All
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddAllToCart}
+                    disabled={!allQueueItemsReady}
+                    style={{ border: 'none', background: allQueueItemsReady ? '#ef4444' : '#cbd5e1', color: '#fff', borderRadius: 8, padding: '10px 8px', fontSize: 11, fontWeight: 950, textTransform: 'uppercase', cursor: allQueueItemsReady ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    Add {files.length} to cart <ChevronRight size={13} />
+                  </button>
+                </div>
               </div>
 
               {/* ── CENTER PANEL: 3D Viewer ── */}
@@ -2615,7 +2693,7 @@ const InstantPricing = () => {
 
                   {currentIsStep && viewMode === '3d' && (
                     <StepModelViewer
-                      selectedFile={selectedFile}
+                      selectedFile={selectedViewerFile}
                       modelUrlOverride={configuredPreviewUrl}
                       viewMode={viewMode}
                       activeAxis={activeAxis}
@@ -2672,7 +2750,7 @@ const InstantPricing = () => {
                   )}
                   {currentIsDxf && (
                     <DxfModelViewer
-                      selectedFile={selectedFile}
+                      selectedFile={selectedViewerFile}
                       viewMode={viewMode}
                       activeFinishColor={activeFinishColor}
                       isFinishPowderCoating={isFinishPowderCoating}
@@ -2796,7 +2874,7 @@ const InstantPricing = () => {
 
                   {currentIsStep && viewMode === '3d' ? (
                     <StepModelViewer
-                      selectedFile={selectedFile}
+                      selectedFile={selectedViewerFile}
                       modelUrlOverride={configuredPreviewUrl}
                       viewMode={viewMode}
                       activeAxis={activeAxis}
@@ -2852,7 +2930,7 @@ const InstantPricing = () => {
                   )}
                   {currentIsDxf && (
                     <DxfModelViewer
-                      selectedFile={selectedFile}
+                      selectedFile={selectedViewerFile}
                       viewMode={viewMode}
                       activeFinishColor={activeFinishColor}
                       isFinishPowderCoating={isFinishPowderCoating}
@@ -3445,9 +3523,11 @@ const InstantPricing = () => {
                               ? (finishPrice > 0 ? finishPrice : baseServicePrice)
                               : baseServicePrice;
                             const shouldShowPriceBadge = !isUnsupported
+                              && isActive
                               && displayServicePrice > 0
+                              && (kind !== 'finish' || selectedFinish)
                               && !(svcTitle.includes('powder') || svcTitle.includes('coat'));
-                            const priceBadgeLabel = selectedFinish ? 'selected' : 'from';
+                            const priceBadgeLabel = 'selected';
 
                             return (
                               <React.Fragment key={svc.id}>
@@ -3667,13 +3747,7 @@ const InstantPricing = () => {
 
                       {(() => {
                         const rows = priceEstimate?.breakdown?.service_breakdown || [];
-                        const markupRows = [
-                          { name: 'Material Markup', amount: priceEstimate?.breakdown?.material_markup_amount },
-                          { name: 'Inside Labor Markup', amount: priceEstimate?.breakdown?.inside_labor_markup_amount },
-                          { name: 'Overhead Markup', amount: priceEstimate?.breakdown?.overhead_markup_amount },
-                          { name: 'General Markup', amount: priceEstimate?.breakdown?.general_markup_amount },
-                        ].filter(row => (parseFloat(row.amount || 0) || 0) > 0.001);
-                        if (rows.length === 0 && markupRows.length === 0) return null;
+                        if (rows.length === 0) return null;
                         return (
                           <div style={{ paddingBottom: 12 }}>
                             {rows.map((r, i) => (
@@ -3690,17 +3764,6 @@ const InstantPricing = () => {
                                         : ((parseFloat(r.price) || 0) * quantity)) || 0).toFixed(2)}
                                     </span>
                                   )
-                                }
-                              </div>
-                            ))}
-                            {markupRows.map((r) => (
-                              <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                                <div>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
-                                </div>
-                                {isCalculatingPrice
-                                  ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
-                                  : <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>${(parseFloat(r.amount || 0) || 0).toFixed(2)}</span>
                                 }
                               </div>
                             ))}

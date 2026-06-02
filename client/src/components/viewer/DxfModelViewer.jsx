@@ -8,8 +8,6 @@ import { analyzeDxfFile } from '../../utils/dxfAnalysis';
 const DxfModelViewer = ({
   selectedFile,
   viewMode,
-  activeFinishColor,
-  isFinishPowderCoating,
   selectedThickness,
   onDimensionsExtracted = () => { },
   onTechDataExtracted = () => { },
