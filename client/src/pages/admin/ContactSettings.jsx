@@ -11,7 +11,8 @@ export default function ContactSettings() {
         navbar_logo: '',
         footer_logo: '',
         site_logo: '',
-        hero_image: ''
+        hero_image: '',
+        show_service_breakdown: true
     });
     const [uploading, setUploading] = useState({ navbar: false, footer: false, site: false, hero: false });
     const navbarInputRef = useRef(null);
@@ -34,7 +35,8 @@ export default function ContactSettings() {
                     navbar_logo: data.navbar_logo || '',
                     footer_logo: data.footer_logo || '',
                     site_logo: data.site_logo || '',
-                    hero_image: data.hero_image || ''
+                    hero_image: data.hero_image || '',
+                    show_service_breakdown: resolveBooleanSetting(data.show_service_breakdown, prev.show_service_breakdown)
                 }));
                 setAllMetals(Array.isArray(metals) ? metals : []);
             })
@@ -48,6 +50,7 @@ export default function ContactSettings() {
             await updateSetting('footer_contact', settings.footer_contact);
             await updateSetting('social_links', settings.social_links);
             await updateSetting('top_metals', settings.top_metals);
+            await updateSetting('show_service_breakdown', settings.show_service_breakdown);
             toast('Settings saved successfully', 'success');
         } catch (err) {
             toast('Failed to save: ' + err.message, 'error');
@@ -122,6 +125,17 @@ export default function ContactSettings() {
             return value.avif || value.webp || value.jpg || value.jpeg || value.png || value.src || '';
         }
         return '';
+    };
+
+    const resolveBooleanSetting = (value, fallback = true) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') return value !== 0;
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (normalized === 'true') return true;
+            if (normalized === 'false') return false;
+        }
+        return fallback;
     };
 
     // Metals not yet added
@@ -230,6 +244,41 @@ export default function ContactSettings() {
                                         </button>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+
+                        {/* Quote Display */}
+                        <div className="admin-section-card" style={{ marginTop: 24 }}>
+                            <div className="admin-section-header">
+                                <div>
+                                    <h3 className="admin-section-title">Quote Display</h3>
+                                    <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
+                                        Control whether the final quote shows per-service prices.
+                                    </p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px' }}>
+                                <div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Show service cost breakdown</div>
+                                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>When off, only the total cost is shown.</div>
+                                </div>
+                                <div className="admin-social-toggle">
+                                    <label className="switch">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!settings.show_service_breakdown}
+                                            onChange={() => setSettings(prev => ({
+                                                ...prev,
+                                                show_service_breakdown: !prev.show_service_breakdown
+                                            }))}
+                                            disabled={loading}
+                                        />
+                                        <span className="slider round"></span>
+                                    </label>
+                                    <span style={{ fontSize: 12, color: '#64748b' }}>
+                                        {settings.show_service_breakdown ? 'On' : 'Off'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 

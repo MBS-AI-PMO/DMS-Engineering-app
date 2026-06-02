@@ -10,7 +10,7 @@ import {
 import {
   fetchServices, calculatePrice, fetchPublicDiscounts, fetchHardwareItemsByType,
   fetchCategories, fetchMetals, fetchPricingCncMetals, fetchPricingSheetMetals,
-  fetchCncPricingConfig, fetchMetalsByServiceId
+  fetchCncPricingConfig, fetchMetalsByServiceId, fetchSettings
 } from '../utils/api';
 import { useCart } from '../context/CartContext.js';
 import { useToast } from '../context/ToastContext';
@@ -89,6 +89,17 @@ const normalizePierceCount = (directCount, dxfCount, detectedHoleCount, subtract
 
   const holes = Number.parseInt(detectedHoleCount, 10);
   return Number.isFinite(holes) && holes > 0 ? holes : 0;
+};
+
+const normalizeBooleanSetting = (value, fallback = true) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return fallback;
 };
 
 const getProcessFlags = (serviceTitle = '') => {
@@ -449,6 +460,7 @@ const InstantPricing = () => {
   const [configuredHardwareResizeReport, setConfiguredHardwareResizeReport] = useState({});
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
   const [configStep, setConfigStep] = useState(0); // 0: Method, 1: Category, 2: Metal, 3: Thickness, 4: Services
+  const [showServiceBreakdown, setShowServiceBreakdown] = useState(true);
 
   // Dynamic data from DB
   const [allServices, setAllServices] = useState([]);
@@ -463,6 +475,20 @@ const InstantPricing = () => {
   const sharedConfigRef = useRef(sharedConfig);
   const restoringQuoteItemRef = useRef(false);
   const backgroundPricingRef = useRef(new Set());
+
+  useEffect(() => {
+    let active = true;
+    fetchSettings()
+      .then((data) => {
+        if (!active) return;
+        const value = normalizeBooleanSetting(data?.show_service_breakdown, true);
+        setShowServiceBreakdown(value);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [selectedProductionService, setSelectedProductionService] = useState(null);
   const [selectedMetal, setSelectedMetal] = useState(null);
@@ -3734,18 +3760,21 @@ const InstantPricing = () => {
                     <div style={{ background: '#1a1a2e', borderRadius: 16, padding: '22px 20px', color: '#fff', marginTop: 'auto' }}>
                       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#64748b', marginBottom: 18 }}>Project Breakdown</div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
-                          {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
+                      {showServiceBreakdown && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
+                            {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
+                          </div>
+                          {isCalculatingPrice
+                            ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
+                            : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(((priceEstimate?.breakdown?.material_cost ?? 0) * quantity) || 0).toFixed(2)}</span>
+                          }
                         </div>
-                        {isCalculatingPrice
-                          ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
-                          : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(((priceEstimate?.breakdown?.material_cost ?? 0) * quantity) || 0).toFixed(2)}</span>
-                        }
-                      </div>
+                      )}
 
                       {(() => {
+                        if (!showServiceBreakdown) return null;
                         const rows = priceEstimate?.breakdown?.service_breakdown || [];
                         if (rows.length === 0) return null;
                         return (

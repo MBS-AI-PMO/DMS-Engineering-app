@@ -27,9 +27,9 @@ const CutSizesVisual = ({ sizes }) => {
     React.useEffect(() => {
         const handleResize = () => {
             if (window.innerWidth < 500) {
-                setContainerHeight(130);
+                setContainerHeight(140);
             } else if (window.innerWidth < 768) {
-                setContainerHeight(160);
+                setContainerHeight(170);
             } else {
                 setContainerHeight(200);
             }
@@ -45,7 +45,7 @@ const CutSizesVisual = ({ sizes }) => {
     const scale = (containerHeight - 20) / maxHeight;
 
     return (
-        <div className="cut-sizes-visual">
+        <div className="cut-sizes-visual" style={{ height: `${containerHeight}px` }}>
             {parsedSizes.map((size, index) => {
                 // Calculate visual dimensions - true portrait aspect ratio
                 let visualWidth = Math.max(MIN_DIM, size.width * scale * 1.5); // Refined multiplier for portrait look
