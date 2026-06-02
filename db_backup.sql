@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict WZctuf5QdHglT4ZjuaZRPdfYK1mSDb3zZ6OuKTKxk78iYmUh8aMlFMmjAGVX5On
+\restrict zW4RBxZctzuv5qgRA3SKi53KtGazokJfeQsZa4jgYpi0fSV8abk5BFyC3kkFRWE
 
 -- Dumped from database version 15.16
 -- Dumped by pg_dump version 18.3
@@ -1835,7 +1835,7 @@ SELECT pg_catalog.setval('public.quantity_discounts_id_seq', 26, true);
 -- Name: service_configs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.service_configs_id_seq', 76513, true);
+SELECT pg_catalog.setval('public.service_configs_id_seq', 76515, true);
 
 
 --
@@ -2409,5 +2409,5 @@ ALTER TABLE ONLY public.services
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WZctuf5QdHglT4ZjuaZRPdfYK1mSDb3zZ6OuKTKxk78iYmUh8aMlFMmjAGVX5On
+\unrestrict zW4RBxZctzuv5qgRA3SKi53KtGazokJfeQsZa4jgYpi0fSV8abk5BFyC3kkFRWE
 
