@@ -23,7 +23,19 @@ import { wrinkleSwatchStyle } from '../utils/wrinkleTexture';
 import { analyzeDxfFile } from '../utils/dxfAnalysis';
 import '../styles/PremiumPricing.css';
 
-const BACKEND_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '') || '/api';
+const apiUrl = (path) => `${API_BASE_URL}${String(path || '').startsWith('/') ? path : `/${path}`}`;
+const backendAssetUrl = (assetPath) => {
+  const raw = String(assetPath || '').trim();
+  if (!raw) return '';
+  if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('blob:') || raw.startsWith('data:')) return raw;
+
+  const cleaned = raw.replace(/^\/+/, '');
+  if (cleaned.startsWith('api/')) return `/${cleaned}`;
+  if (cleaned.startsWith('temp_uploads/')) return apiUrl(`/${cleaned}`);
+  if (cleaned.startsWith('uploads/')) return apiUrl(`/${cleaned}`);
+  return `/${cleaned}`;
+};
 
 const HW_TYPES = [
   { id: 3, label: 'Nut', color: '#B8860B', specs: (item) => [item.length && `T ${item.length}"`, item.base_width && `E ${item.base_width}"`] },
@@ -1340,7 +1352,7 @@ const InstantPricing = () => {
 
   // ── Check backend availability on mount ───────────────
   useEffect(() => {
-    fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(300000) })
+    fetch(apiUrl('/health'), { signal: AbortSignal.timeout(300000) })
       .catch(() => { /* Backend is handled per-request */ });
   }, []);
 
@@ -1466,7 +1478,7 @@ const InstantPricing = () => {
       try {
         let r;
         if (selectedFile?.tempPath) {
-          r = await fetch(`${BACKEND_URL}/api/detect-holes-by-temp`, {
+          r = await fetch(apiUrl('/detect-holes-by-temp'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tempPath: selectedFile.tempPath }),
@@ -1475,7 +1487,7 @@ const InstantPricing = () => {
         } else {
           const fd = new FormData();
           fd.append('file', selectedFile.file);
-          r = await fetch(`${BACKEND_URL}/api/detect-holes`, {
+          r = await fetch(apiUrl('/detect-holes'), {
             method: 'POST',
             body: fd,
             signal: controller.signal,
@@ -1946,7 +1958,7 @@ const InstantPricing = () => {
 
     const fd = new FormData(); fd.append('file', selectedFile.file);
     try {
-      const startResponse = await fetch(`${BACKEND_URL}/api/unfold-job/start`, {
+      const startResponse = await fetch(apiUrl('/unfold-job/start'), {
         method: 'POST',
         body: fd,
         signal: controller.signal
@@ -1959,7 +1971,7 @@ const InstantPricing = () => {
 
       let d = null;
       for (; ;) {
-        const statusResponse = await fetch(`${BACKEND_URL}/api/unfold-job/${encodeURIComponent(jobId)}?ts=${Date.now()}`, {
+        const statusResponse = await fetch(apiUrl(`/unfold-job/${encodeURIComponent(jobId)}?ts=${Date.now()}`), {
           method: 'GET',
           cache: 'no-store',
           headers: {
@@ -2033,7 +2045,7 @@ const InstantPricing = () => {
           try {
             const verifyFd = new FormData();
             verifyFd.append('file', selectedFile.file);
-            const verifyRes = await fetch(`${BACKEND_URL}/api/unfold`, {
+            const verifyRes = await fetch(apiUrl('/unfold'), {
               method: 'POST',
               body: verifyFd,
               signal: controller.signal,
@@ -2148,12 +2160,7 @@ const InstantPricing = () => {
           return;
         }
 
-        const relativePath = String(data.previewPath).replace(/^\/+/, '');
-        const apiRoutedPath = relativePath.startsWith('temp_uploads/')
-          ? `api/${relativePath}`
-          : relativePath;
-        const resolved = BACKEND_URL ? `${BACKEND_URL}/${apiRoutedPath}` : `/${apiRoutedPath}`;
-        setConfiguredPreviewUrl(resolved);
+        setConfiguredPreviewUrl(backendAssetUrl(data.previewPath));
       } catch (err) {
         if (err?.name === 'AbortError') return;
         console.error('Configured STEP preview error:', err);

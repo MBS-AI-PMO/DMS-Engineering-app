@@ -132,14 +132,27 @@ const isAbsoluteHttpUrl = (value) => /^https?:\/\//i.test(String(value || '').tr
 const toBackendAssetUrl = (assetPath, fallbackModelUrl) => {
   if (!assetPath) return null;
 
-  const raw = String(assetPath).trim();
+  let raw = String(assetPath).trim();
   if (!raw) return null;
-  if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('blob:') || raw.startsWith('data:')) {
+  if (raw.startsWith('blob:') || raw.startsWith('data:')) {
+    return raw;
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      raw = new URL(raw).pathname || raw;
+    } catch {
+      return raw;
+    }
+  } else if (raw.startsWith('//')) {
     return raw;
   }
 
   const cleaned = raw.replace(/^\/+/, '');
-  if (BACKEND_URL) return `${BACKEND_URL}/${cleaned}`;
+  if (cleaned.startsWith('api/')) return `/${cleaned}`;
+  if (cleaned.startsWith('temp_uploads/') || cleaned.startsWith('uploads/')) {
+    return `${API_BASE_URL.replace(/\/+$/, '')}/${cleaned}`;
+  }
 
   if (isAbsoluteHttpUrl(fallbackModelUrl)) {
     try {

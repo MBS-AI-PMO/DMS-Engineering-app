@@ -65,6 +65,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     maxAge: '1y',
     immutable: true
 }));
+// Also expose persisted assets behind /api for production proxies that only route /api to the backend.
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads'), {
+    maxAge: '1y',
+    immutable: true
+}));
 
 // Serve temporary CAD assets for cart persistence établissement
 app.use('/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
