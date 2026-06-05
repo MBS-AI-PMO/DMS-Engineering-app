@@ -201,10 +201,40 @@ const validateOrderItemsAgainstBounds = async (items = []) => {
     return null;
 };
 
+const normalizeSubmittedAssetPath = (value) => {
+    let raw = String(value || '').trim();
+    if (!raw) return '';
+
+    try {
+        if (/^https?:\/\//i.test(raw)) {
+            raw = new URL(raw).pathname;
+        }
+    } catch {
+        return '';
+    }
+
+    raw = raw.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (raw.startsWith('api/temp_uploads/')) return raw.slice(4);
+    if (raw.startsWith('api/uploads/')) return raw.slice(4);
+    return raw;
+};
+
+const resolveBackendAssetPath = (relativePath) => {
+    const backendRoot = path.resolve(__dirname, '..');
+    const candidate = path.resolve(backendRoot, relativePath || '');
+    const rootPrefix = `${backendRoot}${path.sep}`.toLowerCase();
+    if (!candidate.toLowerCase().startsWith(rootPrefix)) return null;
+    return candidate;
+};
+
 // Helper: Move file from temp to permanent order storage
 const finalizeOrderFile = (tempPath) => {
-    if (!tempPath) return null;
-    const filename = path.basename(tempPath);
+    const normalizedPath = normalizeSubmittedAssetPath(tempPath);
+    if (!normalizedPath) return null;
+
+    const filename = path.basename(normalizedPath);
+    if (!filename) return null;
+
     const orderDir = path.join(__dirname, '../uploads/orders');
     if (!fs.existsSync(orderDir)) {
         fs.mkdirSync(orderDir, { recursive: true });
@@ -214,16 +244,19 @@ const finalizeOrderFile = (tempPath) => {
     const relativePersistPath = `uploads/orders/${filename}`;
 
     // Guard against root directory resolution établissement
-    const backendRoot = path.resolve(__dirname, '..');
     const sourcePaths = [
-        tempPath,
-        path.resolve(backendRoot, tempPath || ''),
-        path.resolve(backendRoot, 'temp_uploads', filename || '')
-    ].filter(p => p && p !== backendRoot); // Absolute safeguard établissement
+        resolveBackendAssetPath(normalizedPath),
+        resolveBackendAssetPath(path.join('temp_uploads', filename)),
+        resolveBackendAssetPath(path.join('uploads', 'orders', filename))
+    ].filter(Boolean);
 
     for (const src of sourcePaths) {
         if (fs.existsSync(src)) {
             try {
+                if (path.resolve(src) === path.resolve(newPath)) {
+                    console.log(`[CAD-Finalize] File already at destination: ${newPath}`);
+                    return relativePersistPath;
+                }
                 fs.renameSync(src, newPath);
                 console.log(`[CAD-Finalize] Moved ${src} -> ${newPath}`);
                 return relativePersistPath;
@@ -239,7 +272,7 @@ const finalizeOrderFile = (tempPath) => {
         return relativePersistPath;
     }
 
-    console.error(`[CAD-Finalize] SOURCE NOT FOUND: ${tempPath}`);
+    console.error(`[CAD-Finalize] SOURCE NOT FOUND: ${normalizedPath}`);
     return null; // Safety fallback établissement: Reject invalid paths establishments
 };
 
@@ -361,7 +394,12 @@ router.post('/', async (req, res) => {
 
         // 2. Create Order Items
         for (let item of items) {
-            const rawPath = finalizeOrderFile(path.resolve(__dirname, '..', item.tempPath));
+            const rawPath = finalizeOrderFile(item.tempPath);
+            if (!rawPath) {
+                const err = new Error(`${item.fileName || 'Uploaded file'} is no longer available. Please re-upload it and try again.`);
+                err.statusCode = 400;
+                throw err;
+            }
 
             const itemRes = await db.query(
                 `INSERT INTO order_items (order_id, file_name, original_file_path, configured_file_path, flat_file_path, configuration_json, quantity, unit_price)
@@ -404,7 +442,11 @@ router.post('/', async (req, res) => {
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('Error placing order:', err);
-        res.status(500).json({ success: false, error: 'Failed to place order' });
+        const statusCode = err.statusCode || 500;
+        res.status(statusCode).json({
+            success: false,
+            error: statusCode >= 500 ? 'Failed to place order' : err.message
+        });
     }
 });
 

@@ -484,6 +484,8 @@ app.listen(port, async () => {
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS flat_file_path TEXT;`);
         await db.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS configured_file_path TEXT;`);
         await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT;`);
+        await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_deleted_by_user BOOLEAN DEFAULT FALSE;`);
+        await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_deletion_status VARCHAR(20) DEFAULT 'active';`);
 
         // Hardware Item Specification Migration
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);

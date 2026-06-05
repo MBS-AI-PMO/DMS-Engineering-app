@@ -13,6 +13,25 @@ import { useToast } from '../context/ToastContext';
 import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder } from '../utils/api';
 import '../styles/PremiumCheckout.css';
 
+const normalizeOrderTempPath = (value) => {
+    let raw = String(value || '').trim();
+    if (!raw) return '';
+
+    try {
+        if (/^https?:\/\//i.test(raw)) {
+            raw = new URL(raw).pathname;
+        }
+    } catch {
+        return '';
+    }
+
+    raw = raw.replace(/^\/+/, '');
+    if (raw.startsWith('api/temp_uploads/')) return raw.replace(/^api\//, '');
+    if (raw.startsWith('temp_uploads/')) return raw;
+    if (raw.startsWith('uploads/orders/')) return raw;
+    return raw;
+};
+
 const Checkout = () => {
     const { cartItems, cartTotal, cartSubtotal, cartDiscount, clearCart } = useCart();
     const { user } = useAuth();
@@ -90,17 +109,27 @@ const Checkout = () => {
                 return;
             }
 
+            const normalizedItems = cartItems.map(item => ({
+                fileName: item.fileName || item.file_name,
+                tempPath: normalizeOrderTempPath(item.tempPath || item.temp_path || item.file?.path || ''),
+                configuration: item.configuration || {},
+                quantity: item.quantity || 1,
+                unitPrice: item.pricing?.total || 0
+            }));
+
+            if (normalizedItems.some(item => !item.tempPath)) {
+                showToast({
+                    title: 'Order Failed',
+                    message: 'One or more uploaded files are no longer available. Please re-upload the file and try again.'
+                }, 'error');
+                return;
+            }
+
             const payload = {
                 ...formData,
                 payment_method: paymentMethod,
                 payment_id: paymentId,
-                items: cartItems.map(item => ({
-                    fileName: item.fileName || item.file_name,
-                    tempPath: item.tempPath || item.temp_path || '',
-                    configuration: item.configuration || {},
-                    quantity: item.quantity || 1,
-                    unitPrice: item.pricing?.total || 0
-                })),
+                items: normalizedItems,
                 totalPrice: cartTotal || 0
             };
 

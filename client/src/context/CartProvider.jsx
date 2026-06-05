@@ -2,6 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { CartContext } from './CartContext';
 import { calculatePrice, fetchPublicDiscounts } from '../utils/api';
 
+const normalizeStoredAssetPath = (value) => {
+  let raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      raw = new URL(raw).pathname;
+    }
+  } catch {
+    return raw;
+  }
+
+  raw = raw.replace(/^\/+/, '');
+  if (raw.startsWith('api/temp_uploads/')) return `/${raw}`;
+  if (raw.startsWith('temp_uploads/')) return `/api/${raw}`;
+  if (raw.startsWith('api/uploads/')) return `/${raw}`;
+  if (raw.startsWith('uploads/')) return `/${raw}`;
+  return `/${raw}`;
+};
+
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState(() => {
     const saved = localStorage.getItem('dms_cart');
@@ -17,7 +37,7 @@ export const CartProvider = ({ children }) => {
             ...item,
             file: {
               name: item.fileName,
-              path: item.tempPath.startsWith('http') ? item.tempPath : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000'}/${item.tempPath}`
+              path: normalizeStoredAssetPath(item.tempPath)
             }
           };
         }
