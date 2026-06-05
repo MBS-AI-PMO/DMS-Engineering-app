@@ -262,6 +262,14 @@ const finalizeOrderFile = (tempPath) => {
                 return relativePersistPath;
             } catch (err) {
                 console.error(`[CAD-Finalize] Failed to move ${src}:`, err);
+                try {
+                    fs.copyFileSync(src, newPath);
+                    fs.unlinkSync(src);
+                    console.log(`[CAD-Finalize] Copied ${src} -> ${newPath}`);
+                    return relativePersistPath;
+                } catch (copyErr) {
+                    console.error(`[CAD-Finalize] Failed to copy ${src}:`, copyErr);
+                }
             }
         }
     }

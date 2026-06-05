@@ -11,13 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m venv /opt/cadquery-env \
-    && /opt/cadquery-env/bin/pip install --upgrade pip \
-    && /opt/cadquery-env/bin/pip install cadquery python-dotenv
 COPY package*.json ./
 RUN npm install
 
 COPY . .
+
+RUN python3 -m venv /opt/cadquery-env \
+    && /opt/cadquery-env/bin/pip install --upgrade pip \
+    && /opt/cadquery-env/bin/pip install -r requirements.txt
 
 ENV FREECAD_PATH=/usr/bin/freecadcmd
 ENV PYTHON_PATH=/opt/cadquery-env/bin/python
