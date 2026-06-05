@@ -27,4 +27,4 @@ ENV UNFOLD_LIB_PATH=/app/unfold_lib.py
 EXPOSE 5000
 EXPOSE 8000
 
-CMD ["npm", "run", "start"] 
+CMD ["npm", "run", "start:prod"]

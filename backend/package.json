@@ -12,7 +12,8 @@
     "seed:metals": "node scripts/seed_metals.js",
     "seed:faqs": "node scripts/seed_faqs.js",
     "create:admin": "node scripts/create_admin.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:prod": "concurrently --names \"NODE,PYTHON\" --prefix-colors \"cyan,yellow\" \"node server.js\" \"/opt/cadquery-env/bin/python -u main.py\""
   },
   "keywords": [],
   "author": "",
