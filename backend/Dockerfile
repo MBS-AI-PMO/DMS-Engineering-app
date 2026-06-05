@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python3 -m venv /opt/cadquery-env \
     && /opt/cadquery-env/bin/pip install --upgrade pip \
-    && /opt/cadquery-env/bin/pip install cadquery
-
+    && /opt/cadquery-env/bin/pip install cadquery python-dotenv
 COPY package*.json ./
 RUN npm install
 
@@ -22,7 +21,7 @@ COPY . .
 
 ENV FREECAD_PATH=/usr/bin/freecadcmd
 ENV PYTHON_PATH=/opt/cadquery-env/bin/python
-ENV UNFOLD_LIB_PATH=/app/unfold_lib.py
+ENV UNFOLD_LIB_PATH=/app/unfold_lib.py  
 
 EXPOSE 5000
 EXPOSE 8000
