@@ -5,8 +5,8 @@ import { ViteImageOptimizer } from 'vite-plugin-image-optimizer'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  const apiTarget = env.VITE_API_URL || 'http://localhost:5000';
+  const env = loadEnv(mode, process.cwd(), '')
+  const apiTarget = env.VITE_API_URL || 'http://localhost:5000'
 
   return {
     plugins: [
@@ -26,25 +26,38 @@ export default defineConfig(({ mode }) => {
         logStats: true,
       }),
     ],
+
     optimizeDeps: {
       include: ['occt-import-js'],
     },
+
     build: {
       rollupOptions: {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor-react';
-              if (id.includes('three')) return 'vendor-three';
-              if (id.includes('framer-motion')) return 'vendor-motion';
-              if (id.includes('online-3d-viewer')) return 'vendor-ov';
-              return 'vendor';
+              if (
+                id.includes('react') ||
+                id.includes('react-dom') ||
+                id.includes('react-router-dom')
+              ) {
+                return 'vendor-react'
+              }
+
+              if (id.includes('three')) return 'vendor-three'
+              if (id.includes('framer-motion')) return 'vendor-motion'
+              if (id.includes('online-3d-viewer')) return 'vendor-ov'
+
+              return 'vendor'
             }
           },
         },
       },
     },
+
     server: {
+      host: '0.0.0.0',
+      port: 3000,
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'credentialless',
@@ -61,8 +74,20 @@ export default defineConfig(({ mode }) => {
         '/temp_uploads': {
           target: apiTarget,
           changeOrigin: true,
-        }
-      }
-    }
+        },
+      },
+    },
+
+    preview: {
+      host: '0.0.0.0',
+      port: 3000,
+      allowedHosts: [
+        'htnxpk7uxwuu2rr97t3dma4z.2.25.152.142.sslip.io',
+      ],
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+      },
+    },
   }
 })
