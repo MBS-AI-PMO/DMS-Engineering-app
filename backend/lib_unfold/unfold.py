@@ -54,10 +54,23 @@ except ImportError:
         "or reinstalling the SheetMetal workbench using the addon manager\n"
     )
 
+def _freecad_precision_value(method_name, fallback):
+    precision = getattr(getattr(FreeCAD, "Base", None), "Precision", None)
+    method = getattr(precision, method_name, None)
+    if callable(method):
+        try:
+            value = method()
+            if value:
+                return value
+        except Exception:
+            pass
+    return fallback
+
+
 # used when comparing positions in 3D space
-eps = FreeCAD.Base.Precision.approximation()
+eps = _freecad_precision_value("approximation", 1e-7)
 # used when comparing angles
-eps_angular = FreeCAD.Base.Precision.angular()
+eps_angular = _freecad_precision_value("angular", 1e-12)
 
 
 class EstimateThickness:

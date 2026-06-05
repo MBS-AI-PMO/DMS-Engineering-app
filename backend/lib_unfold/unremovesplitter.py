@@ -7,7 +7,20 @@ from statistics import mode
 import FreeCAD
 import Part
 
-eps = FreeCAD.Base.Precision.approximation()
+def _freecad_precision_value(method_name, fallback):
+    precision = getattr(getattr(FreeCAD, "Base", None), "Precision", None)
+    method = getattr(precision, method_name, None)
+    if callable(method):
+        try:
+            value = method()
+            if value:
+                return value
+        except Exception:
+            pass
+    return fallback
+
+
+eps = _freecad_precision_value("approximation", 1e-7)
 
 
 def round_vector(vec: FreeCAD.Vector, ndigits: int = None) -> FreeCAD.Vector:
