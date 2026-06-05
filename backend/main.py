@@ -820,6 +820,10 @@ class CORSHandler(BaseHTTPRequestHandler):
                 print(f"[Python-API] Falling back to legacy engine...")
                 _report_progress(92, "Using fallback CAD engine")
                 return unfold_step_file(filepath)
+            detail = (e.stderr or e.stdout or "").strip()
+            if detail:
+                detail = detail[-2000:]
+                raise RuntimeError(f"FreeCAD unfold subprocess failed (exit {e.returncode}): {detail}")
             raise RuntimeError(f"FreeCAD unfold subprocess failed (exit {e.returncode})")
         except Exception as e:
             print(f"[Python-API] Merge pass unexpected error: {str(e)}")

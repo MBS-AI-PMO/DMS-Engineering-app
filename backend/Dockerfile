@@ -5,6 +5,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     freecad \
     python3 \
+    python3-networkx \
+    python3-numpy \
     python3-pip \
     python3-venv \
     build-essential \
