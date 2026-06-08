@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.env
+.env.*
+uploads
+temp_uploads
+*.log
+*.tar
+*.tar.gz
+*.zip
+__pycache__/
+*.pyc
+.pytest_cache/
+.git
+.gitignore
