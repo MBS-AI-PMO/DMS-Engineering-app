@@ -3837,6 +3837,87 @@ const InstantPricing = () => {
                       </div>
                     </div>
 
+                    {/* PART SNAPSHOT */}
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Part Snapshot</div>
+                      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#f8fafc' }}>
+                        {[
+                          {
+                            icon: <FileText size={14} />,
+                            label: 'File',
+                            value: selectedFile?.file?.name || 'No file selected',
+                          },
+                          {
+                            icon: <Box size={14} />,
+                            label: 'Material',
+                            value: selectedMetal?.name || 'Select material',
+                          },
+                          {
+                            icon: <Layers size={14} />,
+                            label: 'Stock',
+                            value: selectedThicknessDisplay || selectedThickness || 'Select thickness',
+                          },
+                          {
+                            icon: <Grid size={14} />,
+                            label: 'Size',
+                            value: displayDimensions
+                              ? `${displayDimensions.mm.l} x ${displayDimensions.mm.w} x ${displayDimensions.mm.t} mm`
+                              : 'Analyzing geometry',
+                          },
+                        ].map((row, index, rows) => (
+                          <div
+                            key={row.label}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '28px minmax(0, 1fr)',
+                              gap: 10,
+                              alignItems: 'center',
+                              padding: '12px 14px',
+                              borderBottom: index < rows.length - 1 ? '1px solid #e2e8f0' : 'none',
+                            }}
+                          >
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {row.icon}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 2 }}>{row.label}</div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={String(row.value || '')}>
+                                {row.value}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+                        {[
+                          { label: 'Pierces', value: measurementMetrics.pierceCount, color: '#2563eb' },
+                          { label: 'Bends', value: bendCountTotal, color: bendCountTotal > 0 ? '#ef4444' : '#64748b' },
+                          { label: 'Services', value: quoteAdditionalServices.length, color: '#10b981' },
+                        ].map(item => (
+                          <div key={item.label} style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: 10, padding: '11px 8px', textAlign: 'center', minWidth: 0 }}>
+                            <div style={{ fontSize: 17, fontWeight: 950, color: item.color, fontFamily: 'monospace', lineHeight: 1 }}>{item.value}</div>
+                            <div style={{ fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: 5, whiteSpace: 'nowrap' }}>{item.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginTop: 10, padding: '11px 12px', borderRadius: 10, background: isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#fff7ed' : '#ecfdf5', border: `1px solid ${isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#fed7aa' : '#bbf7d0'}`, display: 'flex', alignItems: 'center', gap: 9 }}>
+                        {isLoadingUnfold || isDetectingHoles || isCalculatingPrice
+                          ? <Loader2 size={14} className="animate-spin" style={{ color: '#f97316', flexShrink: 0 }} />
+                          : <Check size={14} style={{ color: '#10b981', flexShrink: 0 }} />
+                        }
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 10, fontWeight: 900, color: isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#c2410c' : '#047857', textTransform: 'uppercase', letterSpacing: '0.9px' }}>
+                            {isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? 'Analyzing quote' : 'Quote ready'}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {dimensionSourceLabel} • {thicknessSourceLabel}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* PROJECT BREAKDOWN */}
                     <div style={{ flex: 1 }} />
                     <div style={{ background: '#1a1a2e', borderRadius: 16, padding: '22px 20px', color: '#fff', marginTop: 'auto' }}>
