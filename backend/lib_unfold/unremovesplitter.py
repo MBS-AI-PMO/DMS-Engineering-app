@@ -1,7 +1,7 @@
 from functools import lru_cache
 from hashlib import md5
 from itertools import combinations
-from math import log10
+from math import log10, pi
 from statistics import mode
 
 import FreeCAD
@@ -21,6 +21,20 @@ def _freecad_precision_value(method_name, fallback):
 
 
 eps = _freecad_precision_value("approximation", 1e-7)
+
+
+def _vectors_parallel(v1: FreeCAD.Vector, v2: FreeCAD.Vector, tolerance: float = eps) -> bool:
+    method = getattr(v1, "isParallel", None)
+    if callable(method):
+        try:
+            return bool(method(v2, tolerance))
+        except AttributeError:
+            pass
+    try:
+        angle = abs(v1.getAngle(v2))
+        return angle <= tolerance or abs(pi - angle) <= tolerance
+    except Exception:
+        return False
 
 
 def round_vector(vec: FreeCAD.Vector, ndigits: int = None) -> FreeCAD.Vector:
@@ -132,7 +146,7 @@ def removeSplitterPoints(shp: Part.Shape) -> None:
             new_edges = [e for e in face.Edges]
             for c1, c2 in combinations(circular_edges, 2):
                 if (
-                    c1.Curve.Axis.isParallel(c2.Curve.Axis, eps)
+                    _vectors_parallel(c1.Curve.Axis, c2.Curve.Axis, eps)
                     and c1.Curve.Center.distanceToPoint(c1.Curve.Center) < eps
                     and abs(c1.Curve.Radius - c2.Curve.Radius) < eps
                 ):

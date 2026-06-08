@@ -2349,6 +2349,76 @@ const InstantPricing = () => {
     });
   };
 
+  const selectQuoteFile = (file) => {
+    if (!file || file.id === selectedFile?.id) return;
+    const latestFiles = getFilesWithActiveSnapshot();
+    const nextFile = latestFiles.find(item => item.id === file.id) || file;
+    setFiles(latestFiles);
+    setSelectedFile(nextFile);
+  };
+
+  const renderFileTabs = (className = '') => {
+    if (!files.length) return null;
+
+    return (
+      <div className={`ip-file-tabs ${className}`.trim()} role="tablist" aria-label="Uploaded files">
+        {files.map((f, index) => {
+          const queueRow = quoteQueueRows.find(row => row.id === f.id);
+          const status = queueRow?.status || 'Needs config';
+          const statusKey = status.toLowerCase().replace(/\s+/g, '-');
+          const isActive = selectedFile?.id === f.id;
+          const fileName = f.file?.name || `File ${index + 1}`;
+
+          return (
+            <div
+              key={f.id}
+              className={`ip-file-tab ${isActive ? 'active' : ''}`}
+              role="tab"
+              tabIndex={0}
+              aria-selected={isActive}
+              title={fileName}
+              onClick={() => selectQuoteFile(f)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectQuoteFile(f);
+                }
+              }}
+            >
+              <span className="ip-file-tab-icon">
+                <FileText size={13} />
+              </span>
+              <span className="ip-file-tab-main">
+                <span className="ip-file-tab-name">{fileName}</span>
+                <span className={`ip-file-tab-status ${statusKey}`}>{status}</span>
+              </span>
+              {isActive ? (
+                <span className="ip-file-tab-check">
+                  <Check size={10} />
+                </span>
+              ) : files.length > 1 ? (
+                <button
+                  type="button"
+                  className="ip-file-tab-close"
+                  aria-label={`Remove ${fileName}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFile(f.id);
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        <button type="button" className="ip-file-tab-add" onClick={openFilePicker} aria-label="Add file">
+          <Plus size={15} />
+        </button>
+      </div>
+    );
+  };
+
   function handleAddAllToCart() {
     const latestFiles = getFilesWithActiveSnapshot();
     const rows = latestFiles.map((file) => {
@@ -2458,6 +2528,34 @@ const InstantPricing = () => {
         .ip-section-title::after { content:''; flex:1; height:1px; background:#e8eaed; }
         .ip-viewer-frame { flex:1; margin:0; border-radius:0; overflow:hidden; border:none; background:#ffffff; position:relative; display: flex; flex-direction: column; }
         .ip-toolbar { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; background:#ffffff; border-bottom:1.5px solid #e8eaed; }
+        .ip-file-tabs { display:flex; align-items:center; gap:8px; min-height:54px; padding:7px 12px; background:#fbfcfd; border-bottom:1.5px solid #e8eaed; overflow-x:auto; overflow-y:hidden; flex-shrink:0; scrollbar-width:thin; scrollbar-color:#cbd5e1 transparent; }
+        .ip-file-tabs.compact { min-height:50px; padding:6px 10px; }
+        .ip-file-tabs::-webkit-scrollbar { height:6px; }
+        .ip-file-tabs::-webkit-scrollbar-track { background:transparent; }
+        .ip-file-tabs::-webkit-scrollbar-thumb { background:#d5dde8; border-radius:999px; }
+        .ip-file-tab { min-width:138px; max-width:220px; height:38px; display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #dbe3ee; border-radius:8px; background:#ffffff; color:#1e293b; cursor:pointer; transition:border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; flex:0 0 auto; }
+        .ip-file-tab:hover { border-color:#b8c5d6; background:#f8fafc; }
+        .ip-file-tab.active { border-color:#ef4444; background:#fff5f5; box-shadow:0 5px 14px rgba(239,68,68,0.12); }
+        .ip-file-tab:focus-visible { outline:2px solid #ef4444; outline-offset:2px; }
+        .ip-file-tab-icon { width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; color:#64748b; flex-shrink:0; }
+        .ip-file-tab.active .ip-file-tab-icon { background:#ef4444; color:#ffffff; }
+        .ip-file-tab-main { display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:0; flex:1; }
+        .ip-file-tab-name { font-size:11px; font-weight:850; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ip-file-tab-status { width:max-content; max-width:100%; border-radius:999px; padding:1px 5px; font-size:8px; font-weight:900; line-height:1.2; text-transform:uppercase; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ip-file-tab-status.ready { color:#047857; background:#ecfdf5; border-color:#bbf7d0; }
+        .ip-file-tab-status.error { color:#b91c1c; background:#fef2f2; border-color:#fecaca; }
+        .ip-file-tab-status.analyzing, .ip-file-tab-status.calculating { color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; }
+        .ip-file-tab-status.needs-config { color:#475569; background:#f8fafc; border-color:#dbe3ee; }
+        .ip-file-tab-check { width:18px; height:18px; border-radius:999px; display:flex; align-items:center; justify-content:center; background:#ef4444; color:#ffffff; flex-shrink:0; }
+        .ip-file-tab-close { width:22px; height:22px; border:0; border-radius:7px; background:transparent; color:#94a3b8; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:background 0.15s ease, color 0.15s ease; }
+        .ip-file-tab-close:hover { background:#fee2e2; color:#ef4444; }
+        .ip-file-tab-add { width:36px; height:36px; border:1px dashed #cbd5e1; border-radius:8px; background:#ffffff; color:#64748b; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; transition:border-color 0.15s ease, color 0.15s ease, background 0.15s ease; }
+        .ip-file-tab-add:hover { border-color:#94a3b8; color:#1e293b; background:#f8fafc; }
+        @media (max-width: 640px) {
+          .ip-file-tabs { min-height:50px; padding:6px 10px; gap:6px; }
+          .ip-file-tab { min-width:126px; max-width:172px; height:36px; gap:6px; }
+          .ip-file-tab-name { font-size:10px; }
+        }
         .ip-pill-toggle { display:flex; padding:3px; border-radius:8px; background:#f1f5f9; border:1px solid #e2e8f0; gap:2px; }
         .ip-pill-btn { border:none; background:transparent; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#64748b; transition:all 0.15s; letter-spacing:0.5px; }
         .ip-pill-btn.active { background:#1a1a2e; color:#ffffff; }
@@ -2681,7 +2779,7 @@ const InstantPricing = () => {
                           exit={{ opacity: 0, x: -12 }}
                           key={f.id}
                           className={`ip-file-card ${selectedFile?.id === f.id ? 'active' : ''}`}
-                          onClick={() => setSelectedFile(f)}
+                          onClick={() => selectQuoteFile(f)}
                         >
                           <div className={`ip-file-icon ${selectedFile?.id === f.id ? 'active' : 'inactive'}`}>
                             <FileText size={14} />
@@ -2783,6 +2881,7 @@ const InstantPricing = () => {
                   </div>
                   {renderUnitToggle()}
                 </div>
+                {renderFileTabs()}
                 <div className="ip-viewer-frame qf-main-canvas">
 
 
@@ -2964,6 +3063,7 @@ const InstantPricing = () => {
                     <ChevronLeft size={13} /> BACK
                   </button>
                 </div>
+                {renderFileTabs('compact')}
                 <div className="ip-qf-viewer" style={{ position: 'relative' }}>
 
 

@@ -140,6 +140,82 @@ const translateCameraEyeBy = (camera, dx, dy, dz) => {
   camera.eye.z += dz;
 };
 
+const VIEW_AXIS_CAMERA = {
+  top: {
+    direction: new THREE.Vector3(0, 0, 1),
+    up: new THREE.Vector3(0, 1, 0),
+  },
+  front: {
+    direction: new THREE.Vector3(0, -1, 0),
+    up: new THREE.Vector3(0, 0, 1),
+  },
+  side: {
+    direction: new THREE.Vector3(1, 0, 0),
+    up: new THREE.Vector3(0, 0, 1),
+  },
+};
+
+const toOvCoord = (point) => new OV.Coord3D(point.x, point.y, point.z);
+
+const getSphereCenterVector = (sphere) => {
+  const center = sphere?.center;
+  return new THREE.Vector3(
+    Number(center?.x) || 0,
+    Number(center?.y) || 0,
+    Number(center?.z) || 0
+  );
+};
+
+const applyAxisCamera = (embeddedViewer, axis, animate = true) => {
+  const axisView = VIEW_AXIS_CAMERA[axis];
+  if (!embeddedViewer || !axisView) return;
+
+  try {
+    const viewer = embeddedViewer.GetViewer?.();
+    const nav = viewer?.navigation;
+    if (!viewer || !nav?.GetCamera) return;
+
+    const sphere = viewer.GetBoundingSphere?.(() => true);
+    const centerVec = getSphereCenterVector(sphere);
+    const radius = Number(sphere?.radius);
+    const safeRadius = Number.isFinite(radius) && radius > 0 ? radius : 1;
+    const distance = Math.max(safeRadius * 2.8, 1);
+    const direction = axisView.direction.clone().normalize();
+    const up = axisView.up.clone().normalize();
+    const center = toOvCoord(centerVec);
+
+    const camera = nav.GetCamera()?.Clone?.() || new OV.Camera(
+      toOvCoord(centerVec.clone().add(direction.clone().multiplyScalar(distance))),
+      center,
+      toOvCoord(up),
+      45
+    );
+
+    camera.center = center;
+    camera.eye = toOvCoord(centerVec.clone().add(direction.multiplyScalar(distance)));
+    camera.up = toOvCoord(up);
+
+    if (!Number.isFinite(camera.fov) || camera.fov <= 0) camera.fov = 45;
+    if (typeof viewer.AdjustClippingPlanesToSphere === 'function' && sphere) {
+      viewer.AdjustClippingPlanesToSphere(sphere);
+    }
+
+    if (typeof nav.GetFitToSphereCamera === 'function' && sphere) {
+      nav.SetCamera(camera);
+      const fitCamera = nav.GetFitToSphereCamera(center, safeRadius);
+      nav.MoveCamera(fitCamera || camera, animate ? 10 : 0);
+    } else if (typeof nav.MoveCamera === 'function') {
+      nav.MoveCamera(camera, animate ? 10 : 0);
+    } else if (typeof viewer.SetCamera === 'function') {
+      viewer.SetCamera(camera);
+    }
+
+    viewer.Render?.();
+  } catch (err) {
+    console.debug('Axis camera update skipped', err);
+  }
+};
+
 const StepModelViewer = ({
   selectedFile,
   detectedHoles = [],
@@ -165,6 +241,7 @@ const StepModelViewer = ({
   isModelFadedManually = false,
   isAnodizingModalOpen = false,
   dimensions = null,
+  activeAxis = null,
   onModelLoaded = () => { },
   onModelLoadFailed = () => { },
   onProgress = () => { },
@@ -176,6 +253,7 @@ const StepModelViewer = ({
   const modelOriginalDataRef = useRef(null);
   const centroidRef = useRef(new THREE.Vector3(0, 0, 0));
   const holeMarkersRef = useRef([]);
+  const activeAxisRef = useRef(activeAxis);
   const [modelLoadCount, setModelLoadCount] = useState(0);
   const selectedThicknessValueMm = useMemo(() => {
     const mm = Number.parseFloat(selectedThicknessMm);
@@ -223,6 +301,10 @@ const StepModelViewer = ({
     if (!wrinkleNormal.current) wrinkleNormal.current = getWrinkleNormal();
     if (!wrinkleGrain.current) wrinkleGrain.current = getWrinkleGrain();
   }, []);
+
+  useEffect(() => {
+    activeAxisRef.current = activeAxis;
+  }, [activeAxis]);
 
   // --- Core 3D Entry Effect ---
   useEffect(() => {
@@ -338,8 +420,13 @@ const StepModelViewer = ({
           setTimeout(() => {
             try {
               if (typeof viewer.Resize === 'function') viewer.Resize();
-              viewer.FitToWindow();
-              setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
+              const currentAxis = activeAxisRef.current;
+              if (currentAxis && currentAxis !== 'flat') {
+                applyAxisCamera(viewer, currentAxis, false);
+              } else {
+                viewer.FitToWindow();
+                setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
+              }
               viewer.Render();
             } catch (e) {
               console.debug('Initial FitToWindow/Resize skipped', e);
@@ -485,8 +572,13 @@ const StepModelViewer = ({
 
             setTimeout(() => {
               try {
-                viewerInstance.current.FitToWindow();
-                setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
+                const currentAxis = activeAxisRef.current;
+                if (currentAxis && currentAxis !== 'flat') {
+                  applyAxisCamera(viewerInstance.current, currentAxis, false);
+                } else {
+                  viewerInstance.current.FitToWindow();
+                  setCameraCenter(v?.navigation?.GetCamera?.(), centroidRef.current);
+                }
                 viewerInstance.current.Render();
               } catch { console.debug('Resize FitToWindow skipped'); }
             }, 50);
@@ -522,6 +614,11 @@ const StepModelViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile, modelUrlOverride]);
 
+  useEffect(() => {
+    if (!activeAxis || activeAxis === 'flat' || !viewerInstance.current || modelLoadCount === 0) return;
+    applyAxisCamera(viewerInstance.current, activeAxis, true);
+  }, [activeAxis, modelLoadCount]);
+
   // --- Thickness Scaling ---
   useEffect(() => {
     if (!viewerInstance.current || modelLoadCount === 0) return;
@@ -538,8 +635,13 @@ const StepModelViewer = ({
     }
     setTimeout(() => {
       try {
-        viewerInstance.current?.FitToWindow();
-        setCameraCenter(viewerInstance.current?.GetViewer?.()?.navigation?.GetCamera?.(), centroidRef.current);
+        const currentAxis = activeAxisRef.current;
+        if (currentAxis && currentAxis !== 'flat') {
+          applyAxisCamera(viewerInstance.current, currentAxis, false);
+        } else {
+          viewerInstance.current?.FitToWindow();
+          setCameraCenter(viewerInstance.current?.GetViewer?.()?.navigation?.GetCamera?.(), centroidRef.current);
+        }
         viewerInstance.current?.Render();
       } catch { console.debug('Scale FitToWindow skipped'); }
     }, 50);

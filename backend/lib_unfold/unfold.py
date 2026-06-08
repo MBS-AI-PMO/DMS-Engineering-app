@@ -73,6 +73,35 @@ eps = _freecad_precision_value("approximation", 1e-7)
 eps_angular = _freecad_precision_value("angular", 1e-12)
 
 
+def _vectors_parallel(v1: Vector, v2: Vector, tolerance: float = eps_angular) -> bool:
+    """FreeCAD 0.20 Base.Vector lacks isParallel; compare angle directly."""
+    method = getattr(v1, "isParallel", None)
+    if callable(method):
+        try:
+            return bool(method(v2, tolerance))
+        except AttributeError:
+            pass
+    try:
+        angle = abs(v1.getAngle(v2))
+        return angle <= tolerance or abs(pi - angle) <= tolerance
+    except Exception:
+        return False
+
+
+def _vectors_normal(v1: Vector, v2: Vector, tolerance: float = eps_angular) -> bool:
+    """FreeCAD 0.20 Base.Vector lacks isNormal; compare angle directly."""
+    method = getattr(v1, "isNormal", None)
+    if callable(method):
+        try:
+            return bool(method(v2, tolerance))
+        except AttributeError:
+            pass
+    try:
+        return abs(abs(v1.getAngle(v2)) - (pi / 2)) <= tolerance
+    except Exception:
+        return False
+
+
 class EstimateThickness:
     """This class provides helper functions to determine the sheet thickness
     of a solid-modelled sheet metal part."""
@@ -130,7 +159,7 @@ class EstimateThickness:
             for f in shape.Faces
             if f.hashCode() != ref_face.hashCode()
             and f.Surface.TypeId == "Part::GeomPlane"
-            and ref_face.Surface.Axis.isParallel(f.Surface.Axis, eps_angular)
+            and _vectors_parallel(ref_face.Surface.Axis, f.Surface.Axis, eps_angular)
         ]
         if not candidates:
             return 0.0
@@ -177,7 +206,7 @@ class TangentFaces:
         # returns True if the two planes have similar normals and the base
         # point of the first plane is (nearly) coincident with the second plane
         return (
-            p1.Axis.isParallel(p2.Axis, eps_angular)
+            _vectors_parallel(p1.Axis, p2.Axis, eps_angular)
             and p1.Position.distanceToPlane(p2.Position, p2.Axis) < eps
         )
 
@@ -186,7 +215,7 @@ class TangentFaces:
         # returns True if the cylinder is tangent to the plane
         # (there is 'line contact' between the surfaces)
         return (
-            p.Axis.isNormal(c.Axis, eps_angular)
+            _vectors_normal(p.Axis, c.Axis, eps_angular)
             and abs(abs(c.Center.distanceToPlane(p.Position, p.Axis)) - c.Radius) < eps
         )
 
@@ -195,7 +224,7 @@ class TangentFaces:
         # returns True if the two cylinders have parallel axis' and those axis'
         # are separated by a distance of approximately r1 + r2
         return (
-            c1.Axis.isParallel(c2.Axis, eps_angular)
+            _vectors_parallel(c1.Axis, c2.Axis, eps_angular)
             and abs(
                 c1.Center.distanceToLine(c2.Center, c2.Axis) - (c1.Radius + c2.Radius)
             )
@@ -207,7 +236,7 @@ class TangentFaces:
         # Imagine a donut sitting flat on a table.
         # That's our tangency condition for a plane and a toroid.
         return (
-            p.Axis.isParallel(t.Axis, eps_angular)
+            _vectors_parallel(p.Axis, t.Axis, eps_angular)
             and abs(abs(t.Center.distanceToPlane(p.Position, p.Axis)) - t.MinorRadius)
             < eps
         )
@@ -219,14 +248,14 @@ class TangentFaces:
         # - a donut shoved onto a shaft with no wiggle room
         # - a cylinder with an axis tangent to the central circle of the donut
         return (
-            c.Axis.isParallel(t.Axis, eps_angular)
+            _vectors_parallel(c.Axis, t.Axis, eps_angular)
             and c.Center.distanceToLine(t.Center, t.Axis) < eps
             and (
                 abs(c.Radius - abs(t.MajorRadius - t.MinorRadius)) < eps
                 or abs(c.Radius - abs(t.MajorRadius + t.MinorRadius)) < eps
             )
         ) or (
-            c.Axis.isNormal(t.Axis, eps_angular)
+            _vectors_normal(c.Axis, t.Axis, eps_angular)
             and abs(abs(t.Center.distanceToLine(c.Center, c.Axis)) - t.MajorRadius)
             < eps
             and abs(c.Radius - t.MinorRadius) < eps
@@ -257,7 +286,7 @@ class TangentFaces:
             )
         ) or (
             abs(s.Radius - t.MinorRadius) < eps
-            and t.Axis.isNormal(s.Center - t.Center, eps_angular)
+            and _vectors_normal(t.Axis, s.Center - t.Center, eps_angular)
             and abs(t.Center.distanceToPoint(s.Center) - t.MajorRadius) < eps
         )
 
@@ -265,7 +294,7 @@ class TangentFaces:
     def compare_torus_torus(t1: Part.Toroid, t2: Part.Toroid) -> bool:
         return (
             t1.Center.distanceToLine(t2.Center, t2.Axis) < eps
-            and t1.Axis.isParallel(t2.Axis, eps_angular)
+            and _vectors_parallel(t1.Axis, t2.Axis, eps_angular)
             and abs(
                 t1.Center.distanceToPoint(t2.Center) ** 2
                 + (t1.MajorRadius - t2.MajorRadius) ** 2
@@ -318,7 +347,7 @@ class TangentFaces:
     @staticmethod
     def compare_torus_cone(t: Part.Toroid, cn: Part.Cone) -> bool:
         return (
-            t.Axis.isParallel(cn.Axis, eps_angular)
+            _vectors_parallel(t.Axis, cn.Axis, eps_angular)
             and cn.Apex.distanceToLine(t.Center, t.Axis) < eps
             and (
                 abs(
