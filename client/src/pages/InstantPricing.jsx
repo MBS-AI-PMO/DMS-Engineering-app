@@ -132,6 +132,8 @@ const PriceSkeleton = ({ width = '80px', height = '24px', className = '' }) => (
 );
 const MotionDiv = motion.div;
 
+const normalizeQuoteQuantity = (value) => Math.max(1, parseInt(value, 10) || 1);
+
 const makeEmptyQuoteConfig = () => ({
   productionService: null,
   category: null,
@@ -175,9 +177,24 @@ const cloneQuoteConfig = (config = {}) => ({
   selectedHardware: { ...(config.selectedHardware || {}) },
   selectedCountersinks: { ...(config.selectedCountersinks || {}) },
   selectedBends: { ...(config.selectedBends || {}) },
-  quantity: Math.max(1, parseInt(config.quantity, 10) || 1),
+  quantity: normalizeQuoteQuantity(config.quantity),
   configStep: Number.isFinite(Number(config.configStep)) ? Number(config.configStep) : 0,
 });
+
+const cloneSharedQuoteConfig = (config = {}) => ({
+  ...cloneQuoteConfig(config),
+  quantity: 1,
+});
+
+const getQuoteConfigForFile = (item, sharedConfig = {}) => {
+  const fileConfig = cloneQuoteConfig(item?.config || {});
+  if (item?.customized) return fileConfig;
+
+  return {
+    ...cloneQuoteConfig(sharedConfig),
+    quantity: fileConfig.quantity,
+  };
+};
 
 const cloneQuoteAnalysis = (analysis = {}) => ({
   dimensions: analysis.dimensions || null,
@@ -557,6 +574,7 @@ const InstantPricing = () => {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [quantityInputValue, setQuantityInputValue] = useState('1');
   const [isModelFadedManually, setIsModelFadedManually] = useState(false);
   const [bendTree, setBendTree] = useState(null);
   const [detectedBends, setDetectedBends] = useState([]);
@@ -594,6 +612,34 @@ const InstantPricing = () => {
   useEffect(() => {
     sharedConfigRef.current = sharedConfig;
   }, [sharedConfig]);
+
+  useEffect(() => {
+    setQuantityInputValue(String(normalizeQuoteQuantity(quantity)));
+  }, [quantity, selectedFileId]);
+
+  const changeQuantityBy = useCallback((delta) => {
+    setQuantity(prev => normalizeQuoteQuantity(prev + delta));
+  }, []);
+
+  const handleQuantityInputChange = useCallback((event) => {
+    const digits = event.target.value.replace(/\D/g, '');
+    setQuantityInputValue(digits);
+    if (digits) {
+      setQuantity(normalizeQuoteQuantity(digits));
+    }
+  }, []);
+
+  const commitQuantityInput = useCallback(() => {
+    const nextQuantity = normalizeQuoteQuantity(quantityInputValue);
+    setQuantity(nextQuantity);
+    setQuantityInputValue(String(nextQuantity));
+  }, [quantityInputValue]);
+
+  const handleQuantityInputKeyDown = useCallback((event) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur();
+    }
+  }, []);
 
   const buildCurrentQuoteConfig = useCallback(() => cloneQuoteConfig({
     productionService: selectedProductionService,
@@ -1360,7 +1406,7 @@ const InstantPricing = () => {
   useEffect(() => {
     if (!selectedFile) return;
     const item = filesRef.current.find(f => f.id === selectedFile.id);
-    const config = item?.customized ? item.config : sharedConfigRef.current;
+    const config = getQuoteConfigForFile(item, sharedConfigRef.current);
     const analysis = cloneQuoteAnalysis(item?.analysis);
     restoringQuoteItemRef.current = true;
     applyQuoteConfigToUi(config);
@@ -1399,11 +1445,21 @@ const InstantPricing = () => {
       return;
     }
 
-    setSharedConfig(cloneQuoteConfig(nextConfig));
+    const nextSharedConfig = cloneSharedQuoteConfig(nextConfig);
+    setSharedConfig(nextSharedConfig);
     setFiles(prev => prev.map(f => (
       f.customized
         ? f
-        : { ...f, config: cloneQuoteConfig(nextConfig), pricing: makeEmptyQuotePricing() }
+        : {
+          ...f,
+          config: cloneQuoteConfig({
+            ...nextSharedConfig,
+            quantity: f.id === selectedFile.id
+              ? nextConfig.quantity
+              : normalizeQuoteQuantity(f.config?.quantity),
+          }),
+          pricing: makeEmptyQuotePricing()
+        }
     )));
   }, [
     selectedFile?.id,
@@ -1780,7 +1836,7 @@ const InstantPricing = () => {
         preview: URL.createObjectURL(file),
         tempPath: tempPath, // Essential for world-class order finalization
         customized: false,
-        config: cloneQuoteConfig(sharedConfigRef.current),
+        config: cloneSharedQuoteConfig(sharedConfigRef.current),
         analysis,
         analysisStatus,
         analysisError,
@@ -1799,7 +1855,7 @@ const InstantPricing = () => {
 
   const priceQuoteItem = useCallback(async (item) => {
     if (!item?.id || item.id === selectedFileRef.current?.id) return;
-    const config = item.customized ? cloneQuoteConfig(item.config) : cloneQuoteConfig(sharedConfigRef.current);
+    const config = getQuoteConfigForFile(item, sharedConfigRef.current);
     const derived = deriveQuoteItem(item, config, allServices);
     const key = buildPricingKeyForQuoteItem(item, config, allServices, derived);
     if (!key) return;
@@ -1856,7 +1912,7 @@ const InstantPricing = () => {
     const nextItem = files.find(f => {
       if (f.id === selectedFile?.id) return false;
       if (f.analysisStatus === 'analyzing' || f.analysisStatus === 'error') return false;
-      const config = f.customized ? cloneQuoteConfig(f.config) : cloneQuoteConfig(sharedConfig);
+      const config = getQuoteConfigForFile(f, sharedConfig);
       const derived = deriveQuoteItem(f, config, allServices);
       const key = buildPricingKeyForQuoteItem(f, config, allServices, derived);
       if (!key) return false;
@@ -2206,7 +2262,7 @@ const InstantPricing = () => {
 
   const quoteQueueRows = useMemo(() => {
     return files.map((file) => {
-      const config = file.customized ? cloneQuoteConfig(file.config) : cloneQuoteConfig(sharedConfig);
+      const config = getQuoteConfigForFile(file, sharedConfig);
       const derived = deriveQuoteItem(file, config, allServices);
       const pricingKey = buildPricingKeyForQuoteItem(file, config, allServices, derived);
       const ready = Boolean(
@@ -2275,7 +2331,12 @@ const InstantPricing = () => {
         : '';
       return {
         ...f,
-        config: f.customized ? activeConfig : f.config,
+        config: f.customized
+          ? activeConfig
+          : cloneQuoteConfig({
+            ...f.config,
+            quantity: activeConfig.quantity,
+          }),
         analysis: activeAnalysis,
         pricing: {
           estimate: priceEstimate,
@@ -2290,7 +2351,7 @@ const InstantPricing = () => {
   function handleAddAllToCart() {
     const latestFiles = getFilesWithActiveSnapshot();
     const rows = latestFiles.map((file) => {
-      const config = file.customized ? cloneQuoteConfig(file.config) : cloneQuoteConfig(sharedConfigRef.current);
+      const config = getQuoteConfigForFile(file, sharedConfigRef.current);
       const derived = deriveQuoteItem(file, config, allServices);
       const pricingKey = buildPricingKeyForQuoteItem(file, config, allServices, derived);
       const ready = Boolean(pricingKey && file.pricing?.estimate?.success && file.pricing?.key === pricingKey);
@@ -2321,7 +2382,7 @@ const InstantPricing = () => {
   const applyActiveConfigToAllFiles = () => {
     if (!selectedFile) return;
     const nextConfig = buildCurrentQuoteConfig();
-    setSharedConfig(cloneQuoteConfig(nextConfig));
+    setSharedConfig(cloneSharedQuoteConfig(nextConfig));
     setFiles(prev => prev.map(f => ({
       ...f,
       customized: false,
@@ -3743,19 +3804,32 @@ const InstantPricing = () => {
                   /* ── Full Quote Panel (after metal selected) ── */
                   <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     {/* ORDER QUANTITY */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 10 }}>Order Quantity</div>
-                      <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                    <div style={{ marginBottom: 28 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Order Quantity</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '58px minmax(0, 1fr) 58px', alignItems: 'center', minHeight: 58, border: '1.5px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
                         <button
-                          onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                          style={{ width: 44, height: 44, background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
+                          type="button"
+                          onClick={() => changeQuantityBy(-1)}
+                          style={{ width: 58, height: 58, background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
                           onMouseEnter={e => e.target.style.background = '#f8fafc'}
                           onMouseLeave={e => e.target.style.background = 'transparent'}
                         >−</button>
-                        <div style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 900, color: '#1e293b', fontFamily: 'monospace' }}>{quantity}</div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          aria-label="Order quantity"
+                          value={quantityInputValue}
+                          onChange={handleQuantityInputChange}
+                          onBlur={commitQuantityInput}
+                          onKeyDown={handleQuantityInputKeyDown}
+                          onFocus={event => event.target.select()}
+                          style={{ minWidth: 0, width: '100%', height: 58, border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontSize: 24, fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', padding: '0 12px' }}
+                        />
                         <button
-                          onClick={() => setQuantity(q => q + 1)}
-                          style={{ width: 44, height: 44, background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
+                          type="button"
+                          onClick={() => changeQuantityBy(1)}
+                          style={{ width: 58, height: 58, background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
                           onMouseEnter={e => e.target.style.background = '#f8fafc'}
                           onMouseLeave={e => e.target.style.background = 'transparent'}
                         >+</button>

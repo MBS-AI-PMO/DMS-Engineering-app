@@ -415,6 +415,7 @@ app.listen(port, async () => {
         // Ensure customer profile columns exist
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`);
+        await db.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;`);
         // Ensure configuration tables exist
         await db.query(`
             CREATE TABLE IF NOT EXISTS service_configs (

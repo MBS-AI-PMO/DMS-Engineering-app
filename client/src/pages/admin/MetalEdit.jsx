@@ -223,10 +223,11 @@ export default function MetalEdit() {
     const [zoomedImage, setZoomedImage] = useState(null);
     const [selectedThicknessIdx, setSelectedThicknessIdx] = useState(0);
     const [selectedServicesThicknessIdx, setSelectedServicesThicknessIdx] = useState(0);
+    const [uploadingImages, setUploadingImages] = useState(0);
 
     useEffect(() => {
         fetchCategories().then(setCategories).catch(err => toast('Failed to load categories: ' + err.message, 'error'));
-        fetchServices().then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
+        fetchServices({ includeInactive: true }).then(setAllServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
         if (!isNew) {
             fetchMetalBySlug(slug)
                 .then(data => {
@@ -253,8 +254,24 @@ export default function MetalEdit() {
     }, [slug, isNew, toast]);
 
     const set = useCallback((key, value) => setMetal(prev => ({ ...prev, [key]: value })), []);
+    const isUploadingImage = uploadingImages > 0;
+
+    const uploadMetalImagePath = useCallback(async (file) => {
+        setUploadingImages(count => count + 1);
+        try {
+            const { data } = await uploadMetalImage(file);
+            return data.image_path;
+        } finally {
+            setUploadingImages(count => Math.max(0, count - 1));
+        }
+    }, []);
 
     const handleSave = async () => {
+        if (isUploadingImage) {
+            toast('Please wait for image upload to finish before saving.', 'error');
+            return;
+        }
+
         setSaving(true);
         setError('');
         try {
@@ -351,8 +368,8 @@ export default function MetalEdit() {
                     <ArrowLeft size={16} /> Back
                 </button>
                 <h1 className="admin-page-title">{isNew ? 'New Metal' : `Edit: ${metal.name}`}</h1>
-                <button className="admin-btn-primary" onClick={handleSave} disabled={saving}>
-                    <Save size={16} /> {saving ? 'Saving...' : 'Save'}
+                <button className="admin-btn-primary" onClick={handleSave} disabled={saving || isUploadingImage}>
+                    <Save size={16} /> {saving ? 'Saving...' : isUploadingImage ? 'Uploading images...' : 'Save'}
                 </button>
             </div>
 
@@ -402,8 +419,9 @@ export default function MetalEdit() {
                                         const file = e.target.files[0];
                                         if (!file) return;
                                         try {
-                                            const { data } = await uploadMetalImage(file);
-                                            set('image_path', data.image_path);
+                                            const imagePath = await uploadMetalImagePath(file);
+                                            set('image_path', imagePath);
+                                            toast('Image uploaded successfully', 'success');
                                         } catch (err) {
                                             toast('Image upload failed: ' + err.message, 'error');
                                         }
@@ -729,8 +747,7 @@ export default function MetalEdit() {
                                                     onZoom={setZoomedImage}
                                                     onUpload={async file => {
                                                         try {
-                                                            const { data } = await uploadMetalImage(file);
-                                                            return data.image_path;
+                                                            return await uploadMetalImagePath(file);
                                                         } catch (err) {
                                                             toast('Upload failed: ' + err.message, 'error');
                                                             return null;
@@ -809,8 +826,11 @@ export default function MetalEdit() {
                                                         const file = e.target.files[0];
                                                         if (!file) return;
                                                         try {
-                                                            const { data } = await uploadMetalImage(file);
-                                                            set('about_section', { ...(metal.about_section || {}), image: data.image_path });
+                                                            const imagePath = await uploadMetalImagePath(file);
+                                                            setMetal(prev => ({
+                                                                ...prev,
+                                                                about_section: { ...(prev.about_section || {}), image: imagePath }
+                                                            }));
                                                             toast('About image uploaded successfully', 'success');
                                                         } catch (err) {
                                                             toast('Upload failed: ' + err.message, 'error');

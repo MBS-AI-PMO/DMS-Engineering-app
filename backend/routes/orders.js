@@ -183,7 +183,7 @@ const validateOrderItemsAgainstBounds = async (items = []) => {
                     SELECT id, title, dimensions_unit,
                            min_length, max_length, min_width, max_width, min_height, max_height
                     FROM services
-                    WHERE id = $1
+                    WHERE id = $1 AND COALESCE(is_active, true) = true
                 `, [serviceId]);
                 svc = svcRes.rows[0] || null;
                 serviceCache.set(serviceId, svc);

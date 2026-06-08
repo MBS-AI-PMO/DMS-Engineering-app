@@ -1,9 +1,7 @@
-/* eslint-disable no-unused-vars */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit2, Search, FileText, Layers, X } from 'lucide-react';
-import { fetchServices, deleteService, fetchServicesWithUsage } from '../../utils/api';
+import { Plus, Edit2, Search, FileText, Layers } from 'lucide-react';
+import { fetchServices, fetchServicesWithUsage, updateServiceStatus } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import ImageModal from '../../components/admin/ImageModal';
 import Skeleton from '../../components/Skeleton';
@@ -40,7 +38,7 @@ const TableSkeleton = () => (
 export default function ServicesList() {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [confirmDelete, setConfirmDelete] = useState(null);
+    const [updatingStatusId, setUpdatingStatusId] = useState(null);
     const [search, setSearch] = useState('');
     const [zoomedImage, setZoomedImage] = useState(null);
     const navigate = useNavigate();
@@ -48,10 +46,10 @@ export default function ServicesList() {
 
     const fetchAllData = useCallback(() => {
         setLoading(true);
-        fetchServicesWithUsage()
+        fetchServicesWithUsage({ includeInactive: true })
             .then(setServices)
             .catch(() => {
-                fetchServices().then(setServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
+                fetchServices({ includeInactive: true }).then(setServices).catch(err => toast('Failed to load services: ' + err.message, 'error'));
             })
             .finally(() => {
                 // Keep loading for at least 600ms for smooth feel
@@ -117,14 +115,21 @@ export default function ServicesList() {
 
     const displayServices = getServicesToDisplay();
 
-    const handleDelete = async (id) => {
+    const handleStatusToggle = async (service) => {
+        const nextActive = service.is_active === false;
+        setUpdatingStatusId(service.id);
         try {
-            await deleteService(id);
-            setServices(prev => prev.filter(s => s.id !== id));
-            setConfirmDelete(null);
-            toast('Service deleted', 'success');
+            await updateServiceStatus(service.id, nextActive);
+            setServices(prev => prev.map(item => (
+                Number(item.id) === Number(service.id)
+                    ? { ...item, is_active: nextActive }
+                    : item
+            )));
+            toast(`${service.title} marked ${nextActive ? 'active' : 'inactive'}`, 'success');
         } catch (err) {
-            toast('Delete failed: ' + err.message, 'error');
+            toast('Status update failed: ' + err.message, 'error');
+        } finally {
+            setUpdatingStatusId(null);
         }
     };
 
@@ -166,13 +171,15 @@ export default function ServicesList() {
                         ) : (
                             displayServices.map(svc => {
                                 const indent = svc.depth || 0;
+                                const isActive = svc.is_active !== false;
                                 return (
-                                    <tr key={svc.id}>
+                                    <tr key={svc.id} className={!isActive ? 'service-row-inactive' : ''}>
                                         <td style={{ paddingLeft: `${12 + indent * 10}px` }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     {indent > 0 && <span style={{ color: '#cbd5e1', fontSize: '10px' }}>└</span>}
                                                     <strong style={{ fontSize: '14px', lineHeight: '1.2' }}>{svc.title}</strong>
+                                                    {!isActive && <span className="badge-inactive">Inactive</span>}
                                                 </div>
                                                 {svc.is_production && svc.pricing_config?.base_setup !== undefined && (
                                                     <span style={{ fontSize: 9, color: '#64748b', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -240,8 +247,16 @@ export default function ServicesList() {
                                                 <button className="admin-icon-btn" onClick={() => navigate(`/admin/services/${svc.id}`)}>
                                                     <Edit2 size={16} />
                                                 </button>
-                                                <button className="admin-icon-btn danger" onClick={() => setConfirmDelete(svc)}>
-                                                    <Trash2 size={16} />
+                                                <button
+                                                    className={`service-status-toggle ${isActive ? 'active' : 'inactive'}`}
+                                                    onClick={() => handleStatusToggle(svc)}
+                                                    disabled={updatingStatusId === svc.id}
+                                                    title={isActive ? 'Set inactive' : 'Set active'}
+                                                >
+                                                    <span className="status-toggle-track">
+                                                        <span className="status-toggle-knob" />
+                                                    </span>
+                                                    <span>{isActive ? 'Active' : 'Inactive'}</span>
                                                 </button>
                                             </div>
                                         </td>
@@ -253,27 +268,6 @@ export default function ServicesList() {
                 </table>
                 {!loading && displayServices.length === 0 && <div className="admin-empty">No services found.</div>}
             </div>
-
-            {/* Delete confirmation remains in separate modal for safety */}
-            <AnimatePresence>
-                {confirmDelete && (
-                    <motion.div className="admin-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDelete(null)}>
-                        <motion.div className="admin-modal" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={e => e.stopPropagation()}>
-                            <div className="admin-modal-header">
-                                <h3>Delete Service</h3>
-                                <button className="admin-icon-btn" onClick={() => setConfirmDelete(null)}><X size={16} /></button>
-                            </div>
-                            <p style={{ margin: '20px 0', color: '#64748b' }}>
-                                Are you sure you want to delete <strong>{confirmDelete.title}</strong>? This action cannot be undone.
-                            </p>
-                            <div className="admin-modal-actions">
-                                <button className="admin-btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
-                                <button className="admin-btn-danger" onClick={() => handleDelete(confirmDelete.id)}>Delete Service</button>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             <ImageModal
                 src={zoomedImage?.src}
@@ -299,6 +293,73 @@ export default function ServicesList() {
                     font-size: 0.75rem;
                     font-weight: 700;
                     border: 1px solid #bae6fd;
+                }
+                .badge-inactive {
+                    background: #fff7ed;
+                    color: #c2410c;
+                    padding: 2px 7px;
+                    border-radius: 999px;
+                    border: 1px solid #fed7aa;
+                    font-size: 0.68rem;
+                    font-weight: 800;
+                }
+                .service-row-inactive {
+                    background: #fffaf5;
+                }
+                .service-row-inactive td {
+                    color: #64748b;
+                }
+                .service-status-toggle {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 7px;
+                    min-width: 92px;
+                    height: 32px;
+                    padding: 0 10px;
+                    border: none;
+                    border-radius: 999px;
+                    font-size: 0.72rem;
+                    font-weight: 900;
+                    cursor: pointer;
+                    transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+                }
+                .service-status-toggle:disabled {
+                    cursor: wait;
+                    opacity: 0.62;
+                }
+                .service-status-toggle:not(:disabled):hover {
+                    transform: translateY(-1px);
+                }
+                .service-status-toggle.active {
+                    color: #047857;
+                    background: #ecfdf5;
+                }
+                .service-status-toggle.inactive {
+                    color: #c2410c;
+                    background: #fff7ed;
+                }
+                .status-toggle-track {
+                    position: relative;
+                    width: 28px;
+                    height: 16px;
+                    flex: 0 0 28px;
+                    border-radius: 999px;
+                    background: currentColor;
+                    opacity: 0.28;
+                }
+                .status-toggle-knob {
+                    position: absolute;
+                    top: 3px;
+                    left: 3px;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                    background: #ffffff;
+                    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+                    transition: transform 0.2s ease;
+                }
+                .service-status-toggle.active .status-toggle-knob {
+                    transform: translateX(12px);
                 }
             `}</style>
         </div>

@@ -97,9 +97,11 @@ async function migrate() {
                 description TEXT,
                 image_path VARCHAR(500),
                 display_order INT DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMP DEFAULT NOW()
             );
         `);
+        await db.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;`);
         console.log('  ✓ services table');
 
         // Hero sections table for service detail pages

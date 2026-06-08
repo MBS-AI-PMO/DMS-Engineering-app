@@ -246,12 +246,24 @@ const MetalDetail = () => {
         }, 100);
     };
 
+    const clampRating = (rating) => Math.min(5, Math.max(0, Number(rating) || 0));
+
+    const getRatingLabel = (rating) => {
+        const score = clampRating(rating);
+        if (score >= 5) return 'Excellent';
+        if (score >= 4) return 'Strong';
+        if (score >= 3) return 'Balanced';
+        if (score >= 2) return 'Limited';
+        return 'Low';
+    };
+
     // Helper to render rating dots
-    const renderDots = (rating) => {
+    const renderDots = (rating, className = '') => {
+        const score = clampRating(rating);
         return (
-            <div className="rating-dots">
+            <div className={`rating-dots ${className}`.trim()}>
                 {[...Array(5)].map((_, i) => (
-                    <span key={i} className={`dot ${i < rating ? 'filled' : 'empty'}`}></span>
+                    <span key={i} className={`dot ${i < score ? 'filled' : 'empty'}`}></span>
                 ))}
             </div>
         );
@@ -266,6 +278,10 @@ const MetalDetail = () => {
     const currentThicknessValue = metal.quickLook.thicknesses[selectedThicknessIndex]?.value;
     const thicknessSpecs = metal.thicknessSpecs?.[currentThicknessValue] || {};
     const currentSpecs = { ...metal.specifications, ...thicknessSpecs };
+    const featureChartItems = metal.aboutSection?.featureChart || [];
+    const averageFeatureRating = featureChartItems.length
+        ? featureChartItems.reduce((sum, feature) => sum + clampRating(feature.rating), 0) / featureChartItems.length
+        : 0;
 
     return (
         <motion.div
@@ -770,15 +786,39 @@ const MetalDetail = () => {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <div className="feature-chart-section">
-                                                        <h2 className="section-title-large">{metal.name} feature chart</h2>
+                                                    <div className="feature-chart-section" aria-label={`${metal.name} feature chart`}>
+                                                        <div className="feature-chart-header">
+                                                            <div>
+                                                                <span className="feature-chart-eyebrow">Material profile</span>
+                                                                <h2 className="feature-chart-title">{metal.name} feature chart</h2>
+                                                            </div>
+                                                            <div className="feature-chart-score-card">
+                                                                <strong>{averageFeatureRating.toFixed(1)}</strong>
+                                                                <span>Average rating</span>
+                                                            </div>
+                                                        </div>
                                                         <div className="feature-grid">
-                                                            {metal.aboutSection.featureChart.map((feature, index) => (
-                                                                <div key={index} className="feature-row-custom">
-                                                                    <span className="feature-label-name">{feature.label}</span>
-                                                                    {renderDots(feature.rating)}
-                                                                </div>
-                                                            ))}
+                                                            {featureChartItems.map((feature, index) => {
+                                                                const rating = clampRating(feature.rating);
+                                                                return (
+                                                                    <div key={index} className="feature-row-custom">
+                                                                        <div className="feature-row-top">
+                                                                            <span className="feature-rank">{String(index + 1).padStart(2, '0')}</span>
+                                                                            <div className="feature-copy">
+                                                                                <span className="feature-label-name">{feature.label}</span>
+                                                                                <span className="feature-rating-label">{getRatingLabel(rating)}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="feature-rating-block">
+                                                                            <span className="feature-score-pill">{rating}/5</span>
+                                                                            {renderDots(rating, 'feature-rating-dots')}
+                                                                        </div>
+                                                                        <div className="feature-meter" aria-hidden="true">
+                                                                            <span style={{ width: `${rating * 20}%` }} />
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
 

@@ -23,7 +23,7 @@ export default function ServiceMetalsConfig() {
             try {
                 const [metalsData, servicesData] = await Promise.all([
                     fetchMetals(),
-                    fetchServices()
+                    fetchServices({ includeInactive: true })
                 ]);
 
                 const svc = servicesData.find(s => Number(s.id) === Number(id));

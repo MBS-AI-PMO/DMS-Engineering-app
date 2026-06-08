@@ -86,7 +86,7 @@ router.get('/:slug/services', async (req, res) => {
         let serviceMap = {};
         if (allIds.size > 0) {
             const svcResult = await db.query(
-                'SELECT * FROM services WHERE id = ANY($1) ORDER BY display_order, id',
+                'SELECT * FROM services WHERE id = ANY($1) AND COALESCE(is_active, true) = true ORDER BY display_order, id',
                 [Array.from(allIds)]
             );
             for (const svc of svcResult.rows) {

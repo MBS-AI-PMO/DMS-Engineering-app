@@ -105,7 +105,7 @@ export default function ServiceEdit() {
         const load = async () => {
             setLoading(true);
             try {
-                const svcs = await fetchServices();
+                const svcs = await fetchServices({ includeInactive: true });
                 setAllServices(svcs || []);
 
                 if (!isNew) {

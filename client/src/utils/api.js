@@ -165,13 +165,17 @@ export async function deleteFaqCategory(id) {
 
 // ── Services ───────────────────────────────────────────
 
-export async function fetchServices() {
-    const { data } = await request('/services');
+export async function fetchServices(options = {}) {
+    const includeInactive = typeof options === 'boolean' ? options : options.includeInactive;
+    const params = includeInactive ? '?includeInactive=true' : '';
+    const { data } = await request(`/services${params}`);
     return data;
 }
 
-export async function fetchServicesWithUsage() {
-    const { data } = await request('/services/usage');
+export async function fetchServicesWithUsage(options = {}) {
+    const includeInactive = typeof options === 'boolean' ? options : options.includeInactive;
+    const params = includeInactive ? '?includeInactive=true' : '';
+    const { data } = await request(`/services/usage${params}`);
     return data;
 }
 
@@ -196,6 +200,13 @@ export async function createService(data) {
 
 export async function updateService(id, data) {
     return request(`/services/admin/${id}`, { method: 'PUT', body: data });
+}
+
+export async function updateServiceStatus(id, isActive) {
+    return request(`/services/admin/${id}/status`, {
+        method: 'PATCH',
+        body: { is_active: isActive }
+    });
 }
 
 export async function deleteService(id) {

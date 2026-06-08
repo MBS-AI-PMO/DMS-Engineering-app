@@ -1350,7 +1350,7 @@ router.get('/admin/metadata', authenticate, requireAdmin, async (req, res) => {
                 FROM metals m
                 ORDER BY m.name
             `),
-            db.query(`SELECT id, title, description, is_production FROM services ORDER BY display_order, id`)
+            db.query(`SELECT id, title, description, is_production, is_active FROM services ORDER BY display_order, id`)
         ]);
 
         res.json({
@@ -1935,7 +1935,7 @@ router.post('/calculate', async (req, res) => {
                   `, [metal_id])
                 : Promise.resolve({ rows: [] }),
             service_id
-                ? db.query('SELECT * FROM services WHERE id = $1', [service_id])
+                ? db.query('SELECT * FROM services WHERE id = $1 AND COALESCE(is_active, true) = true', [service_id])
                 : Promise.resolve({ rows: [] }),
             metal_id
                 ? db.query(`
@@ -2247,7 +2247,7 @@ router.post('/calculate', async (req, res) => {
                 const sId = typeof sReq === 'object' ? sReq.id : sReq;
                 const optId = typeof sReq === 'object' ? sReq.option_id : null;
 
-                const sRes = await db.query('SELECT * FROM services WHERE id = $1', [sId]);
+                const sRes = await db.query('SELECT * FROM services WHERE id = $1 AND COALESCE(is_active, true) = true', [sId]);
                 if (sRes.rows.length === 0) continue;
                 const s = sRes.rows[0];
                 const sTitleLower = s.title.toLowerCase();

@@ -16,6 +16,8 @@ const generateSlug = (title) => {
         .replace(/^-|-$/g, '');
 };
 
+const shouldIncludeInactive = (req) => String(req.query.includeInactive || '').toLowerCase() === 'true';
+
 // Configure multer for service images
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -49,6 +51,7 @@ const upload = multer({
 // GET /api/services — List all services with their parent IDs
 router.get('/', async (req, res) => {
     try {
+        const includeInactive = shouldIncludeInactive(req);
         const result = await db.query(`
             SELECT s.*, 
                    COALESCE((
@@ -57,8 +60,9 @@ router.get('/', async (req, res) => {
                        WHERE service_id = s.id
                    ), '[]'::jsonb) as parent_ids
             FROM services s 
+            WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
             ORDER BY s.display_order, s.id
-        `);
+        `, [includeInactive]);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('Error fetching services:', err);
@@ -69,6 +73,7 @@ router.get('/', async (req, res) => {
 // GET /api/services/usage — Services with metal usage counts
 router.get('/usage', async (req, res) => {
     try {
+        const includeInactive = shouldIncludeInactive(req);
         const result = await db.query(`
             SELECT s.*,
                 COALESCE((SELECT jsonb_agg(parent_id) 
@@ -82,8 +87,9 @@ router.get('/usage', async (req, res) => {
                    AND m.services::jsonb @> to_jsonb(s.id)
                 ) as metal_count
             FROM services s
+            WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
             ORDER BY s.display_order, s.id
-        `);
+        `, [includeInactive]);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('Error fetching services usage:', err);
@@ -146,7 +152,7 @@ router.get('/slug/:slug', async (req, res) => {
                    ), '[]'::jsonb) as parent_ids
             FROM services s 
             LEFT JOIN hero_sections hs ON hs.service_id = s.id
-            WHERE s.slug = $1
+            WHERE s.slug = $1 AND COALESCE(s.is_active, true) = true
         `, [req.params.slug]);
 
         if (result.rows.length === 0) {
@@ -180,7 +186,7 @@ router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     const {
         title, description, image_path, display_order, is_production, parent_ids,
         min_length, max_length, min_width, max_width, min_height, max_height,
-        dimensions_unit, service_options, base_price, pricing_config
+        dimensions_unit, service_options, base_price, pricing_config, is_active
     } = req.body;
 
     try {
@@ -192,13 +198,13 @@ router.post('/admin', authenticate, requireAdmin, async (req, res) => {
             `INSERT INTO services (
                 title, description, image_path, display_order, is_production,
                 min_length, max_length, min_width, max_width, min_height, max_height,
-                dimensions_unit, service_options, base_price, pricing_config, slug
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+                dimensions_unit, service_options, base_price, pricing_config, slug, is_active
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
             [
                 title, description, image_path, display_order || 0, is_production || false,
                 min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
                 dimensions_unit || 'in', JSON.stringify(service_options || []),
-                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {}), serviceSlug
+                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {}), serviceSlug, is_active !== false
             ]
         );
 
@@ -231,7 +237,7 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
     const {
         title, description, image_path, display_order, is_production, parent_ids,
         min_length, max_length, min_width, max_width, min_height, max_height,
-        dimensions_unit, service_options, base_price, pricing_config
+        dimensions_unit, service_options, base_price, pricing_config, is_active
     } = req.body;
 
     console.log('UPDATING SERVICE:', req.params.id, 'with parent_ids:', parent_ids);
@@ -256,8 +262,9 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
                 service_options = COALESCE($13, service_options),
                 base_price = COALESCE($14, base_price),
                 pricing_config = COALESCE($15, pricing_config),
-                slug = COALESCE($16, slug)
-            WHERE id = $17
+                slug = COALESCE($16, slug),
+                is_active = COALESCE($17, is_active)
+            WHERE id = $18
             RETURNING *
         `, [
             title, description, image_path, display_order, is_production,
@@ -267,6 +274,7 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
             parseFloat(base_price) || 0,
             JSON.stringify(pricing_config || {}),
             title ? generateSlug(title) : null,
+            typeof is_active === 'boolean' ? is_active : null,
             req.params.id
         ]);
 
@@ -375,6 +383,31 @@ router.put('/admin/:id/metals', authenticate, requireAdmin, async (req, res) => 
         await db.query('ROLLBACK');
         console.error('Error updating metal assignments:', err);
         res.status(500).json({ success: false, error: 'Failed to update metal assignments: ' + err.message });
+    }
+});
+
+// PATCH /api/services/admin/:id/status — Toggle active/inactive without deleting service data
+router.patch('/admin/:id/status', authenticate, requireAdmin, async (req, res) => {
+    const { is_active } = req.body;
+
+    if (typeof is_active !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'is_active must be true or false' });
+    }
+
+    try {
+        const result = await db.query(
+            'UPDATE services SET is_active = $1 WHERE id = $2 RETURNING *',
+            [is_active, req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Service not found' });
+        }
+
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        console.error('Error updating service status:', err);
+        res.status(500).json({ success: false, error: 'Failed to update service status' });
     }
 });
 
