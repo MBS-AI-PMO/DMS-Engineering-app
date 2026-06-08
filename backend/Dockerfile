@@ -34,7 +34,7 @@ COPY . .
 
 ENV FREECAD_PATH=/usr/bin/freecadcmd
 ENV PYTHON_PATH=/opt/cadquery-env/bin/python
-ENV UNFOLD_LIB_PATH=/app/unfold_lib.py  
+ENV UNFOLD_LIB_PATH=/app/unfold_lib.py
 
 RUN mkdir -p /app/uploads /app/temp_uploads
 VOLUME ["/app/uploads", "/app/temp_uploads"]
