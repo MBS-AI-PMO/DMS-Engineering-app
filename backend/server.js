@@ -138,8 +138,20 @@ app.get('/health', (req, res) => {
 });
 
 // Health Check (Under API prefix)
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'Node.js' });
+app.get('/api/health', async (req, res) => {
+    setNoStore(res);
+    let python = null;
+    try {
+        python = await callPythonGet('/health');
+    } catch (err) {
+        python = { status: 'error', error: err.message };
+    }
+    res.json({
+        status: 'ok',
+        engine: 'Node.js',
+        nodeHoleEngineVersion: DETECT_HOLES_ENGINE_VERSION,
+        python
+    });
 });
 
 // File upload endpoint for CAD assets Establishment établissement
@@ -188,7 +200,7 @@ const PYTHON_REQUEST_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_REQUEST_TI
 const PYTHON_SYNC_UNFOLD_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_SYNC_UNFOLD_TIMEOUT_MS, 900_000);
 const PYTHON_STATUS_TIMEOUT_MS = parsePositiveInt(process.env.PYTHON_STATUS_TIMEOUT_MS, 120_000);
 const getPythonTimeoutMs = (subpath) => (subpath === '/unfold' ? PYTHON_SYNC_UNFOLD_TIMEOUT_MS : PYTHON_REQUEST_TIMEOUT_MS);
-const DETECT_HOLES_ENGINE_VERSION = 'v4-through-bore-dedupe';
+const DETECT_HOLES_ENGINE_VERSION = 'v5-through-bore-dedupe-runtime';
 const DETECT_HOLES_CACHE_TTL_MS = 8 * 60 * 1000;
 const DETECT_HOLES_CACHE_MAX = 256;
 const detectHolesCache = new Map();
@@ -300,12 +312,12 @@ app.post('/api/detect-holes-by-temp', async (req, res) => {
         const cacheKey = `tmp:${DETECT_HOLES_ENGINE_VERSION}:${path.basename(inputPath)}:${stat.size}:${Math.floor(stat.mtimeMs)}`;
         const cached = getCachedDetectHoles(cacheKey);
         if (cached) {
-            return res.json({ success: true, cached: true, ...cached });
+            return res.json({ success: true, cached: true, nodeHoleEngineVersion: DETECT_HOLES_ENGINE_VERSION, ...cached });
         }
 
         const fileBuffer = fs.readFileSync(inputPath);
         const data = await runDetectHolesWithCache({ fileBuffer, filename: path.basename(inputPath), cacheKey });
-        return res.json({ success: true, cached: false, ...data });
+        return res.json({ success: true, cached: false, nodeHoleEngineVersion: DETECT_HOLES_ENGINE_VERSION, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
         return res.status(500).json({ success: false, error: err.message });
@@ -332,7 +344,7 @@ app.post('/api/detect-holes', upload.single('file'), async (req, res) => {
             cacheKey,
         });
 
-        return res.json({ success: true, ...data });
+        return res.json({ success: true, nodeHoleEngineVersion: DETECT_HOLES_ENGINE_VERSION, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
         return res.status(500).json({ success: false, error: err.message });

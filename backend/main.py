@@ -32,7 +32,7 @@ UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
 UNFOLD_JOB_TTL_SECONDS = 15 * 60
 UNFOLD_RESULT_CACHE_TTL_SECONDS = int(os.getenv("UNFOLD_RESULT_CACHE_TTL_SECONDS", "1800"))
 UNFOLD_RESULT_CACHE_MAX = max(1, int(os.getenv("UNFOLD_RESULT_CACHE_MAX", "128")))
-UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-05-17-laser-bend-eligibility-v3")).strip() or "2026-05-17-laser-bend-eligibility-v3"
+UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-06-08-through-bore-dedupe-v5")).strip() or "2026-06-08-through-bore-dedupe-v5"
 GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
 FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
 FREECAD_KILL_GRACE_SECONDS = max(1, int(os.getenv("FREECAD_KILL_GRACE_SECONDS", "8")))
@@ -181,6 +181,26 @@ def _resolve_freecad_executable():
     return env_path or candidates[-1]
 
 
+def _get_unfold_lib_info():
+    script_path = os.getenv("UNFOLD_LIB_PATH", os.path.join(os.path.dirname(__file__), "unfold_lib.py"))
+    info = {
+        "analysisVersion": UNFOLD_ANALYSIS_VERSION,
+        "unfoldLibPath": script_path,
+        "unfoldLibMtime": 0,
+        "unfoldLibSha1": "",
+    }
+    try:
+        info["unfoldLibMtime"] = int(os.path.getmtime(script_path))
+    except Exception:
+        pass
+    try:
+        with open(script_path, "rb") as fh:
+            info["unfoldLibSha1"] = hashlib.sha1(fh.read()).hexdigest()
+    except Exception:
+        pass
+    return info
+
+
 def _collect_descendant_pids(pid):
     """Recursively collect all descendant PIDs of a process (Linux only)."""
     descendants = []
@@ -321,6 +341,7 @@ class CORSHandler(BaseHTTPRequestHandler):
             self._send_json(200, {
                 "status": "ok",
                 "engine": "FreeCAD/CadQuery",
+                "version": _get_unfold_lib_info(),
                 "queue": {
                     "pendingJobs": pending_jobs,
                     "queueLimit": CAD_JOB_QUEUE_LIMIT,
@@ -354,6 +375,8 @@ class CORSHandler(BaseHTTPRequestHandler):
                 lambda fp: self.unfold_with_lib_subprocess(fp, profile="holes_fast"),
                 lambda r: {
                 "holes": r.get("detectedHoles", []),
+                "engineVersion": r.get("engineVersion"),
+                "analysisVersion": UNFOLD_ANALYSIS_VERSION,
                 "faceMeshes": r.get("faceMeshes", {}),
                 "bendTree": r.get("bendTree", None),
                 "thickness": r.get("thickness", 2.0),

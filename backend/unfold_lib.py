@@ -33,6 +33,8 @@ from FreeCAD import Matrix, Vector, Rotation
 import Part
 import networkx as nx
 
+UNFOLD_LIB_ENGINE_VERSION = "2026-06-08-through-bore-dedupe-v5"
+
 # Stub out GUI modules before importing unfold.py — the library does
 # `import FreeCADGui`, `import Draft`, `import importDXF`, `import importSVG`
 # at module level which hang on headless servers.
@@ -951,14 +953,23 @@ def _merge_same_bore_holes(holes, material_thickness_mm=None):
                 continue
 
             delta = p2 - p1
+            center_dist = float(np.linalg.norm(delta))
             axial_signed = float(np.dot(delta, a1))
             axial = abs(axial_signed)
-            if axial < 0.15 or axial > max_pair_depth_mm:
-                continue
 
             radial_vec = delta - axial_signed * a1
             radial = float(np.linalg.norm(radial_vec))
-            if radial > max(0.5, max_d * 0.25):
+
+            # Some STEP exporters report the two faces/loops of one through-bore
+            # with almost identical computed centers. Treat those as duplicate
+            # observations of the same physical hole instead of requiring depth.
+            coincident_same_bore = center_dist <= max(0.75, max_d * 0.20)
+            if not coincident_same_bore:
+                if axial < 0.15 or axial > max_pair_depth_mm:
+                    continue
+                if radial > max(1.25, max_d * 0.60):
+                    continue
+            elif radial > max(0.75, max_d * 0.25):
                 continue
 
             used.add(j)
@@ -1534,6 +1545,7 @@ def unfold_with_lib(filepath, profile="full"):
         emit_progress(96, "Finalizing analysis")
         return _json_safe({
             "success": True,
+            "engineVersion": UNFOLD_LIB_ENGINE_VERSION,
             "flatVertices": [],
             "cutEdges": [],
             "bendEdges": [],
@@ -2190,6 +2202,7 @@ def unfold_with_lib(filepath, profile="full"):
 
     return _json_safe({
         "success": True,
+        "engineVersion": UNFOLD_LIB_ENGINE_VERSION,
         "flatVertices": flat_vertices,
         "cutEdges": cut_edges_2d,
         "bendEdges": bend_edges_2d,
