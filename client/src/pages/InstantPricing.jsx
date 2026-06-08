@@ -3839,7 +3839,7 @@ const InstantPricing = () => {
 
                     {/* PART SNAPSHOT */}
                     <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Part Snapshot</div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 12 }}>Part Snapshot</div>
                       <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#f8fafc' }}>
                         {[
                           {
