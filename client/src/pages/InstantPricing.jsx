@@ -2161,10 +2161,11 @@ const InstantPricing = () => {
   // ── Fast Analysis Stage (Holes/Dimensions) ────────────────────────────────
   // ── Analysis Orchestrator ────────────────────────────────────────────────
   useEffect(() => {
-    if (!selectedFile || !currentIsStep || viewMode !== '2d') return;
-    // Trigger heavy unfold only when the user is actively requesting the flat view.
+    if (!selectedFile || !currentIsStep) return;
+    // Start bend/unfold analysis as soon as a STEP is active so bending prices
+    // and service recognition do not depend on opening the 2D view first.
     handleUnfold(true);
-  }, [selectedFile, currentIsStep, viewMode, handleUnfold]);
+  }, [selectedFile, currentIsStep, handleUnfold]);
 
   // ── Real Configured-Cut STEP Preview (debounced + abortable) ─────────────
   useEffect(() => {

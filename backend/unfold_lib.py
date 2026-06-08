@@ -827,7 +827,11 @@ def _detect_holes_from_planar_loops(fc_shape, material_thickness_mm=None):
                 continue
 
             dot_n = float(np.dot(c1["axis"], c2["axis"]))
-            if dot_n > -0.85:
+            # STEP face normal orientation is not reliable for inner loops:
+            # the two openings of one through-hole can arrive with the same
+            # normal direction. Pair by axial alignment, then orient the hole
+            # by the center-to-center vector.
+            if abs(dot_n) < 0.85:
                 continue
 
             delta = c2["center"] - c1["center"]
@@ -853,7 +857,9 @@ def _detect_holes_from_planar_loops(fc_shape, material_thickness_mm=None):
             c2 = candidates[best_j]
 
             pos = (c1["center"] + c2["center"]) * 0.5
-            axis = _normalize(c1["axis"] - c2["axis"])
+            axis = _normalize(c2["center"] - c1["center"])
+            if np.linalg.norm(axis) < 1e-9:
+                axis = _normalize(c1["axis"] - c2["axis"])
             if np.linalg.norm(axis) < 1e-9:
                 axis = _normalize(c1["axis"])
             depth_mm = float(np.linalg.norm(c2["center"] - c1["center"]))
@@ -881,6 +887,103 @@ def _detect_holes_from_planar_loops(fc_shape, material_thickness_mm=None):
     for idx, h in enumerate(holes):
         h["id"] = f"hole_{idx + 1}"
     return holes
+
+
+def _merge_same_bore_holes(holes, material_thickness_mm=None):
+    if len(holes or []) < 2:
+        return list(holes or [])
+
+    max_pair_depth_mm = _hole_pair_depth_limit(material_thickness_mm)
+    if max_pair_depth_mm is None:
+        max_pair_depth_mm = 6.0
+
+    def _vec(hole, key):
+        value = hole.get(key)
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            return None
+        try:
+            arr = np.array([float(value[0]), float(value[1]), float(value[2])], dtype=float)
+        except (TypeError, ValueError):
+            return None
+        if np.linalg.norm(arr) < 1e-9 and key == "axis":
+            return None
+        return arr
+
+    used = set()
+    merged = []
+
+    for i, h1 in enumerate(holes):
+        if i in used:
+            continue
+
+        best = dict(h1)
+        used.add(i)
+
+        p1 = _vec(h1, "position")
+        a1 = _vec(h1, "axis")
+        d1 = float(h1.get("diameter_mm") or 0.0)
+        if p1 is None or a1 is None or d1 <= 0:
+            merged.append(best)
+            continue
+
+        a1 = _normalize(a1)
+        paired_positions = [p1]
+        paired_depths = [float(h1.get("depth_mm") or 0.0)]
+
+        for j in range(i + 1, len(holes)):
+            if j in used:
+                continue
+
+            h2 = holes[j]
+            p2 = _vec(h2, "position")
+            a2 = _vec(h2, "axis")
+            d2 = float(h2.get("diameter_mm") or 0.0)
+            if p2 is None or a2 is None or d2 <= 0:
+                continue
+
+            max_d = max(d1, d2, 1e-9)
+            dia_delta = abs(d1 - d2)
+            if dia_delta / max_d > 0.12 and dia_delta > 0.6:
+                continue
+
+            a2 = _normalize(a2)
+            if abs(float(np.dot(a1, a2))) < 0.85:
+                continue
+
+            delta = p2 - p1
+            axial_signed = float(np.dot(delta, a1))
+            axial = abs(axial_signed)
+            if axial < 0.15 or axial > max_pair_depth_mm:
+                continue
+
+            radial_vec = delta - axial_signed * a1
+            radial = float(np.linalg.norm(radial_vec))
+            if radial > max(0.5, max_d * 0.25):
+                continue
+
+            used.add(j)
+            paired_positions.append(p2)
+            paired_depths.append(float(h2.get("depth_mm") or 0.0))
+            if d2 < float(best.get("diameter_mm") or d1):
+                best = dict(h2)
+
+        if len(paired_positions) > 1:
+            midpoint = np.mean(np.asarray(paired_positions, dtype=float), axis=0)
+            max_span = 0.0
+            for p_a in paired_positions:
+                for p_b in paired_positions:
+                    max_span = max(max_span, float(np.linalg.norm(p_b - p_a)))
+            best["position"] = [round(float(v), 4) for v in midpoint]
+            best["axis"] = [round(float(v), 4) for v in a1]
+            best["depth_mm"] = round(max(max_span, *paired_depths), 4)
+
+        merged.append(best)
+
+    sys.stderr.write(
+        f"[Hole Detection] Same-bore merge reduced {len(holes)} to {len(merged)} holes\n"
+    )
+    return merged
+
 
 def detect_holes_fc(fc_shape, material_thickness_mm=None):
     """
@@ -913,7 +1016,7 @@ def detect_holes_fc(fc_shape, material_thickness_mm=None):
     )
 
     if not cyl_faces:
-        return []
+        sys.stderr.write("[Hole Detection] No cylindrical faces; trying planar-loop fallback\n")
 
     # Build edge-to-face mapping to associate holes with planar faces
     e2f = {}
@@ -1136,6 +1239,8 @@ def detect_holes_fc(fc_shape, material_thickness_mm=None):
                     break
             if not is_dup:
                 final.append(lh)
+
+    final = _merge_same_bore_holes(final, material_thickness_mm)
 
     # ── Size-based filter ─────────────────────────────────────────
     # Real drilled / punched holes are never a large fraction of the
@@ -1390,7 +1495,7 @@ def unfold_with_lib(filepath, profile="full"):
     include_face_meshes = profile_key == "full"
     include_projections = profile_key == "full"
     include_holes = profile_key in ("full", "holes", "holes_fast")
-    estimate_thickness = profile_key != "holes_fast"
+    estimate_thickness = True
 
     t0 = time.time()
     emit_progress(4, "Loading STEP model")

@@ -82,8 +82,8 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       allowedHosts: [
-        'dynmfgsol.com',
-        'www.dynmfgsol.com',
+        'dmscuts.com',
+        'www.dmscuts.com',
         'htnxpk7uxwuu2rr97t3dma4z.2.25.152.142.sslip.io',
       ],
       headers: {
