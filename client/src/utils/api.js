@@ -7,11 +7,52 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+// ── Token storage (Bearer fallback for environments where cookies aren't sent) ──
+const TOKEN_KEY = 'dms_token';
+const ADMIN_TOKEN_KEY = 'dms_admin_token';
+
+export const setStoredToken = (token) => {
+    try { token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+};
+export const getStoredToken = () => {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+};
+export const setStoredAdminToken = (token) => {
+    try { token ? localStorage.setItem(ADMIN_TOKEN_KEY, token) : localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ }
+};
+export const getStoredAdminToken = () => {
+    try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch { return ''; }
+};
+
+// Admin-scoped endpoints should prefer the admin token.
+const isAdminScopedUrl = (url) => /\/admin([-/]|$)/.test(url) || /\/auth\/admin/.test(url);
+
+// Authorization header helpers for raw fetch() calls outside this module.
+export const authHeaders = () => {
+    const token = getStoredToken() || getStoredAdminToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+export const adminAuthHeaders = () => {
+    const token = getStoredAdminToken() || getStoredToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 async function request(url, options = {}) {
+    const isFormData = options.body instanceof FormData;
+    const baseHeaders = isFormData ? {} : { 'Content-Type': 'application/json' };
+    const headers = { ...baseHeaders, ...(options.headers || {}) };
+
+    const token = isAdminScopedUrl(url)
+        ? (getStoredAdminToken() || getStoredToken())
+        : (getStoredToken() || getStoredAdminToken());
+    if (token && !('Authorization' in headers)) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
     const config = {
-        headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-        credentials: 'include', // Send cookies for JWT
+        credentials: 'include', // Send cookies for JWT (Bearer header is the fallback)
         ...options,
+        headers,
     };
 
     if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
@@ -63,14 +104,20 @@ export async function fetchFaqCategories() {
 // ── Auth ────────────────────────────────────────────────
 
 export async function login(email, password) {
-    return request('/auth/login', {
+    const res = await request('/auth/login', {
         method: 'POST',
         body: { email, password },
     });
+    if (res?.token) setStoredToken(res.token);
+    return res;
 }
 
 export async function logout() {
-    return request('/auth/logout', { method: 'POST' });
+    try {
+        return await request('/auth/logout', { method: 'POST' });
+    } finally {
+        setStoredToken(null);
+    }
 }
 
 export async function getMe() {
@@ -80,14 +127,20 @@ export async function getMe() {
 // ── Admin Auth ──────────────────────────────────────────
 
 export async function adminLogin(email, password) {
-    return request('/auth/admin/login', {
+    const res = await request('/auth/admin/login', {
         method: 'POST',
         body: { email, password },
     });
+    if (res?.token) setStoredAdminToken(res.token);
+    return res;
 }
 
 export async function adminLogout() {
-    return request('/auth/admin/logout', { method: 'POST' });
+    try {
+        return await request('/auth/admin/logout', { method: 'POST' });
+    } finally {
+        setStoredAdminToken(null);
+    }
 }
 
 export async function getAdminMe() {
@@ -114,6 +167,7 @@ export async function uploadMetalImage(file) {
     const response = await fetch(`${API_BASE}/metals/admin/upload-image`, {
         method: 'POST',
         credentials: 'include',
+        headers: { ...adminAuthHeaders() },
         body: formData,
     });
     const data = await response.json();

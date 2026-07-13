@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { authHeaders } from '../utils/api';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import '../styles/PremiumOrders.css';
 
@@ -107,7 +108,7 @@ const Orders = () => {
     useEffect(() => {
         const fetchOrders = async () => {
             try {
-                const response = await fetch('/api/orders/my-orders', { credentials: 'include' });
+                const response = await fetch('/api/orders/my-orders', { credentials: 'include', headers: { ...authHeaders() } });
                 const data = await response.json();
                 if (data.success) {
                     setOrders(data.data);
@@ -132,7 +133,7 @@ const Orders = () => {
 
         setItemsCache(prev => ({ ...prev, [orderId]: { ...prev[orderId], loading: true } }));
         try {
-            const response = await fetch(`/api/orders/${orderId}`, { credentials: 'include' });
+            const response = await fetch(`/api/orders/${orderId}`, { credentials: 'include', headers: { ...authHeaders() } });
             const data = await response.json();
             if (data.success) {
                 setItemsCache(prev => ({
@@ -162,7 +163,8 @@ const Orders = () => {
         try {
             const response = await fetch(`/api/orders/${orderId}/user-delete`, {
                 method: 'POST',
-                credentials: 'include'
+                credentials: 'include',
+                headers: { ...authHeaders() }
             });
             const data = await response.json();
             if (data.success) {

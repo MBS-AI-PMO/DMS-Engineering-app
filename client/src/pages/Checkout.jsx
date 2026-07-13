@@ -11,7 +11,7 @@ import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder } from '../utils/api';
+import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder, authHeaders } from '../utils/api';
 import '../styles/PremiumCheckout.css';
 
 const normalizeOrderTempPath = (value) => {
@@ -136,7 +136,7 @@ const Checkout = () => {
 
             const response = await fetch('/api/orders', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
                 credentials: 'include',
                 body: JSON.stringify(payload)
             });

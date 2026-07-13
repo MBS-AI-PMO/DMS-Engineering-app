@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import ProjectViewer from '../../components/viewer/ProjectViewer';
 import { generateOrderReport } from '../../utils/generateOrderReport';
+import { adminAuthHeaders } from '../../utils/api';
 import '../../styles/PremiumAdminOrders.css';
 import { useToast } from '../../context/ToastContext';
 
@@ -36,7 +37,7 @@ const AdminOrdersList = () => {
         setLoading(true);
         try {
             const endpoint = activeTab === 'active' ? '/api/orders/admin/all' : '/api/orders/admin/deleted';
-            const response = await fetch(endpoint, { credentials: 'include' });
+            const response = await fetch(endpoint, { credentials: 'include', headers: { ...adminAuthHeaders() } });
             const data = await response.json();
             if (data.success) {
                 setOrders(data.data);
@@ -51,7 +52,7 @@ const AdminOrdersList = () => {
     const handleSoftDelete = async (orderId, e) => {
         e.stopPropagation();
         try {
-            const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST', credentials: 'include' });
+            const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST', credentials: 'include', headers: { ...adminAuthHeaders() } });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order moved to trash', 'success');
@@ -62,7 +63,7 @@ const AdminOrdersList = () => {
     const handleRestore = async (orderId, e) => {
         e.stopPropagation();
         try {
-            const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST', credentials: 'include' });
+            const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST', credentials: 'include', headers: { ...adminAuthHeaders() } });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order restored successfully', 'success');
@@ -75,7 +76,7 @@ const AdminOrdersList = () => {
         if (!window.confirm(`PERMANENT DELETE: Are you sure you want to remove Order #${orderId} from the database? This action is irreversible for the Admin side.`)) return;
 
         try {
-            const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE', credentials: 'include' });
+            const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE', credentials: 'include', headers: { ...adminAuthHeaders() } });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order permanently deleted', 'success');
@@ -86,7 +87,7 @@ const AdminOrdersList = () => {
     const handleDeleteAll = async () => {
         if (!window.confirm(`PERMANENT DELETE ALL: This will remove ALL ${orders.length} trashed order(s) from the database forever. This action is irreversible. Continue?`)) return;
         try {
-            await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE', credentials: 'include' })));
+            await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE', credentials: 'include', headers: { ...adminAuthHeaders() } })));
             fetchOrders();
             toast('Trash bin cleared successfully', 'success');
         } catch (err) { toast('Failed to clear trash: ' + err.message, 'error'); }
@@ -117,7 +118,7 @@ const AdminOrdersList = () => {
         try {
             const res = await fetch(`/api/orders/${orderId}/status`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ status: newStatus }),
             });
@@ -471,7 +472,7 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
 
     useEffect(() => {
         setLoadingItems(true);
-        fetch(`/api/orders/${orderId}`, { credentials: 'include' }).then(r => r.json()).then(d => {
+        fetch(`/api/orders/${orderId}`, { credentials: 'include', headers: { ...adminAuthHeaders() } }).then(r => r.json()).then(d => {
             if (d.success) setItems(d.items);
         }).finally(() => setLoadingItems(false));
     }, [orderId]);
