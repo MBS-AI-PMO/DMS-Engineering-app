@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { User, Mail, Lock, Eye, EyeOff, UserPlus, CheckSquare } from 'lucide-react';
 import { registerUser, fetchSettings } from '../utils/api';
 
 export default function Signup() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const redirectTo = searchParams.get('redirect');
     const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', terms: false });
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -48,7 +50,10 @@ export default function Signup() {
         setLoading(true);
         try {
             await registerUser({ name: form.name, email: form.email, password: form.password, terms: form.terms });
-            navigate('/login?registered=1');
+            const loginQuery = redirectTo
+                ? `/login?registered=1&redirect=${encodeURIComponent(redirectTo)}`
+                : '/login?registered=1';
+            navigate(loginQuery);
         } catch (err) {
             setError(err.message || 'Registration failed. Please try again.');
         } finally {
@@ -216,7 +221,7 @@ export default function Signup() {
 
                 <div className="auth-footer">
                     <span>Already have an account?</span>
-                    <Link to="/login">Sign in</Link>
+                    <Link to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}>Sign in</Link>
                 </div>
             </motion.div>
         </div>

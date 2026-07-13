@@ -10,6 +10,7 @@ export default function Login() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const justRegistered = searchParams.get('registered') === '1';
+    const redirectTo = searchParams.get('redirect');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +38,7 @@ export default function Login() {
             if (user.role === 'admin') {
                 navigate('/admin');
             } else {
-                navigate('/');
+                navigate(redirectTo || '/');
             }
         } catch (err) {
             setError(err.message || 'Invalid email or password');
@@ -140,7 +141,7 @@ export default function Login() {
 
                 <div className="auth-footer">
                     <span>Don't have an account?</span>
-                    <Link to="/signup">Create one</Link>
+                    <Link to={redirectTo ? `/signup?redirect=${encodeURIComponent(redirectTo)}` : '/signup'}>Create one</Link>
                 </div>
             </motion.div>
         </div>

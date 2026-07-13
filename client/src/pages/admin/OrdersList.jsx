@@ -36,7 +36,7 @@ const AdminOrdersList = () => {
         setLoading(true);
         try {
             const endpoint = activeTab === 'active' ? '/api/orders/admin/all' : '/api/orders/admin/deleted';
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint, { credentials: 'include' });
             const data = await response.json();
             if (data.success) {
                 setOrders(data.data);
@@ -51,7 +51,7 @@ const AdminOrdersList = () => {
     const handleSoftDelete = async (orderId, e) => {
         e.stopPropagation();
         try {
-            const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST' });
+            const response = await fetch(`/api/orders/${orderId}/admin-soft-delete`, { method: 'POST', credentials: 'include' });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order moved to trash', 'success');
@@ -62,7 +62,7 @@ const AdminOrdersList = () => {
     const handleRestore = async (orderId, e) => {
         e.stopPropagation();
         try {
-            const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST' });
+            const response = await fetch(`/api/orders/${orderId}/admin-restore`, { method: 'POST', credentials: 'include' });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order restored successfully', 'success');
@@ -75,7 +75,7 @@ const AdminOrdersList = () => {
         if (!window.confirm(`PERMANENT DELETE: Are you sure you want to remove Order #${orderId} from the database? This action is irreversible for the Admin side.`)) return;
 
         try {
-            const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+            const response = await fetch(`/api/orders/${orderId}`, { method: 'DELETE', credentials: 'include' });
             if ((await response.json()).success) {
                 fetchOrders();
                 toast('Order permanently deleted', 'success');
@@ -86,7 +86,7 @@ const AdminOrdersList = () => {
     const handleDeleteAll = async () => {
         if (!window.confirm(`PERMANENT DELETE ALL: This will remove ALL ${orders.length} trashed order(s) from the database forever. This action is irreversible. Continue?`)) return;
         try {
-            await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE' })));
+            await Promise.all(orders.map(o => fetch(`/api/orders/${o.id}`, { method: 'DELETE', credentials: 'include' })));
             fetchOrders();
             toast('Trash bin cleared successfully', 'success');
         } catch (err) { toast('Failed to clear trash: ' + err.message, 'error'); }
@@ -118,6 +118,7 @@ const AdminOrdersList = () => {
             const res = await fetch(`/api/orders/${orderId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ status: newStatus }),
             });
             const data = await res.json();
@@ -470,7 +471,7 @@ const AdminItemsList = ({ orderId, order, onPreview }) => {
 
     useEffect(() => {
         setLoadingItems(true);
-        fetch(`/api/orders/${orderId}`).then(r => r.json()).then(d => {
+        fetch(`/api/orders/${orderId}`, { credentials: 'include' }).then(r => r.json()).then(d => {
             if (d.success) setItems(d.items);
         }).finally(() => setLoadingItems(false));
     }, [orderId]);

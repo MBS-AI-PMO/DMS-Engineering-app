@@ -463,9 +463,14 @@ router.post('/', async (req, res) => {
  */
 router.get('/my-orders', authenticate, async (req, res) => {
     try {
+        // Match orders linked to this user_id, OR guest orders placed with the
+        // same email address (so orders placed before signing in still appear).
         const result = await db.query(
-            `SELECT * FROM orders WHERE user_id = $1 AND is_deleted_by_user = FALSE ORDER BY created_at DESC`,
-            [req.user.id]
+            `SELECT * FROM orders
+             WHERE (user_id = $1 OR (user_id IS NULL AND LOWER(email) = LOWER($2)))
+               AND is_deleted_by_user = FALSE
+             ORDER BY created_at DESC`,
+            [req.user.id, req.user.email || '']
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {

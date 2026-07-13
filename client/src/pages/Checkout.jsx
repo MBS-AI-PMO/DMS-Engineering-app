@@ -4,7 +4,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
     ShieldCheck, CreditCard, Truck, ArrowRight, ChevronLeft,
-    AlertCircle, CheckCircle2, Package, MapPin, Phone, User, Mail, Zap
+    AlertCircle, CheckCircle2, Package, MapPin, Phone, User, Mail, Zap,
+    UserPlus, LogIn, Lock
 } from 'lucide-react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useCart } from '../context/CartContext.js';
@@ -34,7 +35,7 @@ const normalizeOrderTempPath = (value) => {
 
 const Checkout = () => {
     const { cartItems, cartTotal, cartSubtotal, cartDiscount, clearCart } = useCart();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const showToast = useToast();
     const navigate = useNavigate();
 
@@ -136,6 +137,7 @@ const Checkout = () => {
             const response = await fetch('/api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(payload)
             });
 
@@ -175,6 +177,40 @@ const Checkout = () => {
                         <div className="success-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px' }}>
                             <Link to="/orders" className="btn-primary large">View My Orders</Link>
                             <Link to="/" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none' }}>Return Home</Link>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+        );
+    }
+
+    // Require an account before checkout. Guests are shown a gate screen that
+    // routes them to sign in / create an account (and back to checkout after).
+    if (!authLoading && !user) {
+        return (
+            <div className="checkout-success-page cart-empty-state">
+                <div className="container">
+                    <motion.div
+                        className="empty-card"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                    >
+                        <div className="empty-icon-wrap">
+                            <Lock size={64} style={{ color: '#e31b23' }} />
+                        </div>
+                        <h2>Create an account to check out</h2>
+                        <p className="success-msg" style={{ maxWidth: '520px', margin: '0 auto' }}>
+                            To place and track your manufacturing order, you'll need a DMS Engineering account.
+                            It only takes a moment — your cart is saved and waiting for you.
+                        </p>
+
+                        <div className="success-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px', flexWrap: 'wrap' }}>
+                            <Link to="/signup?redirect=/checkout" className="btn-primary large" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                                <UserPlus size={20} /> Create Account
+                            </Link>
+                            <Link to="/login?redirect=/checkout" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none', display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                                <LogIn size={20} /> Sign In
+                            </Link>
                         </div>
                     </motion.div>
                 </div>
@@ -523,31 +559,6 @@ const Checkout = () => {
                                 </div>
                             </div>
                         </motion.div>
-
-                        {!user && (
-                            <motion.div
-                                className="checkout-login-prompt"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 0.5 }}
-                                style={{
-                                    marginTop: '30px',
-                                    padding: '25px',
-                                    background: 'rgba(255,255,255,0.03)',
-                                    borderRadius: '20px',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    display: 'flex',
-                                    gap: '15px',
-                                    alignItems: 'center'
-                                }}
-                            >
-                                <AlertCircle size={24} style={{ color: '#e31b23' }} />
-                                <div>
-                                    <p style={{ margin: 0, fontWeight: 700 }}>Checking out as a guest?</p>
-                                    <Link to="/login?redirect=/checkout" style={{ color: '#e31b23', textDecoration: 'none', fontSize: '0.9rem' }}>Login for a faster experience</Link>
-                                </div>
-                            </motion.div>
-                        )}
                     </div>
                 </div>
             </div>

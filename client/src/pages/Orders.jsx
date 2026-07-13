@@ -15,6 +15,8 @@ import {
     ShieldCheck,
     Trash2
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import '../styles/PremiumOrders.css';
 
@@ -95,6 +97,7 @@ const OrderItemsList = React.memo(({ items, loading }) => {
 });
 
 const Orders = () => {
+    const { user, loading: authLoading } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedOrder, setExpandedOrder] = useState(null);
@@ -104,7 +107,7 @@ const Orders = () => {
     useEffect(() => {
         const fetchOrders = async () => {
             try {
-                const response = await fetch('/api/orders/my-orders');
+                const response = await fetch('/api/orders/my-orders', { credentials: 'include' });
                 const data = await response.json();
                 if (data.success) {
                     setOrders(data.data);
@@ -129,7 +132,7 @@ const Orders = () => {
 
         setItemsCache(prev => ({ ...prev, [orderId]: { ...prev[orderId], loading: true } }));
         try {
-            const response = await fetch(`/api/orders/${orderId}`);
+            const response = await fetch(`/api/orders/${orderId}`, { credentials: 'include' });
             const data = await response.json();
             if (data.success) {
                 setItemsCache(prev => ({
@@ -158,7 +161,8 @@ const Orders = () => {
 
         try {
             const response = await fetch(`/api/orders/${orderId}/user-delete`, {
-                method: 'POST'
+                method: 'POST',
+                credentials: 'include'
             });
             const data = await response.json();
             if (data.success) {
@@ -201,6 +205,24 @@ const Orders = () => {
                                 <div className="skeleton orders-skeleton-status" />
                             </div>
                         ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!authLoading && !user) {
+        return (
+            <div className="orders-page">
+                <div className="container">
+                    <div className="empty-orders">
+                        <Package size={48} />
+                        <h3>Sign in to view your orders</h3>
+                        <p>Your manufacturing order history is tied to your account.</p>
+                        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px', flexWrap: 'wrap' }}>
+                            <Link to="/login?redirect=/orders" className="btn-primary large">Sign In</Link>
+                            <Link to="/signup?redirect=/orders" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none' }}>Create Account</Link>
+                        </div>
                     </div>
                 </div>
             </div>
