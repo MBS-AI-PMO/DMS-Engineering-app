@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2, Trash2, UploadCloud, Image as ImageIcon } from 'lucide-react';
-import { fetchSettings, updateSetting, fetchMetals, uploadSettingLogo } from '../../utils/api';
+import { Save, Phone, Mail, MapPin, Linkedin, Facebook, Instagram, Loader2, Trash2, UploadCloud, Image as ImageIcon, Inbox } from 'lucide-react';
+import { fetchSettings, fetchPrivateSettings, updateSetting, fetchMetals, uploadSettingLogo } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function ContactSettings() {
@@ -20,11 +20,16 @@ export default function ContactSettings() {
     const siteInputRef = useRef(null);
     const heroInputRef = useRef(null);
     const [allMetals, setAllMetals] = useState([]);
+    // Where website contact messages are emailed; empty = the public email above.
+    const [contactInbox, setContactInbox] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const toast = useToast();
 
     useEffect(() => {
+        fetchPrivateSettings()
+            .then(data => setContactInbox(String(data?.contact_form_recipients || '')))
+            .catch(() => {});
         Promise.all([fetchSettings(), fetchMetals()])
             .then(([data, metals]) => {
                 setSettings(prev => ({
@@ -51,6 +56,7 @@ export default function ContactSettings() {
             await updateSetting('social_links', settings.social_links);
             await updateSetting('top_metals', settings.top_metals);
             await updateSetting('show_service_breakdown', settings.show_service_breakdown);
+            await updateSetting('contact_form_recipients', contactInbox.trim());
             toast('Settings saved successfully', 'success');
         } catch (err) {
             toast('Failed to save: ' + err.message, 'error');
@@ -191,6 +197,29 @@ export default function ContactSettings() {
                                         <input type="text" value={settings.footer_contact.address}
                                             onChange={e => updateContact('address', e.target.value)}
                                             placeholder="1234 Metal St, Precision City" />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Website messages */}
+                        <div className="admin-section-card" style={{ marginTop: 24 }}>
+                            <div className="admin-section-header">
+                                <div>
+                                    <h3 className="admin-section-title">Website Messages</h3>
+                                    <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
+                                        Messages from the Contact page are emailed here, through the SMTP account in Email Config.
+                                        Leave empty to use the email address above. Not shown on the site.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="admin-form-grid">
+                                <div className="admin-form-group full-width">
+                                    <label><Inbox size={14} /> Send website messages to</label>
+                                    {loading ? <FieldSkeleton /> : (
+                                        <input type="text" value={contactInbox}
+                                            onChange={e => setContactInbox(e.target.value)}
+                                            placeholder="sales@yourcompany.com, support@yourcompany.com" />
                                     )}
                                 </div>
                             </div>

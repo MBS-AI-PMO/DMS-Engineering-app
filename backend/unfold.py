@@ -247,6 +247,40 @@ def _edge_direction(edge_shape):
     return delta / length
 
 
+def _estimate_cylinder_thickness(face_info):
+    """Return the modal concentric-cylinder radius delta for formed sheet."""
+    radius_groups = {}
+    for info in face_info:
+        if info[0] != "cylinder":
+            continue
+        _kind, axis, radius, center = info
+        axis = _normalize(np.asarray(axis, dtype=float))
+        if tuple(np.round(axis, 5)) < tuple(np.round(-axis, 5)):
+            axis = -axis
+        center = np.asarray(center, dtype=float)
+        projected_center = center - (np.dot(center, axis) * axis)
+        key = tuple(np.round(np.concatenate((axis, projected_center)), 4))
+        radius_groups.setdefault(key, []).append(float(radius))
+
+    deltas = []
+    for radii in radius_groups.values():
+        if len(radii) < 2:
+            continue
+        for idx, first in enumerate(radii):
+            for second in radii[idx + 1:]:
+                delta = abs(first - second)
+                if delta > 0.05:
+                    deltas.append(round(delta, 4))
+
+    if not deltas:
+        return 0.0
+
+    counts = {}
+    for delta in deltas:
+        counts[delta] = counts.get(delta, 0) + 1
+    return float(min(counts, key=lambda value: (-counts[value], value)))
+
+
 def _estimate_thickness(faces, face_info, face_areas):
     """
     Estimate sheet metal thickness as the distance between the two largest
@@ -258,17 +292,144 @@ def _estimate_thickness(faces, face_info, face_areas):
         if info[0] == "plane"
     ]
     planar.sort(key=lambda x: -x[2])
+    candidates = []
 
-    for idx_i, (fi, info_i, _) in enumerate(planar[:12]):
+    # The previous implementation returned the first anti-parallel pair among
+    # the largest faces. On formed parts that can be the distance between two
+    # flanges, not the material thickness. Evaluate all plausible skin pairs
+    # and choose the smallest matching separation instead.
+    for idx_i, (fi, info_i, area_i) in enumerate(planar[:48]):
         n_i = _normalize(info_i[1])
         p_i = info_i[2]
-        for fi2, info_j, _ in planar[idx_i + 1:12]:
+        for fi2, info_j, area_j in planar[idx_i + 1:48]:
             n_j = _normalize(info_j[1])
             if np.dot(n_i, n_j) < -0.99:            # anti-parallel normals → opposite skins
                 d = abs(float(np.dot(n_i, info_j[2] - p_i)))
                 if d > 0.05:
-                    return d
-    return 0.0
+                    area_ratio = min(area_i, area_j) / max(area_i, area_j, 1e-9)
+                    candidates.append((d, area_ratio))
+
+    cylinder_thickness = _estimate_cylinder_thickness(face_info)
+    matched_skin_pairs = [d for d, ratio in candidates if ratio >= 0.45]
+    planar_thickness = 0.0
+    if matched_skin_pairs:
+        planar_thickness = min(matched_skin_pairs)
+    elif candidates:
+        planar_thickness = min(d for d, _ratio in candidates)
+
+    # On formed geometry, flange separation can be tens of times larger than
+    # the material gauge. Prefer the repeated bend-radius delta in that case.
+    if cylinder_thickness > 0 and (
+        planar_thickness <= 0 or cylinder_thickness <= planar_thickness * 0.5
+    ):
+        return cylinder_thickness
+    return planar_thickness
+
+
+def _canonical_axis_line(axis, center, precision=3):
+    """Stable key for cylinders that share the same physical center line."""
+    axis = _normalize(np.asarray(axis, dtype=float))
+    if tuple(np.round(axis, 6)) < tuple(np.round(-axis, 6)):
+        axis = -axis
+    center = np.asarray(center, dtype=float)
+    projected_center = center - np.dot(center, axis) * axis
+    return tuple(np.round(np.concatenate((axis, projected_center)), precision))
+
+
+def _physical_bend_groups(
+    bend_connections,
+    face_info,
+    faces,
+    edge_map,
+    thickness,
+):
+    """
+    Pair the inner and outer cylindrical skins of each physical bend.
+
+    STEP files contain both sheet skins and often many short cylindrical
+    fillets. A physical sheet bend is the concentric cylinder pair whose
+    radius delta equals the material thickness. Returning only those pairs
+    prevents render segments and corner fillets from becoming billable bends.
+    """
+    if thickness <= 1e-6:
+        return []
+
+    connections_by_cylinder = {}
+    cylinders_by_axis = {}
+    for connection in bend_connections:
+        ci = connection[2]
+        connections_by_cylinder.setdefault(ci, []).append(connection)
+        _kind, axis, radius, center = face_info[ci]
+        key = _canonical_axis_line(axis, center)
+        cylinders_by_axis.setdefault(key, []).append((ci, float(radius)))
+
+    tolerance = max(0.08, thickness * 0.12)
+    groups = []
+    used_cylinders = set()
+    for axis_key, cylinders in cylinders_by_axis.items():
+        candidates = []
+        for index, (first_ci, first_radius) in enumerate(cylinders):
+            for second_ci, second_radius in cylinders[index + 1:]:
+                delta_error = abs(abs(first_radius - second_radius) - thickness)
+                if delta_error <= tolerance:
+                    candidates.append(
+                        (delta_error, first_ci, first_radius, second_ci, second_radius)
+                    )
+
+        for _error, first_ci, first_radius, second_ci, second_radius in sorted(candidates):
+            if first_ci in used_cylinders or second_ci in used_cylinders:
+                continue
+            if first_radius <= second_radius:
+                inner_ci, inner_radius = first_ci, first_radius
+                outer_ci, outer_radius = second_ci, second_radius
+            else:
+                inner_ci, inner_radius = second_ci, second_radius
+                outer_ci, outer_radius = first_ci, first_radius
+
+            outer_connections = connections_by_cylinder.get(outer_ci, [])
+            inner_connections = connections_by_cylinder.get(inner_ci, [])
+            if not outer_connections or not inner_connections:
+                continue
+
+            best_axis = None
+            best_length = 0.0
+            for connection in outer_connections + inner_connections:
+                for edge_id in connection[3] + connection[4]:
+                    edge_shape = TopoDS.Edge_s(edge_map.FindKey(edge_id))
+                    p0, p1 = _edge_endpoints(edge_shape)
+                    if p0 is None or p1 is None:
+                        continue
+                    length = float(np.linalg.norm(p1 - p0))
+                    if length > best_length:
+                        best_length = length
+                        best_axis = (p0, p1)
+
+            representative = outer_connections[0]
+            bend_angle = _compute_bend_angle(
+                face_info[representative[0]],
+                face_info[representative[1]],
+                face_info[outer_ci],
+            )
+            groups.append({
+                "axis_key": axis_key,
+                "inner_cylinder": inner_ci,
+                "outer_cylinder": outer_ci,
+                "inner_radius": inner_radius,
+                "outer_radius": outer_radius,
+                "outer_connections": outer_connections,
+                "inner_connections": inner_connections,
+                "outside_faces": {
+                    face_id
+                    for connection in outer_connections
+                    for face_id in connection[:2]
+                },
+                "axis_points": best_axis,
+                "length": best_length,
+                "angle": bend_angle,
+            })
+            used_cylinders.update((inner_ci, outer_ci))
+
+    return groups
 
 
 def _build_bend_tree(seed, planar_adj, face_info, faces, edge_map, bend_connections=None):
@@ -797,6 +958,33 @@ def unfold_step_file(filepath: str) -> dict:
                 seen_pairs.add(pair_key)
                 bend_connections.append((pa, pb, ci, ea, eb))
 
+    thickness_est = _estimate_thickness(faces, face_info, face_areas)
+    physical_bends = _physical_bend_groups(
+        bend_connections,
+        face_info,
+        faces,
+        edge_map,
+        thickness_est,
+    )
+
+    # Follow only the outer cylindrical skin when a valid inner/outer pair is
+    # available. This makes the flattened dimensions represent the outside of
+    # the manufactured part and excludes decorative fillets from bend costing.
+    if physical_bends:
+        active_bend_connections = [
+            connection
+            for bend in physical_bends
+            for connection in bend["outer_connections"][:1]
+        ]
+        outside_faces = {
+            face_id
+            for bend in physical_bends
+            for face_id in bend["outside_faces"]
+        }
+    else:
+        active_bend_connections = bend_connections
+        outside_faces = set()
+
     # 5. Build planar-face adjacency graph
     planar_adj = {i: [] for i in planar_faces}
 
@@ -806,7 +994,7 @@ def unfold_step_file(filepath: str) -> dict:
                 if _planes_are_coplanar(face_info[pi], face_info[adj_fi]):
                     planar_adj[pi].append({"neighbor": adj_fi, "type": "coplanar", "edges": edges})
 
-    for pa, pb, ci, ea, eb in bend_connections:
+    for pa, pb, ci, ea, eb in active_bend_connections:
         cyl_info = face_info[ci]
         bend_angle = _compute_bend_angle(face_info[pa], face_info[pb], cyl_info)
         _, cyl_axis, cyl_radius, cyl_center = cyl_info
@@ -825,9 +1013,9 @@ def unfold_step_file(filepath: str) -> dict:
     if not planar_faces:
         raise ValueError("No planar faces found — not a sheet metal part?")
 
-    seed = max(planar_faces, key=lambda i: face_areas[i])
-    thickness_est = _estimate_thickness(faces, face_info, face_areas)
-    flat_mode = (not bend_connections) or thickness_est <= 1e-4
+    outside_candidates = [face_id for face_id in outside_faces if face_id in planar_faces]
+    seed = max(outside_candidates or planar_faces, key=lambda i: face_areas[i])
+    flat_mode = (not active_bend_connections) or thickness_est <= 1e-4
 
     # Tessellate all planar faces
     face_meshes = {}
@@ -948,9 +1136,19 @@ def unfold_step_file(filepath: str) -> dict:
     cut_edges_3d = []
     bend_edges_3d = []
     bend_edge_ids = set()
-    for _, _, _, ea, eb in bend_connections:
+    for _, _, _, ea, eb in active_bend_connections:
         bend_edge_ids.update(ea)
         bend_edge_ids.update(eb)
+
+    selected_face_ids = {record["face_id"] for record in face_records}
+    selected_edge_counts = {}
+    for face_id in selected_face_ids:
+        face_edge_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(faces[face_id], TopAbs_EDGE, face_edge_map)
+        for edge_index in range(1, face_edge_map.Extent() + 1):
+            global_id = edge_map.FindIndex(face_edge_map.FindKey(edge_index))
+            if global_id > 0:
+                selected_edge_counts[global_id] = selected_edge_counts.get(global_id, 0) + 1
 
     for rec in face_records:
         fi = rec["face_id"]
@@ -962,9 +1160,59 @@ def unfold_step_file(filepath: str) -> dict:
             eidx_global = edge_map.FindIndex(edge)
             pts = _sample_edge_points(edge)
             if eidx_global in bend_edge_ids:
-                _append_polyline_segments(bend_edges_3d, pts, R, t)
-            else:
+                continue
+            # Coplanar seams occur twice in the selected outside skin and are
+            # not part of the laser perimeter.
+            if selected_edge_counts.get(eidx_global, 0) == 1:
                 _append_polyline_segments(cut_edges_3d, pts, R, t)
+
+    # Emit one line per physical bend. The previous fallback emitted every
+    # sampled render segment, which made one part appear to have 52 bends.
+    transforms_by_face = {
+        record["face_id"]: record["transform"] for record in face_records
+    }
+    bend_features = []
+    for index, bend in enumerate(physical_bends):
+        line_points = None
+        for connection in bend["outer_connections"]:
+            for face_id, edge_ids in (
+                (connection[0], connection[3]),
+                (connection[1], connection[4]),
+            ):
+                transform = transforms_by_face.get(face_id)
+                if transform is None or not edge_ids:
+                    continue
+                edge_shape = TopoDS.Edge_s(edge_map.FindKey(edge_ids[0]))
+                p0, p1 = _edge_endpoints(edge_shape)
+                if p0 is None or p1 is None:
+                    continue
+                R, t = transform
+                line_points = (R @ p0 + t, R @ p1 + t)
+                break
+            if line_points is not None:
+                break
+
+        if line_points is not None:
+            p0, p1 = line_points
+            bend_edges_3d.extend([
+                float(p0[0]), float(p0[1]), 0.0,
+                float(p1[0]), float(p1[1]), 0.0,
+            ])
+
+        axis_points = bend.get("axis_points")
+        bend_features.append({
+            "id": f"bend_{index + 1}",
+            "type": "bend",
+            "length": round(float(bend.get("length", 0.0)), 4),
+            "radius": round(float(bend.get("inner_radius", 0.0)), 4),
+            "outerRadius": round(float(bend.get("outer_radius", 0.0)), 4),
+            "angle": round(math.degrees(float(bend.get("angle", 0.0))), 4),
+            "axis": {
+                "p0": axis_points[0].tolist(),
+                "p1": axis_points[1].tolist(),
+            } if axis_points is not None else None,
+            "source": "concentric_sheet_skin_pair",
+        })
 
     # 9. Clean up flat vertices for JSON output
     flat_vertices = []
@@ -985,6 +1233,32 @@ def unfold_step_file(filepath: str) -> dict:
         v_max = np.max(all_v, axis=0)
         width = round(float(v_max[0] - v_min[0]), 2)
         height = round(float(v_max[1] - v_min[1]), 2)
+
+    planar_flat_area = 0.0
+    for record in face_records:
+        vertices = record["vertices"]
+        for triangle in record["triangles"]:
+            a, b, c = (vertices[triangle[index]] for index in range(3))
+            planar_flat_area += 0.5 * float(np.linalg.norm(np.cross(b - a, c - a)))
+    bend_flat_area = sum(
+        float(bend.get("length", 0.0))
+        * abs(float(bend.get("angle", 0.0)))
+        * (float(bend.get("inner_radius", 0.0)) + K_FACTOR * thickness_est)
+        for bend in physical_bends
+    )
+    flat_area = planar_flat_area + bend_flat_area
+    bounding_area = max(float(width) * float(height), 0.0)
+    if bounding_area > 0:
+        # Overlapping duplicate STEP faces must not inflate material area.
+        flat_area = min(flat_area, bounding_area)
+
+    total_cut_length = 0.0
+    for index in range(0, len(cut_edges_3d), 6):
+        if index + 5 >= len(cut_edges_3d):
+            break
+        p0 = np.array(cut_edges_3d[index:index + 3], dtype=float)
+        p1 = np.array(cut_edges_3d[index + 3:index + 6], dtype=float)
+        total_cut_length += float(np.linalg.norm(p1 - p0))
 
     # 10. Compute Technical Views (Projections)
     bend_ids = list(bend_edge_ids)
@@ -1031,7 +1305,34 @@ def unfold_step_file(filepath: str) -> dict:
         "frontBendEdges": [float(v) for v in front_bend_edges],
         "sideBendEdges": [float(v) for v in side_bend_edges],
         "thickness": round(float(thickness_est), 4),
-        "bbox": {"width": float(width), "height": float(height)},
+        "bbox": {
+            "length": float(max(width, height)),
+            "width": float(min(width, height)),
+            "xSpan": float(width),
+            "ySpan": float(height),
+            "height": round(float(thickness_est), 4),
+            "source": "unfolded_outside_skin",
+            "flatPatternOnly": True,
+        },
+        "flatPattern": {
+            "length": float(max(width, height)),
+            "width": float(min(width, height)),
+            "area": round(float(flat_area), 4),
+            "outsideSkin": True,
+            "source": "unfolded_outside_skin_fallback",
+        },
+        "flatArea": round(float(flat_area), 4),
+        "surfaceArea": round(float(sum(face_areas)), 4),
+        "totalCutLength": round(float(total_cut_length), 4),
+        "bends": bend_features,
+        "physicalBendCount": len(bend_features),
+        "analysisEngine": "legacy_outside_skin_fallback",
+        "outsideSkin": True,
+        "processEligibility": {
+            "laser": bool(total_cut_length > 0),
+            "cnc": False,
+            "tubing": False,
+        },
         "faceMeshes": serializable_meshes,
-        "bendTree": _build_bend_tree(seed, planar_adj, face_info, faces, edge_map, bend_connections)
+        "bendTree": _build_bend_tree(seed, planar_adj, face_info, faces, edge_map, active_bend_connections)
     })

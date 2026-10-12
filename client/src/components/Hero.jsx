@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 // eslint-disable-next-line no-unused-vars
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 import { fetchSettings } from '../utils/api';
+import '../styles/HomeHero.css';
 
 const HERO_DEFAULT = {
     avif: '/assets/hero-home.avif',
@@ -54,6 +56,7 @@ const resolveHeroSources = (setting) => {
 
 const Hero = () => {
     const [heroSources, setHeroSources] = useState(HERO_DEFAULT);
+    const reduceMotion = useReducedMotion();
 
     useEffect(() => {
         let mounted = true;
@@ -106,34 +109,39 @@ const Hero = () => {
                 />
             </picture>
             <div className="hero-overlay" style={{ position: 'absolute', inset: 0, zIndex: 1 }}></div>
-            <div className="hero-content" style={{ position: 'relative', zIndex: 2 }}>
+            <div className="hero-content home-hero" style={{ position: 'relative', zIndex: 2 }}>
                 <motion.h1
-                    className="hero-title"
-                    initial={{ opacity: 0, y: 30 }}
+                    className="home-hero-title"
+                    initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
                 >
-                    Precision on demand.
-                    From raw material to finished part in 48 hours.
+                    <span className="home-hero-title-lead">Precision on demand.</span>{' '}
+                    <span className="home-hero-title-rest">From raw material to finished part in 48&nbsp;hours.</span>
                 </motion.h1>
 
                 <motion.p
-                    className="hero-subtitle"
-                    initial={{ opacity: 0, y: 20 }}
+                    className="home-hero-lede"
+                    initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+                    transition={{ duration: 0.7, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
                 >
-                    Sheet metal, CNC, and beyond.
+                    <span>Sheet metal</span>
+                    <span className="home-hero-dot" aria-hidden="true" />
+                    <span>CNC</span>
+                    <span className="home-hero-dot" aria-hidden="true" />
+                    <span>and beyond</span>
                 </motion.p>
 
                 <motion.div
-                    className="hero-actions"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="home-hero-actions"
+                    initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.7, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
                 >
-                    <Link to="/get-instant-pricing" className="btn-hero-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
-                        BUILD NOW
+                    <Link to="/get-instant-pricing" className="home-hero-cta">
+                        Build now
+                        <ArrowRight size={18} aria-hidden="true" />
                     </Link>
                 </motion.div>
             </div>

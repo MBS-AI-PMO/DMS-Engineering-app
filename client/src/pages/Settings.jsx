@@ -1,53 +1,38 @@
-/* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { User, Mail, Phone, MapPin, Lock, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CheckCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getUserProfile, updateUserProfile, updateUserPassword } from '../utils/api';
 import { useToast } from '../context/ToastContext';
-import Skeleton from '../components/Skeleton';
+import '../styles/Shimmer.css';
+import '../styles/AccountPages.css';
 
-const SettingsSkeleton = () => (
-    <div className="settings-page">
-        <div className="settings-hero">
-            <div className="container">
-                <div className="settings-hero-content settings-hero-skeleton">
-                    <Skeleton dark variant="rectangle" style={{ width: 64, height: 64, borderRadius: 18, flexShrink: 0 }} />
-                    <div className="settings-skeleton-copy">
-                        <Skeleton dark variant="text" style={{ width: 220, height: 32, marginBottom: 10 }} />
-                        <Skeleton dark variant="text" style={{ width: 320, maxWidth: '70vw', height: 14 }} />
-                    </div>
-                </div>
-            </div>
-        </div>
+/**
+ * Account settings: a short dark heading band with the person's initial,
+ * name and email, then two white panels — profile details and password.
+ * Saving works as before (toasts on success or failure); fields shimmer
+ * until the profile has loaded.
+ */
 
-        <div className="container settings-container">
-            <div className="settings-grid">
-                {[0, 1].map(card => (
-                    <div key={card} className="settings-card settings-card-skeleton">
-                        <div className="settings-card-header">
-                            <Skeleton dark variant="rectangle" style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0 }} />
-                            <div className="settings-skeleton-copy">
-                                <Skeleton dark variant="text" style={{ width: 190, height: 20, marginBottom: 9 }} />
-                                <Skeleton dark variant="text" style={{ width: 240, maxWidth: '100%', height: 12 }} />
-                            </div>
-                        </div>
-
-                        <div className="settings-form">
-                            {[0, 1, 2, 3].map(row => (
-                                <div key={row} className="settings-field">
-                                    <Skeleton dark variant="text" style={{ width: 96, height: 11 }} />
-                                    <Skeleton dark variant="rectangle" style={{ width: '100%', height: row === 3 ? 82 : 45, borderRadius: 11 }} />
-                                </div>
-                            ))}
-                            <Skeleton dark variant="rectangle" style={{ width: 170, height: 44, borderRadius: 11 }} />
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    </div>
+const PasswordField = ({ label, value, onChange, autoComplete, placeholder, shown, onToggle }) => (
+    <label className="acc-field">
+        <span className="acc-label">{label}</span>
+        <span className="acc-input-wrap">
+            <input
+                type={shown ? 'text' : 'password'}
+                value={value}
+                onChange={onChange}
+                autoComplete={autoComplete}
+                placeholder={placeholder}
+                required
+            />
+            {onToggle && (
+                <button type="button" className="acc-eye" onClick={onToggle} aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}>
+                    {shown ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                </button>
+            )}
+        </span>
+    </label>
 );
 
 export default function Settings() {
@@ -56,6 +41,7 @@ export default function Settings() {
     const navigate = useNavigate();
 
     const [profile, setProfile] = useState({ name: '', email: '', phone: '', address: '' });
+    const [profileReady, setProfileReady] = useState(false);
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     const [showCurrent, setShowCurrent] = useState(false);
     const [showNew, setShowNew] = useState(false);
@@ -80,7 +66,8 @@ export default function Settings() {
                 })
                 .catch(() => {
                     setProfile({ name: user.name || '', email: user.email || '', phone: '', address: '' });
-                });
+                })
+                .finally(() => setProfileReady(true));
         }
     }, [user, authLoading, navigate]);
 
@@ -121,213 +108,122 @@ export default function Settings() {
         }
     };
 
-    if (authLoading) return <SettingsSkeleton />;
+    const loadingAll = authLoading || (user && !profileReady);
+    const displayName = profile.name || user?.name || '';
+    const initial = (displayName || user?.email || 'U').trim().charAt(0).toUpperCase();
 
-    const firstName = user?.name?.split(' ')[0] || 'User';
+    const fieldSkeleton = (tall) => <span className={`shimmer acc-sk-input${tall ? ' is-tall' : ''}`} aria-hidden="true" />;
 
     return (
-        <div className="settings-page">
-            <div className="settings-hero">
-                <div className="container">
-                    <motion.div
-                        className="settings-hero-content"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5 }}
-                    >
-                        <div className="settings-avatar">
-                            {(firstName?.[0] || 'U').toUpperCase()}
-                        </div>
+        <div className="acc">
+            <section className="acc-hero" aria-labelledby="acc-title">
+                <div className="acc-inner">
+                    <nav className="acc-crumbs" aria-label="Breadcrumb">
+                        <Link to="/">Home</Link>
+                        <span aria-hidden="true">/</span>
+                        <span aria-current="page">Settings</span>
+                    </nav>
+                    <div className="acc-who">
+                        {loadingAll
+                            ? <span className="shimmer acc-avatar" aria-hidden="true" />
+                            : <span className="acc-avatar" aria-hidden="true">{initial}</span>}
                         <div>
-                            <h1>Account Settings</h1>
-                            <p>Manage your profile and security for {user?.email}</p>
+                            <h1 id="acc-title" className="acc-title">Account settings</h1>
+                            <p className="acc-lede">
+                                {loadingAll ? <span className="shimmer acc-sk-lede" aria-hidden="true" /> : (profile.email || user?.email)}
+                            </p>
                         </div>
-                    </motion.div>
+                    </div>
                 </div>
-            </div>
+            </section>
 
-            <div className="container settings-container">
-                <div className="settings-grid">
-
-                    {/* Personal Information */}
-                    <motion.div
-                        className="settings-card"
-                        initial={{ opacity: 0, y: 24 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.1 }}
-                    >
-                        <div className="settings-card-header">
-                            <div className="settings-card-icon">
-                                <User size={20} />
-                            </div>
-                            <div>
-                                <h2>Personal Information</h2>
-                                <p>Update your name and contact details</p>
-                            </div>
+            <section className="acc-body" aria-label="Settings">
+                <div className="acc-inner acc-settings">
+                    {/* Profile */}
+                    <form className="acc-panel" onSubmit={handleProfileSave} aria-labelledby="acc-profile-title">
+                        <div className="acc-panel-head">
+                            <h2 id="acc-profile-title" className="acc-h2">Profile</h2>
+                            <p className="acc-muted">Used on your orders and for shipping.</p>
                         </div>
 
-                        <form onSubmit={handleProfileSave} className="settings-form">
-                            <div className="settings-field">
-                                <label>Full Name</label>
-                                <div className="settings-input-wrapper">
-                                    <User size={16} className="settings-input-icon" />
-                                    <input
-                                        type="text"
-                                        value={profile.name}
-                                        onChange={e => setProfile(p => ({ ...p, name: e.target.value }))}
-                                        placeholder="Your full name"
-                                    />
-                                </div>
-                            </div>
+                        <label className="acc-field">
+                            <span className="acc-label">Full name</span>
+                            {loadingAll ? fieldSkeleton() : (
+                                <input type="text" autoComplete="name" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder="Your full name" />
+                            )}
+                        </label>
 
-                            <div className="settings-field">
-                                <label>Email Address</label>
-                                <div className="settings-input-wrapper settings-input-readonly">
-                                    <Mail size={16} className="settings-input-icon" />
-                                    <input
-                                        type="email"
-                                        value={profile.email}
-                                        readOnly
-                                        title="Email cannot be changed"
-                                    />
-                                </div>
-                                <span className="settings-field-hint">Email address cannot be changed</span>
-                            </div>
+                        <label className="acc-field">
+                            <span className="acc-label">Email</span>
+                            {loadingAll ? fieldSkeleton() : (
+                                <input type="email" value={profile.email} readOnly aria-describedby="acc-email-hint" className="is-readonly" />
+                            )}
+                            <span id="acc-email-hint" className="acc-hint">Your email can't be changed.</span>
+                        </label>
 
-                            <div className="settings-field">
-                                <label>Phone Number</label>
-                                <div className="settings-input-wrapper">
-                                    <Phone size={16} className="settings-input-icon" />
-                                    <input
-                                        type="tel"
-                                        value={profile.phone}
-                                        onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
-                                        placeholder="+1 (555) 000-0000"
-                                    />
-                                </div>
-                            </div>
+                        <label className="acc-field">
+                            <span className="acc-label">Phone</span>
+                            {loadingAll ? fieldSkeleton() : (
+                                <input type="tel" autoComplete="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+                            )}
+                        </label>
 
-                            <div className="settings-field">
-                                <label>Shipping Address</label>
-                                <div className="settings-input-wrapper settings-textarea-wrapper">
-                                    <MapPin size={16} className="settings-input-icon settings-input-icon-top" />
-                                    <textarea
-                                        value={profile.address}
-                                        onChange={e => setProfile(p => ({ ...p, address: e.target.value }))}
-                                        placeholder="123 Main St, City, State, ZIP"
-                                        rows={3}
-                                    />
-                                </div>
-                            </div>
+                        <label className="acc-field">
+                            <span className="acc-label">Shipping address</span>
+                            {loadingAll ? fieldSkeleton(true) : (
+                                <textarea rows={3} autoComplete="street-address" value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} placeholder="Street, city, state, ZIP" />
+                            )}
+                        </label>
 
-                            <button type="submit" className="settings-save-btn" disabled={profileLoading}>
-                                {profileLoading ? (
-                                    <span className="settings-btn-spinner" />
-                                ) : profileSaved ? (
-                                    <>
-                                        <CheckCircle size={18} />
-                                        Saved
-                                    </>
-                                ) : (
-                                    <>
-                                        <Save size={18} />
-                                        Save Changes
-                                    </>
-                                )}
+                        <div className="acc-panel-foot">
+                            <button type="submit" className="acc-btn is-primary" disabled={profileLoading || loadingAll}>
+                                {profileLoading ? <Loader2 size={16} className="acc-spin" aria-hidden="true" /> : profileSaved ? <CheckCircle size={16} aria-hidden="true" /> : null}
+                                {profileLoading ? 'Saving' : profileSaved ? 'Saved' : 'Save profile'}
                             </button>
-                        </form>
-                    </motion.div>
+                        </div>
+                    </form>
 
-                    {/* Password & Security */}
-                    <motion.div
-                        className="settings-card"
-                        initial={{ opacity: 0, y: 24 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.2 }}
-                    >
-                        <div className="settings-card-header">
-                            <div className="settings-card-icon settings-card-icon-red">
-                                <Lock size={20} />
-                            </div>
-                            <div>
-                                <h2>Password & Security</h2>
-                                <p>Update your password to keep your account secure</p>
-                            </div>
+                    {/* Password */}
+                    <form className="acc-panel" onSubmit={handlePasswordSave} aria-labelledby="acc-password-title">
+                        <div className="acc-panel-head">
+                            <h2 id="acc-password-title" className="acc-h2">Password</h2>
+                            <p className="acc-muted">At least 8 characters.</p>
                         </div>
 
-                        <form onSubmit={handlePasswordSave} className="settings-form">
-                            <div className="settings-field">
-                                <label>Current Password</label>
-                                <div className="settings-input-wrapper">
-                                    <Lock size={16} className="settings-input-icon" />
-                                    <input
-                                        type={showCurrent ? 'text' : 'password'}
-                                        value={passwords.currentPassword}
-                                        onChange={e => setPasswords(p => ({ ...p, currentPassword: e.target.value }))}
-                                        placeholder="Enter current password"
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="settings-eye-btn"
-                                        onClick={() => setShowCurrent(v => !v)}
-                                        tabIndex={-1}
-                                    >
-                                        {showCurrent ? <EyeOff size={15} /> : <Eye size={15} />}
-                                    </button>
-                                </div>
-                            </div>
+                        <PasswordField
+                            label="Current password"
+                            value={passwords.currentPassword}
+                            onChange={e => setPasswords(p => ({ ...p, currentPassword: e.target.value }))}
+                            autoComplete="current-password"
+                            shown={showCurrent}
+                            onToggle={() => setShowCurrent(v => !v)}
+                        />
+                        <PasswordField
+                            label="New password"
+                            value={passwords.newPassword}
+                            onChange={e => setPasswords(p => ({ ...p, newPassword: e.target.value }))}
+                            autoComplete="new-password"
+                            placeholder="At least 8 characters"
+                            shown={showNew}
+                            onToggle={() => setShowNew(v => !v)}
+                        />
+                        <PasswordField
+                            label="Confirm new password"
+                            value={passwords.confirmPassword}
+                            onChange={e => setPasswords(p => ({ ...p, confirmPassword: e.target.value }))}
+                            autoComplete="new-password"
+                            shown={showNew}
+                        />
 
-                            <div className="settings-field">
-                                <label>New Password</label>
-                                <div className="settings-input-wrapper">
-                                    <Lock size={16} className="settings-input-icon" />
-                                    <input
-                                        type={showNew ? 'text' : 'password'}
-                                        value={passwords.newPassword}
-                                        onChange={e => setPasswords(p => ({ ...p, newPassword: e.target.value }))}
-                                        placeholder="Min. 8 characters"
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="settings-eye-btn"
-                                        onClick={() => setShowNew(v => !v)}
-                                        tabIndex={-1}
-                                    >
-                                        {showNew ? <EyeOff size={15} /> : <Eye size={15} />}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="settings-field">
-                                <label>Confirm New Password</label>
-                                <div className="settings-input-wrapper">
-                                    <Lock size={16} className="settings-input-icon" />
-                                    <input
-                                        type="password"
-                                        value={passwords.confirmPassword}
-                                        onChange={e => setPasswords(p => ({ ...p, confirmPassword: e.target.value }))}
-                                        placeholder="Repeat new password"
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <button type="submit" className="settings-save-btn settings-save-btn-secondary" disabled={passwordLoading}>
-                                {passwordLoading ? (
-                                    <span className="settings-btn-spinner" />
-                                ) : (
-                                    <>
-                                        <Lock size={18} />
-                                        Update Password
-                                    </>
-                                )}
+                        <div className="acc-panel-foot">
+                            <button type="submit" className="acc-btn" disabled={passwordLoading}>
+                                {passwordLoading && <Loader2 size={16} className="acc-spin" aria-hidden="true" />}
+                                {passwordLoading ? 'Updating' : 'Update password'}
                             </button>
-                        </form>
-                    </motion.div>
+                        </div>
+                    </form>
                 </div>
-            </div>
+            </section>
         </div>
     );
 }

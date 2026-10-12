@@ -231,19 +231,6 @@ const isPowderStyle = (configuration, activeFinishColor) => {
   });
 };
 
-const normalizeServiceOptions = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-};
-
 const VIEW_MODE_KEY = 'dms_model_view_mode';
 
 const ProjectViewer = ({
@@ -287,7 +274,6 @@ const ProjectViewer = ({
   const configurePreviewSeqRef = useRef(0);
   const configurePreviewKeyRef = useRef('');
   const [configuredPreviewUrl, setConfiguredPreviewUrl] = useState(null);
-  const [configuredHardwareResizeReport, setConfiguredHardwareResizeReport] = useState({});
 
   const detectedHoles = useMemo(
     () => mergeDetectedHoles(configuration, selectedTaps, selectedHardware, selectedCountersinks),
@@ -312,39 +298,9 @@ const ProjectViewer = ({
     [configuration?.additionalServices]
   );
 
-  const tapService = useMemo(
-    () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('tap')) || null,
-    [selectedServices]
-  );
-
-  const countersinkService = useMemo(
-    () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('countersink')) || null,
-    [selectedServices]
-  );
-
   const hardwareService = useMemo(
     () => selectedServices.find((s) => String(s?.title || '').toLowerCase().includes('hardware')) || null,
     [selectedServices]
-  );
-
-  const tapOptions = useMemo(
-    () => normalizeServiceOptions(tapService?.service_options),
-    [tapService?.service_options]
-  );
-
-  const csOptions = useMemo(
-    () => normalizeServiceOptions(countersinkService?.service_options),
-    [countersinkService?.service_options]
-  );
-
-  const isTappingActive = useMemo(
-    () => Boolean(tapService) || Object.keys(selectedTaps || {}).length > 0,
-    [tapService, selectedTaps]
-  );
-
-  const isCountersinkingActive = useMemo(
-    () => Boolean(countersinkService) || Object.keys(selectedCountersinks || {}).length > 0,
-    [countersinkService, selectedCountersinks]
   );
 
   const isHardwareActive = useMemo(
@@ -419,7 +375,6 @@ const ProjectViewer = ({
       if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
       configurePreviewKeyRef.current = '';
       setConfiguredPreviewUrl(null);
-      setConfiguredHardwareResizeReport({});
       return;
     }
 
@@ -449,12 +404,6 @@ const ProjectViewer = ({
 
         if (seq !== configurePreviewSeqRef.current) return;
 
-        const nextResizeReport =
-          (data?.hardwareResizeReport && typeof data.hardwareResizeReport === 'object')
-            ? data.hardwareResizeReport
-            : {};
-        setConfiguredHardwareResizeReport(nextResizeReport);
-
         configurePreviewKeyRef.current = key;
         if (!data.previewPath) {
           setConfiguredPreviewUrl(null);
@@ -468,7 +417,6 @@ const ProjectViewer = ({
         console.error('ProjectViewer configured preview error:', err);
         if (seq === configurePreviewSeqRef.current) {
           setConfiguredPreviewUrl(null);
-          setConfiguredHardwareResizeReport({});
         }
       }
     }, 220);
@@ -527,17 +475,11 @@ const ProjectViewer = ({
             selectedTaps={selectedTaps}
             activeTapHole={null}
             setActiveTapHole={noop}
-            isTappingActive={isTappingActive}
-            tapOptions={tapOptions}
             selectedHardware={selectedHardware}
-            hardwareResizeReport={configuredHardwareResizeReport}
             isHardwareActive={isHardwareActive}
             hwItemsByType={{}}
             selectedCountersinks={selectedCountersinks}
             showCountersinkMarkers={false}
-            countersinkMarkerStyle="camouflage"
-            csOptions={csOptions}
-            isCountersinkingActive={isCountersinkingActive}
             activeFinishColor={activeFinishColor}
             isFinishPowderCoating={isFinishPowderCoating}
             isBendingActive={Boolean((configuration.detectedBends || []).length)}
@@ -546,7 +488,7 @@ const ProjectViewer = ({
             selectedThicknessMm={configuration?.dimensions?.mm?.t || null}
             isModelFadedManually={false}
             isAnodizingModalOpen={false}
-            dimensions={configuration.dimensions || null}
+            showViewCube={!isPreview}
             allServices={selectedServices}
             backendData={configuration.pricingTechnicalData || null}
             onModelLoaded={noop}

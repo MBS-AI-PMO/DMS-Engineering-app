@@ -9,7 +9,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const previewJobs = new Map();
 const previewResultCache = new Map();
-const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v12-tap-axis-aware-cut';
+const CONFIGURED_PREVIEW_ENGINE_VERSION = 'v14-preview-cleaned';
 const PREVIEW_RESULT_TTL_MS = 8 * 60 * 1000;
 const PREVIEW_RESULT_CACHE_MAX = 256;
 
@@ -1193,6 +1193,7 @@ const compactHardwareAssignments = (selectedHardware = {}) => {
                 position: hole.position ?? null,
                 axis: hole.axis ?? null,
                 diameter_mm: hole.diameter_mm ?? null,
+                rim_diameter_mm: hole.rim_diameter_mm ?? null,
                 diameter_in: hole.diameter_in ?? null,
                 diameterInches: hole.diameterInches ?? null,
                 depth_mm: hole.depth_mm ?? null,
@@ -1896,7 +1897,13 @@ router.post('/configure-preview', async (req, res) => {
  *
  * GENERAL MARKUP — percentage from site_settings (general markup.csv)
  */
-router.post('/calculate', async (req, res) => {
+/**
+ * The price engine. Takes the same fields /calculate receives and returns
+ * { status, body } instead of writing a response, so the quote page and the
+ * order checks (order placement, PayPal) price a part with the very same
+ * code. Nothing here trusts a price sent by the browser.
+ */
+async function calculateQuotePrice(input = {}) {
     const {
         metal_id,
         service_id,
@@ -1908,15 +1915,15 @@ router.post('/calculate', async (req, res) => {
         taps = [],
         hardware = [],
         countersinks = []
-    } = req.body;
+    } = input;
 
     if (!metal_id && !service_id) {
-        return res.status(400).json({ success: false, error: 'Select either a material or a production method to see pricing.' });
+        return { status: 400, body: { success: false, error: 'Select either a material or a production method to see pricing.' } };
     }
 
     try {
         const qty = parseInt(quantity) || 1;
-        const techData = req.body.technical_data || {};
+        const techData = input.technical_data || {};
         const sheetNestData = techData.sheetNest || techData.sheet_nest || techData.nest || null;
         const profilePointsInches = getProfilePointsInches(techData);
         const flatAreaIn2 = getFlatAreaIn2(techData);
@@ -2366,19 +2373,82 @@ router.post('/calculate', async (req, res) => {
             return isNaN(price) ? 0 : price;
         };
 
-        if (Array.isArray(taps) && taps.length > 0) {
-            const tapTotal = taps.reduce((acc, t) => acc + parseManualPrice(t.price), 0);
-            service_breakdown.push({ base_name: 'Tapping', name: 'Tapping', price: tapTotal });
+        // Tap and countersink prices come from the admin's own size lists,
+        // matched by name. A price sent by the browser is never used: anyone
+        // could send 0.
+        const tapItems = Array.isArray(taps) ? taps : [];
+        const countersinkItems = Array.isArray(countersinks) ? countersinks : [];
+        let holeServiceRows = [];
+        if (tapItems.length > 0 || countersinkItems.length > 0) {
+            const holeServicesRes = await db.query(
+                "SELECT id, title, service_options FROM services WHERE title ILIKE '%tap%' OR title ILIKE '%countersink%' ORDER BY id"
+            );
+            holeServiceRows = holeServicesRes.rows;
+        }
+        const holeOptionsFor = (word) => {
+            const row = holeServiceRows.find(r => String(r.title || '').toLowerCase().includes(word));
+            let options = row?.service_options;
+            if (typeof options === 'string') {
+                try { options = JSON.parse(options); } catch { options = []; }
+            }
+            return Array.isArray(options) ? options : [];
+        };
+        const priceHoleItems = (items, options) => {
+            let total = 0;
+            for (const item of items) {
+                const name = String(item?.name || '').trim();
+                const option = options.find(o => String(o?.name || '').trim() === name);
+                if (!option) return { missing: name || 'unnamed size' };
+                total += parseManualPrice(option.price);
+            }
+            return { total };
+        };
+        const tapPricing = priceHoleItems(tapItems, holeOptionsFor('tap'));
+        const countersinkPricing = priceHoleItems(countersinkItems, holeOptionsFor('countersink'));
+
+        // Hardware the same way: each part is priced from the admin's own
+        // hardware list, found by its id (by name for carts saved before ids
+        // were sent). Parts switched off in the admin are no longer offered.
+        const hardwareItems = Array.isArray(hardware) ? hardware : [];
+        let hardwarePricing = { total: 0 };
+        if (hardwareItems.length > 0) {
+            const hwIds = [...new Set(hardwareItems.map(h => Number.parseInt(h?.id, 10)).filter(Number.isInteger))];
+            const hwNames = [...new Set(hardwareItems.map(h => String(h?.name || '').trim()).filter(Boolean))];
+            const hwRes = await db.query(
+                'SELECT id, name, price FROM hardware_items WHERE COALESCE(is_active, true) = true AND (id = ANY($1::int[]) OR name = ANY($2::text[]))',
+                [hwIds, hwNames]
+            );
+            let total = 0;
+            for (const h of hardwareItems) {
+                const id = Number.parseInt(h?.id, 10);
+                const name = String(h?.name || '').trim();
+                const row = Number.isInteger(id)
+                    ? hwRes.rows.find(r => r.id === id)
+                    : hwRes.rows.find(r => String(r.name || '').trim() === name);
+                if (!row) { hardwarePricing = { missing: name || 'unnamed part' }; break; }
+                total += parseManualPrice(row.price);
+            }
+            if (!hardwarePricing.missing) hardwarePricing = { total };
         }
 
-        if (Array.isArray(hardware) && hardware.length > 0) {
-            const hwTotal = hardware.reduce((acc, h) => acc + parseManualPrice(h.price), 0);
-            service_breakdown.push({ base_name: 'Hardware', name: 'Hardware', price: hwTotal });
+        const missingHoleSize = tapPricing.missing || countersinkPricing.missing || hardwarePricing.missing;
+        if (missingHoleSize) {
+            return { status: 400, body: {
+                success: false,
+                error: `"${missingHoleSize}" is no longer offered. Choose another size for that hole.`,
+            } };
         }
 
-        if (Array.isArray(countersinks) && countersinks.length > 0) {
-            const csTotal = countersinks.reduce((acc, c) => acc + parseManualPrice(c.price), 0);
-            service_breakdown.push({ base_name: 'Countersinking', name: 'Countersinking', price: csTotal });
+        if (tapItems.length > 0) {
+            service_breakdown.push({ base_name: 'Tapping', name: 'Tapping', price: tapPricing.total });
+        }
+
+        if (hardwareItems.length > 0) {
+            service_breakdown.push({ base_name: 'Hardware', name: 'Hardware', price: hardwarePricing.total });
+        }
+
+        if (countersinkItems.length > 0) {
+            service_breakdown.push({ base_name: 'Countersinking', name: 'Countersinking', price: countersinkPricing.total });
         }
 
         // ── MARKUPS & FINAL TOTALS ──────────────────────────────────────────
@@ -2522,7 +2592,7 @@ router.post('/calculate', async (req, res) => {
             ...pricingWarnings
         ].filter(Boolean)));
 
-        res.json({
+        return { status: 200, body: {
             success: true,
             total_price: final_total,
             lead_days: lead_days || 0,
@@ -2560,12 +2630,18 @@ router.post('/calculate', async (req, res) => {
                 powder_coating: powder_coating_breakdown,
                 bending: bending_breakdown ? bending_breakdown.variables : null
             }
-        });
+        } };
 
     } catch (err) {
         console.error('Error calculating price:', err);
-        res.status(500).json({ success: false, error: 'Calculation failed' });
+        return { status: 500, body: { success: false, error: 'Calculation failed' } };
     }
+}
+
+router.post('/calculate', async (req, res) => {
+    const result = await calculateQuotePrice(req.body || {});
+    res.status(result.status).json(result.body);
 });
 
 module.exports = router;
+module.exports.calculateQuotePrice = calculateQuotePrice;

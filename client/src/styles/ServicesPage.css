@@ -1,0 +1,695 @@
+/* ══ Services page (/services) ═══════════════════════════════════════════
+   Same voice as the metals page: a dark heading band (here over the
+   laser-cutting photo, shaded from the left so the words stay readable),
+   a light band of white cards with hairline borders, a white band with
+   the four steps, then a dark band to instant pricing. Red only on the
+   main action and on hover arrows. Own class names (sp-). */
+
+.sp {
+  --sp-dark: #0b0c0f;
+  --sp-ground: #f7f7f8;
+  --sp-ink: #0b0c0f;
+  --sp-text: #5b5f68;
+  --sp-faint: #8b8f98;
+  --sp-rule: #e3e4e8;
+  --sp-rule-strong: #cfd2d8;
+  --sp-tile: #eceef1;
+  --sp-accent: #dc2626;
+  --sp-accent-strong: #b91c1c;
+  --sp-on-dark: #f4f4f5;
+  --sp-on-dark-text: rgba(244, 244, 245, 0.72);
+  --sp-on-dark-faint: rgba(244, 244, 245, 0.5);
+  --sp-on-dark-rule: rgba(255, 255, 255, 0.12);
+
+  background: var(--sp-ground);
+  color: var(--sp-ink);
+}
+
+.sp-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ── Buttons ── */
+.sp-btn {
+  height: 46px;
+  padding: 0 18px 0 20px;
+  border: 1px solid #d5d7dc;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--sp-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.sp-btn:hover {
+  border-color: #b9bcc3;
+  background: #ffffff;
+  color: var(--sp-ink);
+}
+.sp-btn.is-primary {
+  border-color: var(--sp-accent);
+  background: var(--sp-accent);
+  color: #ffffff;
+}
+.sp-btn.is-primary:hover {
+  border-color: var(--sp-accent-strong);
+  background: var(--sp-accent-strong);
+  color: #ffffff;
+}
+.sp-btn svg {
+  transition: transform 0.2s ease;
+}
+.sp-btn:hover svg {
+  transform: translateX(3px);
+}
+.sp a:focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 3px;
+}
+
+/* ── Heading band ── */
+.sp-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--sp-dark);
+  color: var(--sp-on-dark);
+  --shimmer-base: rgba(255, 255, 255, 0.1);
+  --shimmer-shine: rgba(255, 255, 255, 0.1);
+}
+.sp-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 70% center;
+}
+.sp-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(11, 12, 15, 0.94) 0%, rgba(11, 12, 15, 0.82) 38%, rgba(11, 12, 15, 0.35) 72%, rgba(11, 12, 15, 0.2) 100%),
+    linear-gradient(0deg, rgba(11, 12, 15, 0.6) 0%, rgba(11, 12, 15, 0) 40%);
+}
+.sp-hero-content {
+  position: relative;
+  padding-top: 72px;
+  padding-bottom: 84px;
+}
+.sp-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sp-on-dark-faint);
+  font-size: 0.8125rem;
+}
+.sp-crumbs a {
+  color: var(--sp-on-dark-text);
+  text-decoration: none;
+}
+.sp-crumbs a:hover {
+  color: var(--sp-on-dark);
+}
+.sp-crumbs [aria-current] {
+  color: var(--sp-on-dark);
+}
+.sp .sp-title {
+  margin: 28px 0 0;
+  color: var(--sp-on-dark);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.sp .sp-lede {
+  max-width: 38rem;
+  margin: 18px 0 0;
+  color: var(--sp-on-dark-text);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.sp-stats {
+  margin: 44px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 0;
+}
+.sp-stat {
+  min-width: 130px;
+  padding: 0 36px;
+  border-left: 1px solid var(--sp-on-dark-rule);
+}
+.sp-stat:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.sp-stat dt {
+  color: var(--sp-on-dark-faint);
+  font-size: 0.8125rem;
+}
+.sp-stat dd {
+  min-height: 34px;
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  color: var(--sp-on-dark);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.sp-sk-stat {
+  width: 56px;
+  height: 26px;
+}
+
+.sp-hero-actions {
+  margin-top: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+.sp-hero-link {
+  color: var(--sp-on-dark-text);
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+  text-underline-offset: 4px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+.sp-hero-link:hover {
+  color: var(--sp-on-dark);
+  text-decoration-color: currentColor;
+}
+
+/* ── Services ── */
+.sp-catalog {
+  padding: 72px 0 96px;
+  --shimmer-base: #e6e8ec;
+  --shimmer-shine: rgba(255, 255, 255, 0.65);
+}
+.sp-group-head {
+  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+.sp-group-head.is-second {
+  margin-top: 64px;
+}
+.sp .sp-group-title {
+  margin: 0;
+  color: var(--sp-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.sp .sp-group-text {
+  margin: 0;
+  color: var(--sp-text);
+  font-size: 0.9375rem;
+}
+
+/* Processes: two wide cards, the add-ons that go with each listed inside. */
+.sp-process-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.sp-process {
+  position: relative;
+  padding: 24px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 28px;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.sp-process:hover {
+  border-color: var(--sp-rule-strong);
+  box-shadow: 0 14px 32px -18px rgba(15, 17, 21, 0.18);
+}
+.sp-process-media {
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 168px;
+  border-radius: 10px;
+  background: var(--sp-tile);
+}
+.sp-process-media .ti-img {
+  display: block;
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+.sp-process:hover .sp-process-media .ti-img {
+  transform: scale(1.05);
+}
+.sp-process-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sp .sp-process-name {
+  margin: 4px 0 0;
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.sp-stretch {
+  color: var(--sp-ink);
+  text-decoration: none;
+}
+.sp-stretch:hover {
+  color: var(--sp-ink);
+}
+/* The whole card opens the service; the add-on chips sit above it. */
+.sp-stretch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+}
+.sp .sp-stretch:focus-visible {
+  outline: none;
+}
+.sp .sp-stretch:focus-visible::after {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 2px;
+}
+.sp .sp-process-desc {
+  margin: 10px 0 0;
+  color: var(--sp-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.sp .sp-process-all {
+  margin: 14px 0 0;
+  color: var(--sp-faint);
+  font-size: 0.875rem;
+}
+.sp-process-adds {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+}
+.sp-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--sp-faint);
+  font-size: 0.75rem;
+}
+.sp-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sp-chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  color: var(--sp-text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.sp-chip:hover {
+  border-color: var(--sp-accent);
+  color: var(--sp-accent);
+}
+.sp-more {
+  margin-top: auto;
+  padding-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sp-ink);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+.sp-more svg {
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+.sp-process:hover .sp-more {
+  color: var(--sp-accent);
+}
+.sp-process:hover .sp-more svg {
+  transform: translateX(3px);
+}
+
+/* Add-ons: smaller cards, picture on top. */
+.sp-addon-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.sp-addon-item {
+  display: flex;
+}
+.sp-addon {
+  width: 100%;
+  padding: 12px 12px 18px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.sp-addon:hover {
+  border-color: var(--sp-rule-strong);
+  box-shadow: 0 14px 32px -18px rgba(15, 17, 21, 0.18);
+  color: inherit;
+}
+.sp-addon-media {
+  display: grid;
+  place-items: center;
+  height: 148px;
+  border-radius: 8px;
+  background: var(--sp-tile);
+}
+.sp-addon-media .ti-img {
+  display: block;
+  width: 70%;
+  height: 78%;
+  object-fit: contain;
+}
+.sp-addon:hover .sp-addon-media .ti-img {
+  transform: scale(1.06);
+}
+.sp-addon-body {
+  padding: 16px 6px 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+.sp .sp-addon-name {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--sp-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.sp-addon-name svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sp-faint);
+  transition: color 0.15s ease, transform 0.2s ease;
+}
+.sp-addon:hover .sp-addon-name svg,
+.sp-addon:focus-visible .sp-addon-name svg {
+  color: var(--sp-accent);
+  transform: translateX(3px);
+}
+.sp .sp-addon-desc {
+  margin: 8px 0 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--sp-text);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+.sp .sp-addon-with {
+  margin: auto 0 0;
+  padding-top: 14px;
+  color: var(--sp-faint);
+  font-size: 0.8125rem;
+}
+
+/* Loading */
+.sp-process.is-skeleton:hover,
+.sp-addon.is-skeleton:hover {
+  border-color: var(--sp-rule);
+  box-shadow: none;
+}
+.sp-sk-heading {
+  width: 180px;
+  height: 20px;
+}
+.sp-sk-line {
+  display: block;
+  width: 92%;
+  height: 11px;
+  margin-top: 10px;
+}
+.sp-sk-line.is-name {
+  width: 55%;
+  height: 18px;
+  margin-top: 4px;
+}
+.sp-sk-line.is-short {
+  width: 64%;
+}
+.sp-sk-chips {
+  margin-top: 22px;
+  display: flex;
+  gap: 6px;
+}
+.sp-sk-chip {
+  width: 84px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.sp-empty {
+  padding: 56px 24px;
+  border: 1px dashed var(--sp-rule-strong);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--sp-text);
+}
+.sp .sp-empty-title {
+  margin: 0;
+  color: var(--sp-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.sp-empty p {
+  margin: 0 0 10px;
+  font-size: 0.9375rem;
+}
+
+/* ── From file to part ── */
+.sp-steps {
+  padding: 88px 0 96px;
+  border-top: 1px solid var(--sp-rule);
+  background: #ffffff;
+}
+.sp-steps-head {
+  margin-bottom: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+.sp .sp-steps-title {
+  margin: 0;
+  color: var(--sp-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+.sp .sp-steps-text {
+  margin: 0;
+  color: var(--sp-text);
+  font-size: 0.9375rem;
+}
+.sp-step-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px;
+}
+.sp-step {
+  padding-top: 20px;
+  border-top: 2px solid var(--sp-rule);
+}
+.sp-step:first-child {
+  border-top-color: var(--sp-accent);
+}
+.sp-step-num {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sp-ink);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sp-step:first-child .sp-step-num {
+  background: var(--sp-accent);
+}
+.sp .sp-step-title {
+  margin: 16px 0 0;
+  color: var(--sp-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.sp .sp-step-text {
+  margin: 8px 0 0;
+  color: var(--sp-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* ── Widths ── */
+@media (max-width: 1200px) {
+  .sp-addon-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1100px) {
+  .sp-process-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sp-step-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px 24px;
+  }
+}
+@media (max-width: 900px) {
+  .sp-inner {
+    padding: 0 20px;
+  }
+  .sp-hero-content {
+    padding-top: 56px;
+    padding-bottom: 64px;
+  }
+  .sp-hero-shade {
+    background: linear-gradient(90deg, rgba(11, 12, 15, 0.92) 0%, rgba(11, 12, 15, 0.75) 100%);
+  }
+  .sp-addon-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .sp-inner {
+    padding: 0 16px;
+  }
+  .sp-hero-content {
+    padding-top: 40px;
+    padding-bottom: 52px;
+  }
+  .sp .sp-lede {
+    font-size: 1rem;
+  }
+  .sp-stat {
+    min-width: 0;
+    padding: 0 20px;
+  }
+  .sp-stat dd {
+    font-size: 1.375rem;
+  }
+  .sp-catalog {
+    padding: 48px 0 64px;
+  }
+  .sp-process {
+    padding: 18px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .sp-process-media {
+    width: 100%;
+    height: 180px;
+  }
+  .sp-addon-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .sp-addon {
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 14px;
+  }
+  .sp-addon-media {
+    height: 96px;
+  }
+  .sp-addon-body {
+    padding: 2px 0 0;
+  }
+  .sp-group-head.is-second {
+    margin-top: 48px;
+  }
+  .sp-steps {
+    padding: 64px 0 72px;
+  }
+  .sp-step-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-btn,
+  .sp-btn svg,
+  .sp-process,
+  .sp-addon,
+  .sp-chip,
+  .sp-more svg,
+  .sp-addon-name svg,
+  .sp-hero-link {
+    transition: none;
+  }
+  .sp-process:hover .sp-process-media .ti-img,
+  .sp-addon:hover .sp-addon-media .ti-img {
+    transform: none;
+  }
+}

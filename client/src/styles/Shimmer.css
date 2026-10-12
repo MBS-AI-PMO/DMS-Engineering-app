@@ -1,0 +1,66 @@
+/* ══ Loading shimmer ═════════════════════════════════════════════════════
+   One soft band of light sweeping left to right, shared by every
+   placeholder on the home page:
+   - .shimmer is a placeholder block (a line of text, a picture tile).
+   - .ti is a picture tile (ThumbImage): it shimmers until the picture has
+     loaded, then the picture fades in.
+   A section sets --shimmer-base (the block colour) and --shimmer-shine
+   (the light) on itself to suit its ground; the fallbacks below suit a
+   light one. */
+
+.shimmer,
+.ti {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.shimmer {
+  display: block;
+  border-radius: 6px;
+  background: var(--shimmer-base, #e8e9ed);
+}
+
+.shimmer::after,
+.ti.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(105deg, transparent 30%, var(--shimmer-shine, rgba(255, 255, 255, 0.6)) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.ti-img {
+  opacity: 0;
+  filter: blur(6px);
+  transition:
+    opacity 0.5s ease,
+    filter 0.6s ease,
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ti.is-loaded .ti-img {
+  opacity: 1;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ti-img {
+    filter: none;
+    transition: opacity 0.2s linear;
+  }
+  .shimmer::after,
+  .ti.is-loading::after {
+    animation: none;
+    transform: none;
+    background: var(--shimmer-shine, rgba(255, 255, 255, 0.6));
+    opacity: 0.35;
+  }
+}

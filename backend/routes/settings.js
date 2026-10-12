@@ -8,6 +8,12 @@ const { optimizeImage, optimizeHeroImage } = require('../utils/imageOptimizer');
 
 const router = express.Router();
 
+// Settings only admins may read: left out of the public GETs below and
+// served by GET /admin/private. contact_form_recipients is where website
+// contact messages are emailed (see routes/contact.js).
+const PRIVATE_KEYS = new Set(['contact_form_recipients']);
+const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
+
 // Setup multer for logo uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -42,7 +48,7 @@ router.get('/', async (req, res) => {
         const result = await db.query('SELECT key, value FROM site_settings');
         const settings = {};
         result.rows.forEach(row => {
-            settings[row.key] = row.value;
+            if (!PRIVATE_KEYS.has(row.key)) settings[row.key] = row.value;
         });
         res.json({ success: true, data: settings });
     } catch (err) {
@@ -51,8 +57,24 @@ router.get('/', async (req, res) => {
     }
 });
 
+// GET /api/settings/admin/private - Admin only
+router.get('/admin/private', authenticate, requireAdmin, async (req, res) => {
+    try {
+        const result = await db.query('SELECT key, value FROM site_settings WHERE key = ANY($1::text[])', [[...PRIVATE_KEYS]]);
+        const settings = {};
+        result.rows.forEach(row => { settings[row.key] = row.value; });
+        res.json({ success: true, data: settings });
+    } catch (err) {
+        console.error('Error fetching private settings:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch settings' });
+    }
+});
+
 // GET /api/settings/:key - Public
 router.get('/:key', async (req, res) => {
+    if (PRIVATE_KEYS.has(req.params.key)) {
+        return res.status(404).json({ success: false, error: 'Setting not found' });
+    }
     try {
         const result = await db.query('SELECT value FROM site_settings WHERE key = $1', [req.params.key]);
         if (result.rows.length === 0) {
@@ -68,9 +90,16 @@ router.get('/:key', async (req, res) => {
 // PUT /api/settings/:key - Admin only
 router.put('/:key', authenticate, requireAdmin, async (req, res) => {
     try {
-        const { value } = req.body;
+        let { value } = req.body;
         if (value === undefined) {
             return res.status(400).json({ success: false, error: 'Value is required' });
+        }
+        if (req.params.key === 'contact_form_recipients') {
+            const list = String(value || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+            if (list.length > 5 || list.some(e => e.length > 200 || !EMAIL_RE.test(e))) {
+                return res.status(400).json({ success: false, error: 'Use up to 5 valid email addresses, separated by commas.' });
+            }
+            value = list.join(', ');
         }
 
         const result = await db.query(`

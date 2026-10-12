@@ -149,7 +149,7 @@ export const CartProvider = ({ children }) => {
           };
         }),
         taps: Object.values(configuration.selectedTaps || {}).map(t => ({ name: t.name, price: t.price })),
-        hardware: Object.values(configuration.selectedHardware || {}).map(h => ({ name: h?.item?.name, price: h?.item?.price || 0 })),
+        hardware: Object.values(configuration.selectedHardware || {}).map(h => ({ id: h?.item?.id ?? null, name: h?.item?.name, price: h?.item?.price || 0 })),
         countersinks: Object.values(configuration.selectedCountersinks || {}).map(cs => ({ name: cs?.name, price: cs?.price || 0 })),
         technical_data: configuration.pricingTechnicalData || {
           totalPerimeter: ((parseFloat(configuration.dimensions?.inches?.l) || 0) + (parseFloat(configuration.dimensions?.inches?.w) || 0)) * 2 * 25.4,

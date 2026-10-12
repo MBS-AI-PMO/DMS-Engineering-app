@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
-// eslint-disable-next-line no-unused-vars
-import { motion } from 'framer-motion';
+import React, { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
+// eslint-disable-next-line no-unused-vars
+import { motion, useReducedMotion } from 'framer-motion';
+import { ArrowRight, Plus } from 'lucide-react';
+import '../styles/HomeFaq.css';
+
+/**
+ * Home page FAQ: the heading and the way to the full list on the left,
+ * the questions on the right, one open at a time, a hairline above each.
+ */
 
 const FAQData = [
     {
@@ -28,76 +35,82 @@ const FAQData = [
 
 const FAQ = () => {
     const [activeIndex, setActiveIndex] = useState(null);
+    const reduceMotion = useReducedMotion();
+    const baseId = useId();
 
     const toggleAccordion = (index) => {
         setActiveIndex((current) => (current === index ? null : index));
     };
 
-    return (
-        <section id="faq" className="faq-section faq-landing-section">
-            <div className="faq-container">
-                <div className="faq-header">
-                    <div className="faq-icon-wrapper">
-                        <div className="faq-icon">?</div>
-                    </div>
-                    <h2 className="faq-title">Frequently asked questions</h2>
-                    <p className="faq-subtitle">Quick answers to the most common questions about ordering, quoting, and production.</p>
-                </div>
+    const reveal = (delay = 0) => (reduceMotion ? {} : {
+        initial: { opacity: 0, y: 12 },
+        whileInView: { opacity: 1, y: 0 },
+        viewport: { once: true, margin: '-40px' },
+        transition: { duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] },
+    });
 
-                <div className="faq-list">
+    return (
+        <section id="faq" className="hf" aria-labelledby="hf-title">
+            <div className="hf-inner">
+                <motion.div className="hf-head" {...reveal()}>
+                    <h2 id="hf-title" className="hf-title">Frequently asked questions</h2>
+                    <p className="hf-lede">Quick answers to the most common questions about ordering, quoting, and production.</p>
+                    <div className="hf-head-actions">
+                        <Link to="/faq" className="hf-btn">
+                            View all FAQs
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </Link>
+                        <Link to="/contact" className="hf-ask">Still stuck? Contact us</Link>
+                    </div>
+                </motion.div>
+
+                <ul className="hf-list">
                     {FAQData.map((item, index) => {
                         const isOpen = activeIndex === index;
+                        const buttonId = `${baseId}-q${index}`;
+                        const panelId = `${baseId}-a${index}`;
                         return (
-                            <motion.div
-                                key={index}
-                                className={`faq-item-custom ${isOpen ? 'active' : ''}`}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.28, delay: index * 0.04, ease: 'easeOut' }}
+                            <motion.li
+                                key={item.question}
+                                className={`hf-item${isOpen ? ' is-open' : ''}`}
+                                {...reveal(Math.min(index, 6) * 0.04)}
                             >
-                                <motion.button
-                                    type="button"
-                                    className="faq-question-row"
-                                    onClick={() => toggleAccordion(index)}
-                                    aria-expanded={isOpen}
-                                    whileTap={{ scale: 0.995 }}
-                                >
-                                    <motion.div
-                                        className="faq-icon-circle"
-                                        animate={{ rotate: isOpen ? 135 : 0, scale: isOpen ? 1.04 : 1 }}
-                                        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                                <h3 className="hf-q">
+                                    <button
+                                        type="button"
+                                        id={buttonId}
+                                        className="hf-q-btn"
+                                        onClick={() => toggleAccordion(index)}
+                                        aria-expanded={isOpen}
+                                        aria-controls={panelId}
                                     >
-                                        +
-                                    </motion.div>
-                                    <h3 className="faq-question-text">{item.question}</h3>
-                                </motion.button>
-                                <motion.div
-                                    className="faq-answer-row"
-                                    animate={{
-                                        gridTemplateRows: isOpen ? '1fr' : '0fr',
-                                        opacity: isOpen ? 1 : 0
-                                    }}
-                                    initial={false}
-                                    transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
+                                        <span className="hf-q-text">{item.question}</span>
+                                        <span className="hf-q-icon" aria-hidden="true">
+                                            <Plus size={16} />
+                                        </span>
+                                    </button>
+                                </h3>
+                                {/* Closed answers stay in the page for the height
+                                    animation; inert keeps their link out of Tab. */}
+                                <div
+                                    id={panelId}
+                                    className="hf-a"
+                                    role="region"
+                                    aria-labelledby={buttonId}
+                                    inert={!isOpen}
                                 >
-                                    <motion.div
-                                        className="faq-answer-inner"
-                                        animate={{ y: isOpen ? 0 : -4 }}
-                                        transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
-                                    >
-                                        <p className="faq-answer-text">{item.answer}</p>
-                                        <Link to="/faq" className="faq-link">READ FULL FAQ -&gt;</Link>
-                                    </motion.div>
-                                </motion.div>
-                            </motion.div>
+                                    <div className="hf-a-inner">
+                                        <p className="hf-a-text">{item.answer}</p>
+                                        <Link to="/faq" className="hf-a-link">
+                                            Read the full FAQ
+                                            <ArrowRight size={14} aria-hidden="true" />
+                                        </Link>
+                                    </div>
+                                </div>
+                            </motion.li>
                         );
                     })}
-                </div>
-
-                <div className="faq-footer">
-                    <Link to="/faq" className="view-all-faq">VIEW ALL FAQS -&gt;</Link>
-                </div>
+                </ul>
             </div>
         </section>
     );

@@ -1,0 +1,295 @@
+/* ══ Home metals: the sheet stock as a list ══════════════════════════════
+   A dark band, the same ground as the site bar. One column per metal
+   family, each metal a row: a swatch of the material, its name in normal
+   case, how many thicknesses it comes in, a hairline above. Own class
+   names (hm-) because the old metal-card rules are still used by the
+   metals page and the detail pages. */
+
+.hm {
+  --hm-ground: #0b0c0f;
+  --hm-ink: #f4f4f5;
+  --hm-text: rgba(244, 244, 245, 0.64);
+  --hm-faint: rgba(244, 244, 245, 0.42);
+  --hm-rule: rgba(255, 255, 255, 0.08);
+  --hm-chip: #1b1d22;
+  --hm-accent: #ef4444;
+  --shimmer-base: rgba(255, 255, 255, 0.06);
+  --shimmer-shine: rgba(255, 255, 255, 0.07);
+
+  padding: 104px 0 96px;
+  background: var(--hm-ground);
+  color: var(--hm-ink);
+}
+
+.hm-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ── Heading ── */
+.hm-head {
+  margin-bottom: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px 48px;
+}
+.hm .hm-title {
+  margin: 0;
+  color: var(--hm-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+.hm .hm-lede {
+  max-width: 36rem;
+  margin: 14px 0 0;
+  color: var(--hm-text);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+.hm-all {
+  flex: none;
+  height: 46px;
+  padding: 0 18px 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--hm-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.hm-all:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--hm-ink);
+}
+.hm-all svg {
+  transition: transform 0.2s ease;
+}
+.hm-all:hover svg {
+  transform: translateX(3px);
+}
+.hm-all:focus-visible {
+  outline: 2px solid var(--hm-accent);
+  outline-offset: 3px;
+}
+
+/* ── Families ── */
+.hm-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+  gap: 48px;
+}
+.hm .hm-group-name {
+  margin: 0 0 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--hm-ink);
+  font-family: "Roboto", system-ui, sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.hm-group-count {
+  color: var(--hm-faint);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-groups.is-single .hm-group {
+  grid-column: 1 / -1;
+}
+.hm-groups.is-single .hm-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  column-gap: 48px;
+}
+.hm-item {
+  border-top: 1px solid var(--hm-rule);
+}
+
+.hm-row {
+  padding: 14px 0;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.hm-row:hover {
+  color: inherit;
+}
+.hm-row:focus-visible {
+  outline: 2px solid var(--hm-accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+/* The hairline ring is an outline so it sits over the picture. */
+.hm-swatch {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: var(--hm-chip);
+  outline: 1px solid rgba(255, 255, 255, 0.08);
+  outline-offset: -1px;
+  transition: filter 0.2s ease, outline-color 0.2s ease;
+}
+.hm-swatch .ti-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hm-row:hover .hm-swatch {
+  filter: brightness(1.12);
+  outline-color: rgba(255, 255, 255, 0.16);
+}
+
+.hm-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.hm-name {
+  overflow: hidden;
+  color: rgba(244, 244, 245, 0.9);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.hm-row:hover .hm-name {
+  color: #ffffff;
+}
+.hm-spec {
+  color: var(--hm-text);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.hm-arrow {
+  color: var(--hm-faint);
+  transition: color 0.15s ease, transform 0.2s ease;
+}
+.hm-row:hover .hm-arrow,
+.hm-row:focus-visible .hm-arrow {
+  color: var(--hm-accent);
+  transform: translateX(3px);
+}
+
+.hm .hm-note {
+  margin: 56px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--hm-rule);
+  color: var(--hm-faint);
+  font-size: 0.875rem;
+}
+
+/* ── Loading ── */
+.hm .hm-sk-count {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.8em;
+  vertical-align: -0.04em;
+  border-radius: 8px;
+}
+.hm-sk-head {
+  width: 96px;
+  height: 14px;
+  margin-bottom: 18px;
+}
+.hm-sk-row {
+  padding: 14px 0;
+  border-top: 1px solid var(--hm-rule);
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+.hm-sk-row .hm-swatch {
+  outline: 0;
+}
+.hm-sk-lines {
+  display: grid;
+  gap: 8px;
+}
+.hm-sk-line {
+  width: 70%;
+  height: 12px;
+}
+.hm-sk-line.is-short {
+  width: 45%;
+}
+
+/* ── Widths ── */
+@media (max-width: 900px) {
+  .hm {
+    padding: 80px 0 72px;
+  }
+  .hm-inner {
+    padding: 0 20px;
+  }
+  .hm-head {
+    margin-bottom: 40px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hm-groups {
+    gap: 40px;
+  }
+}
+@media (max-width: 640px) {
+  .hm {
+    padding: 64px 0 56px;
+  }
+  .hm-inner {
+    padding: 0 16px;
+  }
+  .hm-groups,
+  .hm-groups.is-single .hm-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm-swatch {
+    width: 48px;
+    height: 48px;
+  }
+  .hm-row {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+  .hm-sk-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  .hm .hm-note {
+    margin-top: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-all,
+  .hm-all svg,
+  .hm-swatch,
+  .hm-name,
+  .hm-arrow {
+    transition: none;
+  }
+}

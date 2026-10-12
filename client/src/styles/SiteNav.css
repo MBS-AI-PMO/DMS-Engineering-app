@@ -1,0 +1,504 @@
+/* ══ Site navbar ═══════════════════════════════════════════════════════
+   One slim dark bar pinned to the top of the window: hairline edge, plain
+   words, the active page marked by a red rule under it, and red only on
+   the one action (Instant pricing). Pinned with position: fixed because
+   body's overflow-x: hidden stops sticky from sticking; .sn-spacer keeps
+   the page below where it was. */
+
+.sn {
+  --sn-height: 64px;
+  --sn-bg: #0b0c0f;
+  --sn-ink: #f4f4f5;
+  --sn-text: rgba(244, 244, 245, 0.68);
+  --sn-faint: rgba(244, 244, 245, 0.45);
+  --sn-rule: rgba(255, 255, 255, 0.08);
+  --sn-fill: rgba(255, 255, 255, 0.05);
+  --sn-fill-strong: rgba(255, 255, 255, 0.09);
+  --sn-accent: #dc2626;
+  --sn-accent-strong: #b91c1c;
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1000;
+  border-bottom: 1px solid var(--sn-rule);
+  background: var(--sn-bg);
+  color: var(--sn-ink);
+  font-family: "Roboto", system-ui, sans-serif;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.sn.is-scrolled {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+  background: rgba(11, 12, 15, 0.97);
+}
+.sn-spacer {
+  height: 64px;
+}
+body.qf-active .sn,
+body.qf-active .sn-spacer {
+  display: none !important;
+}
+
+.sn a,
+.sn button {
+  -webkit-tap-highlight-color: transparent;
+}
+.sn a:focus-visible,
+.sn button:focus-visible {
+  outline: 2px solid var(--sn-accent);
+  outline-offset: 2px;
+}
+
+.sn-bar {
+  position: relative;
+  max-width: 1360px;
+  height: var(--sn-height);
+  margin: 0 auto;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+/* ── Logo ── */
+.sn-logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  text-decoration: none;
+}
+.sn-logo img {
+  display: block;
+  height: 38px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+}
+
+/* ── Links ── */
+.sn-links {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.sn-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--sn-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.sn-link:hover {
+  color: var(--sn-ink);
+}
+.sn-link.is-active {
+  color: var(--sn-ink);
+}
+.sn-link::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--sn-accent);
+  transform: scaleX(0);
+  transition: transform 0.2s ease;
+}
+.sn-link.is-active::after {
+  transform: scaleX(1);
+}
+
+/* ── Actions ── */
+.sn-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sn-search {
+  height: 36px;
+  padding: 0 8px 0 11px;
+  border: 1px solid var(--sn-rule);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--sn-fill);
+  color: var(--sn-faint);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.sn-search:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--sn-fill-strong);
+  color: var(--sn-ink);
+}
+.sn-search-text {
+  min-width: 96px;
+  text-align: left;
+}
+.sn-kbd {
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  color: var(--sn-faint);
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.sn-icon {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sn-text);
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.sn-icon:hover,
+.sn-icon.is-active {
+  background: var(--sn-fill);
+  color: var(--sn-ink);
+}
+.sn-count {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sn-accent);
+  box-shadow: 0 0 0 2px var(--sn-bg);
+  color: #ffffff;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sn-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--sn-rule);
+}
+
+.sn-login {
+  height: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--sn-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.sn-login:hover {
+  color: var(--sn-ink);
+}
+
+.sn-cta {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  background: var(--sn-accent);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+.sn-cta:hover {
+  background: var(--sn-accent-strong);
+  color: #ffffff;
+}
+
+/* ── Account ── */
+.sn-user {
+  position: relative;
+}
+.sn-user-trigger {
+  height: 36px;
+  padding: 0 6px 0 3px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  color: var(--sn-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.sn-user-trigger:hover,
+.sn-user-trigger[aria-expanded="true"] {
+  background: var(--sn-fill);
+  color: var(--sn-ink);
+}
+.sn-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: #2a2c31;
+  color: var(--sn-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.sn-chevron {
+  transition: transform 0.2s ease;
+}
+.sn-chevron.is-open {
+  transform: rotate(180deg);
+}
+.sn-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 240px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  background: #121317;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+.sn-menu-head {
+  padding: 10px 10px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--sn-rule);
+  display: grid;
+  gap: 2px;
+}
+.sn-menu-name {
+  overflow: hidden;
+  color: var(--sn-ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sn-menu-email {
+  overflow: hidden;
+  color: var(--sn-faint);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sn-menu-item {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  color: rgba(244, 244, 245, 0.82);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sn-menu-item:hover,
+.sn-menu-item:focus-visible {
+  background: var(--sn-fill-strong);
+  color: var(--sn-ink);
+}
+.sn-menu-item.is-quiet {
+  color: var(--sn-text);
+}
+
+/* ── Phone ── */
+.sn-menu-btn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--sn-ink);
+  cursor: pointer;
+}
+.sn-menu-btn:hover {
+  background: var(--sn-fill);
+}
+
+.sn-sheet {
+  position: fixed;
+  top: 64px;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100vw);
+  border-left: 1px solid var(--sn-rule);
+  display: flex;
+  flex-direction: column;
+  background: var(--sn-bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sn-sheet-links {
+  padding: 12px 16px;
+  display: grid;
+}
+.sn-sheet-link {
+  position: relative;
+  padding: 14px 8px;
+  border-bottom: 1px solid var(--sn-rule);
+  color: var(--sn-text);
+  font-size: 20px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.sn-sheet-link:hover,
+.sn-sheet-link.is-active {
+  color: var(--sn-ink);
+}
+.sn-sheet-link.is-active::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--sn-accent);
+  transform: translateY(-50%);
+}
+.sn-sheet-foot {
+  margin-top: auto;
+  padding: 16px 24px 28px;
+  display: grid;
+  gap: 4px;
+}
+.sn-sheet-account {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--sn-rule);
+}
+.sn-sheet-who {
+  padding: 4px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sn-ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+.sn-sheet-item {
+  height: 44px;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  color: var(--sn-text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sn-sheet-item:hover {
+  color: var(--sn-ink);
+}
+.sn-sheet-cta {
+  height: 48px;
+  margin-top: 12px;
+  padding: 0 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--sn-accent);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.sn-sheet-cta:hover {
+  background: var(--sn-accent-strong);
+  color: #ffffff;
+}
+
+/* ── Widths ── */
+@media (max-width: 1180px) {
+  .sn-bar {
+    gap: 24px;
+  }
+  .sn-search {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .sn-search-text,
+  .sn-kbd {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .sn-bar {
+    padding: 0 16px;
+  }
+  .sn-links,
+  .sn-search,
+  .sn-divider,
+  .sn-login,
+  .sn-cta,
+  .sn-user {
+    display: none;
+  }
+  .sn-menu-btn {
+    display: inline-flex;
+  }
+  .sn-logo img {
+    height: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn,
+  .sn-link,
+  .sn-link::after,
+  .sn-search,
+  .sn-icon,
+  .sn-login,
+  .sn-cta,
+  .sn-user-trigger,
+  .sn-chevron {
+    transition: none;
+  }
+}

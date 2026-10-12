@@ -423,6 +423,10 @@ export async function sendTestEmail() {
 
 // ── Newsletter ─────────────────────────────────────────
 
+export async function sendContactMessage(message) {
+    return request('/contact', { method: 'POST', body: message });
+}
+
 export async function subscribeNewsletter(email) {
     return request('/newsletter/subscribe', { method: 'POST', body: { email } });
 }
@@ -440,6 +444,11 @@ export async function deleteSubscriber(id) {
 
 export async function fetchSettings() {
     const { data } = await request('/settings');
+    return data;
+}
+
+export async function fetchPrivateSettings() {
+    const { data } = await request('/settings/admin/private');
     return data;
 }
 

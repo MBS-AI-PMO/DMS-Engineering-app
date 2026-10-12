@@ -28,6 +28,7 @@ const hardwareRoutes = require('./routes/hardware');
 const paymentRoutes = require('./routes/payment');
 const legalRoutes = require('./routes/legal');
 const heroSectionsRoutes = require('./routes/heroSections');
+const contactRoutes = require('./routes/contact');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -92,6 +93,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/contact', contactRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/guidelines', guidelinesRoutes);
 app.use('/api/configurations', configurationsRoutes);

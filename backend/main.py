@@ -9,8 +9,16 @@ load_dotenv(override=True)
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["OCP_NO_DISPLAY"] = "1"
 import json
+import sys
 import tempfile
 import traceback
+
+# Windows hands a piped stdout the legacy cp1252 code page, which cannot
+# encode the tick on the status line -- the worker then dies before it has
+# bound its port. Node on the other end reads UTF-8, so write UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn  # Added for handling multiple requests
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +33,7 @@ import threading
 import uuid
 import time
 import signal
+import re
 from urllib.parse import urlparse, parse_qs
 from unfold import unfold_step_file, detect_holes_in_step
 
@@ -32,13 +41,41 @@ UNFOLD_PROGRESS_PREFIX = "__PROGRESS__"
 UNFOLD_JOB_TTL_SECONDS = 15 * 60
 UNFOLD_RESULT_CACHE_TTL_SECONDS = int(os.getenv("UNFOLD_RESULT_CACHE_TTL_SECONDS", "1800"))
 UNFOLD_RESULT_CACHE_MAX = max(1, int(os.getenv("UNFOLD_RESULT_CACHE_MAX", "128")))
-UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-06-08-through-bore-dedupe-v5")).strip() or "2026-06-08-through-bore-dedupe-v5"
+UNFOLD_ANALYSIS_VERSION = str(os.getenv("UNFOLD_ANALYSIS_VERSION", "2026-07-14-analysis-v13")).strip() or "2026-07-14-analysis-v13"
+UNFOLD_ANALYSIS_PROFILE = str(os.getenv("UNFOLD_ANALYSIS_PROFILE", "full")).strip().lower() or "full"
 GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS = int(os.getenv("GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS", "180"))
 FREECAD_WORKER_TIMEOUT_SECONDS = int(os.getenv("FREECAD_WORKER_TIMEOUT_SECONDS", "420"))
 FREECAD_KILL_GRACE_SECONDS = max(1, int(os.getenv("FREECAD_KILL_GRACE_SECONDS", "8")))
 MAX_PARALLEL_FREECAD_WORKERS = max(1, int(os.getenv("MAX_PARALLEL_FREECAD_WORKERS", "1")))
 CAD_JOB_QUEUE_LIMIT = max(1, int(os.getenv("CAD_JOB_QUEUE_LIMIT", "64")))
 ENABLE_LEGACY_UNFOLD_FALLBACK = str(os.getenv("ENABLE_LEGACY_UNFOLD_FALLBACK", "0")).strip().lower() in ("1", "true", "yes", "on")
+
+RECOVERABLE_UNFOLD_ERRORS = (
+    "wire is not closed",
+    "could not find a valid root face",
+    "failed to create unbent face",
+    "failed to create face",
+    "b-spline",
+    "bspline",
+    "self-intersect",
+)
+
+
+def _is_recoverable_unfold_error(detail):
+    normalized = str(detail or "").lower()
+    return any(message in normalized for message in RECOVERABLE_UNFOLD_ERRORS)
+
+
+def _detected_primary_thickness(detail):
+    matches = re.findall(
+        r"Detected thickness:\s*([0-9]+(?:\.[0-9]+)?)",
+        str(detail or ""),
+        flags=re.IGNORECASE,
+    )
+    if not matches:
+        return None
+    value = float(matches[-1])
+    return value if math.isfinite(value) and value > 0 else None
 
 geometry_slots = threading.BoundedSemaphore(MAX_PARALLEL_FREECAD_WORKERS)
 cad_job_pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL_FREECAD_WORKERS, thread_name_prefix="cad-job")
@@ -69,18 +106,19 @@ def _get_unfold_job(job_id):
 def _cleanup_unfold_jobs():
     cutoff = time.time() - UNFOLD_JOB_TTL_SECONDS
     cache_cutoff = time.time() - UNFOLD_RESULT_CACHE_TTL_SECONDS
-    stale_running_cutoff = time.time() - FREECAD_WORKER_TIMEOUT_SECONDS - 30
+    now = time.time()
     with unfold_jobs_lock:
         # Mark running jobs as failed if they've been running longer than the
         # worker timeout + 30s grace.  This prevents zombie "running" jobs from
         # blocking cache-key reuse forever.
         for job_id, job in unfold_jobs.items():
+            stale_running_cutoff = now - FREECAD_WORKER_TIMEOUT_SECONDS - 30
             if job.get("status") == "running" and job.get("started_at", job.get("created_at", 0)) < stale_running_cutoff:
                 job["status"] = "failed"
                 job["error"] = "Job exceeded worker timeout and was marked as failed"
                 job["stage"] = "Failed (timeout)"
                 job["percent"] = 100.0
-                job["updated_at"] = time.time()
+                job["updated_at"] = now
                 print(f"[Python-API] Cleanup: marked stale running job {job_id} as failed")
 
         stale_ids = [
@@ -354,6 +392,7 @@ class CORSHandler(BaseHTTPRequestHandler):
                     "workerKillGraceSeconds": FREECAD_KILL_GRACE_SECONDS,
                     "lockWaitTimeoutSeconds": GEOMETRY_LOCK_WAIT_TIMEOUT_SECONDS,
                     "legacyFallbackEnabled": ENABLE_LEGACY_UNFOLD_FALLBACK,
+                    "analysisProfile": UNFOLD_ANALYSIS_PROFILE,
                 },
             })
         elif parsed.path == "/unfold-job/status":
@@ -367,7 +406,7 @@ class CORSHandler(BaseHTTPRequestHandler):
         if post_path == "/unfold":
             # Use the new robust library if available
             self._process_step_file(
-                lambda fp: self.unfold_with_lib_subprocess(fp, profile="fast2d"),
+                lambda fp: self._analyze_cad_file(fp),
                 lambda r: r
             )
         elif post_path == "/detect-holes":
@@ -450,7 +489,7 @@ class CORSHandler(BaseHTTPRequestHandler):
             unfold_script_mtime = 0
 
         cache_key = (
-            f"fast2d:{UNFOLD_ANALYSIS_VERSION}:{unfold_script_mtime}:{file_hash}"
+            f"{UNFOLD_ANALYSIS_PROFILE}:{UNFOLD_ANALYSIS_VERSION}:{unfold_script_mtime}:{file_hash}"
             if file_hash else ""
         )
 
@@ -555,6 +594,14 @@ class CORSHandler(BaseHTTPRequestHandler):
 
         self._send_json(200, {"success": True, "jobId": job_id, "queuePosition": queue_position})
 
+    def _analyze_cad_file(self, tmp_path, progress_callback=None):
+        """Unfold one STEP part in a FreeCAD subprocess with the configured analysis profile."""
+        return self.unfold_with_lib_subprocess(
+            tmp_path,
+            profile=UNFOLD_ANALYSIS_PROFILE,
+            progress_callback=progress_callback,
+        )
+
     def _run_unfold_job(self, job_id, tmp_path, cache_key):
         def on_progress(percent, stage):
             _set_unfold_job(
@@ -574,9 +621,8 @@ class CORSHandler(BaseHTTPRequestHandler):
                 queuePosition=0,
                 started_at=time.time(),
             )
-            result = self.unfold_with_lib_subprocess(
+            result = self._analyze_cad_file(
                 tmp_path,
-                profile="fast2d",
                 progress_callback=on_progress,
             )
             _cache_unfold_result(cache_key, result)
@@ -815,6 +861,17 @@ class CORSHandler(BaseHTTPRequestHandler):
                     )
 
                 if return_code != 0:
+                    # The analyzer prints its reason as a last JSON line when
+                    # it can; that line is the message, not the exit code.
+                    reason = ""
+                    if stdout_text:
+                        try:
+                            last = json.loads(stdout_text.splitlines()[-1])
+                            reason = str(last.get("error") or "") if isinstance(last, dict) else ""
+                        except Exception:
+                            reason = ""
+                    if reason:
+                        raise RuntimeError(reason)
                     raise subprocess.CalledProcessError(
                         return_code,
                         cmd,
@@ -839,11 +896,33 @@ class CORSHandler(BaseHTTPRequestHandler):
             print(f"[Python-API] Robust unfold failed (Exit {e.returncode}). Output:")
             print(f"STDOUT: {e.stdout}")
             print(f"STDERR: {e.stderr}")
-            if ENABLE_LEGACY_UNFOLD_FALLBACK:
-                print(f"[Python-API] Falling back to legacy engine...")
-                _report_progress(92, "Using fallback CAD engine")
-                return unfold_step_file(filepath)
-            detail = (e.stderr or e.stdout or "").strip()
+            detail = "\n".join(
+                part for part in (e.stdout, e.stderr) if str(part or "").strip()
+            ).strip()
+            should_fallback = ENABLE_LEGACY_UNFOLD_FALLBACK or _is_recoverable_unfold_error(detail)
+            if should_fallback:
+                reason = "configured fallback" if ENABLE_LEGACY_UNFOLD_FALLBACK else "recoverable topology error"
+                print(f"[Python-API] Falling back to legacy engine ({reason})...")
+                _report_progress(92, "Recovering geometry with fallback engine")
+                try:
+                    fallback_result = unfold_step_file(filepath)
+                    if isinstance(fallback_result, dict):
+                        if not fallback_result.get("cutEdges") and not fallback_result.get("flatVertices"):
+                            fallback_result.setdefault("analysisWarnings", []).append(
+                                "Fallback CAD analysis recovered whole-part metadata but could not build a flat preview."
+                            )
+                        detected_thickness = _detected_primary_thickness(detail)
+                        if detected_thickness is not None:
+                            fallback_result["thickness"] = detected_thickness
+                        fallback_result.setdefault("analysisWarnings", []).append(
+                            "Primary sheet-metal unfold encountered an open CAD boundary; geometry was recovered with the fallback engine."
+                        )
+                        fallback_result.setdefault("analysisEngine", "legacy_fallback")
+                    _report_progress(100, "Completed with geometry fallback")
+                    return fallback_result
+                except Exception as fallback_error:
+                    print(f"[Python-API] Legacy fallback failed: {fallback_error}")
+                    detail = f"{detail}\nFallback engine: {fallback_error}".strip()
             if detail:
                 detail = detail[-2000:]
                 raise RuntimeError(f"FreeCAD unfold subprocess failed (exit {e.returncode}): {detail}")
@@ -862,9 +941,15 @@ class CORSHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    # Ensure it listens on 0.0.0.0 to be accessible via AWS Public IP
-    print(f"\n\033[92m[DMS-PYTHON] Starting Engine on Port {PORT}...\033[0m")
-    server = ThreadedHTTPServer(("0.0.0.0", PORT), CORSHandler)
+    # Ensure it listens on 0.0.0.0 to be accessible locally and on deployed hosts.
+    # The same status line the API prints: one full-width line on a green or
+    # red ground, printed only once the port is actually bound.
+    try:
+        server = ThreadedHTTPServer(("0.0.0.0", PORT), CORSHandler)
+    except OSError as error:
+        print(f"\033[1;97;41m  CAD WORKER ✖ NOT running · port {PORT} · {error}".ljust(100) + "\033[0m", flush=True)
+        raise SystemExit(1)
+    print(f"\033[1;97;42m  CAD WORKER ✔ running · http://0.0.0.0:{PORT}".ljust(100) + "\033[0m", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

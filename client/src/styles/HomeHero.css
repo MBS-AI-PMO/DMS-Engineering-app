@@ -1,0 +1,112 @@
+/* ══ Home hero: headline, line under it, the one button ════════════════
+   Same voice as the site bar: plain white type in sentence case, the
+   second half of the headline quieter, red only on the button, no glow. */
+
+.hero-section .home-hero {
+  gap: 0;
+  padding: 0 4px;
+}
+
+/* Three classes deep on purpose: ServiceDetail.css styles every
+   `.hero-content h1` (weight 900, see-through gradient fill) and
+   `.hero-content p` (bigger type, no top gap), and page stylesheets load
+   site-wide, so both reached this hero too. */
+.hero-section .home-hero .home-hero-title {
+  max-width: 21ch;
+  margin: 0;
+  background: none;
+  color: #f4f4f5;
+  -webkit-text-fill-color: currentColor;
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  text-shadow: none;
+  text-wrap: balance;
+}
+.hero-section .home-hero .home-hero-title-lead {
+  color: #ffffff;
+  -webkit-text-fill-color: currentColor;
+}
+.hero-section .home-hero .home-hero-title-rest {
+  color: rgba(244, 244, 245, 0.55);
+  -webkit-text-fill-color: currentColor;
+  font-weight: 600;
+}
+
+.hero-section .home-hero .home-hero-lede {
+  max-width: none;
+  margin: 28px 0 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(244, 244, 245, 0.72);
+  font-family: "Roboto", system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.home-hero-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.home-hero-actions {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+.home-hero-cta {
+  height: 52px;
+  padding: 0 22px 0 26px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: #dc2626;
+  color: #ffffff;
+  font-family: "Roboto", system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+.home-hero-cta svg {
+  transition: transform 0.2s ease;
+}
+.home-hero-cta:hover {
+  background: #b91c1c;
+  color: #ffffff;
+}
+.home-hero-cta:hover svg {
+  transform: translateX(3px);
+}
+.home-hero-cta:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .hero-section .home-hero .home-hero-title {
+    max-width: 14ch;
+  }
+  .hero-section .home-hero .home-hero-lede {
+    margin-top: 22px;
+    font-size: 1rem;
+  }
+  .home-hero-actions {
+    margin-top: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-cta,
+  .home-hero-cta svg {
+    transition: none;
+  }
+}

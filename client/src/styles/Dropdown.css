@@ -1,0 +1,121 @@
+/* ══ Dropdown ════════════════════════════════════════════════════════════
+   The site's own select: a white button with a hairline border, and a
+   white list with a soft shadow that pops in below it (same look as the
+   option list in the pricing drawers). The picked option is bold with a
+   red check; the one under the pointer or keyboard gets a grey fill. */
+
+.dd {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.dd-label {
+  color: #8b8f98;
+  font-size: 0.8125rem;
+}
+
+.dd-button {
+  height: 40px;
+  min-width: 220px;
+  padding: 0 12px 0 14px;
+  border: 1px solid #e3e4e8;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #ffffff;
+  color: #0b0c0f;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dd-button:hover {
+  border-color: #cfd2d8;
+}
+.dd.is-open .dd-button {
+  border-color: #0b0c0f;
+  box-shadow: 0 0 0 3px rgba(11, 12, 15, 0.06);
+}
+.dd-button:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+}
+.dd-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-chevron {
+  flex: none;
+  color: #5b5f68;
+  transition: transform 0.2s ease;
+}
+.dd.is-open .dd-chevron {
+  transform: rotate(180deg);
+}
+
+.dd-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(320px, 90vw);
+  max-height: 320px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid #e3e4e8;
+  border-radius: 12px;
+  list-style: none;
+  overflow-y: auto;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(17, 24, 39, 0.14);
+  outline: none;
+  animation: dd-pop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top right;
+}
+@keyframes dd-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.dd-option {
+  min-height: 38px;
+  padding: 0 10px 0 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #3f434b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+.dd-option.is-active {
+  background: #f3f4f6;
+  color: #0b0c0f;
+}
+.dd-option.is-selected {
+  color: #0b0c0f;
+  font-weight: 600;
+}
+.dd-option svg {
+  flex: none;
+  color: #dc2626;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-list {
+    animation: none;
+  }
+  .dd-button,
+  .dd-chevron {
+    transition: none;
+  }
+}

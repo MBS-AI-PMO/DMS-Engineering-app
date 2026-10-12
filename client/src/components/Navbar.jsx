@@ -1,278 +1,306 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Search, User, ChevronDown, Settings, LogOut, ShoppingBag, Package } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Menu, X, Search, ChevronDown, Settings, LogOut, ShoppingBag, Package, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext.js';
 import { fetchSettings } from '../utils/api';
 import SearchOverlay from './SearchOverlay';
+import '../styles/SiteNav.css';
+
+/**
+ * The site's top bar: one slim dark bar pinned to the top of the window,
+ * logo and plain-word links on the left, search, cart, account and the one
+ * red action on the right. Below 900 px the links move into a full-height
+ * sheet. A spacer of the bar's height keeps the page below it where it was.
+ */
+
+const NAV_LINKS = [
+  { name: 'Metals', path: '/metals' },
+  { name: 'Services', path: '/services' },
+  { name: 'Guidelines', path: '/guidelines' },
+  { name: 'FAQ', path: '/faq' },
+  { name: 'Contact', path: '/contact' },
+];
+
+const MotionDiv = motion.div;
 
 const Navbar = () => {
-    const [isScrolled, setIsScrolled] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
-    const location = useLocation();
-    const navigate = useNavigate();
-    const { user, logout } = useAuth();
-    const { cartItems } = useCart();
-    const dropdownRef = useRef(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
+  const [seenPath, setSeenPath] = useState(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { cartItems } = useCart();
+  const dropdownRef = useRef(null);
+  const reduceMotion = useReducedMotion();
 
-    useEffect(() => {
-        const handleScroll = () => setIsScrolled(window.scrollY > 50);
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
+  // Menus close when the page changes (adjusted during render, as React
+  // recommends for state that follows a value).
+  if (seenPath !== location.pathname) {
+    setSeenPath(location.pathname);
+    setMobileMenuOpen(false);
+    setDropdownOpen(false);
+  }
 
-    useEffect(() => {
-        fetchSettings()
-            .then(data => {
-                if (data.navbar_logo) {
-                    setLogo(data.navbar_logo);
-                    localStorage.setItem('navbar_logo', data.navbar_logo);
-                }
-            })
-            .catch(err => console.error('Failed to load navbar logo:', err));
-    }, []);
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 8);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-                setDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+  useEffect(() => {
+    fetchSettings()
+      .then(data => {
+        if (data.navbar_logo) {
+          setLogo(data.navbar_logo);
+          localStorage.setItem('navbar_logo', data.navbar_logo);
+        }
+      })
+      .catch(err => console.error('Failed to load navbar logo:', err));
+  }, []);
 
-    // Keyboard shortcut for search (Ctrl+K or /)
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-                e.preventDefault();
-                setIsSearchOpen(true);
-            }
-            if (e.key === '/') {
-                if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-                    e.preventDefault();
-                    setIsSearchOpen(true);
-                }
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+  // Close the account menu on a click outside it.
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    // Redundant dropdown resets are handled by onClick handlers on nav links
+  // Search on Ctrl+K (Cmd+K) or "/"; Escape closes the open menu.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+      if (e.key === '/') {
+        const tag = document.activeElement?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !document.activeElement?.isContentEditable) {
+          e.preventDefault();
+          setIsSearchOpen(true);
+        }
+      }
+      if (e.key === 'Escape') {
+        setDropdownOpen(false);
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-    const handleLogout = async () => {
-        await logout();
-        navigate('/');
+  // The page behind the open phone menu does not scroll.
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [mobileMenuOpen]);
+
+  const handleLogout = async () => {
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+    await logout();
+    navigate('/');
+  };
+
+  const handleLogoError = () => {
+    localStorage.removeItem('navbar_logo');
+    setLogo('/logo.webp');
+  };
+
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+  const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Account';
+  const initial = (firstName?.[0] || 'U').toUpperCase();
+  const cartCount = cartItems.length;
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+  const sheetMotion = reduceMotion
+    ? { initial: false, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0 } }
+    : {
+      initial: { x: '100%' },
+      animate: { x: 0 },
+      exit: { x: '100%' },
+      transition: { type: 'tween', duration: 0.32, ease: [0.22, 1, 0.36, 1] },
     };
 
-    const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Account';
-    const handleLogoError = () => {
-        localStorage.removeItem('navbar_logo');
-        setLogo('/logo.webp');
-    };
+  return (
+    <>
+      <header className={`sn${isScrolled ? ' is-scrolled' : ''}`}>
+        <div className="sn-bar">
+          <Link to="/" className="sn-logo" aria-label="Home">
+            <img src={logo} alt="DMS" decoding="async" onError={handleLogoError} />
+          </Link>
 
-    const navLinks = [
-        { name: 'Metals', path: '/metals' },
-        { name: 'Services', path: '/services' },
-        { name: 'Guidelines', path: '/guidelines' },
-        { name: 'FAQ', path: '/faq' },
-        { name: 'Contact', path: '/contact' },
-    ];
+          <nav className="sn-links" aria-label="Main">
+            {NAV_LINKS.map((link) => {
+              const active = isActive(link.path);
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={`sn-link${active ? ' is-active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {link.name}
+                </Link>
+              );
+            })}
+          </nav>
 
-    return (
-        <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
-            <div className="container navbar-container">
-                <div className="navbar-left">
-                    <Link to="/" className="logo">
-                        <img src={logo} alt="DMS Logo" className="logo-img" decoding="async" onError={handleLogoError} />
+          <div className="sn-actions">
+            <button
+              type="button"
+              className="sn-search"
+              onClick={() => setIsSearchOpen(true)}
+              aria-label="Search"
+              title={`Search (${isMac ? '⌘' : 'Ctrl'} K)`}
+            >
+              <Search size={15} aria-hidden="true" />
+              <span className="sn-search-text">Search</span>
+              <kbd className="sn-kbd">{isMac ? '⌘' : 'Ctrl'} K</kbd>
+            </button>
+
+            <Link
+              to="/cart"
+              className={`sn-icon${isActive('/cart') ? ' is-active' : ''}`}
+              aria-label={cartCount ? `Cart, ${cartCount} item${cartCount === 1 ? '' : 's'}` : 'Cart'}
+            >
+              <ShoppingBag size={18} aria-hidden="true" />
+              {cartCount > 0 && <span className="sn-count" aria-hidden="true">{cartCount > 99 ? '99+' : cartCount}</span>}
+            </Link>
+
+            <span className="sn-divider" aria-hidden="true" />
+
+            {!user && (
+              <Link to="/login" className="sn-login">Log in</Link>
+            )}
+
+            <Link to="/get-instant-pricing" className="sn-cta">
+              Instant pricing
+            </Link>
+
+            {user && (
+              <div className="sn-user" ref={dropdownRef}>
+                <button
+                  type="button"
+                  className="sn-user-trigger"
+                  onClick={() => setDropdownOpen(open => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={dropdownOpen}
+                  aria-label={`Account: ${firstName}`}
+                >
+                  <span className="sn-avatar" aria-hidden="true">{initial}</span>
+                  <ChevronDown size={14} className={`sn-chevron${dropdownOpen ? ' is-open' : ''}`} aria-hidden="true" />
+                </button>
+
+                <AnimatePresence>
+                  {dropdownOpen && (
+                    <MotionDiv
+                      className="sn-menu"
+                      role="menu"
+                      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.14, ease: 'easeOut' }}
+                    >
+                      <div className="sn-menu-head">
+                        <span className="sn-menu-name">{user.name || firstName}</span>
+                        {user.email && <span className="sn-menu-email">{user.email}</span>}
+                      </div>
+                      <Link to="/orders" className="sn-menu-item" role="menuitem">
+                        <Package size={15} aria-hidden="true" />
+                        My orders
+                      </Link>
+                      <Link to="/settings" className="sn-menu-item" role="menuitem">
+                        <Settings size={15} aria-hidden="true" />
+                        Settings
+                      </Link>
+                      <button type="button" className="sn-menu-item is-quiet" role="menuitem" onClick={handleLogout}>
+                        <LogOut size={15} aria-hidden="true" />
+                        Log out
+                      </button>
+                    </MotionDiv>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="sn-menu-btn"
+              onClick={() => setMobileMenuOpen(open => !open)}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="sn-sheet"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+            </button>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <MotionDiv id="sn-sheet" className="sn-sheet" {...sheetMotion}>
+              <nav className="sn-sheet-links" aria-label="Main">
+                {NAV_LINKS.map((link) => {
+                  const active = isActive(link.path);
+                  return (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`sn-sheet-link${active ? ' is-active' : ''}`}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      {link.name}
                     </Link>
-                </div>
+                  );
+                })}
+              </nav>
 
-                <div className="navbar-center">
-                    <ul className="nav-links">
-                        {navLinks.map((link) => (
-                            <li key={link.name}>
-                                <Link
-                                    to={link.path}
-                                    className={location.pathname === link.path ? 'active' : ''}
-                                >
-                                    {link.name}
-                                </Link>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-
-                <div className="navbar-right">
-                    <div className="navbar-actions">
-                        <button
-                            className="icon-btn search-trigger"
-                            onClick={() => setIsSearchOpen(true)}
-                            title="Search (Ctrl + K or /)"
-                        >
-                            <Search size={20} />
-                        </button>
-
-                        <Link
-                            to="/cart"
-                            className={`icon-btn cart-trigger ${cartItems.length > 0 ? 'has-items' : ''}`}
-                            style={{ position: 'relative' }}
-                        >
-                            <ShoppingBag size={20} />
-                            {cartItems.length > 0 && (
-                                <span className="cart-badge" style={{
-                                    position: 'absolute',
-                                    top: '-4px',
-                                    right: '-4px',
-                                    backgroundColor: 'var(--primary-color, #1a1a1a)',
-                                    color: 'white',
-                                    fontSize: '10px',
-                                    padding: '2px 5px',
-                                    borderRadius: '50%',
-                                    fontWeight: 'bold'
-                                }}>
-                                    {cartItems.length}
-                                </span>
-                            )}
-                        </Link>
-
-                        <Link to="/get-instant-pricing" className="btn-pricing-nav">
-                            Instant Pricing
-                        </Link>
-
-                        {user ? (
-                            <div className="user-menu" ref={dropdownRef}>
-                                <button
-                                    className="user-menu-trigger"
-                                    onClick={() => setDropdownOpen(o => !o)}
-                                >
-                                    <div className="user-menu-avatar">
-                                        {(firstName?.[0] || 'U').toUpperCase()}
-                                    </div>
-                                    <span className="user-menu-name">{firstName}</span>
-                                    <ChevronDown
-                                        size={14}
-                                        className={`user-menu-chevron${dropdownOpen ? ' open' : ''}`}
-                                    />
-                                </button>
-
-                                <AnimatePresence>
-                                    {dropdownOpen && (
-                                        <motion.div
-                                            className="user-dropdown"
-                                            initial={{ opacity: 0, y: -8, scale: 0.97 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-                                            transition={{ duration: 0.15, ease: 'easeOut' }}
-                                        >
-                                            <div className="user-dropdown-header">
-                                                <span className="user-dropdown-name">{user.name || user.email}</span>
-                                                <span className="user-dropdown-email">{user.email}</span>
-                                            </div>
-                                            <div className="user-dropdown-divider" />
-                                            <Link to="/orders" className="user-dropdown-item">
-                                                <Package size={16} />
-                                                My Orders
-                                            </Link>
-                                            <Link to="/settings" className="user-dropdown-item">
-                                                <Settings size={16} />
-                                                Settings
-                                            </Link>
-                                            <button className="user-dropdown-item user-dropdown-logout" onClick={handleLogout}>
-                                                <LogOut size={16} />
-                                                Logout
-                                            </button>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        ) : (
-                            <Link to="/login" className="btn-login-nav">
-                                <User size={18} />
-                                <span>Login</span>
-                            </Link>
-                        )}
-                    </div>
-
-                    <button
-                        className="mobile-toggle"
-                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    >
-                        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-                    </button>
-                </div>
-            </div>
-
-            {/* Mobile Menu */}
-            <AnimatePresence>
-                {mobileMenuOpen && (
-                    <motion.div
-                        initial={{ x: '100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '100%' }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="mobile-menu"
-                    >
-                        <div className="mobile-menu-header">
-                            <Link to="/" className="logo" onClick={() => setMobileMenuOpen(false)}>
-                                <img src={logo} alt="DMS Logo" className="logo-img-mobile" loading="lazy" decoding="async" onError={handleLogoError} />
-                            </Link>
-                            <button className="mobile-close" onClick={() => setMobileMenuOpen(false)}>
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="mobile-menu-links">
-                            {navLinks.map((link) => (
-                                <Link
-                                    key={link.name}
-                                    to={link.path}
-                                    onClick={() => setMobileMenuOpen(false)}
-                                >
-                                    {link.name}
-                                </Link>
-                            ))}
-                            <Link to="/get-instant-pricing" className="mobile-cta" onClick={() => setMobileMenuOpen(false)}>
-                                Instant Pricing
-                            </Link>
-
-                            <div className="mobile-menu-divider" />
-
-                            {user ? (
-                                <div className="mobile-user-section">
-                                    <Link to="/orders" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
-                                        <Package size={20} /> My Orders
-                                    </Link>
-                                    <Link to="/settings" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
-                                        <Settings size={20} /> Settings
-                                    </Link>
-                                    <button className="mobile-user-link mobile-logout" onClick={() => { setMobileMenuOpen(false); handleLogout(); }}>
-                                        <LogOut size={20} /> Logout
-                                    </button>
-                                </div>
-                            ) : (
-                                <Link to="/login" className="mobile-user-link" onClick={() => setMobileMenuOpen(false)}>
-                                    <User size={20} /> Login
-                                </Link>
-                            )}
-                        </div>
-                    </motion.div>
+              <div className="sn-sheet-foot">
+                {user ? (
+                  <div className="sn-sheet-account">
+                    <span className="sn-sheet-who">
+                      <span className="sn-avatar" aria-hidden="true">{initial}</span>
+                      <span>{user.name || firstName}</span>
+                    </span>
+                    <Link to="/orders" className="sn-sheet-item"><Package size={17} aria-hidden="true" /> My orders</Link>
+                    <Link to="/settings" className="sn-sheet-item"><Settings size={17} aria-hidden="true" /> Settings</Link>
+                    <button type="button" className="sn-sheet-item" onClick={handleLogout}><LogOut size={17} aria-hidden="true" /> Log out</button>
+                  </div>
+                ) : (
+                  <Link to="/login" className="sn-sheet-item">Log in</Link>
                 )}
-            </AnimatePresence>
-            {/* Search Overlay */}
-            <SearchOverlay
-                isOpen={isSearchOpen}
-                onClose={() => setIsSearchOpen(false)}
-            />
-        </nav>
-    );
+                <button type="button" className="sn-sheet-item" onClick={() => { setMobileMenuOpen(false); setIsSearchOpen(true); }}>
+                  <Search size={17} aria-hidden="true" /> Search
+                </button>
+                <Link to="/get-instant-pricing" className="sn-sheet-cta">
+                  Instant pricing
+                  <ArrowRight size={17} aria-hidden="true" />
+                </Link>
+              </div>
+            </MotionDiv>
+          )}
+        </AnimatePresence>
+      </header>
+      <div className="sn-spacer" aria-hidden="true" />
+
+      <SearchOverlay
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
+    </>
+  );
 };
 
 export default Navbar;

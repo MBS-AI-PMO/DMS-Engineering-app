@@ -1,319 +1,272 @@
-/* eslint-disable no-unused-vars */
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, ArrowRight, ShoppingCart, Info, ChevronRight, Package, Box, PlusCircle, ShieldCheck, Zap, Layers, Settings, TrendingDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { ArrowRight, Layers, Minus, Plus, Settings, ShieldCheck, ShoppingBag, Trash2, Package, Droplet } from 'lucide-react';
 import { useCart } from '../context/CartContext.js';
 import ProjectViewer from '../components/viewer/ProjectViewer';
-import DiscountTable from '../components/DiscountTable';
-import Skeleton from '../components/Skeleton';
-import '../styles/PremiumCart.css';
+import { displayMetalName } from '../utils/metalDisplay';
+import '../styles/Shimmer.css';
+import '../styles/CartPage.css';
+
+/**
+ * The cart: a short dark heading band, then each part as a white panel
+ * (3D preview, what it is, what was added to it, quantity, price) and the
+ * order summary beside them, which stays in view, with the one red action.
+ * Quantities, removal, volume discounts and totals work exactly as before;
+ * prices shimmer while a quantity change is being re-priced.
+ */
+
+const TIER_QUANTITIES = [2, 5, 10, 50, 100, 1000];
+
+// Volume discount tiers that apply to this cart, the one reached marked.
+const VolumeTiers = ({ allDiscounts, quantity }) => {
+    if (!allDiscounts || allDiscounts.length === 0) return null;
+    const tiers = TIER_QUANTITIES.filter(q => allDiscounts.some(d => (d.quantities || []).some(t => t <= q)));
+    if (tiers.length === 0) return null;
+    return (
+        <div className="cr-tiers">
+            <span className="cr-tiers-label">Volume discounts</span>
+            <ul className="cr-tiers-list">
+                {tiers.map((qty, i) => {
+                    const best = allDiscounts
+                        .filter(d => (d.quantities || []).some(t => t <= qty))
+                        .reduce((a, b) => (a.discount_percent > b.discount_percent ? a : b));
+                    const reached = quantity >= qty && (i === tiers.length - 1 || quantity < tiers[i + 1]);
+                    return (
+                        <li key={qty} className={`cr-tier${reached ? ' is-on' : ''}`}>
+                            <span className="cr-tier-qty">{qty}+</span>
+                            <span className="cr-tier-pct">−{best.discount_percent}%</span>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+};
+
+const Shimmer = ({ w, h = 14 }) => <span className="shimmer cr-sk" style={{ width: w, height: h }} aria-hidden="true" />;
 
 const Cart = () => {
-  const { cartItems, removeFromCart, updateQuantity, cartTotal, cartSubtotal, cartDiscount, allDiscounts } = useCart();
-  const navigate = useNavigate();
+    const { cartItems, removeFromCart, updateQuantity, cartTotal, cartSubtotal, cartDiscount, allDiscounts } = useCart();
+    const reduceMotion = useReducedMotion();
+    const count = cartItems.length;
+    const anyUpdating = cartItems.some(i => i.isUpdating);
 
-  if (cartItems.length === 0) {
     return (
-      <div className="cart-page">
-        <div className="container">
-          <motion.div
-            className="empty-card"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
-          >
-            <div className="empty-icon-wrap">
-              <ShoppingCart size={55} />
-              <motion.div
-                className="icon-plus-overlay"
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.4 }}
-                style={{ position: 'absolute', right: -10, bottom: -10, color: '#fff' }}
-              >
-                <PlusCircle size={28} fill="#e31b23" />
-              </motion.div>
-            </div>
-            <h2>Your cart is empty</h2>
-            <p>Ready to bring your engineering designs to life? Upload your STEP files and get instant pricing for precision manufacturing.</p>
-            <Link to="/get-instant-pricing" className="btn-primary large">
-              Start a New Project <ArrowRight size={22} />
-            </Link>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
+        <div className="cr">
+            <section className="cr-hero" aria-labelledby="cr-title">
+                <div className="cr-inner">
+                    <nav className="cr-crumbs" aria-label="Breadcrumb">
+                        <Link to="/">Home</Link>
+                        <span aria-hidden="true">/</span>
+                        <span aria-current="page">Cart</span>
+                    </nav>
+                    <h1 id="cr-title" className="cr-title">Your cart</h1>
+                    <p className="cr-lede">
+                        {count === 0 ? 'Nothing here yet.' : `${count} ${count === 1 ? 'part' : 'parts'} ready to order`}
+                    </p>
+                </div>
+            </section>
 
-  return (
-    <div className="cart-page">
-      <div className="container">
-        <motion.div
-          className="cart-header"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <h1>Manufacturing Cart</h1>
-          <p>{cartItems.length} Project{cartItems.length !== 1 ? 's' : ''} staged for production</p>
-        </motion.div>
+            <section className="cr-body" aria-label="Cart">
+                <div className="cr-inner">
+                    {count === 0 ? (
+                        <div className="cr-empty">
+                            <span className="cr-empty-icon" aria-hidden="true"><ShoppingBag size={24} /></span>
+                            <h2 className="cr-h2">Your cart is empty</h2>
+                            <p>Upload a STEP or DXF file to get an instant price, then add the part here.</p>
+                            <Link to="/get-instant-pricing" className="cr-btn is-primary">
+                                Get instant pricing
+                                <ArrowRight size={16} aria-hidden="true" />
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="cr-layout">
+                            <ul className="cr-items">
+                                <AnimatePresence initial={false}>
+                                    {cartItems.map((item) => {
+                                        const config = item.configuration || {};
+                                        const unitPrice = item.pricing?.total || 0;
+                                        const lineTotal = unitPrice * (item.quantity || 1);
+                                        const hasBaseDiscount = item.pricing?.baseUnit > item.pricing?.total;
+                                        const tapCount = Object.keys(config.selectedTaps || {}).length;
+                                        const hardwareCount = Object.keys(config.selectedHardware || {}).length;
+                                        const countersinkCount = Object.keys(config.selectedCountersinks || {}).length;
+                                        const bendCount = Math.max(Object.keys(config.selectedBends || {}).length, (config.detectedBends || []).length);
+                                        const finishNames = Object.values(config.selectedFinishColors || {})
+                                            .map(c => c?.name || c?.service_name || c?.service || 'Selected');
+                                        const thicknessText = config.selectedThickness
+                                            ? `${config.selectedThickness}${config.thickness ? ` · model ${config.thickness} mm` : ''}`
+                                            : (config.thickness ? `${config.thickness} mm` : '—');
+                                        const volumeNote = (() => {
+                                            if (item.quantity <= 1) return null;
+                                            const tiers = (allDiscounts || []).filter(d => (d.quantities || []).some(q => q <= item.quantity));
+                                            if (tiers.length === 0) return null;
+                                            const best = tiers.reduce((a, b) => (a.discount_percent > b.discount_percent ? a : b));
+                                            return `${best.discount_percent}% volume discount applied`;
+                                        })();
 
-        <div className="cart-grid">
-          <div className="cart-items-column">
-            <AnimatePresence>
-              {cartItems.map((item) => (
-                <motion.div
-                  key={item.cartId}
-                  className="premium-cart-item"
-                  layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
-                  <div className="cart-preview-wrap">
-                    <ProjectViewer
-                      file={item.file}
-                      tempPath={item.tempPath || item.configuration?.tempPath || null}
-                      configuration={item.configuration}
-                      isPreview={true}
-                    />
-                  </div>
+                                        return (
+                                            <motion.li
+                                                key={item.cartId}
+                                                className="cr-item"
+                                                layout={!reduceMotion}
+                                                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 16 }}
+                                            >
+                                                <div className="cr-preview">
+                                                    <ProjectViewer
+                                                        file={item.file}
+                                                        tempPath={item.tempPath || config.tempPath || null}
+                                                        configuration={config}
+                                                        isPreview={true}
+                                                    />
+                                                </div>
 
-                  <div className="item-main-info">
-                    <h2>{item.fileName}</h2>
+                                                <div className="cr-main">
+                                                    <div className="cr-main-head">
+                                                        <h2 className="cr-name" title={item.fileName}>{item.fileName}</h2>
+                                                        <div className="cr-price">
+                                                            <strong className="cr-price-total">
+                                                                {item.isUpdating ? <Shimmer w={96} h={24} /> : `$${lineTotal.toFixed(2)}`}
+                                                            </strong>
+                                                            <span className="cr-price-unit">
+                                                                {item.isUpdating ? <Shimmer w={80} h={11} /> : hasBaseDiscount ? (
+                                                                    <><s>${item.pricing.baseUnit.toFixed(2)}</s> ${unitPrice.toFixed(2)} each</>
+                                                                ) : `$${unitPrice.toFixed(2)} each`}
+                                                            </span>
+                                                        </div>
+                                                    </div>
 
-                    {/* Metadata Sub-Services Display */}
-                    <div className="item-metadata-labels">
-                      <span className="meta-tag">
-                        <Box size={14} />
-                        {item.isUpdating ? <Skeleton dark style={{ width: '80px', height: '14px', marginLeft: '6px' }} /> : (item.configuration?.metal?.name || 'Standard Metal')}
-                      </span>
-                      <span className="meta-tag secondary">
-                        <TrendingDown size={14} />
-                        {item.isUpdating ? <Skeleton dark style={{ width: '60px', height: '14px', marginLeft: '6px' }} /> : `${item.configuration.thickness}mm Thickness${item.configuration?.selectedThickness ? ` (${item.configuration.selectedThickness})` : ''}`}
-                      </span>
+                                                    <dl className="cr-specs">
+                                                        <div>
+                                                            <dt>Material</dt>
+                                                            <dd>{item.isUpdating ? <Shimmer w={110} /> : displayMetalName(config.metal?.name || 'Standard metal')}</dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt>Thickness</dt>
+                                                            <dd>{item.isUpdating ? <Shimmer w={80} /> : thicknessText}</dd>
+                                                        </div>
+                                                        {config.dimensions && (
+                                                            <div className="is-wide">
+                                                                <dt>Size</dt>
+                                                                <dd>
+                                                                    {config.dimensions.mm.l} × {config.dimensions.mm.w} × {config.dimensions.mm.t} mm
+                                                                    <span className="cr-sub">
+                                                                        {config.dimensions.inches.l} × {config.dimensions.inches.w} × {config.dimensions.inches.t} in
+                                                                    </span>
+                                                                </dd>
+                                                            </div>
+                                                        )}
+                                                    </dl>
 
-                      {/* Detailed Sub-Services */}
-                      {(item.configuration.additionalServices || []).map(svc => (
-                        <span key={svc.id} className="meta-tag premium">
-                          {svc.title.toLowerCase().includes('anodiz') ? <Zap size={14} /> :
-                            svc.title.toLowerCase().includes('bend') ? <Layers size={14} /> :
-                              <Settings size={14} />}
-                          {svc.title}
-                          {svc.title.toLowerCase().includes('anodiz') && item.configuration.anodizingColor && (
-                            <span className="sub-detail">: {item.configuration.anodizingColor.name}</span>
-                          )}
-                        </span>
-                      ))}
+                                                    {((config.additionalServices || []).length > 0 || tapCount || hardwareCount || countersinkCount || bendCount || finishNames.length > 0) ? (
+                                                        <ul className="cr-chips" aria-label="Added to this part">
+                                                            {(config.additionalServices || []).map(svc => (
+                                                                <li key={svc.id} className="cr-chip">
+                                                                    {/bend/i.test(svc.title) ? <Layers size={13} aria-hidden="true" /> : <Settings size={13} aria-hidden="true" />}
+                                                                    {svc.title}
+                                                                    {/anodiz/i.test(svc.title) && config.anodizingColor && <span className="cr-chip-sub">{config.anodizingColor.name}</span>}
+                                                                </li>
+                                                            ))}
+                                                            {tapCount > 0 && <li className="cr-chip"><Settings size={13} aria-hidden="true" />{tapCount} tapped {tapCount === 1 ? 'hole' : 'holes'}</li>}
+                                                            {hardwareCount > 0 && <li className="cr-chip"><Settings size={13} aria-hidden="true" />{hardwareCount} hardware {hardwareCount === 1 ? 'insert' : 'inserts'}</li>}
+                                                            {countersinkCount > 0 && <li className="cr-chip"><Settings size={13} aria-hidden="true" />{countersinkCount} {countersinkCount === 1 ? 'countersink' : 'countersinks'}</li>}
+                                                            {bendCount > 0 && <li className="cr-chip"><Layers size={13} aria-hidden="true" />{bendCount} {bendCount === 1 ? 'bend' : 'bends'}</li>}
+                                                            {finishNames.length > 0 && <li className="cr-chip"><Droplet size={13} aria-hidden="true" />Finish: {finishNames.join(', ')}</li>}
+                                                        </ul>
+                                                    ) : null}
 
-                      {item.configuration.selectedTaps && Object.keys(item.configuration.selectedTaps).length > 0 && (
-                        <span className="meta-tag secondary">
-                          <Settings size={14} />
-                          {Object.keys(item.configuration.selectedTaps).length} Tapped Holes
-                        </span>
-                      )}
+                                                    <VolumeTiers allDiscounts={allDiscounts} quantity={item.quantity} />
 
-                      {item.configuration?.selectedHardware && Object.keys(item.configuration.selectedHardware).length > 0 && (
-                        <span className="meta-tag secondary">
-                          <Settings size={14} />
-                          {Object.keys(item.configuration.selectedHardware).length} Hardware Inserts
-                        </span>
-                      )}
+                                                    <div className="cr-actions">
+                                                        <div className="cr-qty" role="group" aria-label={`Quantity of ${item.fileName}`}>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="One fewer"
+                                                                onClick={() => updateQuantity(item.cartId, item.quantity - 1)}
+                                                                disabled={item.quantity <= 1 || item.isUpdating}
+                                                            >
+                                                                <Minus size={15} aria-hidden="true" />
+                                                            </button>
+                                                            <span className="cr-qty-value" aria-live="polite">
+                                                                {item.isUpdating ? <Shimmer w={18} h={16} /> : item.quantity}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="One more"
+                                                                onClick={() => updateQuantity(item.cartId, item.quantity + 1)}
+                                                                disabled={item.isUpdating}
+                                                            >
+                                                                <Plus size={15} aria-hidden="true" />
+                                                            </button>
+                                                        </div>
+                                                        {volumeNote && !item.isUpdating && <span className="cr-volume">{volumeNote}</span>}
+                                                        <button type="button" className="cr-remove" onClick={() => removeFromCart(item.cartId)}>
+                                                            <Trash2 size={15} aria-hidden="true" /> Remove
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </motion.li>
+                                        );
+                                    })}
+                                </AnimatePresence>
+                            </ul>
 
-                      {item.configuration?.selectedCountersinks && Object.keys(item.configuration.selectedCountersinks).length > 0 && (
-                        <span className="meta-tag secondary">
-                          <Settings size={14} />
-                          {Object.keys(item.configuration.selectedCountersinks).length} Countersinks
-                        </span>
-                      )}
+                            <aside className="cr-side">
+                                <section className="cr-summary" aria-labelledby="cr-summary-title">
+                                    <h2 id="cr-summary-title" className="cr-h2">Order summary</h2>
+                                    <dl className="cr-lines">
+                                        <div>
+                                            <dt>Subtotal</dt>
+                                            <dd>{anyUpdating ? <Shimmer w={70} /> : `$${cartSubtotal.toFixed(2)}`}</dd>
+                                        </div>
+                                        {cartDiscount > 0 && (
+                                            <div className="cr-saving">
+                                                <dt>Volume savings</dt>
+                                                <dd>{anyUpdating ? <Shimmer w={60} /> : `−$${cartDiscount.toFixed(2)}`}</dd>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <dt>Production logistics</dt>
+                                            <dd className="cr-free">Free</dd>
+                                        </div>
+                                    </dl>
+                                    <div className="cr-total">
+                                        <span>Estimated total</span>
+                                        <strong>{anyUpdating ? <Shimmer w={110} h={28} /> : `$${cartTotal.toFixed(2)}`}</strong>
+                                    </div>
+                                    <Link
+                                        to="/checkout"
+                                        className={`cr-btn is-primary is-block${anyUpdating ? ' is-waiting' : ''}`}
+                                        aria-disabled={anyUpdating || undefined}
+                                        onClick={(e) => { if (anyUpdating) e.preventDefault(); }}
+                                    >
+                                        Proceed to checkout
+                                        <ArrowRight size={16} aria-hidden="true" />
+                                    </Link>
+                                    <ul className="cr-trust">
+                                        <li><Package size={15} aria-hidden="true" /> Secure industrial manufacturing</li>
+                                        <li><ShieldCheck size={15} aria-hidden="true" /> Precision quality guarantee</li>
+                                    </ul>
+                                </section>
 
-                      {(Object.keys(item.configuration?.selectedBends || {}).length > 0 || (item.configuration?.detectedBends || []).length > 0) && (
-                        <span className="meta-tag secondary">
-                          <Layers size={14} />
-                          {Math.max(Object.keys(item.configuration?.selectedBends || {}).length, (item.configuration?.detectedBends || []).length)} Bends
-                        </span>
-                      )}
-
-                      {Object.keys(item.configuration?.selectedFinishColors || {}).length > 0 && (
-                        <span className="meta-tag premium">
-                          <Zap size={14} />
-                          Finish: {Object.values(item.configuration.selectedFinishColors).map(c => c?.name || c?.service_name || c?.service || 'Selected').join(', ')}
-                        </span>
-                      )}
-
-                      {item.configuration?.dimensions && (
-                        <span className="meta-tag" style={{ fontFamily: 'monospace', fontSize: '11px', letterSpacing: 0 }}>
-                          {item.configuration.dimensions.mm.l} × {item.configuration.dimensions.mm.w} × {item.configuration.dimensions.mm.t} mm, {item.configuration.dimensions.mm.volume} mm³
-                          {' | '}
-                          {item.configuration.dimensions.inches.l} × {item.configuration.dimensions.inches.w} × {item.configuration.dimensions.inches.t} in, {item.configuration.dimensions.inches.volume} in³
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Volume Discount Table */}
-                    <DiscountTable
-                      allDiscounts={allDiscounts}
-                      currentQuantity={item.quantity}
-                    />
-
-                    <div className="item-interaction-row">
-                      <div className="qty-control-premium">
-                        <button
-                          className="qty-btn"
-                          onClick={() => updateQuantity(item.cartId, item.quantity - 1)}
-                          disabled={item.quantity <= 1 || item.isUpdating}
-                        >
-                          <Info size={16} />
-                        </button>
-                        <span className="qty-value">
-                          {item.isUpdating ? <Skeleton dark style={{ width: '20px', height: '24px' }} /> : item.quantity}
-                        </span>
-                        <button
-                          className="qty-btn"
-                          onClick={() => updateQuantity(item.cartId, item.quantity + 1)}
-                          disabled={item.isUpdating}
-                        >
-                          <PlusCircle size={16} />
-                        </button>
-                      </div>
-
-                      <button
-                        className="btn-remove-premium"
-                        onClick={() => removeFromCart(item.cartId)}
-                      >
-                        <Trash2 size={16} /> Remove Project
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="item-pricing-summary">
-                    <div className="price-unit-wrap">
-                      {item.isUpdating ? (
-                        <Skeleton dark style={{ width: '80px', height: '16px' }} />
-                      ) : (
-                        item.pricing?.baseUnit > item.pricing?.total ? (
-                          <>
-                            <span className="price-unit-base" style={{ textDecoration: 'line-through', opacity: 0.5, fontSize: '0.9rem', marginRight: '8px' }}>
-                              ${item.pricing.baseUnit.toFixed(2)}
-                            </span>
-                            <span className="price-unit discounted" style={{ color: '#e31b23', fontWeight: 700 }}>
-                              ${(item.pricing?.total || 0).toFixed(2)} / unit
-                            </span>
-                          </>
-                        ) : (
-                          <span className="price-unit">
-                            ${(item.pricing?.total || 0).toFixed(2)} / unit
-                          </span>
-                        )
-                      )}
-                    </div>
-                    <span className="price-total">
-                      {item.isUpdating ? <Skeleton dark style={{ width: '100px', height: '28px' }} /> : `$${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}`}
-                    </span>
-
-                    {/* Discount Badge */}
-                    {!item.isUpdating && item.quantity > 1 && (
-                      <div className="applied-discount-badge animate-fade-in">
-                        <Zap size={10} fill="#e31b23" />
-                        <span>
-                          {(() => {
-                            const applicableTiers = (allDiscounts || []).filter(d => (d.quantities || []).some(q => q <= item.quantity));
-                            if (applicableTiers.length === 0) return 'Volume Discount Applied';
-                            const bestTier = applicableTiers.reduce((prev, current) =>
-                              (prev.discount_percent > current.discount_percent) ? prev : current
-                            );
-                            return `${bestTier.discount_percent}% Volume Discount Applied`;
-                          })()}
-                        </span>
-                      </div>
+                                <section className="cr-help">
+                                    <h2 className="cr-help-title">Need help with a part?</h2>
+                                    <p>Our engineers can help with tight tolerances and custom materials.</p>
+                                    <Link to="/contact" className="cr-link">
+                                        Talk to us
+                                        <ArrowRight size={15} aria-hidden="true" />
+                                    </Link>
+                                </section>
+                            </aside>
+                        </div>
                     )}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          <div className="cart-summary-column">
-            <div className="cart-summary-sticky-wrapper">
-              <motion.div
-                className="cart-summary-premium"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <h3 className="summary-title">Order Summary</h3>
-
-                <div className="summary-row">
-                  <span>Gross Subtotal</span>
-                  <span>${cartSubtotal.toFixed(2)}</span>
                 </div>
-                {cartDiscount > 0 && (
-                  <div className="summary-row discount-row" style={{ color: '#e31b23' }}>
-                    <span>Volume Savings</span>
-                    <span>-${cartDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="summary-row">
-                  <span>Production Logistics</span>
-                  <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>
-                </div>
-
-                <div className="summary-row total">
-                  <span>Estimate Total</span>
-                  <span>
-                    {cartItems.some(i => i.isUpdating) ? <Skeleton dark style={{ width: '100px', height: '24px' }} /> : `$${cartTotal.toFixed(2)}`}
-                  </span>
-                </div>
-
-                <Link to="/checkout" className="btn-checkout-premium">
-                  Proceed to Checkout <ArrowRight size={20} />
-                </Link>
-
-                <div className="summary-trust-badges">
-                  <div className="trust-badge-item">
-                    <Package size={18} /> <span>Secure Industrial Manufacturing</span>
-                  </div>
-                  <div className="trust-badge-item">
-                    <ShieldCheck size={18} /> <span>Precision Quality Guarantee</span>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                className="summary-help-card"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                style={{
-                  marginTop: '25px',
-                  padding: '30px',
-                  background: 'rgba(255,255,255,0.02)',
-                  borderRadius: '28px',
-                  border: '1px solid rgba(255,255,255,0.06)'
-                }}
-              >
-                <h4 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Need engineering support?</h4>
-                <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-                  Our experts are ready to assist with complex tolerances and custom materials.
-                </p>
-                <Link to="/contact" style={{
-                  color: '#e31b23',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginTop: '15px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem'
-                }}>
-                  Contact Specialist <ChevronRight size={14} />
-                </Link>
-              </motion.div>
-            </div>
-          </div>
+            </section>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default Cart;

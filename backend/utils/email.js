@@ -72,7 +72,7 @@ function createTransporter(config) {
     });
 }
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, replyTo }) {
     const config = await getEmailConfig();
     if (!config) throw new Error('Email not configured. Go to Admin > Email Config to set up SMTP.');
 
@@ -84,6 +84,7 @@ async function sendEmail({ to, subject, html }) {
             to,
             subject,
             html,
+            ...(replyTo ? { replyTo } : {}),
         });
         console.log(`[Email] Sent to ${to} | subject: "${subject}" | messageId: ${info.messageId}`);
         return info;

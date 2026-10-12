@@ -1,0 +1,490 @@
+/* ══ Contact page (/contact) ═════════════════════════════════════════════
+   Same voice as the other inner pages: a dark heading band over the parts
+   photo, then on the light ground the ways to reach the shop on the left
+   (white panels) and the message form in a white panel on the right. Red
+   only on Send and on icons. Own class names (ct-). */
+
+.ct {
+  --ct-dark: #0b0c0f;
+  --ct-ground: #f7f7f8;
+  --ct-ink: #0b0c0f;
+  --ct-text: #5b5f68;
+  --ct-faint: #8b8f98;
+  --ct-rule: #e3e4e8;
+  --ct-rule-soft: #eceef1;
+  --ct-rule-strong: #cfd2d8;
+  --ct-tile: #f3f4f6;
+  --ct-accent: #dc2626;
+  --ct-accent-strong: #b91c1c;
+  --ct-on-dark: #f4f4f5;
+  --ct-on-dark-text: rgba(244, 244, 245, 0.74);
+  --ct-on-dark-faint: rgba(244, 244, 245, 0.5);
+
+  background: var(--ct-ground);
+  color: var(--ct-ink);
+}
+
+.ct-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+.ct a:focus-visible,
+.ct button:focus-visible {
+  outline: 2px solid var(--ct-accent);
+  outline-offset: 3px;
+}
+
+/* ── Heading band ── */
+.ct-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--ct-dark);
+  color: var(--ct-on-dark);
+}
+.ct-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 45%;
+}
+.ct-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(11, 12, 15, 0.95) 0%, rgba(11, 12, 15, 0.84) 45%, rgba(11, 12, 15, 0.5) 100%),
+    linear-gradient(0deg, rgba(11, 12, 15, 0.6) 0%, rgba(11, 12, 15, 0) 50%);
+}
+.ct-hero-content {
+  position: relative;
+  padding-top: 72px;
+  padding-bottom: 84px;
+}
+.ct-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ct-on-dark-faint);
+  font-size: 0.8125rem;
+}
+.ct-crumbs a {
+  color: var(--ct-on-dark-text);
+  text-decoration: none;
+}
+.ct-crumbs a:hover {
+  color: var(--ct-on-dark);
+}
+.ct-crumbs [aria-current] {
+  color: var(--ct-on-dark);
+}
+.ct .ct-title {
+  margin: 28px 0 0;
+  color: var(--ct-on-dark);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.ct .ct-lede {
+  max-width: 36rem;
+  margin: 18px 0 0;
+  color: var(--ct-on-dark-text);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+/* ── Body ── */
+.ct-body {
+  padding: 56px 0 96px;
+  --shimmer-base: #e8e9ed;
+  --shimmer-shine: rgba(255, 255, 255, 0.65);
+}
+.ct-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+  gap: 24px;
+}
+.ct-side {
+  display: grid;
+  gap: 24px;
+}
+.ct-panel {
+  padding: 28px 32px;
+  border: 1px solid var(--ct-rule);
+  border-radius: 14px;
+  background: #ffffff;
+}
+.ct .ct-h2 {
+  margin: 0;
+  color: var(--ct-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.ct .ct-muted {
+  margin: 8px 0 0;
+  color: var(--ct-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Ways to reach us */
+.ct-ways {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ct-ways > li + li {
+  border-top: 1px solid var(--ct-rule-soft);
+}
+.ct-way {
+  padding: 14px 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+.ct-way-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--ct-accent);
+}
+.ct-way-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ct-way-label {
+  color: var(--ct-faint);
+  font-size: 0.8125rem;
+}
+.ct-way-value {
+  color: var(--ct-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+a.ct-way:hover .ct-way-value {
+  color: var(--ct-accent);
+}
+.ct-sk-line {
+  display: block;
+  width: 70%;
+  height: 12px;
+}
+.ct-sk-line.is-label {
+  width: 40%;
+  height: 10px;
+}
+
+.ct-social {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ct-rule-soft);
+  display: flex;
+  gap: 8px;
+}
+.ct-social-link {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ct-rule);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ct-text);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.ct-social-link:hover {
+  border-color: var(--ct-accent);
+  color: var(--ct-accent);
+}
+
+/* Shortcuts */
+.ct-shortcuts {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ct-shortcuts > li + li {
+  border-top: 1px solid var(--ct-rule-soft);
+}
+.ct-shortcut {
+  padding: 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.ct-shortcut-text {
+  display: grid;
+  gap: 2px;
+}
+.ct-shortcut-title {
+  color: var(--ct-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.ct-shortcut-sub {
+  color: var(--ct-text);
+  font-size: 0.875rem;
+}
+.ct-shortcut svg {
+  flex: none;
+  color: var(--ct-faint);
+  transition: color 0.15s ease, transform 0.2s ease;
+}
+.ct-shortcut:hover svg,
+.ct-shortcut:focus-visible svg {
+  color: var(--ct-accent);
+  transform: translateX(3px);
+}
+
+/* Form */
+.ct-form-panel {
+  padding: 32px 36px;
+}
+.ct-form {
+  display: grid;
+  gap: 18px;
+}
+.ct-form-head {
+  margin-bottom: 4px;
+}
+.ct-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.ct-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.ct-label,
+.ct-topic .dd-label {
+  color: var(--ct-ink);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+.ct-optional {
+  margin-left: 4px;
+  color: var(--ct-faint);
+  font-weight: 400;
+}
+.ct-field input,
+.ct-field textarea {
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid var(--ct-rule);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ct-ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ct-field input {
+  height: 44px;
+}
+.ct-field textarea {
+  min-height: 150px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.ct-field input::placeholder,
+.ct-field textarea::placeholder {
+  color: var(--ct-faint);
+}
+.ct-field input:hover,
+.ct-field textarea:hover {
+  border-color: var(--ct-rule-strong);
+}
+.ct-field input:focus-visible,
+.ct-field textarea:focus-visible {
+  border-color: var(--ct-ink);
+  box-shadow: 0 0 0 3px rgba(11, 12, 15, 0.06);
+  outline: none;
+}
+/* The topic dropdown, laid out like the other fields. */
+.ct-topic {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.ct-topic .dd-button {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+}
+.ct-topic .dd-list {
+  left: 0;
+  right: auto;
+  width: 100%;
+  max-width: none;
+}
+
+.ct-trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.ct .ct-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--ct-accent-strong);
+  font-size: 0.875rem;
+}
+.ct-form-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.ct-btn {
+  height: 46px;
+  padding: 0 18px 0 20px;
+  border: 1px solid #d5d7dc;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #ffffff;
+  color: var(--ct-ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.ct-btn.is-primary {
+  border-color: var(--ct-accent);
+  background: var(--ct-accent);
+  color: #ffffff;
+}
+.ct-btn.is-primary:hover:not(:disabled) {
+  border-color: var(--ct-accent-strong);
+  background: var(--ct-accent-strong);
+}
+.ct-btn:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+.ct-btn.is-quiet:hover {
+  border-color: var(--ct-rule-strong);
+}
+.ct-btn svg {
+  transition: transform 0.2s ease;
+}
+.ct-btn.is-primary:hover:not(:disabled) svg:last-child {
+  transform: translateX(3px);
+}
+.ct-spin {
+  animation: ct-spin 0.9s linear infinite;
+}
+@keyframes ct-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ct-sent {
+  padding: 32px 0;
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.ct-sent-icon {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+}
+.ct-sent .ct-btn {
+  margin-top: 12px;
+}
+
+/* ── Widths ── */
+@media (max-width: 1000px) {
+  .ct-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ct-form-panel {
+    order: -1;
+  }
+}
+@media (max-width: 900px) {
+  .ct-inner {
+    padding: 0 20px;
+  }
+  .ct-hero-content {
+    padding-top: 56px;
+    padding-bottom: 64px;
+  }
+}
+@media (max-width: 640px) {
+  .ct-inner {
+    padding: 0 16px;
+  }
+  .ct-hero-content {
+    padding-top: 40px;
+    padding-bottom: 52px;
+  }
+  .ct .ct-lede {
+    font-size: 1rem;
+  }
+  .ct-body {
+    padding: 28px 0 64px;
+  }
+  .ct-panel,
+  .ct-form-panel {
+    padding: 22px 18px;
+  }
+  .ct-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ct-form-foot .ct-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-btn,
+  .ct-btn svg,
+  .ct-shortcut svg,
+  .ct-social-link,
+  .ct-field input,
+  .ct-field textarea {
+    transition: none;
+  }
+  .ct-spin {
+    animation-duration: 2s;
+  }
+}

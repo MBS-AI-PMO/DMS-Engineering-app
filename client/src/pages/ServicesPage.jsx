@@ -1,440 +1,315 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Clock3, Layers3, ShieldCheck } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { ArrowRight } from 'lucide-react';
 import { fetchServices } from '../utils/api';
+import { servicesData } from '../data/servicesData';
+import ThumbImage from '../components/ThumbImage';
 import serviceHeroBg from '../assets/services/service-hero-bg.webp';
-import './ServicesPage.css';
+import '../styles/Shimmer.css';
+import '../styles/ServicesPage.css';
 
-const PROCESS_STEPS = [
+/**
+ * The services page: a heading band over the laser-cutting photo with live
+ * counts, then the services in two groups — the main processes, each with
+ * the add-ons that go with it, and the add-ons and finishes — then the
+ * four steps from file to part, then a band that leads to instant pricing.
+ * Counts and cards shimmer until the services have loaded.
+ */
+
+const STEPS = [
     {
-        title: 'Upload and Configure',
-        description: 'Upload your part, select the process, choose material and thickness, and define precision options.',
+        title: 'Upload your part',
+        description: 'Drop in a STEP or DXF file. We read the geometry and work out the flat pattern.',
     },
     {
-        title: 'Instant Validation',
-        description: 'Our workflow validates manufacturability, dimensional fit, and compatible finishing selections.',
+        title: 'Choose material and services',
+        description: 'Pick a metal and thickness, then add bending, tapping, hardware or a finish.',
     },
     {
-        title: 'Production Kickoff',
-        description: 'Once approved, your job enters production with quality checkpoints tied to your selected process.',
+        title: 'See your price',
+        description: 'The price updates as you change options, so you know the cost before you order.',
     },
     {
-        title: 'Delivery and Support',
-        description: 'Receive your parts with full support for revisions, repeat builds, and scaling to higher volumes.',
+        title: 'We make your parts',
+        description: 'Once the order is placed, your parts are cut, formed and finished, then shipped to you.',
     },
 ];
 
-const QUALITY_PILLARS = [
-    'Consistent quality controls for every operation',
-    'Fast quoting and transparent production readiness',
-    'Process guidance for prototype and production runs',
-    'Designed for repeatable, scalable manufacturing workflows',
-];
+// The built-in picture for the same service, by id.
+const staticImageFor = (service) => servicesData.find(s => s.id === service.id)?.image || '';
 
-const fadeInUp = {
-    initial: { opacity: 0, y: 24 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, amount: 0.18 },
-    transition: { duration: 0.5, ease: 'easeOut' },
-};
-
-const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-        opacity: 1,
-        transition: {
-            staggerChildren: 0.08,
-            delayChildren: 0.08,
-        },
-    },
-};
-
-const staggerItem = {
-    hidden: { opacity: 0, y: 18 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: 'easeOut' } },
+// A service's parents: the list when admin set several, else the single one.
+const parentIdsOf = (service) => {
+    const ids = Array.isArray(service.parent_ids) && service.parent_ids.length
+        ? service.parent_ids
+        : (service.parent_id != null ? [service.parent_id] : []);
+    return ids.map(Number).filter(Number.isFinite);
 };
 
 const ServicesPage = () => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const reduceMotion = useReducedMotion();
 
     useEffect(() => {
+        let cancelled = false;
         fetchServices()
             .then((apiServices) => {
-                if (!Array.isArray(apiServices) || apiServices.length === 0) {
-                    setServices([]);
-                    return;
-                }
-                const mapped = apiServices.map((service) => {
-                    return {
-                        ...service,
-                        image: service.image_path || '',
-                        description: service.description || 'Precision manufacturing service.',
-                    };
-                });
-                setServices(mapped);
+                if (cancelled) return;
+                setServices(Array.isArray(apiServices) ? apiServices : []);
             })
             .catch(() => {
-                setServices([]);
+                if (!cancelled) setServices([]);
             })
             .finally(() => {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             });
+        return () => { cancelled = true; };
     }, []);
 
-    const primaryServices = useMemo(() => services.slice(0, 6), [services]);
+    const { processes, addOns, byId } = useMemo(() => {
+        const map = new Map(services.map(s => [Number(s.id), s]));
+        const main = services.filter(s => s.is_production);
+        // No process flagged: show everything as one group.
+        const rest = main.length ? services.filter(s => !s.is_production) : services;
+        return { processes: main, addOns: rest, byId: map };
+    }, [services]);
+
+    const childrenOf = (service) => addOns.filter(s => parentIdsOf(s).includes(Number(service.id)));
+    // Named only when an add-on fits some processes but not all of them.
+    const worksWith = (service) => {
+        const parents = parentIdsOf(service).map(id => byId.get(id)).filter(p => p && p.is_production);
+        return parents.length < processes.length ? parents.map(p => p.title) : [];
+    };
+
+    const reveal = (delay = 0) => (reduceMotion ? {} : {
+        initial: { opacity: 0, y: 12 },
+        whileInView: { opacity: 1, y: 0 },
+        viewport: { once: true, margin: '-40px' },
+        transition: { duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] },
+    });
+
+    const stat = (value) => (loading
+        ? <span className="shimmer sp-sk-stat" aria-hidden="true" />
+        : value);
+
+    const linkTo = (service) => `/service/${service.slug || service.id}`;
 
     return (
-        <div className="services-page-light">
-            <section className="services-page-hero">
-                <div className="services-page-hero-bg">
-                    <img
-                        src={serviceHeroBg}
-                        alt="Manufacturing floor equipment and precision parts"
-                        loading="eager"
-                        fetchPriority="high"
-                        decoding="async"
-                    />
-                </div>
-                <div className="services-page-hero-overlay" />
+        <div className="sp">
+            {/* ── Heading band ── */}
+            <section className="sp-hero" aria-labelledby="sp-title">
+                <img
+                    className="sp-hero-img"
+                    src={serviceHeroBg}
+                    alt=""
+                    aria-hidden="true"
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                />
+                <div className="sp-hero-shade" aria-hidden="true" />
+                <div className="sp-inner sp-hero-content">
+                    <nav className="sp-crumbs" aria-label="Breadcrumb">
+                        <Link to="/">Home</Link>
+                        <span aria-hidden="true">/</span>
+                        <span aria-current="page">Services</span>
+                    </nav>
+                    <h1 id="sp-title" className="sp-title">Manufacturing services</h1>
+                    <p className="sp-lede">
+                        Laser cutting and CNC machining, plus the bending, hardware and finishing that go
+                        with them, all priced together in one order.
+                    </p>
 
-                <div className="container services-page-hero-content">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6 }}
-                        className="services-page-hero-intro"
-                    >
-                        {loading ? (
-                            <div className="services-page-hero-intro-skeleton">
-                                <div className="skeleton services-skeleton-badge" />
-                                <div className="skeleton services-skeleton-hero-title" />
-                                <div className="skeleton services-skeleton-hero-title short" />
-                                <div className="skeleton services-skeleton-hero-line" />
-                                <div className="skeleton services-skeleton-hero-line medium" />
-                                <div className="skeleton services-skeleton-hero-button" />
+                    <dl className="sp-stats" aria-busy={loading}>
+                        <div className="sp-stat">
+                            <dt>Services</dt>
+                            <dd>{stat(services.length)}</dd>
+                        </div>
+                        {(loading || processes.length > 0) && (
+                            <div className="sp-stat">
+                                <dt>Processes</dt>
+                                <dd>{stat(processes.length)}</dd>
                             </div>
-                        ) : (
-                            <>
-                                <motion.span {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.04 }} className="services-page-badge">
-                                    DMS Service Platform
-                                </motion.span>
-                                <motion.h1 {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.08 }}>
-                                    Full-Spectrum Manufacturing Services in One Workflow
-                                </motion.h1>
-                                <motion.p {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.12 }}>
-                                    Browse every production and finishing capability from one place. Configure parts with
-                                    clear options, practical limits, and reliable turnaround built for both prototypes and
-                                    production runs.
-                                </motion.p>
-                                <motion.div {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.16 }} className="services-page-hero-actions">
-                                    <Link to="/get-instant-pricing" className="services-page-btn primary">
-                                        Start Instant Pricing <ArrowRight size={18} />
-                                    </Link>
-                                </motion.div>
-                            </>
                         )}
-                    </motion.div>
+                        {(loading || processes.length > 0) && (
+                            <div className="sp-stat">
+                                <dt>Add-ons and finishes</dt>
+                                <dd>{stat(addOns.length)}</dd>
+                            </div>
+                        )}
+                    </dl>
 
-                    <motion.div
-                        className="services-page-hero-grid"
-                        variants={staggerContainer}
-                        initial="hidden"
-                        animate="visible"
-                    >
-                        {loading
-                            ? [...Array(6)].map((_, idx) => (
-                                <div key={`hero-skeleton-${idx}`} className="services-page-hero-card skeleton-card services-page-hero-card-skeleton">
-                                    <div className="services-page-hero-card-media skeleton" />
-                                    <div className="services-page-hero-card-text">
-                                        <div className="skeleton services-skeleton-title-line" />
-                                        <div className="skeleton services-skeleton-body-line" />
-                                        <div className="skeleton services-skeleton-body-line short" />
+                    <div className="sp-hero-actions">
+                        <Link to="/get-instant-pricing" className="sp-btn is-primary">
+                            Get instant pricing
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </Link>
+                        <Link to="/metals" className="sp-hero-link">Browse metals</Link>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Services ── */}
+            <section className="sp-catalog" aria-label="Services">
+                <div className="sp-inner">
+                    {loading ? (
+                        <div aria-hidden="true">
+                            <div className="sp-group-head">
+                                <span className="shimmer sp-sk-heading" />
+                            </div>
+                            <div className="sp-process-grid">
+                                {[0, 1].map(i => (
+                                    <div key={i} className="sp-process is-skeleton">
+                                        <span className="shimmer sp-process-media" />
+                                        <span className="sp-process-body">
+                                            <span className="shimmer sp-sk-line is-name" />
+                                            <span className="shimmer sp-sk-line" />
+                                            <span className="shimmer sp-sk-line is-short" />
+                                            <span className="sp-sk-chips">
+                                                <span className="shimmer sp-sk-chip" />
+                                                <span className="shimmer sp-sk-chip" />
+                                                <span className="shimmer sp-sk-chip" />
+                                            </span>
+                                        </span>
                                     </div>
-                                </div>
-                            ))
-                            : services.map((service) => (
-                                <motion.div key={service.id} variants={staggerItem}>
-                                    <Link to={`/service/${service.slug || service.id}`} className="services-page-hero-card">
-                                        <div className="services-page-hero-card-media">
-                                            {service.image ? (
-                                                <img src={service.image} alt={service.title} loading="lazy" decoding="async" />
-                                            ) : (
-                                                <div className="services-page-hero-card-fallback">
-                                                    <Layers3 size={18} />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="services-page-hero-card-text">
-                                            <h3>{service.title}</h3>
-                                            <p>{service.description}</p>
-                                        </div>
-                                    </Link>
-                                </motion.div>
-                            ))}
-                        {!loading && services.length === 0 && (
-                            <div className="services-page-empty">
-                                <h3>No services available right now</h3>
-                                <p>We could not load services from the API at this time. Please try again shortly.</p>
-                            </div>
-                        )}
-                    </motion.div>
-                </div>
-            </section>
-
-            <section className="services-page-section">
-                <div className="container services-page-process">
-                    {loading ? (
-                        <>
-                            <div className="services-page-section-head services-page-section-head-skeleton">
-                                <div className="skeleton services-skeleton-section-title" />
-                                <div className="skeleton services-skeleton-section-line" />
-                                <div className="skeleton services-skeleton-section-line medium" />
-                            </div>
-                            <div className="services-page-step-grid">
-                                {[...Array(4)].map((_, idx) => (
-                                    <article key={`step-skeleton-${idx}`} className="services-page-step-card skeleton-card">
-                                        <div className="skeleton services-skeleton-step-index" />
-                                        <div className="skeleton services-skeleton-step-title" />
-                                        <div className="skeleton services-skeleton-step-line" />
-                                        <div className="skeleton services-skeleton-step-line medium" />
-                                    </article>
                                 ))}
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <motion.div className="services-page-section-head" {...fadeInUp}>
-                                <h2>How Our Service Workflow Works</h2>
-                                <p>
-                                    The platform is built to reduce back-and-forth and make service selection clear from the
-                                    first upload to final delivery.
-                                </p>
-                            </motion.div>
-
-                            <motion.div className="services-page-step-grid" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
-                                {PROCESS_STEPS.map((step, idx) => (
-                                    <motion.article key={step.title} className="services-page-step-card" variants={staggerItem}>
-                                        <span className="services-page-step-index">0{idx + 1}</span>
-                                        <h3>{step.title}</h3>
-                                        <p>{step.description}</p>
-                                    </motion.article>
-                                ))}
-                            </motion.div>
-                        </>
-                    )}
-                </div>
-            </section>
-
-            <section className="services-page-section alt">
-                <div className="container services-page-value-wrap">
-                    {loading ? (
-                        <>
-                            <div className="services-page-value-copy skeleton-card">
-                                <div className="skeleton services-skeleton-value-title" />
-                                <div className="skeleton services-skeleton-value-title short" />
-                                <div className="skeleton services-skeleton-value-line" />
-                                <div className="skeleton services-skeleton-value-line medium" />
-                                <div className="skeleton services-skeleton-value-line short" />
-                                <div className="skeleton services-skeleton-value-line" />
-                                <div className="services-page-mini-pills">
-                                    <span className="skeleton services-skeleton-pill" />
-                                    <span className="skeleton services-skeleton-pill" />
-                                    <span className="skeleton services-skeleton-pill" />
-                                </div>
+                            <div className="sp-group-head is-second">
+                                <span className="shimmer sp-sk-heading" />
                             </div>
-                            <div className="services-page-pillar-panel skeleton-card">
-                                <div className="skeleton services-skeleton-pillar-title" />
-                                {[...Array(4)].map((_, idx) => (
-                                    <div key={`pillar-line-${idx}`} className="skeleton services-skeleton-pillar-line" />
+                            <div className="sp-addon-grid">
+                                {[0, 1, 2, 3].map(i => (
+                                    <div key={i} className="sp-addon is-skeleton">
+                                        <span className="shimmer sp-addon-media" />
+                                        <span className="sp-addon-body">
+                                            <span className="shimmer sp-sk-line is-name" />
+                                            <span className="shimmer sp-sk-line" />
+                                            <span className="shimmer sp-sk-line is-short" />
+                                        </span>
+                                    </div>
                                 ))}
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <motion.div className="services-page-value-copy" {...fadeInUp}>
-                                <h2>
-                                    <span className="services-page-inline-heading-icon"><Layers3 size={18} /></span>
-                                    Built for Teams That Need Speed and Repeatability
-                                </h2>
-                                <p>
-                                    From first article samples to repeat production, our services are designed to stay
-                                    consistent as your part count grows. You get predictable process control, clearer
-                                    manufacturing limits, and better coordination between cutting, machining, and finishing.
-                                </p>
-                                <p>
-                                    Every service is configured to work with real engineering constraints. That means fewer
-                                    surprises, faster approvals, and cleaner handoffs between design, procurement, and
-                                    manufacturing.
-                                </p>
-                                <div className="services-page-mini-pills">
-                                    <span><Clock3 size={14} /> Fast turnaround</span>
-                                    <span><ShieldCheck size={14} /> Reliable quality</span>
-                                    <span><CheckCircle2 size={14} /> Production ready</span>
-                                </div>
-                            </motion.div>
-
-                            <motion.div className="services-page-pillar-panel" {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.08 }}>
-                                <div className="services-page-pillar-header">
-                                    <ShieldCheck size={20} />
-                                    <h3>Quality and Delivery Pillars</h3>
-                                </div>
-                                <ul>
-                                    {QUALITY_PILLARS.map((item) => (
-                                        <li key={item}>
-                                            <CheckCircle2 size={16} />
-                                            <span>{item}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </motion.div>
-                        </>
-                    )}
-                </div>
-            </section>
-
-            <section className="services-page-section">
-                <div className="container">
-                    {loading ? (
-                        <div className="services-page-section-head services-page-section-head-skeleton">
-                            <div className="skeleton services-skeleton-section-title" />
-                            <div className="skeleton services-skeleton-section-line" />
-                            <div className="skeleton services-skeleton-section-line medium" />
+                        </div>
+                    ) : services.length === 0 ? (
+                        <div className="sp-empty">
+                            <h2 className="sp-empty-title">Services could not be loaded</h2>
+                            <p>Please refresh the page in a moment, or get a price straight away.</p>
+                            <Link to="/get-instant-pricing" className="sp-btn">Get instant pricing</Link>
                         </div>
                     ) : (
-                        <motion.div className="services-page-section-head" {...fadeInUp}>
-                            <h2>Explore Service Capabilities</h2>
-                            <p>
-                                Select any service to review detailed constraints, available options, and where it fits in
-                                your production plan.
-                            </p>
-                        </motion.div>
-                    )}
-
-                    <motion.div className="services-page-catalog" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
-                        {loading
-                            ? [...Array(6)].map((_, idx) => (
-                                <article key={`catalog-skeleton-${idx}`} className="services-page-catalog-item skeleton-card">
-                                    <div className="services-page-catalog-media skeleton" />
-                                    <div className="services-page-catalog-copy">
-                                        <div className="skeleton services-skeleton-catalog-title" />
-                                        <div className="skeleton services-skeleton-catalog-line" />
-                                        <div className="skeleton services-skeleton-catalog-line medium" />
-                                        <div className="skeleton services-skeleton-catalog-link" />
+                        <>
+                            {processes.length > 0 && (
+                                <>
+                                    <motion.div className="sp-group-head" {...reveal()}>
+                                        <h2 className="sp-group-title">Processes</h2>
+                                        <p className="sp-group-text">Every part starts with one of these.</p>
+                                    </motion.div>
+                                    <div className="sp-process-grid">
+                                        {processes.map((service, index) => {
+                                            const children = childrenOf(service);
+                                            return (
+                                                <motion.article key={service.id} className="sp-process" {...reveal(index * 0.06)}>
+                                                    <ThumbImage
+                                                        key={service.image_path}
+                                                        className="sp-process-media"
+                                                        src={service.image_path}
+                                                        fallback={staticImageFor(service)}
+                                                    />
+                                                    <div className="sp-process-body">
+                                                        <h3 className="sp-process-name">
+                                                            <Link to={linkTo(service)} className="sp-stretch">{service.title}</Link>
+                                                        </h3>
+                                                        {service.description && <p className="sp-process-desc">{service.description}</p>}
+                                                        {children.length > 0 && children.length === addOns.length && (
+                                                            <p className="sp-process-all">Works with every add-on and finish below.</p>
+                                                        )}
+                                                        {children.length > 0 && children.length < addOns.length && (
+                                                            <div className="sp-process-adds">
+                                                                <span className="sp-label">Add-ons</span>
+                                                                <ul className="sp-chips">
+                                                                    {children.map(child => (
+                                                                        <li key={child.id}>
+                                                                            <Link to={linkTo(child)} className="sp-chip">{child.title}</Link>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        <span className="sp-more" aria-hidden="true">
+                                                            View details
+                                                            <ArrowRight size={15} />
+                                                        </span>
+                                                    </div>
+                                                </motion.article>
+                                            );
+                                        })}
                                     </div>
-                                </article>
-                            ))
-                            : primaryServices.map((service) => (
-                                <motion.article key={service.id} className="services-page-catalog-item" variants={staggerItem}>
-                                    <div className="services-page-catalog-media">
-                                        {service.image ? (
-                                            <img src={service.image} alt={service.title} loading="lazy" decoding="async" />
-                                        ) : (
-                                            <div className="services-page-catalog-fallback">
-                                                <Layers3 size={18} />
-                                            </div>
+                                </>
+                            )}
+
+                            {addOns.length > 0 && (
+                                <>
+                                    <motion.div className={`sp-group-head${processes.length ? ' is-second' : ''}`} {...reveal()}>
+                                        <h2 className="sp-group-title">{processes.length ? 'Add-ons and finishes' : 'All services'}</h2>
+                                        {processes.length > 0 && (
+                                            <p className="sp-group-text">Added to a cut or machined part in the same order.</p>
                                         )}
-                                    </div>
-                                    <div className="services-page-catalog-copy">
-                                        <h3>{service.title}</h3>
-                                        <p>{service.description}</p>
-                                        <Link to={`/service/${service.slug || service.id}`} className="services-page-inline-link">
-                                            View Service Details <ArrowRight size={16} />
-                                        </Link>
-                                    </div>
-                                </motion.article>
-                            ))}
-                        {!loading && primaryServices.length === 0 && (
-                            <article className="services-page-catalog-item services-page-catalog-empty">
-                                <div className="services-page-catalog-copy">
-                                    <h3>Catalog temporarily unavailable</h3>
-                                    <p>Service data is currently unavailable from the API. Please check again shortly.</p>
-                                </div>
-                            </article>
-                        )}
+                                    </motion.div>
+                                    <ul className="sp-addon-grid">
+                                        {addOns.map((service, index) => {
+                                            const parents = worksWith(service);
+                                            return (
+                                                <motion.li key={service.id} className="sp-addon-item" {...reveal(Math.min(index, 8) * 0.04)}>
+                                                    <Link to={linkTo(service)} className="sp-addon">
+                                                        <ThumbImage
+                                                            key={service.image_path}
+                                                            className="sp-addon-media"
+                                                            src={service.image_path}
+                                                            fallback={staticImageFor(service)}
+                                                        />
+                                                        <div className="sp-addon-body">
+                                                            <h3 className="sp-addon-name">
+                                                                <span>{service.title}</span>
+                                                                <ArrowRight size={16} aria-hidden="true" />
+                                                            </h3>
+                                                            {service.description && <p className="sp-addon-desc">{service.description}</p>}
+                                                            {parents.length > 0 && (
+                                                                <p className="sp-addon-with">Works with {parents.join(', ')}</p>
+                                                            )}
+                                                        </div>
+                                                    </Link>
+                                                </motion.li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
+            </section>
+
+            {/* ── From file to part ── */}
+            <section className="sp-steps" aria-labelledby="sp-steps-title">
+                <div className="sp-inner">
+                    <motion.div className="sp-steps-head" {...reveal()}>
+                        <h2 id="sp-steps-title" className="sp-steps-title">From file to finished part</h2>
+                        <p className="sp-steps-text">Four steps, all online.</p>
                     </motion.div>
+                    <ol className="sp-step-list">
+                        {STEPS.map((step, index) => (
+                            <motion.li key={step.title} className="sp-step" {...reveal(index * 0.06)}>
+                                <span className="sp-step-num" aria-hidden="true">{index + 1}</span>
+                                <h3 className="sp-step-title">{step.title}</h3>
+                                <p className="sp-step-text">{step.description}</p>
+                            </motion.li>
+                        ))}
+                    </ol>
                 </div>
             </section>
 
-            <section className="services-page-section alt">
-                <motion.div className="container services-page-bottom-grid" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
-                    {loading ? [...Array(3)].map((_, idx) => (
-                        <article key={`info-skeleton-${idx}`} className="services-page-info-card skeleton-card">
-                            <div className="skeleton services-skeleton-info-icon" />
-                            <div className="skeleton services-skeleton-info-title" />
-                            <div className="skeleton services-skeleton-info-line" />
-                            <div className="skeleton services-skeleton-info-line medium" />
-                        </article>
-                    )) : (
-                        <>
-                            <motion.article className="services-page-info-card" variants={staggerItem}>
-                                <div className="services-page-info-icon">
-                                    <Clock3 size={20} />
-                                </div>
-                                <h3>Faster Time to Production</h3>
-                                <p>
-                                    Service bundling, clear constraints, and immediate option checks help teams move from
-                                    design intent to production-ready parts with less delay.
-                                </p>
-                            </motion.article>
-
-                            <motion.article className="services-page-info-card" variants={staggerItem}>
-                                <div className="services-page-info-icon">
-                                    <ShieldCheck size={20} />
-                                </div>
-                                <h3>Predictable Manufacturing Outcomes</h3>
-                                <p>
-                                    Consistent workflows help ensure your selected service stack aligns with process limits,
-                                    material realities, and production requirements.
-                                </p>
-                            </motion.article>
-
-                            <motion.article className="services-page-info-card" variants={staggerItem}>
-                                <div className="services-page-info-icon">
-                                    <Layers3 size={20} />
-                                </div>
-                                <h3>Flexible for Every Build Stage</h3>
-                                <p>
-                                    Whether you are validating prototypes or scaling order volume, the same service architecture
-                                    supports iterative builds and repeat orders.
-                                </p>
-                            </motion.article>
-                        </>
-                    )}
-                </motion.div>
-            </section>
-
-            <section className="services-page-cta">
-                <div className="container services-page-cta-box">
-                    {loading ? (
-                        <div className="services-page-cta-skeleton">
-                            <div className="skeleton services-skeleton-cta-title" />
-                            <div className="skeleton services-skeleton-cta-line" />
-                            <div className="skeleton services-skeleton-cta-line medium" />
-                            <div className="services-page-cta-actions">
-                                <div className="skeleton services-skeleton-cta-btn" />
-                                <div className="skeleton services-skeleton-cta-btn secondary" />
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <motion.h2 {...fadeInUp}>Ready to Configure Your Next Project?</motion.h2>
-                            <motion.p {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.06 }}>
-                                Pick your service path, validate manufacturability, and launch production with confidence.
-                            </motion.p>
-                            <motion.div className="services-page-cta-actions" {...fadeInUp} transition={{ ...fadeInUp.transition, delay: 0.12 }}>
-                                <Link to="/get-instant-pricing" className="services-page-btn primary">
-                                    Get Instant Pricing <ArrowRight size={18} />
-                                </Link>
-                                <Link to="/metals" className="services-page-btn secondary">
-                                    Explore Metals
-                                </Link>
-                            </motion.div>
-                        </>
-                    )}
-                </div>
-            </section>
         </div>
     );
 };

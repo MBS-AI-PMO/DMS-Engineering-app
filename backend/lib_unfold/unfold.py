@@ -29,7 +29,10 @@ from itertools import combinations
 from math import degrees, log10, pi, radians, sin, tan
 from operator import mul as multiply_operator
 from statistics import StatisticsError, mode
-from typing import Self
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 import FreeCAD
 import FreeCADGui
@@ -131,18 +134,39 @@ class EstimateThickness:
                     *[round(d, num_places) for d in adjusted_center]
                 )
                 key = (*cleaned_axis, *cleaned_center)
-                if key in curv_map:
-                    curv_map[key].append(face.Surface.Radius)
-                else:
-                    curv_map[key] = [
-                        face.Surface.Radius,
-                    ]
+                u_range = face.ParameterRange
+                arc_span = abs(float(u_range[1]) - float(u_range[0]))
+                curv_map.setdefault(key, []).append(
+                    (face.Surface.Radius, arc_span)
+                )
+        # Sharing an axis is NOT enough to make two cylinders the inner and
+        # outer face of one bend. A through-hole, a rounded end and a large
+        # corner fillet can all land on the same axis by coincidence, and their
+        # radius differences then outvote the real bends in the mode() below —
+        # on a 1.57 mm part that produced a 19 mm "thickness", which corrupts
+        # every bend allowance and therefore the whole flat pattern.
+        #
+        # The inner and outer surface of a genuine bend sweep the SAME arc, so
+        # require the spans to match before treating a pair as a bend.
+        #
+        # A genuine bend is also a PARTIAL arc — the sheet wraps part-way around
+        # the neutral axis (typically 30-180 deg, never a closed loop). Two
+        # concentric FULL circles are a counterbored hole, a boss/pilot stack or
+        # a pin, not a bend: on one perforated part a 9.525 mm counterbore over a
+        # 2.153 mm pilot (both 360 deg, repeated across every hole) produced a
+        # 7.37 mm "thickness" that outvoted the real 1.98 mm bends in mode()
+        # below. Both arcs matched, so the span-equality test alone let it pass —
+        # exclude near-closed circles so hole stacks can't be read as bends.
+        full_circle_min = radians(350.0)
         combined_list_of_thicknesses = [
             val
             for radset in curv_map.values()
             if len(radset) > 1
-            for r1, r2 in combinations(radset, 2)
-            if (val := abs(r1 - r2)) > eps
+            for (r1, span1), (r2, span2) in combinations(radset, 2)
+            if abs(span1 - span2) <= radians(2.0)
+            and span1 < full_circle_min
+            and span2 < full_circle_min
+            and (val := abs(r1 - r2)) > eps
         ]
         try:
             thickness_value = mode(combined_list_of_thicknesses)
@@ -153,7 +177,6 @@ class EstimateThickness:
     @staticmethod
     def from_face(shape: Part.Shape, selected_face: int) -> float:
         ref_face = shape.Faces[selected_face]
-        # find all planar faces that are parallel to the chosen face
         candidates = [
             f
             for f in shape.Faces
@@ -163,12 +186,25 @@ class EstimateThickness:
         ]
         if not candidates:
             return 0.0
-        opposite_face = sorted(candidates, key=lambda x: abs(x.Area - ref_face.Area))[0]
-        return abs(
-            opposite_face.valueAt(0, 0).distanceToPlane(
-                ref_face.Surface.Position, ref_face.Surface.Axis
+        ref_area = float(ref_face.Area or 0.0)
+        scored = []
+        for face in candidates:
+            distance = abs(
+                face.valueAt(0, 0).distanceToPlane(
+                    ref_face.Surface.Position, ref_face.Surface.Axis
+                )
             )
-        )
+            if distance <= eps:
+                continue
+            face_area = float(face.Area or 0.0)
+            area_similarity = 1.0 - (
+                abs(face_area - ref_area) / max(face_area, ref_area, 1e-6)
+            )
+            score = area_similarity - (distance * 0.001)
+            scored.append((score, distance))
+        if not scored:
+            return 0.0
+        return float(max(scored, key=lambda item: item[0])[1])
 
     @staticmethod
     def from_user_input() -> float:
@@ -222,14 +258,23 @@ class TangentFaces:
     @staticmethod
     def compare_cylinder_cylinder(c1: Part.Cylinder, c2: Part.Cylinder) -> bool:
         # returns True if the two cylinders have parallel axis' and those axis'
-        # are separated by a distance of approximately r1 + r2
-        return (
-            _vectors_parallel(c1.Axis, c2.Axis, eps_angular)
-            and abs(
-                c1.Center.distanceToLine(c2.Center, c2.Axis) - (c1.Radius + c2.Radius)
-            )
-            < eps
-        )
+        # are separated by a distance of approximately r1 + r2 (externally
+        # tangent, side by side) OR they are two patches of the SAME cylindrical
+        # surface (coincident axis line and equal radius).
+        #
+        # The same-surface case matters because STEP exporters routinely split a
+        # single bend into several co-cylindrical faces (e.g. a 90 deg bend cut
+        # into two 45 deg patches at a seam line). Without it, that seam reads as
+        # a tangent break: the unfold chain dead-ends at the first patch and every
+        # face past it — the terminal flange, the joggled foot — is dropped from
+        # the flat pattern. Only faces that already share an edge are compared, so
+        # unrelated coaxial features (e.g. holes on opposite walls) are unaffected.
+        if not _vectors_parallel(c1.Axis, c2.Axis, eps_angular):
+            return False
+        axis_distance = c1.Center.distanceToLine(c2.Center, c2.Axis)
+        if abs(axis_distance - (c1.Radius + c2.Radius)) < eps:
+            return True
+        return axis_distance < eps and abs(c1.Radius - c2.Radius) < eps
 
     @staticmethod
     def compare_plane_torus(p: Part.Plane, t: Part.Toroid) -> bool:
@@ -909,12 +954,31 @@ def unroll_cylinder(
     # FaceMaker classes to produce valid output. Running Part.sortEdges
     # fixes this.
     list_of_list_of_edges = Part.sortEdges(flattened_edges)
-    wires = [Part.Wire(x) for x in list_of_list_of_edges]
+    wires = []
+    closure_tolerance = max(1e-4, abs(thickness) * 0.05)
+    for edge_chain in list_of_list_of_edges:
+        wire = Part.Wire(edge_chain)
+        if not wire.isClosed() and len(wire.Vertexes) >= 2:
+            first_point = wire.Vertexes[0].Point
+            last_point = wire.Vertexes[-1].Point
+            if first_point.distanceToPoint(last_point) <= closure_tolerance:
+                edge_chain = list(edge_chain) + [Part.makeLine(last_point, first_point)]
+                wire = Part.Wire(edge_chain)
+        wires.append(wire)
     try:
         face = Part.makeFace(wires, "Part::FaceMakerBullseye")
-    except RuntimeError:
-        errmsg = "Failed to create unbent face from cylinder"
-        raise RuntimeError(errmsg) from None
+    except (RuntimeError, ValueError):
+        # Some STEP exporters split a cylindrical patch into open or
+        # numerically inconsistent trim wires. FaceMakerBullseye then fails with
+        # either a RuntimeError or a ValueError ("Wire is not closed") depending
+        # on the exact defect, so both must be caught. A true constant-radius
+        # sheet bend still unfolds to an exact rectangle: cylinder-axis length by
+        # neutral-axis bend allowance. Reconstruct that canonical face instead
+        # of rejecting the whole part or reusing folded model dimensions.
+        if overall_height <= 1e-6 or bend_allowance <= 1e-6:
+            errmsg = "Failed to create unbent face from cylinder"
+            raise RuntimeError(errmsg) from None
+        face = Part.makePlane(overall_height, bend_allowance)
     mirror_base_pos = Vector(overall_height / 2, bend_allowance / 2)
     # there are four possible orientations of the face corresponding to four
     # quadrants of the 2D plane. Whether flipping across the x/y/both axis is
@@ -966,22 +1030,81 @@ def compute_unbend_transform(
         errmsg = "Bend angle must be less that 359.9 degrees"
         raise RuntimeError(errmsg)
     bend_direction = BendDirection.from_face(bent_face)
-    # the reference edge should intersect with the bent cylindrical surface at
-    # either opposite corner of surface's uv-parameter range.
-    # We need to determine which of these possibilities is correct
+    # The shared (reference) edge runs axially along v at either u=umin or
+    # u=umax, and the bend must be flattened by rotating about whichever of
+    # those two u-boundaries it sits on.
+    #
+    # Historically the side was picked by testing the surface's parametric-box
+    # corners (valueAt(umin,vmin) etc.) against the edge. That is fragile: for
+    # non-rectangular parametric trims — routine with converted STEP files,
+    # corner relief, and mitered flanges — the reference edge is inset from the
+    # cylinder's v-extent, so NONE of the four corners land on it and unfolding
+    # aborts with "No point on reference edge".
+    #
+    # Instead, sample a point that is guaranteed to lie on the shared edge (and
+    # therefore on the bend surface) and project it back to the surface's
+    # u-parameter. That u-parameter identifies the correct boundary regardless
+    # of how the face is trimmed. Corner distances are retained only as a
+    # fallback for the rare case where the projection cannot be computed.
     first_corner_point = bent_face.valueAt(umin, vmin)
     second_corner_point = bent_face.valueAt(umax, vmin)
-    # at least one of these points should be on the starting edge
-    dist1 = first_corner_point.distanceToLine(
-        base_edge.Curve.Location, base_edge.Curve.Direction
+    dist1 = min(
+        base_edge.distToShape(Part.Vertex(first_corner_point))[0],
+        base_edge.distToShape(Part.Vertex(bent_face.valueAt(umin, vmax)))[0],
     )
-    dist2 = second_corner_point.distanceToLine(
-        base_edge.Curve.Location, base_edge.Curve.Direction
+    dist2 = min(
+        base_edge.distToShape(Part.Vertex(second_corner_point))[0],
+        base_edge.distToShape(Part.Vertex(bent_face.valueAt(umax, vmax)))[0],
     )
+
+    # Angular distance so the cylinder seam (u = 0 ≡ 2*pi) can't flip decisions.
+    period = 2.0 * pi
+
+    def _angular_gap(a, b):
+        gap = abs(a - b) % period
+        return min(gap, period - gap)
+
+    # Sample several points along the shared edge and project each back onto
+    # the bend surface. Every point on the shared edge must also lie on the
+    # bend surface, so a valid sample's u-parameter reveals which u-boundary
+    # the edge sits on — independent of how the face is trimmed. Voting across
+    # multiple samples tolerates a single noisy projection, and the on-surface
+    # check rejects a mislabeled edge that does not belong to this bend.
+    on_surface_tol = max(eps, 1e-4, radius * 1e-4)
+    forward_votes = 0
+    reverse_votes = 0
+    try:
+        first_p = base_edge.FirstParameter
+        last_p = base_edge.LastParameter
+        for frac in (0.2, 0.5, 0.8):
+            sample_point = base_edge.valueAt(first_p + frac * (last_p - first_p))
+            u_s, v_s = bent_face.Surface.parameter(sample_point)
+            if (
+                bent_face.Surface.value(u_s, v_s).sub(sample_point).Length
+                > on_surface_tol
+            ):
+                continue
+            if _angular_gap(u_s, umin) <= _angular_gap(u_s, umax):
+                forward_votes += 1
+            else:
+                reverse_votes += 1
+    except Exception:
+        forward_votes = reverse_votes = 0
+
+    if forward_votes or reverse_votes:
+        forward_orientation = forward_votes >= reverse_votes
+    elif dist1 < eps and dist1 <= dist2:
+        forward_orientation = True
+    elif dist2 < eps:
+        forward_orientation = False
+    else:
+        errmsg = "No point on reference edge"
+        raise RuntimeError(errmsg)
+
     # the x-axis of our desired reference is the tangent vector to a radial
     # line on the cylindrical surface, oriented away from the previous face.
     # We can compute candidates to choose from with the .tangent() method
-    if dist1 < eps:  # 'Forward' orientation
+    if forward_orientation:  # 'Forward' orientation
         tangent_vector, binormal_vector = bent_face.Surface.tangent(umin, vmin)
         y_axis = tangent_vector
         # use the normal of the face and not the surface here
@@ -999,7 +1122,7 @@ def compute_unbend_transform(
         else:
             lcs_base_point = corner_2
             uvref = UVRef.TOP_LEFT
-    elif dist2 < eps:  # 'Reverse' orientation
+    else:  # 'Reverse' orientation
         tangent_vector, binormal_vector = bent_face.Surface.tangent(umax, vmin)
         y_axis = tangent_vector.negative()
         z_axis = bent_face.normalAt(umax, vmin)
@@ -1012,9 +1135,6 @@ def compute_unbend_transform(
         else:
             lcs_base_point = corner_4
             uvref = UVRef.TOP_RIGHT
-    else:
-        errmsg = "No point on reference edge"
-        raise RuntimeError(errmsg)
     # note that the x-axis is ignored here based on the priority string
     lcs_rotation = Rotation(x_axis, y_axis, z_axis, "ZYX")
     alignment_transform = Placement(lcs_base_point, lcs_rotation).toMatrix()

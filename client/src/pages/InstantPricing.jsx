@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, X, Info, Layers, Box, Boxes, ChevronLeft,
   ChevronRight, ChevronDown, AlertCircle, AlertTriangle, Loader2, Check, Shield, Calculator,
-  Plus, Zap, TrendingDown, FileText, Settings, Grid
+  Plus, Zap, TrendingDown, FileText, Settings, Grid, ArrowRight
 } from 'lucide-react';
 import {
   fetchServices, calculatePrice, fetchPublicDiscounts, fetchHardwareItemsByType,
@@ -16,12 +16,15 @@ import { useCart } from '../context/CartContext.js';
 import { useToast } from '../context/ToastContext';
 import StepModelViewer from '../components/viewer/StepModelViewer';
 import DxfModelViewer from '../components/viewer/DxfModelViewer';
-import FlatPatternViewer from '../components/viewer/FlatPatternViewer';
+import CadFlatPatternViewer from '../components/viewer/CadFlatPatternViewer';
 import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
 import PricingSidebar from '../components/pricing/PricingSidebar';
-import { wrinkleSwatchStyle } from '../utils/wrinkleTexture';
+import HoleServiceDrawer from '../components/pricing/HoleServiceDrawer';
+import FinishColorDrawer from '../components/pricing/FinishColorDrawer';
+import { HARDWARE_TYPES, countersinkLabel, optionBlockedReason } from '../utils/holeFeatures';
 import { analyzeDxfFile } from '../utils/dxfAnalysis';
 import '../styles/PremiumPricing.css';
+import '../styles/InstantPricingWorkbench.css';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '') || '/api';
 const apiUrl = (path) => `${API_BASE_URL}${String(path || '').startsWith('/') ? path : `/${path}`}`;
@@ -36,13 +39,6 @@ const backendAssetUrl = (assetPath) => {
   if (cleaned.startsWith('uploads/')) return apiUrl(`/${cleaned}`);
   return `/${cleaned}`;
 };
-
-const HW_TYPES = [
-  { id: 3, label: 'Nut', color: '#B8860B', specs: (item) => [item.length && `T ${item.length}"`, item.base_width && `E ${item.base_width}"`] },
-  { id: 2, label: 'Flush Standoff', color: '#6366f1', specs: (item) => [item.length && `L ${item.length}"`] },
-  { id: 1, label: 'Flush Stud', color: '#059669', specs: (item) => [item.length && `L ${item.length}"`] },
-  { id: 4, label: 'Flush Nut', color: '#DC2626', specs: (item) => [item.length && `A ${item.length}"`, item.base_width && `H ${item.base_width}"`, item.shank && `Shank ${item.shank}"`] },
-];
 
 const is2DFile = (filename) => {
   const name = filename?.toLowerCase() ?? '';
@@ -90,6 +86,19 @@ const sumSegmentLengths = (flatEdgePoints = []) => {
   return total;
 };
 
+// The CAD engine's own measure of the cutting path: the outline plus every
+// cut-out, traced from the closed flat-pattern contours. The raw cut-edge sum
+// also counts seams inside the blank where two faces meet (a folded enclosure
+// read 7,813 mm for a 6,206 mm path), so it is only a fallback. An outline
+// that is just a bounding-box stand-in measures nothing.
+const measuredCutLengthMm = (backend) => {
+  const length = toFiniteNumber(backend?.totalCutLength);
+  if (!(length > 0)) return 0;
+  const contours = Array.isArray(backend?.contours) ? backend.contours : [];
+  if (contours.some(contour => String(contour?.source || '').includes('bbox_fallback'))) return 0;
+  return length;
+};
+
 const normalizePierceCount = (directCount, dxfCount, detectedHoleCount, subtractOuterProfile = false) => {
   const direct = Number.parseInt(directCount, 10);
   if (Number.isFinite(direct) && direct >= 0) {
@@ -102,6 +111,41 @@ const normalizePierceCount = (directCount, dxfCount, detectedHoleCount, subtract
   const holes = Number.parseInt(detectedHoleCount, 10);
   return Number.isFinite(holes) && holes > 0 ? holes : 0;
 };
+
+// One direction rule for every hole, so "Top" means the same side in the
+// configure drawer, the 3D view and the production cut: the axis points up
+// in the viewer (+Z) when it can, otherwise along +Y, otherwise +X.
+const canonicalHoleAxis = (axis) => {
+  if (!Array.isArray(axis) || axis.length < 3) return axis;
+  const [x, y, z] = axis.map(Number);
+  if (![x, y, z].every(Number.isFinite)) return axis;
+  const flip = Math.abs(z) >= 0.5
+    ? z < 0
+    : (Math.abs(y) >= Math.abs(x) ? y < 0 : x < 0);
+  return flip ? [-x || 0, -y || 0, -z || 0] : [x, y, z];
+};
+
+// Engine holes -> the page's hole records (positions on the 3D model).
+const mapEngineHoles = (holes, fallbackDepthIn) => (holes || []).map((h, idx) => ({
+  id: idx,
+  diameterInches: h.diameter_in,
+  diameter_mm: h.diameter_mm,
+  rim_diameter_mm: h.rim_diameter_mm || null,
+  depthMm: h.depth_mm || 0,
+  depthInches: h.depth_mm ? h.depth_mm / 25.4 : fallbackDepthIn,
+  position: h.position,
+  axis: canonicalHoleAxis(h.axis),
+  parent_face_id: h.face_id,
+}));
+
+// The full analysis lists holes twice: detectedHoles in the unfolded frame
+// (right for counting) and modelHoles where they sit on the 3D model (right
+// for placing taps and countersinks). Older results only have the first.
+const engineHolesForModel = (result) => (
+  Array.isArray(result?.modelHoles)
+    ? result.modelHoles
+    : (Array.isArray(result?.detectedHoles) ? result.detectedHoles : [])
+);
 
 const normalizeBooleanSetting = (value, fallback = true) => {
   if (typeof value === 'boolean') return value;
@@ -296,8 +340,11 @@ const deriveQuoteItem = (item, config = {}, allServices = []) => {
 
   const modelLenMm = toFiniteNumber(analysis.dimensions?.mm?.l);
   const modelWidMm = toFiniteNumber(analysis.dimensions?.mm?.w);
-  const flatWidth = currentIsStepFile ? toFiniteNumber(backend?.bbox?.width) : 0;
-  const flatHeight = currentIsStepFile ? toFiniteNumber(backend?.bbox?.height) : 0;
+  // The CAD worker reports the flat pattern's two spans as xSpan/ySpan. Its
+  // bbox.width is the shorter span and bbox.height is the sheet thickness, so
+  // they are only a fallback for results that carry no spans.
+  const flatWidth = currentIsStepFile ? toFiniteNumber(backend?.bbox?.xSpan ?? backend?.bbox?.width) : 0;
+  const flatHeight = currentIsStepFile ? toFiniteNumber(backend?.bbox?.ySpan ?? backend?.bbox?.height) : 0;
   const hasFlatSize = flatWidth > 0 && flatHeight > 0;
   const useFlatSize = currentIsStepFile && hasFlatSize;
   const lengthMm = useFlatSize ? Math.max(flatWidth, flatHeight) : modelLenMm;
@@ -326,6 +373,8 @@ const deriveQuoteItem = (item, config = {}, allServices = []) => {
   const perimeterMm = (() => {
     const direct = toFiniteNumber(backend?.totalPerimeter);
     if (direct > 0) return direct;
+    const measured = measuredCutLengthMm(backend);
+    if (measured > 0) return measured;
     const dxfPerimeter = toFiniteNumber(analysis.dxfTechData?.totalPerimeter);
     if (dxfPerimeter > 0) return dxfPerimeter;
     const edgePerimeter = sumSegmentLengths(backend?.cutEdges);
@@ -397,7 +446,7 @@ const buildPricingPayloadForQuoteItem = (item, config = {}, allServices = [], de
       };
     }),
     taps: Object.values(config.selectedTaps || {}).map(t => ({ name: t.name, price: t.price || 0 })),
-    hardware: Object.values(config.selectedHardware || {}).map(h => ({ name: h.item?.name, price: h.item?.price || 0 })),
+    hardware: Object.values(config.selectedHardware || {}).map(h => ({ id: h.item?.id ?? null, name: h.item?.name, price: h.item?.price || 0 })),
     countersinks: Object.values(config.selectedCountersinks || {}).map(cs => ({ name: cs.name, price: cs.price || 0 })),
     technical_data: info.pricingTechnicalData
   };
@@ -466,7 +515,8 @@ const InstantPricing = () => {
   const [sharedConfig, setSharedConfig] = useState(() => makeEmptyQuoteConfig());
   const [dimensions, setDimensions] = useState(null);
   const [viewMode, setViewMode] = useState('3d');
-  const [activeAxis, setActiveAxis] = useState('top');
+  // 'iso' is the angled front-right-top view a part opens with (as in Zamyr).
+  const [activeAxis, setActiveAxis] = useState('iso');
   const [unit, setUnit] = useState('mm'); // mm or inch
   const [dxfSvg, setDxfSvg] = useState(null);
   const [backendData, setBackendData] = useState(null);
@@ -486,7 +536,6 @@ const InstantPricing = () => {
   const [importProgress, setImportProgress] = useState(0);
   const [isGeneratingConfiguredPreview, setIsGeneratingConfiguredPreview] = useState(false);
   const [configuredPreviewUrl, setConfiguredPreviewUrl] = useState(null);
-  const [configuredHardwareResizeReport, setConfiguredHardwareResizeReport] = useState({});
   const [isQuoteFlowActive, setIsQuoteFlowActive] = useState(false);
   const [configStep, setConfigStep] = useState(0); // 0: Method, 1: Category, 2: Metal, 3: Thickness, 4: Services
   const [showServiceBreakdown, setShowServiceBreakdown] = useState(true);
@@ -534,8 +583,10 @@ const InstantPricing = () => {
   ), [selectedFileId, selectedFileTempPath, selectedFileName]);
   const [selectedAdditionalServices, setSelectedAdditionalServices] = useState([]);
   const [selectedFinishColors, setSelectedFinishColors] = useState({});
-  const [activeFinishSvcId, setActiveFinishSvcId] = useState(null);
-  const [isAnodizingModalOpen, setIsAnodizingModalOpen] = useState(false);
+  // The Finish color drawer: the finish service it is open for, and the color
+  // its pointer is over (shown on the 3D model only, never priced or cut).
+  const [finishDrawerSvcId, setFinishDrawerSvcId] = useState(null);
+  const [finishPreview, setFinishPreview] = useState(null);
   const activeFinishColor = useMemo(() => {
     // Priority order: Find any selected finish that has a color assigned
     const keys = Object.keys(selectedFinishColors);
@@ -558,16 +609,24 @@ const InstantPricing = () => {
     return selectedAdditionalServices.find(s => s.id?.toString() === activeFinishKey.toString())?.title?.toLowerCase().includes('powder coat');
   }, [selectedAdditionalServices, activeFinishKey]);
   const [selectedTaps, setSelectedTaps] = useState({});
-  const [activeTapHole, setActiveTapHole] = useState(null);
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedHardware, setSelectedHardware] = useState({});
-  const [activeHwHole, setActiveHwHole] = useState(null);
+  // The admin's hardware list, per hardware_types id (loaded when the
+  // Hardware service is switched on).
   const [hwItemsByType, setHwItemsByType] = useState({});
-  const [activeHwType, setActiveHwType] = useState(3);
-  const [expandedHwGroups, setExpandedHwGroups] = useState(new Set());
   const [selectedCountersinks, setSelectedCountersinks] = useState({});
-  const [activeCSHole, setActiveCSHole] = useState(null);
-  const [expandedCSGroups, setExpandedCSGroups] = useState(new Set());
+  // The Tapping / Countersinking / Hardware drawer ('tap' | 'cs' | 'hw' |
+  // null), the holes its pointer is over (lit on the 3D model) and the last
+  // hole clicked there.
+  const [holeDrawer, setHoleDrawer] = useState(null);
+  const [drawerHoverHoleIds, setDrawerHoverHoleIds] = useState(null);
+  const [pickedHole, setPickedHole] = useState({ id: null, seq: 0 });
+  // Taps, countersinks and hardware as last confirmed: the drawer's choices
+  // are copied here only while it is shut, so the server builds the real cut
+  // model once per Done instead of once per pick.
+  const [confirmedHoleCuts, setConfirmedHoleCuts] = useState({ taps: {}, sinks: {}, hardware: {} });
+  // The finish color as last confirmed, for the same reason: the cut model is
+  // built in that color, so it follows the Finish drawer's Done, not each pick.
+  const [confirmedFinishColor, setConfirmedFinishColor] = useState(activeFinishColor);
   const [isDetectingHoles, setIsDetectingHoles] = useState(false);
   const [detectedHoles, setDetectedHoles] = useState([]);
   const [allDiscounts, setAllDiscounts] = useState([]);
@@ -597,8 +656,11 @@ const InstantPricing = () => {
       ? backendData
       : null
   );
+  // The 2D view is ready once this file's unfold result is in. A flat part
+  // (no bends) has no bend tree, and waiting for one kept its flat pattern
+  // behind "will appear here after analysis" for good.
   const currentUnfoldReady = Boolean(
-    currentBackendData && bendTree
+    currentBackendData && (bendTree || currentBackendData.success === true)
   );
 
   useEffect(() => {
@@ -686,13 +748,11 @@ const InstantPricing = () => {
   }, []);
 
   const clearActiveTransientUi = useCallback(() => {
-    setActiveTapHole(null);
-    setActiveHwHole(null);
-    setActiveCSHole(null);
-    setActiveFinishSvcId(null);
-    setIsAnodizingModalOpen(false);
+    setHoleDrawer(null);
+    setDrawerHoverHoleIds(null);
+    setFinishDrawerSvcId(null);
+    setFinishPreview(null);
     setConfiguredPreviewUrl(null);
-    setConfiguredHardwareResizeReport({});
     setIsGeneratingConfiguredPreview(false);
     setIsDetectingHoles(false);
     setIsLoadingUnfold(false);
@@ -739,8 +799,10 @@ const InstantPricing = () => {
   }, [dimensions?.mm?.l, dimensions?.mm?.w]);
 
   const flatSize = useMemo(() => {
-    const width = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.width) : 0;
-    const height = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.height) : 0;
+    // xSpan/ySpan are the flat pattern's spans; bbox.width/height are only a
+    // fallback (on the current worker bbox.height is the sheet thickness).
+    const width = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.xSpan ?? currentBackendData?.bbox?.width) : 0;
+    const height = currentIsStep ? toFiniteNumber(currentBackendData?.bbox?.ySpan ?? currentBackendData?.bbox?.height) : 0;
     const hasSize = width > 0 && height > 0;
     return {
       width,
@@ -749,7 +811,13 @@ const InstantPricing = () => {
       min: hasSize ? Math.min(width, height) : 0,
       hasSize
     };
-  }, [currentIsStep, currentBackendData?.bbox?.width, currentBackendData?.bbox?.height]);
+  }, [
+    currentIsStep,
+    currentBackendData?.bbox?.xSpan,
+    currentBackendData?.bbox?.ySpan,
+    currentBackendData?.bbox?.width,
+    currentBackendData?.bbox?.height
+  ]);
 
   const thicknessResolution = useMemo(() => {
     if (currentIsStep && modelThicknessFrom2dMm > 0) {
@@ -824,6 +892,9 @@ const InstantPricing = () => {
     const direct = toFiniteNumber(currentBackendData?.totalPerimeter);
     if (direct > 0) return direct;
 
+    const measured = measuredCutLengthMm(currentBackendData);
+    if (measured > 0) return measured;
+
     const dxfPerimeter = toFiniteNumber(dxfTechData?.totalPerimeter);
     if (dxfPerimeter > 0) return dxfPerimeter;
 
@@ -833,7 +904,7 @@ const InstantPricing = () => {
     const l = toFiniteNumber(displayDimensions?.mm?.l);
     const w = toFiniteNumber(displayDimensions?.mm?.w);
     return l > 0 && w > 0 ? ((l + w) * 2) : 0;
-  }, [currentBackendData?.totalPerimeter, currentBackendData?.cutEdges, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
+  }, [currentBackendData, dxfTechData?.totalPerimeter, displayDimensions?.mm?.l, displayDimensions?.mm?.w]);
 
   const pierceCount = useMemo(() => {
     return normalizePierceCount(
@@ -1133,51 +1204,15 @@ const InstantPricing = () => {
   const stepHolesDetectedRef = useRef(false);
   const holeDetectionAttemptedRef = useRef(false);
   const qty1PriceRef = useRef(null);
+  // Each price request takes a number; only the newest one's reply is kept,
+  // so a slow older reply can never overwrite a newer price.
+  const priceRequestSeqRef = useRef(0);
   const detectHolesAbortRef = useRef(null);
-  const TAP_RANGE_TOLERANCE = 0.00025;
-
-  const holeGroups = useMemo(() => {
-    const groups = {};
-    detectedHoles.forEach(hole => {
-      const key = Number(hole.diameterInches || 0).toFixed(3);
-      if (!groups[key]) groups[key] = { dia: key, holes: [] };
-      groups[key].holes.push(hole);
-    });
-    return Object.values(groups).sort((a, b) => parseFloat(a.dia) - parseFloat(b.dia));
-  }, [detectedHoles]);
 
   const holeIndexById = useMemo(() => {
     const idx = {};
     detectedHoles.forEach((h, i) => { idx[h.id] = i + 1; });
     return idx;
-  }, [detectedHoles]);
-
-  const hwTypeById = useMemo(() => {
-    const m = {};
-    HW_TYPES.forEach(t => { m[t.id] = t; });
-    return m;
-  }, []);
-
-  const holeGroupsWithHwState = useMemo(() => {
-    return holeGroups.map(group => {
-      let assignedCount = 0;
-      group.holes.forEach(h => { if (selectedHardware[h.id]) assignedCount += 1; });
-      return {
-        ...group,
-        assignedCount,
-        allAssigned: assignedCount === group.holes.length,
-      };
-    });
-  }, [holeGroups, selectedHardware]);
-
-  const csHoleGroups = useMemo(() => {
-    const groups = {};
-    detectedHoles.forEach(h => {
-      const dia = Number(h.diameterInches || 0).toFixed(4);
-      if (!groups[dia]) groups[dia] = { dia, holes: [] };
-      groups[dia].holes.push(h);
-    });
-    return Object.values(groups).sort((a, b) => parseFloat(a.dia) - parseFloat(b.dia));
   }, [detectedHoles]);
 
   // Keep only assignments that still map to currently detected holes.
@@ -1201,10 +1236,6 @@ const InstantPricing = () => {
     setSelectedHardware(prev => pruneByHoleIds(prev));
     setSelectedCountersinks(prev => pruneByHoleIds(prev));
     setSelectedTaps(prev => pruneByHoleIds(prev));
-
-    setActiveHwHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
-    setActiveCSHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
-    setActiveTapHole(prev => (prev && validIds.has(String(prev.id)) ? prev : null));
   }, [detectedHoles]);
 
   const isTappingActive = useMemo(() =>
@@ -1221,31 +1252,38 @@ const InstantPricing = () => {
     [selectedAdditionalServices]
   );
 
-  const showHardwareFitLegend = useMemo(() => {
-    return isHardwareActive && viewMode === '3d' && Object.keys(selectedHardware || {}).length > 0;
-  }, [isHardwareActive, viewMode, selectedHardware]);
+  // The admin's active parts of the four kinds, in the order the drawer
+  // lists them; null until the lists have loaded.
+  const hwOptions = useMemo(() => {
+    if (!HARDWARE_TYPES.every(t => Array.isArray(hwItemsByType[t.id]))) return null;
+    return HARDWARE_TYPES.flatMap(t => hwItemsByType[t.id].filter(item => item && item.is_active !== false));
+  }, [hwItemsByType]);
 
   const selectedHardwareForPreview = useMemo(() => {
-    const entries = Object.entries(selectedHardware || {}).filter(([, hw]) => {
+    const entries = Object.entries(confirmedHoleCuts.hardware || {}).filter(([, hw]) => {
       const typeId = Number(hw?.typeId);
       return typeId === 1 || typeId === 2 || typeId === 3 || typeId === 4;
     });
     return Object.fromEntries(entries);
-  }, [selectedHardware]);
+  }, [confirmedHoleCuts]);
 
+  // The server builds a real cut model for the 3D view. While a configure
+  // drawer is open taps, countersinks and hardware are drawn straight onto
+  // the view as they are chosen; the cut model follows once it closes
+  // (Done), so the model reloads once per Done, not once per pick.
   const hasConfiguredCuts = useMemo(() => {
     return (
-      Object.keys(selectedCountersinks || {}).length > 0 ||
-      Object.keys(selectedTaps || {}).length > 0 ||
-      Object.keys(selectedHardwareForPreview || {}).length > 0
+      Object.keys(selectedHardwareForPreview || {}).length > 0 ||
+      Object.keys(confirmedHoleCuts.taps || {}).length > 0 ||
+      Object.keys(confirmedHoleCuts.sinks || {}).length > 0
     );
-  }, [selectedCountersinks, selectedTaps, selectedHardwareForPreview]);
+  }, [selectedHardwareForPreview, confirmedHoleCuts]);
 
   const configuredPreviewPayload = useMemo(() => {
     if (!selectedFile?.tempPath || !currentIsStep || !hasConfiguredCuts) return null;
 
-    const finishColor = activeFinishColor
-      ? (activeFinishColor?.color || activeFinishColor?.hex || (typeof activeFinishColor === 'string' ? activeFinishColor : null))
+    const finishColor = confirmedFinishColor
+      ? (confirmedFinishColor?.color || confirmedFinishColor?.hex || (typeof confirmedFinishColor === 'string' ? confirmedFinishColor : null))
       : null;
     const mmThickness = resolvedModelThicknessMm > 0
       ? Number(resolvedModelThicknessMm.toFixed(4))
@@ -1254,15 +1292,15 @@ const InstantPricing = () => {
     return {
       tempPath: selectedFile.tempPath,
       configuration: {
-        selectedTaps,
+        selectedTaps: confirmedHoleCuts.taps,
         selectedHardware: selectedHardwareForPreview,
-        selectedCountersinks,
+        selectedCountersinks: confirmedHoleCuts.sinks,
         thickness: mmThickness,
         dimensions: mmThickness ? { mm: { t: mmThickness } } : null,
         anodizingColor: finishColor ? { color: finishColor } : null,
       }
     };
-  }, [selectedFile?.tempPath, currentIsStep, hasConfiguredCuts, selectedTaps, selectedHardwareForPreview, selectedCountersinks, resolvedModelThicknessMm, selectedThicknessMM, activeFinishColor]);
+  }, [selectedFile?.tempPath, currentIsStep, hasConfiguredCuts, selectedHardwareForPreview, confirmedHoleCuts, resolvedModelThicknessMm, selectedThicknessMM, confirmedFinishColor]);
 
   const tapOptions = useMemo(() => {
     const tapSvc = allServices.find(s => s.title.toLowerCase().includes('tap'));
@@ -1275,8 +1313,144 @@ const InstantPricing = () => {
 
   const csOptions = useMemo(() => {
     const csSvc = allServices.find(s => s.title.toLowerCase().includes('countersink'));
-    return csSvc?.service_options || [];
+    let options = csSvc?.service_options || [];
+    if (typeof options === 'string') {
+      try { options = JSON.parse(options); } catch { options = []; }
+    }
+    return Array.isArray(options) ? options : [];
   }, [allServices]);
+
+  // The drawer belongs to the Services step of an open quote; it never
+  // lingers behind another step or once its service is switched off.
+  const activeHoleDrawer = (
+    isQuoteFlowActive
+    && configStep === 4
+    && (
+      (holeDrawer === 'tap' && isTappingActive)
+      || (holeDrawer === 'cs' && isCountersinkingActive)
+      || (holeDrawer === 'hw' && isHardwareActive)
+    )
+  ) ? holeDrawer : null;
+
+  // The Finish color drawer follows the same rule: the finish service it was
+  // opened for, only on the Services step and only while that service is on.
+  const activeFinishDrawerSvc = (
+    isQuoteFlowActive
+    && configStep === 4
+    && finishDrawerSvcId !== null
+  ) ? (selectedAdditionalServices.find(s => String(s.id) === String(finishDrawerSvcId)) || null) : null;
+
+  // While it is open the model shows the color under its pointer; prices and
+  // the cut model only ever see the chosen one.
+  const finishPreviewShown = activeFinishDrawerSvc && finishPreview ? finishPreview : null;
+  const viewerFinishColor = finishPreviewShown || activeFinishColor;
+  const viewerFinishIsPowder = finishPreviewShown
+    ? String(activeFinishDrawerSvc.title || '').toLowerCase().includes('powder coat')
+    : isFinishPowderCoating;
+
+  const closeFinishDrawer = useCallback(() => {
+    setFinishDrawerSvcId(null);
+    setFinishPreview(null);
+  }, []);
+
+  if (!activeFinishDrawerSvc && confirmedFinishColor !== activeFinishColor) {
+    setConfirmedFinishColor(activeFinishColor);
+  }
+
+  // One feature per hole (as SendCutSend does): a hole that is tapped,
+  // countersunk or carries hardware is locked in the other drawer, so an
+  // order can never pay for two features the cut can only make one of.
+  const lockedHolesForDrawer = useMemo(() => {
+    if (!activeHoleDrawer) return {};
+    const locks = {};
+    if (activeHoleDrawer !== 'hw') {
+      Object.entries(selectedHardware || {}).forEach(([id, hw]) => {
+        locks[id] = { kind: 'hw', label: 'Hardware', detail: hw?.item?.name || '' };
+      });
+    }
+    if (activeHoleDrawer !== 'cs') {
+      Object.entries(selectedCountersinks || {}).forEach(([id, cs]) => {
+        locks[id] = { kind: 'cs', label: 'Countersinking', detail: countersinkLabel(cs) };
+      });
+    }
+    if (activeHoleDrawer !== 'tap') {
+      Object.entries(selectedTaps || {}).forEach(([id, tap]) => {
+        locks[id] = { kind: 'tap', label: 'Tapping', detail: tap?.name || '' };
+      });
+    }
+    return locks;
+  }, [activeHoleDrawer, selectedHardware, selectedCountersinks, selectedTaps]);
+
+  // The x on a locked hole in the drawer takes the other feature off it, so
+  // the hole is free for this one (as SendCutSend does).
+  const unlockHoles = useCallback((holeIds, kind) => {
+    const drop = (prev) => {
+      const next = { ...(prev || {}) };
+      holeIds.forEach(id => { delete next[id]; });
+      return next;
+    };
+    if (kind === 'tap') setSelectedTaps(drop);
+    else if (kind === 'cs') setSelectedCountersinks(drop);
+    else if (kind === 'hw') setSelectedHardware(drop);
+  }, []);
+
+  const closeHoleDrawer = useCallback(() => {
+    setHoleDrawer(null);
+    setDrawerHoverHoleIds(null);
+  }, []);
+
+  if (!activeHoleDrawer && (
+    confirmedHoleCuts.taps !== selectedTaps
+    || confirmedHoleCuts.sinks !== selectedCountersinks
+    || confirmedHoleCuts.hardware !== selectedHardware
+  )) {
+    setConfirmedHoleCuts({ taps: selectedTaps, sinks: selectedCountersinks, hardware: selectedHardware });
+  }
+
+  const handleHolePick = useCallback((hole) => {
+    setPickedHole(prev => ({ id: hole?.id ?? null, seq: prev.seq + 1 }));
+  }, []);
+
+  // The part is made from the chosen stock, so that thickness decides which
+  // tap and countersink sizes can be made (see optionBlockedReason).
+  const holeSheetThicknessMm = selectedThicknessMM > 0 ? selectedThicknessMM : resolvedModelThicknessMm;
+
+  // When the sheet changes, sizes that no longer fit it are taken off their
+  // holes and the customer is told (state adjusted during render, as React
+  // recommends for state that follows a value; the message goes out after).
+  const [holeSheetSeen, setHoleSheetSeen] = useState(holeSheetThicknessMm);
+  const [holeSheetNotice, setHoleSheetNotice] = useState(null);
+  if (holeSheetThicknessMm !== holeSheetSeen) {
+    setHoleSheetSeen(holeSheetThicknessMm);
+    const keepFitting = (selections, kind) => {
+      const next = {};
+      let dropped = 0;
+      Object.entries(selections || {}).forEach(([holeId, sel]) => {
+        if (sel && optionBlockedReason(kind, sel, holeSheetThicknessMm)) dropped += 1;
+        else next[holeId] = sel;
+      });
+      return { next, dropped };
+    };
+    const taps = keepFitting(selectedTaps, 'tap');
+    const sinks = keepFitting(selectedCountersinks, 'cs');
+    if (taps.dropped > 0) setSelectedTaps(taps.next);
+    if (sinks.dropped > 0) setSelectedCountersinks(sinks.next);
+    if (taps.dropped + sinks.dropped > 0) {
+      const parts = [];
+      if (taps.dropped) parts.push(`${taps.dropped} tap${taps.dropped === 1 ? '' : 's'}`);
+      if (sinks.dropped) parts.push(`${sinks.dropped} countersink${sinks.dropped === 1 ? '' : 's'}`);
+      setHoleSheetNotice({
+        seq: (holeSheetNotice?.seq || 0) + 1,
+        text: `Removed ${parts.join(' and ')} that can't be made on the new sheet thickness.`,
+      });
+    }
+  }
+  const shownHoleSheetNoticeRef = useRef(0);
+  useEffect(() => {
+    if (!holeSheetNotice || holeSheetNotice.seq === shownHoleSheetNoticeRef.current) return;
+    shownHoleSheetNoticeRef.current = holeSheetNotice.seq;
+    toast(holeSheetNotice.text, 'info');
+  }, [holeSheetNotice, toast]);
 
   function handleProceedToReview() {
     handleAddAllToCart();
@@ -1286,7 +1460,7 @@ const InstantPricing = () => {
   useEffect(() => {
     const hwSvc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('hardware'));
     if (!hwSvc) return;
-    HW_TYPES.forEach(({ id }) => {
+    HARDWARE_TYPES.forEach(({ id }) => {
       if (hwItemsByType[id] !== undefined) return;
       fetchHardwareItemsByType(id)
         .then(items => setHwItemsByType(prev => ({ ...prev, [id]: items || [] })))
@@ -1421,7 +1595,7 @@ const InstantPricing = () => {
     setIsCalculatingPrice(item?.pricing?.status === 'calculating');
     clearActiveTransientUi();
     setViewMode(is2DFile(selectedFile.file?.name) ? '2d' : '3d');
-    setActiveAxis(is2DFile(selectedFile.file?.name) ? 'flat' : 'top');
+    setActiveAxis(is2DFile(selectedFile.file?.name) ? 'flat' : 'iso');
   }, [selectedFile, selectedFile?.id, applyQuoteConfigToUi, clearActiveTransientUi]);
 
   useEffect(() => {
@@ -1491,21 +1665,11 @@ const InstantPricing = () => {
   useEffect(() => {
     if (!selectedFile || !isStepFile(selectedFile.file.name)) return;
     if (backendData?.__fileKey !== selectedFileKey) return;
-    const backendHoles = Array.isArray(backendData?.detectedHoles) ? backendData.detectedHoles : [];
+    const backendHoles = engineHolesForModel(backendData);
     if (backendHoles.length === 0) return;
     const tMm = detectHolesContextRef.current.thicknessMm;
     const depthIn = tMm > 0 ? tMm / 25.4 : 2 / 25.4;
-    const mapped = backendHoles.map((h, idx) => ({
-      id: idx,
-      diameterInches: h.diameter_in,
-      diameter_mm: h.diameter_mm,
-      depthMm: h.depth_mm || 0,
-      depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
-      position: h.position,
-      axis: h.axis,
-      parent_face_id: h.face_id,
-    }));
-    setDetectedHoles(mapped);
+    setDetectedHoles(mapEngineHoles(backendHoles, depthIn));
     stepHolesDetectedRef.current = true;
     holeDetectionAttemptedRef.current = true;
     // If a fallback detect() is still in-flight, cancel it — we have real data.
@@ -1513,7 +1677,7 @@ const InstantPricing = () => {
       try { detectHolesAbortRef.current.abort(); } catch { /* noop */ }
       detectHolesAbortRef.current = null;
     }
-  }, [selectedFile, selectedFileKey, backendData?.__fileKey, backendData?.detectedHoles]);
+  }, [selectedFile, selectedFileKey, backendData]);
 
   // 2) Fire the direct /api/detect-holes fetch once per file. Depends ONLY on
   // selectedFile so no other state change can abort the in-flight request.
@@ -1556,17 +1720,7 @@ const InstantPricing = () => {
         if (stepHolesDetectedRef.current) return;
         const tMm = detectHolesContextRef.current.thicknessMm;
         const depthIn = tMm > 0 ? tMm / 25.4 : 2 / 25.4;
-        const mapped = (d.holes || []).map((h, idx) => ({
-          id: idx,
-          diameterInches: h.diameter_in,
-          diameter_mm: h.diameter_mm,
-          depthMm: h.depth_mm || 0,
-          depthInches: h.depth_mm ? h.depth_mm / 25.4 : depthIn,
-          position: h.position,
-          axis: h.axis,
-          parent_face_id: h.face_id,
-        }));
-        setDetectedHoles(mapped);
+        setDetectedHoles(mapEngineHoles(d.holes, depthIn));
         stepHolesDetectedRef.current = true;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -1591,21 +1745,15 @@ const InstantPricing = () => {
     };
   }, [selectedFile]);
 
-  // Open one sub-service modal (closes all others first)
+  // Open one sub-service drawer or modal (closes all others first)
   const openSubModal = (kind, svc) => {
-    setActiveTapHole(null);
-    setActiveHwHole(null);
-    setActiveCSHole(null);
-    setIsAnodizingModalOpen(false);
-    if (kind === 'tap') {
-      setActiveTapHole(detectedHoles[0]);
-    } else if (kind === 'hw') {
-      setActiveHwHole(detectedHoles[0]);
-    } else if (kind === 'cs') {
-      setActiveCSHole(detectedHoles[0]);
+    setHoleDrawer(null);
+    setFinishDrawerSvcId(null);
+    setFinishPreview(null);
+    if (kind === 'tap' || kind === 'cs' || kind === 'hw') {
+      setHoleDrawer(kind);
     } else if (kind === 'finish') {
-      if (svc) setActiveFinishSvcId(svc.id);
-      setIsAnodizingModalOpen(true);
+      if (svc) setFinishDrawerSvcId(svc.id);
     }
   };
 
@@ -1652,6 +1800,9 @@ const InstantPricing = () => {
     }
 
     const getEstimate = async () => {
+      const requestSeq = priceRequestSeqRef.current + 1;
+      priceRequestSeqRef.current = requestSeq;
+      const isLatest = () => requestSeq === priceRequestSeqRef.current;
       setIsCalculatingPrice(true);
       try {
         const thicknessValueIn = pricingThicknessInches > 0 ? pricingThicknessInches.toFixed(6) : null;
@@ -1699,6 +1850,7 @@ const InstantPricing = () => {
             price: t.price || 0
           })),
           hardware: Object.values(selectedHardware).map(h => ({
+            id: h.item?.id ?? null,
             name: h.item?.name,
             price: h.item?.price || 0
           })),
@@ -1709,6 +1861,7 @@ const InstantPricing = () => {
           technical_data: pricingTechnicalData
         };
         const res = await calculatePrice(payload);
+        if (!isLatest()) return;
         if (res.success) {
           setPriceEstimate({ ...res, __pricingKey: activePricingKey });
           // Anchor the Qty 1 price for cart subtotal transparency établissements
@@ -1723,6 +1876,7 @@ const InstantPricing = () => {
           setPriceEstimate(null);
         }
       } catch (err) {
+        if (!isLatest()) return;
         // Bounds mismatches are surfaced as card-level locks — swallow silently.
         const msg = String(err?.message || '');
         const isBoundsError = /exceeds max|is below min/i.test(msg);
@@ -1731,7 +1885,7 @@ const InstantPricing = () => {
         }
         setPriceEstimate(null);
       } finally {
-        setIsCalculatingPrice(false);
+        if (isLatest()) setIsCalculatingPrice(false);
       }
     };
 
@@ -1933,27 +2087,6 @@ const InstantPricing = () => {
     maxFiles: 10
   });
 
-  const renderUnitToggle = (className = '') => (
-    <div className={`ip-unit-toggle ${className}`.trim()} role="group" aria-label="Measurement unit">
-      <button
-        type="button"
-        className={`ip-unit-btn ${unit === 'mm' ? 'active' : ''}`}
-        aria-pressed={unit === 'mm'}
-        onClick={() => setUnit('mm')}
-      >
-        MM
-      </button>
-      <button
-        type="button"
-        className={`ip-unit-btn ${unit === 'inch' ? 'active' : ''}`}
-        aria-pressed={unit === 'inch'}
-        onClick={() => setUnit('inch')}
-      >
-        IN
-      </button>
-    </div>
-  );
-
   const formatRulePairMm = (xMm, yMm) => {
     const x = toFiniteNumber(xMm);
     const y = toFiniteNumber(yMm);
@@ -1991,7 +2124,9 @@ const InstantPricing = () => {
     const unfoldFileKey = getFileAnalysisKey(selectedFile) || 'unknown';
 
     // Only return early when the cached unfold result belongs to this file.
-    if (backendData?.__fileKey === unfoldFileKey && bendTree) return;
+    // A flat part's result has no bend tree; without the success check every
+    // finished result started a fresh unfold job (and a verify run) again.
+    if (backendData?.__fileKey === unfoldFileKey && (bendTree || backendData?.success === true)) return;
 
     // If the same file is already unfolding, avoid abort/restart loops that produce nginx 499.
     if (unfoldAbortControllerRef.current && unfoldRequestFileKeyRef.current === unfoldFileKey) {
@@ -2078,19 +2213,9 @@ const InstantPricing = () => {
         setBackendData(keyedBackendData); // Keep backendData for other compatibility
 
         const unfoldDepthIn = toFiniteNumber(d?.thickness) > 0 ? (toFiniteNumber(d.thickness) / 25.4) : (2 / 25.4);
-        const unfoldHoles = Array.isArray(d?.detectedHoles) ? d.detectedHoles : [];
+        const unfoldHoles = engineHolesForModel(d);
         if (unfoldHoles.length > 0) {
-          const mappedHoles = unfoldHoles.map((h, idx) => ({
-            id: idx,
-            diameterInches: h.diameter_in,
-            diameter_mm: h.diameter_mm,
-            depthMm: h.depth_mm || 0,
-            depthInches: h.depth_mm ? h.depth_mm / 25.4 : unfoldDepthIn,
-            position: h.position,
-            axis: h.axis,
-            parent_face_id: h.face_id,
-          }));
-          setDetectedHoles(mappedHoles);
+          setDetectedHoles(mapEngineHoles(unfoldHoles, unfoldDepthIn));
           stepHolesDetectedRef.current = true;
           holeDetectionAttemptedRef.current = true;
         }
@@ -2140,7 +2265,7 @@ const InstantPricing = () => {
           }
           if (node.children) node.children.forEach(flatten);
         };
-        flatten(d.bendTree);
+        if (d.bendTree) flatten(d.bendTree);
         setSelectedBends(initial);
         setDetectedBends(bendsList);
       }
@@ -2173,7 +2298,6 @@ const InstantPricing = () => {
       if (configurePreviewAbortRef.current) configurePreviewAbortRef.current.abort();
       configurePreviewKeyRef.current = '';
       setConfiguredPreviewUrl(null);
-      setConfiguredHardwareResizeReport({});
       setIsGeneratingConfiguredPreview(false);
       return;
     }
@@ -2205,12 +2329,6 @@ const InstantPricing = () => {
 
         if (seq !== configurePreviewSeqRef.current) return;
 
-        const nextResizeReport =
-          (data?.hardwareResizeReport && typeof data.hardwareResizeReport === 'object')
-            ? data.hardwareResizeReport
-            : {};
-        setConfiguredHardwareResizeReport(nextResizeReport);
-
         configurePreviewKeyRef.current = key;
         if (!data.previewPath) {
           setConfiguredPreviewUrl(null);
@@ -2223,7 +2341,6 @@ const InstantPricing = () => {
         console.error('Configured STEP preview error:', err);
         if (seq === configurePreviewSeqRef.current) {
           setConfiguredPreviewUrl(null);
-          setConfiguredHardwareResizeReport({});
         }
       } finally {
         if (seq === configurePreviewSeqRef.current) setIsGeneratingConfiguredPreview(false);
@@ -2465,7 +2582,12 @@ const InstantPricing = () => {
   };
 
   const showStepModelLoadingOverlay = currentIsStep && viewMode === '3d' && isStepModelLoading;
-  const showGlobalViewerOverlay = isDetectingHoles || isCalculatingPrice || isGeneratingConfiguredPreview || showStepModelLoadingOverlay;
+  // A price update never covers the model while a configure drawer is open:
+  // the drawer and the receipt show the price, the model shows each pick.
+  const showGlobalViewerOverlay = isDetectingHoles
+    || (isCalculatingPrice && !activeHoleDrawer && !activeFinishDrawerSvc)
+    || isGeneratingConfiguredPreview
+    || showStepModelLoadingOverlay;
   const globalOverlayTitle = showStepModelLoadingOverlay
     ? 'Importing 3D Model...'
     : isGeneratingConfiguredPreview
@@ -2746,31 +2868,38 @@ const InstantPricing = () => {
       ) : (
         <div className="qf-preview-container container-fluid p-0 h-100">
           {!isQuoteFlowActive ? (
-            <div className="ip-panel-layout">
+            <div className="ip-panel-layout ipw-layout">
 
-              {/* ── LEFT PANEL: File List ── */}
-              <div className="ip-left-panel">
-                <button type="button" className="ip-back-mini" onClick={() => navigate(-1)}>
-                  <ChevronLeft size={13} /> Back
+              {/* ── LEFT: files and the quote queue ── */}
+              <aside className="ip-left-panel ipw-files">
+                <button type="button" className="ipw-back" onClick={() => navigate(-1)}>
+                  <ChevronLeft size={15} /> Back
                 </button>
-                <div className="ip-left-topline">
-                  <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>
-                    Files <span style={{ background: '#f1f5f9', color: '#64748b', borderRadius: '4px', padding: '1px 5px', marginLeft: '4px' }}>{files.length}</span>
+                <div className="ipw-files-head">
+                  <span className="ipw-eyebrow">
+                    Files <span className="ipw-count">{files.length}</span>
                   </span>
-                  <button className="ip-clear-btn" onClick={() => { setFiles([]); setSelectedFile(null); setIsQuoteFlowActive(false); }}>Clear all</button>
+                  <button
+                    type="button"
+                    className="ipw-link-btn"
+                    onClick={() => { setFiles([]); setSelectedFile(null); setIsQuoteFlowActive(false); }}
+                  >
+                    Clear all
+                  </button>
                 </div>
-                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                <div className="ipw-file-list">
                   <AnimatePresence mode="popLayout">
                     {files.map(f => {
                       const queueRow = quoteQueueRows.find(row => row.id === f.id);
                       const status = queueRow?.status || 'Needs config';
-                      const statusColor = status === 'Ready'
-                        ? '#059669'
+                      const statusTone = status === 'Ready'
+                        ? 'ready'
                         : status === 'Error'
-                          ? '#dc2626'
+                          ? 'error'
                           : status === 'Calculating' || status === 'Analyzing'
-                            ? '#d97706'
-                            : '#64748b';
+                            ? 'busy'
+                            : 'idle';
+                      const isActiveFile = selectedFile?.id === f.id;
                       return (
                         <MotionDiv
                           layout
@@ -2778,111 +2907,156 @@ const InstantPricing = () => {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -12 }}
                           key={f.id}
-                          className={`ip-file-card ${selectedFile?.id === f.id ? 'active' : ''}`}
+                          className={`ipw-file-card${isActiveFile ? ' is-active' : ''}`}
                           onClick={() => selectQuoteFile(f)}
                         >
-                          <div className={`ip-file-icon ${selectedFile?.id === f.id ? 'active' : 'inactive'}`}>
-                            <FileText size={14} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.file.name}</div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 3 }}>
-                              <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                {f.file.name.split('.').pop().toUpperCase()}
-                              </span>
-                              <span style={{ fontSize: 8, fontWeight: 900, color: statusColor, background: `${statusColor}14`, border: `1px solid ${statusColor}30`, borderRadius: 999, padding: '1px 5px', textTransform: 'uppercase' }}>
-                                {status}
-                              </span>
-                              {f.customized && (
-                                <span style={{ fontSize: 8, fontWeight: 900, color: '#7c3aed', background: '#f3e8ff', border: '1px solid #ddd6fe', borderRadius: 999, padding: '1px 5px', textTransform: 'uppercase' }}>
-                                  Custom
-                                </span>
-                              )}
-                            </div>
+                          <span className="ipw-file-icon"><FileText size={15} /></span>
+                          <span className="ipw-file-main">
+                            <span className="ipw-file-name" title={f.file.name}>{f.file.name}</span>
+                            <span className="ipw-file-meta">
+                              <span className="ipw-file-ext">{f.file.name.split('.').pop().toUpperCase()}</span>
+                              <span className={`ipw-status is-${statusTone}`}>{status}</span>
+                              {f.customized && <span className="ipw-status is-custom">Custom</span>}
+                            </span>
                             {queueRow?.ready && (
-                              <div style={{ fontSize: 10, fontWeight: 900, color: '#0f172a', marginTop: 3 }}>
-                                ${queueRow.total.toFixed(2)}
-                              </div>
+                              <span className="ipw-file-price">${queueRow.total.toFixed(2)}</span>
                             )}
-                          </div>
-                          {selectedFile?.id === f.id
-                            ? <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={9} color="#fff" /></div>
-                            : <X size={13} color="#cbd5e1" style={{ flexShrink: 0, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); removeFile(f.id); }} />
-                          }
+                          </span>
+                          {isActiveFile ? (
+                            <span className="ipw-file-check" aria-hidden="true"><Check size={10} /></span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ipw-file-remove"
+                              aria-label={`Remove ${f.file.name}`}
+                              onClick={(e) => { e.stopPropagation(); removeFile(f.id); }}
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
                         </MotionDiv>
                       );
                     })}
                   </AnimatePresence>
                 </div>
                 <input {...getInputProps()} />
-                <button type="button" className="ip-add-btn" onClick={openFilePicker}>
-                  <Plus size={13} /> Add more files
+                <button type="button" className="ipw-add-btn" onClick={openFilePicker}>
+                  <Plus size={14} /> Add more files
                 </button>
-                <div style={{ marginTop: 10, padding: 10, border: '1.5px solid #e8eaed', borderRadius: 10, background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                <div className="ipw-queue">
+                  <div className="ipw-queue-top">
                     <div>
-                      <div style={{ fontSize: 9, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Quote Queue</div>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{queueReadyCount}/{files.length} ready</div>
+                      <span className="ipw-eyebrow">Quote queue</span>
+                      <strong>{queueReadyCount}/{files.length} ready</strong>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 9, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</div>
-                      <div style={{ fontSize: 15, fontWeight: 950, color: allQueueItemsReady ? '#059669' : '#0f172a' }}>${queueTotal.toFixed(2)}</div>
+                    <div className="ipw-queue-total">
+                      <span className="ipw-eyebrow">Total</span>
+                      <strong className={allQueueItemsReady ? 'is-ready' : ''}>${queueTotal.toFixed(2)}</strong>
                     </div>
                   </div>
-                  {!allQueueItemsReady && (
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', lineHeight: 1.35 }}>
-                      {queueBlockedReason}
-                    </div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {!allQueueItemsReady && <p className="ipw-queue-note">{queueBlockedReason}</p>}
+                  <div className="ipw-queue-actions">
                     <button
                       type="button"
+                      className="ipw-btn"
                       onClick={markActiveFileCustom}
                       disabled={!selectedFile || activeQuoteItem?.customized}
-                      style={{ border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 8, padding: '7px 8px', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', cursor: selectedFile && !activeQuoteItem?.customized ? 'pointer' : 'not-allowed', opacity: selectedFile && !activeQuoteItem?.customized ? 1 : 0.55 }}
                     >
                       Customize
                     </button>
                     <button
                       type="button"
+                      className="ipw-btn"
                       onClick={applyActiveConfigToAllFiles}
                       disabled={!selectedFile}
-                      style={{ border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 8, padding: '7px 8px', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', cursor: selectedFile ? 'pointer' : 'not-allowed', opacity: selectedFile ? 1 : 0.55 }}
                     >
-                      Apply All
+                      Apply all
                     </button>
                   </div>
                   <button
                     type="button"
+                    className="ipw-btn ipw-btn-primary"
                     onClick={handleAddAllToCart}
                     disabled={!allQueueItemsReady}
-                    style={{ border: 'none', background: allQueueItemsReady ? '#ef4444' : '#cbd5e1', color: '#fff', borderRadius: 8, padding: '10px 8px', fontSize: 11, fontWeight: 950, textTransform: 'uppercase', cursor: allQueueItemsReady ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    Add {files.length} to cart <ChevronRight size={13} />
+                    Add {files.length} to cart <ChevronRight size={14} />
                   </button>
                 </div>
-              </div>
+              </aside>
 
-              {/* ── CENTER PANEL: 3D Viewer ── */}
-              <div className="ip-center-panel">
-                <div className="ip-toolbar">
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <div className="ip-pill-toggle">
-                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('top'); } }}>3D View</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); setActiveAxis('flat'); }}>2D View</button>
+              {/* ── CENTRE: toolbar and viewer ── */}
+              <main className="ip-center-panel ipw-center">
+                <div className="ipw-toolbar">
+                  <div className="ipw-toolbar-left">
+                    {selectedFile && (
+                      <div className="ipw-file-chip" title={selectedFile.file.name}>
+                        <span className="ipw-file-chip-icon"><FileText size={15} /></span>
+                        <span className="ipw-file-chip-text">
+                          <strong>{selectedFile.file.name}</strong>
+                          <span>
+                            {selectedFile.file.name.split('.').pop().toUpperCase()}
+                            {' · '}
+                            {quoteQueueRows.find(row => row.id === selectedFile.id)?.status || 'Needs config'}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="ipw-toolbar-controls">
+                    <div className="ipw-seg" role="group" aria-label="View">
+                      <button
+                        type="button"
+                        className={viewMode === '3d' ? 'active' : ''}
+                        aria-pressed={viewMode === '3d'}
+                        onClick={() => { setViewMode('3d'); if (activeAxis === 'flat') { setActiveAxis('iso'); } }}
+                      >
+                        3D
+                      </button>
+                      <button
+                        type="button"
+                        className={viewMode === '2d' ? 'active' : ''}
+                        aria-pressed={viewMode === '2d'}
+                        onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); setActiveAxis('flat'); }}
+                      >
+                        2D
+                      </button>
                     </div>
-                    <div className="ip-pill-toggle">
-                      {['top', 'front', 'side', 'flat']
-                        .filter(ax => (viewMode === '3d' && ax !== 'flat') || (viewMode === '2d' && ax === 'flat'))
-                        .map(ax => (
-                          <button key={ax} className={`ip-axis-btn ${activeAxis === ax ? 'active' : ''}`} onClick={() => { setActiveAxis(ax); }}>{ax}</button>
+                    {viewMode === '3d' && currentIsStep && (
+                      <div className="ipw-seg ipw-seg-axis" role="group" aria-label="Camera view">
+                        {[['top', 'Top'], ['side', 'Side'], ['front', 'Front']].map(([axisKey, axisLabel]) => (
+                          <button
+                            key={axisKey}
+                            type="button"
+                            className={activeAxis === axisKey ? 'active' : ''}
+                            aria-pressed={activeAxis === axisKey}
+                            onClick={() => setActiveAxis(axisKey)}
+                          >
+                            {axisLabel}
+                          </button>
                         ))}
+                      </div>
+                    )}
+                    <div className="ipw-seg" role="group" aria-label="Measurement unit">
+                      <button
+                        type="button"
+                        className={unit === 'mm' ? 'active' : ''}
+                        aria-pressed={unit === 'mm'}
+                        onClick={() => setUnit('mm')}
+                      >
+                        mm
+                      </button>
+                      <button
+                        type="button"
+                        className={unit === 'inch' ? 'active' : ''}
+                        aria-pressed={unit === 'inch'}
+                        onClick={() => setUnit('inch')}
+                      >
+                        inch
+                      </button>
                     </div>
                   </div>
-                  {renderUnitToggle()}
                 </div>
-                {renderFileTabs()}
-                <div className="ip-viewer-frame qf-main-canvas">
+                <div className="ipw-stage">
 
 
                   {currentIsStep && viewMode === '3d' && (
@@ -2893,26 +3067,17 @@ const InstantPricing = () => {
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
                       selectedThicknessMm={selectedThicknessMM}
-                      activeFinishColor={activeFinishColor}
-                      isFinishPowderCoating={isFinishPowderCoating}
+                      activeFinishColor={viewerFinishColor}
+                      isFinishPowderCoating={viewerFinishIsPowder}
                       isModelFadedManually={isModelFadedManually}
                       detectedHoles={detectedHoles}
                       selectedTaps={selectedTaps}
-                      activeTapHole={activeTapHole}
-                      setActiveTapHole={setActiveTapHole}
+                      holeDrawerKind={activeHoleDrawer}
+                      highlightHoleIds={activeHoleDrawer ? drawerHoverHoleIds : null}
+                      onHolePick={handleHolePick}
                       selectedHardware={selectedHardware}
-                      hardwareResizeReport={configuredHardwareResizeReport}
                       selectedCountersinks={selectedCountersinks}
-                      showCountersinkMarkers={false}
-                      countersinkMarkerStyle="camouflage"
-                      isTappingActive={isTappingActive}
-                      isCountersinkingActive={isCountersinkingActive}
-                      isHardwareActive={isHardwareActive}
-                      tapOptions={tapOptions}
-                      csOptions={csOptions}
-                      hwItemsByType={hwItemsByType}
                       allServices={allServices}
-                      dimensions={displayDimensions || dimensions}
                       onDimensionsExtracted={setDimensions}
                       onProgress={handleStepViewerProgress}
                       onModelLoaded={handleStepViewerLoaded}
@@ -2920,25 +3085,25 @@ const InstantPricing = () => {
                   )}
                   {currentIsStep && viewMode === '2d' && (
                     currentUnfoldReady ? (
-                      <FlatPatternViewer
-                        backendData={currentBackendData}
-                        holes={detectedHoles}
+                      <CadFlatPatternViewer
+                        analysis={currentBackendData}
                       />
                     ) : (
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontWeight: 700, fontSize: 13 }}>
-                        {isLoadingUnfold ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                            <Loader2 size={64} style={{ color: '#ef4444', animation: 'spin 1.25s linear infinite' }} />
-                            <div style={{ marginTop: 10, fontSize: 20, fontWeight: 900, color: '#ef4444' }}>
-                              {`${Math.max(0, Math.min(100, Math.round(unfoldProgress)))}%`}
-                            </div>
-                            <div style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                              {unfoldStage || 'Generating 2D Flat Pattern...'}
-                            </div>
-                          </div>
-                        ) : (
-                          '2D flat pattern will appear here after analysis.'
-                        )}
+                      <div className="cad-viewer-empty ipw-pending" role="status" aria-live="polite">
+                        <div>
+                          {isLoadingUnfold ? (
+                            <>
+                              <span className="ipw-spinner" aria-hidden="true" />
+                              <strong>{`${Math.max(0, Math.min(100, Math.round(unfoldProgress)))}%`}</strong>
+                              <p>{unfoldStage || 'Generating the 2D flat pattern…'}</p>
+                            </>
+                          ) : (
+                            <>
+                              <strong>2D flat pattern</strong>
+                              <p>It appears here once the part has been analysed.</p>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )
                   )}
@@ -2946,8 +3111,8 @@ const InstantPricing = () => {
                     <DxfModelViewer
                       selectedFile={selectedViewerFile}
                       viewMode={viewMode}
-                      activeFinishColor={activeFinishColor}
-                      isFinishPowderCoating={isFinishPowderCoating}
+                      activeFinishColor={viewerFinishColor}
+                      isFinishPowderCoating={viewerFinishIsPowder}
                       selectedThickness={selectedThickness}
                       onDimensionsExtracted={setDimensions}
                       onHolesDetected={setDetectedHoles}
@@ -2958,46 +3123,30 @@ const InstantPricing = () => {
                   )}
 
                   {showGlobalViewerOverlay && (
-                    <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
-                      </div>
-                      {globalOverlayPercent !== null && Number.isFinite(globalOverlayPercent) && (
-                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#ef4444', marginTop: '10px' }}>
-                          {`${Math.max(0, Math.min(100, Math.round(globalOverlayPercent)))}%`}
-                        </div>
-                      )}
-                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                        {globalOverlayTitle}
+                    <div className="cad-viewer-empty ipw-pending ipw-busy" role="status" aria-live="polite">
+                      <div>
+                        <span className="ipw-spinner" aria-hidden="true" />
+                        {globalOverlayPercent !== null && Number.isFinite(globalOverlayPercent) && (
+                          <strong>{`${Math.max(0, Math.min(100, Math.round(globalOverlayPercent)))}%`}</strong>
+                        )}
+                        <p>{globalOverlayTitle}</p>
                       </div>
                     </div>
                   )}
-                  {showHardwareFitLegend && (
-                    <div className="ip-legend-card" style={{
-                      background: '#1e293b',
-                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
-                      boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>
-                        Red appears only when the original hole was larger than the required hardware bore.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {/* ── RIGHT PANEL: Model Details ── */}
-              <div className="ip-right-panel">
+                </div>
+              </main>
+
+              {/* ── RIGHT: model details ── */}
+              <div className="ip-right-panel ipw-details">
                 <PricingSidebar
                   selectedFile={selectedFile}
                   dimensions={displayDimensions}
                   unit={unit}
                   measurementMetrics={measurementMetrics}
+                  holeCount={currentIsStep ? detectedHoles.length : null}
+                  isDetectingHoles={isDetectingHoles}
+                  isFlatPending={currentIsStep && !useFlatSize && isLoadingUnfold}
                   dimensionSourceLabel={dimensionSourceLabel}
                   thicknessSourceLabel={thicknessSourceLabel}
                   selectedProductionService={selectedProductionService}
@@ -3030,11 +3179,6 @@ const InstantPricing = () => {
                   isCalculatingPrice={isCalculatingPrice}
                   allDiscounts={allDiscounts}
                   handleUnfold={handleUnfold}
-                  setIsAnodizingModalOpen={setIsAnodizingModalOpen}
-                  setActiveFinishSvcId={setActiveFinishSvcId}
-                  setActiveTapHole={setActiveTapHole}
-                  setActiveHwHole={setActiveHwHole}
-                  setActiveCSHole={setActiveCSHole}
                   handleProceedToReview={handleProceedToReview}
                   is2DFile={is2DFile}
                   isStepFile={isStepFile}
@@ -3044,27 +3188,47 @@ const InstantPricing = () => {
               </div>
             </div>
           ) : (
-            <div className="ip-panel-layout">
-              <div className="ip-qf-left">
-                <div className="ip-toolbar">
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <div className="ip-pill-toggle">
-                      <button className={`ip-pill-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D VIEW</button>
-                      <button className={`ip-pill-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); }}>2D FLAT</button>
-                    </div>
-                    <button className="ip-pill-btn" style={{ background: isModelFadedManually ? '#ef4444' : 'transparent', color: isModelFadedManually ? '#fff' : '#64748b', border: 'none' }} onClick={() => setIsModelFadedManually(!isModelFadedManually)}>FADE</button>
-                    {isCountersinkingActive && isGeneratingConfiguredPreview && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '3px 8px', fontSize: '10px', fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: 11 }}>⚙</span> Generating countersink cuts
-                      </div>
-                    )}
+            <div className="ip-panel-layout ipw-layout ipw-quote">
+              <div className="ip-qf-left ipw-q-left">
+                <div className="ipw-toolbar ipw-q-toolbar">
+                  <div className="ipw-toolbar-left">
+                    <button type="button" className="ipw-back" onClick={() => setIsQuoteFlowActive(false)}>
+                      <ChevronLeft size={15} /> Back to model
+                    </button>
                   </div>
-                  <button className="ip-back-btn" onClick={() => setIsQuoteFlowActive(false)}>
-                    <ChevronLeft size={13} /> BACK
-                  </button>
+                  <div className="ipw-toolbar-controls">
+                    <div className="ipw-seg" role="group" aria-label="View">
+                      <button
+                        type="button"
+                        className={viewMode === '3d' ? 'active' : ''}
+                        aria-pressed={viewMode === '3d'}
+                        onClick={() => setViewMode('3d')}
+                      >
+                        3D
+                      </button>
+                      <button
+                        type="button"
+                        className={viewMode === '2d' ? 'active' : ''}
+                        aria-pressed={viewMode === '2d'}
+                        onClick={() => { setViewMode('2d'); if (!currentUnfoldReady) handleUnfold(); }}
+                      >
+                        2D
+                      </button>
+                    </div>
+                    <div className="ipw-seg" role="group" aria-label="See through the part">
+                      <button
+                        type="button"
+                        className={isModelFadedManually ? 'active' : ''}
+                        aria-pressed={isModelFadedManually}
+                        onClick={() => setIsModelFadedManually(!isModelFadedManually)}
+                      >
+                        Fade
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 {renderFileTabs('compact')}
-                <div className="ip-qf-viewer" style={{ position: 'relative' }}>
+                <div className="ip-qf-viewer ipw-stage" style={{ position: 'relative' }}>
 
 
                   {currentIsStep && viewMode === '3d' ? (
@@ -3075,24 +3239,16 @@ const InstantPricing = () => {
                       activeAxis={activeAxis}
                       selectedThickness={selectedThickness}
                       selectedThicknessMm={selectedThicknessMM}
-                      activeFinishColor={activeFinishColor}
-                      isFinishPowderCoating={isFinishPowderCoating}
+                      activeFinishColor={viewerFinishColor}
+                      isFinishPowderCoating={viewerFinishIsPowder}
                       isModelFadedManually={isModelFadedManually}
                       detectedHoles={detectedHoles}
                       selectedTaps={selectedTaps}
-                      isTappingActive={isTappingActive}
-                      activeTapHole={activeTapHole}
-                      setActiveTapHole={setActiveTapHole}
+                      holeDrawerKind={activeHoleDrawer}
+                      highlightHoleIds={activeHoleDrawer ? drawerHoverHoleIds : null}
+                      onHolePick={handleHolePick}
                       selectedHardware={selectedHardware}
-                      hardwareResizeReport={configuredHardwareResizeReport}
-                      isHardwareActive={isHardwareActive}
-                      hwItemsByType={hwItemsByType}
                       selectedCountersinks={selectedCountersinks}
-                      showCountersinkMarkers={false}
-                      countersinkMarkerStyle="camouflage"
-                      csOptions={csOptions}
-                      isCountersinkingActive={isCountersinkingActive}
-                      dimensions={displayDimensions || dimensions}
                       allServices={allServices}
                       backendData={currentUnfoldReady ? currentBackendData : null}
                       onProgress={handleStepViewerProgress}
@@ -3101,25 +3257,25 @@ const InstantPricing = () => {
                   ) : null}
                   {currentIsStep && viewMode === '2d' && (
                     currentUnfoldReady ? (
-                      <FlatPatternViewer
-                        backendData={currentBackendData}
-                        holes={detectedHoles}
+                      <CadFlatPatternViewer
+                        analysis={currentBackendData}
                       />
                     ) : (
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontWeight: 700, fontSize: 13 }}>
-                        {isLoadingUnfold ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                            <Loader2 size={64} style={{ color: '#ef4444', animation: 'spin 1.25s linear infinite' }} />
-                            <div style={{ marginTop: 10, fontSize: 20, fontWeight: 900, color: '#ef4444' }}>
-                              {`${Math.max(0, Math.min(100, Math.round(unfoldProgress)))}%`}
-                            </div>
-                            <div style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                              {unfoldStage || 'Generating 2D Flat Pattern...'}
-                            </div>
-                          </div>
-                        ) : (
-                          '2D flat pattern will appear here after analysis.'
-                        )}
+                      <div className="cad-viewer-empty ipw-pending" role="status" aria-live="polite">
+                        <div>
+                          {isLoadingUnfold ? (
+                            <>
+                              <span className="ipw-spinner" aria-hidden="true" />
+                              <strong>{`${Math.max(0, Math.min(100, Math.round(unfoldProgress)))}%`}</strong>
+                              <p>{unfoldStage || 'Generating the 2D flat pattern…'}</p>
+                            </>
+                          ) : (
+                            <>
+                              <strong>2D flat pattern</strong>
+                              <p>It appears here once the part has been analysed.</p>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )
                   )}
@@ -3127,8 +3283,8 @@ const InstantPricing = () => {
                     <DxfModelViewer
                       selectedFile={selectedViewerFile}
                       viewMode={viewMode}
-                      activeFinishColor={activeFinishColor}
-                      isFinishPowderCoating={isFinishPowderCoating}
+                      activeFinishColor={viewerFinishColor}
+                      isFinishPowderCoating={viewerFinishIsPowder}
                       selectedThickness={selectedThickness}
                       onDimensionsExtracted={setDimensions}
                       onHolesDetected={setDetectedHoles}
@@ -3139,165 +3295,131 @@ const InstantPricing = () => {
                   )}
 
                   {showGlobalViewerOverlay && (
-                    <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)' }}>
-                      <Loader2 size={80} style={{ color: '#ef4444', animation: 'spin 1.5s linear infinite' }} />
-                      {globalOverlayPercent !== null && Number.isFinite(globalOverlayPercent) && (
-                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#ef4444', marginTop: '10px' }}>
-                          {`${Math.max(0, Math.min(100, Math.round(globalOverlayPercent)))}%`}
-                        </div>
-                      )}
-                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', marginTop: '24px', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                        {globalOverlayTitle}
-                      </div>
-                    </div>
-                  )}
-                  {showHardwareFitLegend && (
-                    <div className="ip-legend-card" style={{
-                      background: '#1e293b',
-                      padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
-                      boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>Hardware Fit</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 8px #dc262680' }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Red hardware: hole reduced to fit</span>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>
-                        Red appears only when the original hole was larger than the required hardware bore.
+                    <div className="cad-viewer-empty ipw-pending ipw-busy" role="status" aria-live="polite">
+                      <div>
+                        <span className="ipw-spinner" aria-hidden="true" />
+                        {globalOverlayPercent !== null && Number.isFinite(globalOverlayPercent) && (
+                          <strong>{`${Math.max(0, Math.min(100, Math.round(globalOverlayPercent)))}%`}</strong>
+                        )}
+                        <p>{globalOverlayTitle}</p>
                       </div>
                     </div>
                   )}
                 </div>
                 {displayDimensions && (
-                  <div className="ip-qf-dims">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>{unit === 'mm' ? 'Metric' : 'Imperial'} Dims</span>
-                      {renderUnitToggle('compact')}
+                  <div className="ip-qf-dims ipw-q-dims">
+                    <div className="ipw-q-dims-head">
+                      <span className="ipw-eyebrow">Part size</span>
+                      <div className="ipw-seg ipw-seg-sm" role="group" aria-label="Measurement unit">
+                        <button
+                          type="button"
+                          className={unit === 'mm' ? 'active' : ''}
+                          aria-pressed={unit === 'mm'}
+                          onClick={() => setUnit('mm')}
+                        >
+                          mm
+                        </button>
+                        <button
+                          type="button"
+                          className={unit === 'inch' ? 'active' : ''}
+                          aria-pressed={unit === 'inch'}
+                          onClick={() => setUnit('inch')}
+                        >
+                          inch
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                    <dl className="ipw-q-figures">
                       {[
-                        { label: 'L', key: 'l', color: '#3b82f6', bg: '#eff6ff' },
-                        { label: 'W', key: 'w', color: '#22c55e', bg: '#f0fdf4' },
-                        { label: 'T', key: 't', color: '#f97316', bg: '#fff7ed' },
-                      ].map(item => (
-                        <div key={item.key} style={{ background: item.bg, border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
-                          <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
-                          <div style={{ fontSize: '14px', fontWeight: 900, color: item.color, fontFamily: 'monospace', lineHeight: 1.2 }}>{unit === 'mm' ? displayDimensions.mm[item.key] : displayDimensions.inches[item.key]}</div>
+                        { label: 'Length', value: unit === 'mm' ? displayDimensions.mm.l : displayDimensions.inches.l, unit: unit === 'mm' ? 'mm' : 'in' },
+                        { label: 'Width', value: unit === 'mm' ? displayDimensions.mm.w : displayDimensions.inches.w, unit: unit === 'mm' ? 'mm' : 'in' },
+                        { label: 'Thickness', value: unit === 'mm' ? displayDimensions.mm.t : displayDimensions.inches.t, unit: unit === 'mm' ? 'mm' : 'in' },
+                        {
+                          label: 'Area',
+                          value: unit === 'mm' ? (measurementMetrics.areaMm2 / 100).toFixed(2) : (measurementMetrics.areaMm2 / (25.4 * 25.4)).toFixed(2),
+                          unit: unit === 'mm' ? 'cm²' : 'in²',
+                        },
+                        {
+                          label: 'Perimeter',
+                          value: unit === 'mm' ? measurementMetrics.perimeterMm.toFixed(2) : (measurementMetrics.perimeterMm / 25.4).toFixed(2),
+                          unit: unit === 'mm' ? 'mm' : 'in',
+                        },
+                        { label: 'Pierces', value: measurementMetrics.pierceCount, unit: '' },
+                      ].map((figure) => (
+                        <div key={figure.label}>
+                          <dt>{figure.label}</dt>
+                          <dd>
+                            {figure.value}
+                            {figure.unit ? <i>{figure.unit}</i> : null}
+                          </dd>
                         </div>
                       ))}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 6 }}>
-                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
-                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Area</div>
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>
-                          {unit === 'mm' ? (measurementMetrics.areaMm2 / 100).toFixed(2) : (measurementMetrics.areaMm2 / (25.4 * 25.4)).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'cm²' : 'in²'}</div>
-                      </div>
-                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
-                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Perimeter</div>
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>
-                          {unit === 'mm' ? measurementMetrics.perimeterMm.toFixed(2) : (measurementMetrics.perimeterMm / 25.4).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{unit === 'mm' ? 'mm' : 'in'}</div>
-                      </div>
-                      <div style={{ background: '#f8fafc', border: '1px solid #e8eaed', borderRadius: 8, padding: '8px 10px' }}>
-                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pierces</div>
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1.2 }}>{measurementMetrics.pierceCount}</div>
-                        <div style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>count</div>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>
-                      Size source: {dimensionSourceLabel} | Thickness source: {thicknessSourceLabel}
-                    </div>
+                    </dl>
+                    <p className="ipw-q-source">{dimensionSourceLabel} · {thicknessSourceLabel}</p>
                   </div>
                 )}
               </div>
 
-              <div className="ip-qf-mid" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-                {/* ── wizard Selection Header ──────────────── */}
-                <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                  {selectedProductionService && (
-                    <div className="ip-step-summary">
-                      <div className="label"><Zap size={10} /> METHOD</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="value">{selectedProductionService.title}</span>
-                        <button className="change-btn" onClick={() => { setConfigStep(0); setSelectedCategory(null); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
-                      </div>
-                    </div>
-                  )}
-                  {selectedCategory && (
-                    <div className="ip-step-summary">
-                      <div className="label"><Grid size={10} /> CATEGORY</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="value">{selectedCategory.name}</span>
-                        <button className="change-btn" onClick={() => { setConfigStep(1); setSelectedMetal(null); setSelectedThickness(null); }}>CHANGE</button>
-                      </div>
-                    </div>
-                  )}
-                  {selectedMetal && (
-                    <div className="ip-step-summary">
-                      <div className="label"><Box size={10} /> METAL</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="value">{selectedMetal.name}</span>
-                        <button className="change-btn" onClick={() => { setConfigStep(2); setSelectedThickness(null); }}>CHANGE</button>
-                      </div>
-                    </div>
-                  )}
-                  {selectedThickness && (
-                    <div className="ip-step-summary">
-                      <div className="label"><Layers size={10} /> THICKNESS</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="value">{selectedThicknessDisplay || selectedThickness}</span>
-                        <button className="change-btn" onClick={() => { setConfigStep(3); }}>CHANGE</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ padding: '24px 20px', flex: 1, overflowY: 'auto' }}>
-                  {/* ── Wizard Progress Stepper ── */}
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22, overflowX: 'auto', paddingBottom: 4 }}>
-                    {[
-                      { label: 'Method', num: 0 },
-                      { label: 'Category', num: 1 },
-                      { label: 'Material', num: 2 },
-                      { label: 'Thickness', num: 3 },
-                      { label: 'Services', num: 4 },
-                    ].map((s, i, arr) => {
-                      const done = configStep > s.num;
-                      const active = configStep === s.num;
-                      return (
-                        <React.Fragment key={s.num}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                            <div style={{
-                              width: 28, height: 28, borderRadius: '50%',
-                              background: done ? '#10b981' : active ? '#ef4444' : '#f1f5f9',
-                              border: `2px solid ${done ? '#10b981' : active ? '#ef4444' : '#e2e8f0'}`,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              transition: 'all 0.25s',
-                            }}>
-                              {done
-                                ? <Check size={13} color="#fff" strokeWidth={3} />
-                                : <span style={{ fontSize: 11, fontWeight: 900, color: active ? '#fff' : '#94a3b8' }}>{s.num + 1}</span>
-                              }
-                            </div>
-                            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', color: done ? '#10b981' : active ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>{s.label}</span>
-                          </div>
-                          {i < arr.length - 1 && (
-                            <div style={{ flex: 1, height: 2, background: done ? '#10b981' : '#e2e8f0', margin: '0 6px', marginBottom: 20, transition: 'background 0.3s', borderRadius: 2 }} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
+              <div className="ip-qf-mid ipw-q-mid">
+                <div className="ipw-q-body">
+                  <ol className="ipw-q-steps" aria-label="Quote steps">
+                    {(() => {
+                      // A step is done when its choice is made, and open once
+                      // every step before it is done. Moving between steps
+                      // keeps all choices; a pick only clears the later ones
+                      // when it actually changes (see each step's onClick).
+                      const chosen = [
+                        selectedProductionService?.title,
+                        selectedCategory?.name,
+                        selectedMetal?.name,
+                        selectedThickness ? (selectedThicknessDisplay || String(selectedThickness)) : null,
+                      ];
+                      return [
+                        { label: 'Method', num: 0 },
+                        { label: 'Category', num: 1 },
+                        { label: 'Material', num: 2 },
+                        { label: 'Thickness', num: 3 },
+                        { label: 'Services', num: 4 },
+                      ].map((s) => {
+                        const done = Boolean(chosen[s.num]);
+                        const active = configStep === s.num;
+                        const open = chosen.slice(0, s.num).every(Boolean);
+                        const marker = (
+                          <>
+                            <span className="ipw-q-step-num">{done && !active ? <Check size={12} strokeWidth={3} /> : s.num + 1}</span>
+                            <span className="ipw-q-step-label">{s.label}</span>
+                          </>
+                        );
+                        return (
+                          <li
+                            key={s.num}
+                            className={`ipw-q-step${done ? ' is-done' : ''}${active ? ' is-active' : ''}`}
+                            aria-current={active ? 'step' : undefined}
+                          >
+                            {open && !active ? (
+                              <button
+                                type="button"
+                                className="ipw-q-step-link"
+                                onClick={() => setConfigStep(s.num)}
+                                title={chosen[s.num] ? `${s.label}: ${chosen[s.num]}` : s.label}
+                                aria-label={chosen[s.num] ? `${s.label}: ${chosen[s.num]}` : s.label}
+                              >
+                                {marker}
+                              </button>
+                            ) : marker}
+                          </li>
+                        );
+                      });
+                    })()}
+                  </ol>
 
                   {configStep === 0 && (
                     <div className="wizard-screen">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 18 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select production method:</h2>
+                      <div className="ipw-step-head">
+                        <h2 className="ipw-step-title">Choose a production method</h2>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div className="ipw-option-list">
                         {allServices.filter(s => s.is_production).map(svc => {
                           const isActive = selectedProductionService?.id === svc.id;
                           const processFlags = getProcessFlags(svc.title);
@@ -3337,42 +3459,38 @@ const InstantPricing = () => {
                               className={`ip-wizard-card ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
                               onClick={() => {
                                 if (isLocked) return;
+                                if (selectedProductionService?.id !== svc.id) {
+                                  setSelectedCategory(null);
+                                  setSelectedMetal(null);
+                                  setSelectedThickness(null);
+                                }
                                 setSelectedProductionService(svc);
                                 setConfigStep(1);
                               }}
                             >
-                              <div style={{ display: 'flex', gap: 18 }}>
+                              <div className="ipw-option-body">
                                 <div className={`icon-box ${svc.title.toLowerCase().includes('cnc') ? 'blue' : 'red'}`}>
                                   {svc.title.toLowerCase().includes('cnc') ? <Box size={20} /> : <Zap size={20} />}
                                 </div>
-                                <div style={{ flex: 1 }}>
+                                <div className="ipw-option-main">
                                   <div className="ip-card-title-row">
                                     <div className="ip-card-title">{svc.title}</div>
                                     {isLocked && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fee2e2', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
-                                        <AlertCircle size={11} color="#ef4444" />
-                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Not Compatible</span>
-                                      </div>
+                                      <span className="ipw-tag is-danger"><AlertCircle size={12} />Not compatible</span>
                                     )}
                                     {!isLocked && isActive && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#dcfce7', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
-                                        <Check size={11} color="#16a34a" strokeWidth={3} />
-                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>Selected</span>
-                                      </div>
+                                      <span className="ipw-tag is-success"><Check size={12} strokeWidth={3} />Selected</span>
                                     )}
                                     {!isLocked && !isActive && processFlags.isCnc && isLaserBlockedByNonFlatFeatures && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#eff6ff', borderRadius: 6, padding: '3px 9px', flexShrink: 0 }}>
-                                        <Check size={11} color="#2563eb" strokeWidth={3} />
-                                        <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase' }}>Recommended</span>
-                                      </div>
+                                      <span className="ipw-tag is-info"><Check size={12} strokeWidth={3} />Recommended</span>
                                     )}
                                   </div>
-                                  <div className="ip-card-description" style={{ marginBottom: isLocked ? 8 : 14 }}>{svc.description || 'Precision production.'}</div>
+                                  <div className="ip-card-description">{svc.description || 'Precision production.'}</div>
                                   {isLocked && (
-                                    <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    <div className="ipw-lock-list">
                                       {lockReasons.map((reason, reasonIdx) => (
-                                        <div key={reasonIdx} style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                          <AlertTriangle size={12} color="#dc2626" />
+                                        <div key={reasonIdx} className="ipw-lock-reason">
+                                          <AlertTriangle size={13} />
                                           {reason}
                                         </div>
                                       ))}
@@ -3406,11 +3524,11 @@ const InstantPricing = () => {
 
                   {configStep === 1 && (
                     <div className="wizard-screen">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Category</h2>
-                        <div className="ip-badge outline">{allCategories.length} CATEGORIES</div>
+                      <div className="ipw-step-head">
+                        <h2 className="ipw-step-title">Choose a category</h2>
+                        <span className="ipw-step-meta">{allCategories.length} categories</span>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="ipw-option-list">
                         {allCategories.map(cat => {
                           const metalCount = allMetals.filter(m => m.category_id === cat.id).length;
                           const isAvailable = metalCount > 0;
@@ -3421,24 +3539,28 @@ const InstantPricing = () => {
                               className={`ip-category-bar ${isActive ? 'active' : ''} ${!isAvailable ? 'locked' : ''}`}
                               onClick={() => {
                                 if (!isAvailable) return;
+                                if (selectedCategory?.id !== cat.id) {
+                                  setSelectedMetal(null);
+                                  setSelectedThickness(null);
+                                }
                                 setSelectedCategory(cat);
                                 setConfigStep(2);
                               }}
                             >
                               <div className="icon-disc"><Grid size={16} /></div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>{cat.name}</div>
-                                  {!isAvailable && <div className="ip-badge outline" style={{ fontSize: 9 }}>Not Available</div>}
+                              <div className="ipw-option-main">
+                                <div className="ipw-option-title-row">
+                                  <div className="ipw-option-title">{cat.name}</div>
+                                  {!isAvailable && <span className="ipw-tag">Not available</span>}
                                 </div>
-                                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>{metalCount} {metalCount === 1 ? 'ITEM' : 'ITEMS'}</div>
+                                <div className="ipw-option-meta">{metalCount} {metalCount === 1 ? 'material' : 'materials'}</div>
                                 {!isAvailable && (
-                                  <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: '#dc2626' }}>
+                                  <div className="ipw-option-warn">
                                     Locked: no materials available in this category for the selected process.
                                   </div>
                                 )}
                               </div>
-                              {isAvailable && <ChevronRight size={18} color="#cbd5e1" />}
+                              {isAvailable && <ChevronRight size={18} className="ipw-option-chevron" />}
                             </div>
                           );
                         })}
@@ -3448,11 +3570,11 @@ const InstantPricing = () => {
 
                   {configStep === 2 && (
                     <div className="wizard-screen">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Material</h2>
-                        <div className="ip-badge outline">IN STOCK</div>
+                      <div className="ipw-step-head">
+                        <h2 className="ipw-step-title">Choose a material</h2>
+                        <span className="ipw-step-meta">In stock</span>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div className="ipw-option-list">
                         {(allMetals || []).filter(m => m.category_id === selectedCategory?.id).map(met => {
                           const isActive = selectedMetal?.id === met.id;
                           const dim = displayDimensions?.mm || { l: 0, w: 0, t: 0 };
@@ -3518,26 +3640,24 @@ const InstantPricing = () => {
                               className={`ip-wizard-card ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
                               onClick={() => {
                                 if (isLocked) return;
+                                if (selectedMetal?.id !== met.id) setSelectedThickness(null);
                                 setSelectedMetal(met);
                                 setConfigStep(3);
                               }}
                             >
-                              <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+                              <div className="ipw-option-body">
                                 <div className="icon-box green"><Box size={20} /></div>
-                                <div style={{ flex: 1 }}>
+                                <div className="ipw-option-main">
                                   <div className="ip-card-title-row">
                                     <div className="ip-card-title">{met.name}</div>
                                     {isLocked && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fee2e2', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
-                                        <AlertCircle size={10} color="#ef4444" />
-                                        <span style={{ fontSize: 9, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase' }}>Not Supported</span>
-                                      </div>
+                                      <span className="ipw-tag is-danger"><AlertCircle size={12} />Not supported</span>
                                     )}
                                   </div>
                                   {isLocked && (
-                                    <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                    <div className="ipw-lock-list">
                                       {lockReasons.map((reason, reasonIdx) => (
-                                        <div key={reasonIdx} style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, background: '#fff5f5', padding: '4px 8px', borderRadius: 5, border: '1px solid #fecaca' }}>{reason}</div>
+                                        <div key={reasonIdx} className="ipw-lock-reason"><AlertTriangle size={13} />{reason}</div>
                                       ))}
                                     </div>
                                   )}
@@ -3556,7 +3676,7 @@ const InstantPricing = () => {
                                     </div>
                                   </div>
                                 </div>
-                                {!isLocked && <ChevronRight size={20} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />}
+                                {!isLocked && <ChevronRight size={18} className="ipw-option-chevron" />}
                               </div>
                             </div>
                           );
@@ -3567,45 +3687,33 @@ const InstantPricing = () => {
 
                   {configStep === 3 && (
                     <div className="wizard-screen">
-                      <div style={{ marginBottom: 20 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Select Thickness</h2>
-                        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Choose the gauge for <strong>{selectedMetal?.name}</strong></p>
+                      <div className="ipw-step-head is-stacked">
+                        <h2 className="ipw-step-title">Choose a thickness</h2>
+                        <p className="ipw-step-sub">Choose the gauge for <strong>{selectedMetal?.name}</strong></p>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                      <div className="ipw-thick-grid">
                         {(selectedMetal?.quick_look?.thicknesses || []).map(t => {
                           const tMM = t.metric === 'mm' ? parseFloat(t.value) : parseFloat(t.value) * 25.4;
                           const modelTMM = resolvedModelThicknessMm;
                           const isMatch = modelTMM > 0 && Math.abs(tMM - modelTMM) < 0.15;
                           const isActive = selectedThickness === t.value;
                           return (
-                            <div
+                            <button
+                              type="button"
                               key={t.value}
-                              style={{
-                                background: isActive ? '#fff5f5' : '#ffffff',
-                                border: `1.5px solid ${isActive ? '#ef4444' : isMatch ? '#10b981' : '#e2e8f0'}`,
-                                borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
-                                transition: 'all 0.15s', position: 'relative',
-                                boxShadow: isActive ? '0 0 0 2px rgba(239,68,68,0.15)' : isMatch ? '0 0 0 2px rgba(16,185,129,0.12)' : 'none',
-                              }}
+                              className={`ipw-thick${isActive ? ' is-active' : ''}${isMatch ? ' is-match' : ''}`}
+                              aria-pressed={isActive}
                               onClick={() => { setSelectedThickness(t.value); setConfigStep(4); }}
                             >
-                              {isMatch && (
-                                <div style={{ position: 'absolute', top: 8, right: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '1px 5px', fontSize: 8, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                                  ≈ Model
-                                </div>
-                              )}
-                              <div style={{ fontSize: 22, fontWeight: 900, color: isActive ? '#ef4444' : '#1e293b', fontFamily: 'monospace', lineHeight: 1.1 }}>
-                                {t.metric === 'mm' ? `${parseFloat(t.value).toFixed(3)}` : parseFloat(t.value).toFixed(3)}"
-                              </div>
-                              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 3 }}>
+                              {isMatch && <span className="ipw-thick-match">Matches model</span>}
+                              <span className="ipw-thick-value">
+                                {t.metric === 'mm' ? `${parseFloat(t.value).toFixed(3)} mm` : `${parseFloat(t.value).toFixed(3)}"`}
+                              </span>
+                              <span className="ipw-thick-alt">
                                 {t.metric === 'mm' ? `${(tMM / 25.4).toFixed(3)}"` : `${tMM.toFixed(3)} mm`}
-                              </div>
-                              {t.gauge && (
-                                <div style={{ marginTop: 6, fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  {t.gauge}
-                                </div>
-                              )}
-                            </div>
+                              </span>
+                              {t.gauge && <span className="ipw-thick-gauge">{t.gauge}</span>}
+                            </button>
                           );
                         })}
                       </div>
@@ -3613,11 +3721,11 @@ const InstantPricing = () => {
                   )}
                   {configStep === 4 && (
                     <div className="wizard-screen">
-                      <div style={{ marginBottom: 20 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0 }}>Additional Services</h2>
-                        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Enhance your part with extra processes</p>
+                      <div className="ipw-step-head is-stacked">
+                        <h2 className="ipw-step-title">Additional services</h2>
+                        <p className="ipw-step-sub">Enhance your part with extra processes</p>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="ipw-option-list">
                         {allServices
                           .filter(s => {
                             if (!selectedMetal) return false;
@@ -3741,13 +3849,12 @@ const InstantPricing = () => {
 
                                     if (isActive) {
                                       setSelectedAdditionalServices(prev => prev.filter(s => s.id !== svc.id));
-                                      if (k === 'tap') { setSelectedTaps({}); setActiveTapHole(null); }
-                                      else if (k === 'hw') { setSelectedHardware({}); setActiveHwHole(null); }
-                                      else if (k === 'cs') { setSelectedCountersinks({}); setActiveCSHole(null); }
+                                      if (k === 'tap') { setSelectedTaps({}); setHoleDrawer(prev => (prev === 'tap' ? null : prev)); }
+                                      else if (k === 'hw') { setSelectedHardware({}); setHoleDrawer(prev => (prev === 'hw' ? null : prev)); }
+                                      else if (k === 'cs') { setSelectedCountersinks({}); setHoleDrawer(prev => (prev === 'cs' ? null : prev)); }
                                       else if (k === 'finish') {
                                         setSelectedFinishColors(prev => { const n = { ...prev }; delete n[svc.id]; return n; });
-                                        setIsAnodizingModalOpen(false);
-                                        setActiveFinishSvcId(null);
+                                        setFinishDrawerSvcId(prev => (String(prev) === String(svc.id) ? null : prev));
                                       }
                                     } else {
                                       setSelectedAdditionalServices(prev => [...prev, svc]);
@@ -3756,73 +3863,69 @@ const InstantPricing = () => {
                                   }}
                                 >
                                   <div className="icon-disc">{svcIcon}</div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                      <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>{svc.title}</div>
+                                  <div className="ipw-option-main">
+                                    <div className="ipw-option-title-row">
+                                      <div className="ipw-option-title">{svc.title}</div>
                                       {isUnsupported && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fee2e2', borderRadius: 4, padding: '2px 7px', flexShrink: 0 }}>
-                                          <AlertCircle size={9} color="#ef4444" />
-                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                                            {lockReason || 'Not Supported'}
-                                          </span>
-                                        </div>
+                                        <span className="ipw-tag is-danger"><AlertCircle size={11} />{lockReason || 'Not supported'}</span>
                                       )}
                                       {shouldShowPriceBadge && (
-                                        <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>
+                                        <span className="ipw-tag is-success">
                                           {priceBadgeLabel} ${displayServicePrice.toFixed(2)}
                                         </span>
                                       )}
                                     </div>
-                                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{svc.description || 'Professional finish.'}</div>
+                                    <div className="ipw-option-meta">{svc.description || 'Professional finish.'}</div>
                                   </div>
                                   {!isUnsupported && !isBendService && (
-                                    <div className={`selection-dot ${isActive ? 'active' : ''}`} style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isActive ? '#ef4444' : '#e2e8f0'}`, background: isActive ? '#ef4444' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+                                    <div className={`selection-dot ipw-check ${isActive ? 'active' : ''}`}>
                                       {isActive && <Check size={10} color="#fff" strokeWidth={3} />}
                                     </div>
                                   )}
                                 </div>
                                 {isActive && kind && !isUnsupported && (
-                                  <div style={{ marginTop: 6, marginBottom: 10, marginLeft: 12, marginRight: 12, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                                  <div className="ipw-svc-config">
+                                    <div className="ipw-svc-stats">
                                       {(kind === 'tap' || kind === 'hw' || kind === 'cs') && (
                                         <>
-                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Detected</span>
-                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{holeCount} hole{holeCount === 1 ? '' : 's'}</span>
+                                          <div className="ipw-svc-stat">
+                                            <span>Detected</span>
+                                            <span className="ipw-svc-value">{holeCount} hole{holeCount === 1 ? '' : 's'}</span>
                                           </div>
-                                          <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
-                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Configured</span>
-                                            <span style={{ fontSize: 14, fontWeight: 900, color: configuredCount > 0 ? '#059669' : '#94a3b8' }}>{configuredCount} / {totalForKind}</span>
+                                          <span className="ipw-svc-divider" aria-hidden="true" />
+                                          <div className="ipw-svc-stat">
+                                            <span>Configured</span>
+                                            <span className={`ipw-svc-value${configuredCount > 0 ? ' is-good' : ' is-muted'}`}>{configuredCount} / {totalForKind}</span>
                                           </div>
                                         </>
                                       )}
                                       {kind === 'bend' && (
                                         <>
-                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Bends</span>
-                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{bendList?.length || 0} detected</span>
+                                          <div className="ipw-svc-stat">
+                                            <span>Bends</span>
+                                            <span className="ipw-svc-value">{bendList?.length || 0} detected</span>
                                           </div>
-                                          <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
-                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Price</span>
-                                            <span style={{ fontSize: 14, fontWeight: 900, color: '#059669' }}>${bendDisplayPrice.toFixed(2)}</span>
+                                          <span className="ipw-svc-divider" aria-hidden="true" />
+                                          <div className="ipw-svc-stat">
+                                            <span>Price</span>
+                                            <span className="ipw-svc-value is-good">${bendDisplayPrice.toFixed(2)}</span>
                                           </div>
                                         </>
                                       )}
                                       {kind === 'finish' && (
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                          <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Color</span>
-                                          <span style={{ fontSize: 14, fontWeight: 900, color: selectedFinishColors?.[svc.id] ? '#059669' : '#94a3b8' }}>{selectedFinishColors?.[svc.id]?.name || 'Not selected'}</span>
+                                        <div className="ipw-svc-stat">
+                                          <span>Color</span>
+                                          <span className={`ipw-svc-value${selectedFinishColors?.[svc.id] ? ' is-good' : ' is-muted'}`}>{selectedFinishColors?.[svc.id]?.name || 'Not selected'}</span>
                                         </div>
                                       )}
                                     </div>
                                     {kind !== 'bend' && (
                                       <button
+                                        type="button"
+                                        className="ipw-btn ipw-btn-dark"
                                         onClick={(e) => { e.stopPropagation(); openSubModal(kind, svc); }}
-                                        style={{ border: 'none', background: '#1e293b', color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                                       >
-                                        {kind === 'finish' ? 'Pick Color' : 'Configure'}
+                                        {kind === 'finish' ? 'Pick color' : 'Configure'}
                                       </button>
                                     )}
                                   </div>
@@ -3836,8 +3939,7 @@ const InstantPricing = () => {
                 </div>
               </div>
 
-              <div className="ip-qf-right">
-                {/* ── Volume Discounts: fixed tiers (2, 10, 50, 100, 1000) ── */}
+              <div className="ip-qf-right ipw-q-right">
                 {(() => {
                   const ALLOWED_TIERS = [2, 5, 10, 50, 100, 1000];
                   const seen = new Set();
@@ -3847,36 +3949,35 @@ const InstantPricing = () => {
                     .sort((a, b) => a.min_quantity - b.min_quantity);
                   if (tiers.length === 0) return null;
                   return (
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 10 }}>Volume Discounts</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <section className="ipw-q-section">
+                      <h3 className="ipw-q-section-title">Volume discounts</h3>
+                      <ul className="ipw-q-tiers">
                         {tiers.map((d, i) => {
                           const reached = quantity >= d.min_quantity;
                           return (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 14px', borderRadius: 8, background: reached ? '#fff5f5' : '#ffffff', border: `1.5px solid ${reached ? '#fecaca' : '#e8eaed'}` }}>
-                              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{d.min_quantity}+ UNITS</span>
-                              <span style={{ fontSize: 13, fontWeight: 900, color: '#ef4444' }}>{parseFloat(d.discount_percent).toFixed(2)}% OFF</span>
-                            </div>
+                            <li key={i} className={reached ? 'is-reached' : ''}>
+                              <span>{d.min_quantity}+ units</span>
+                              <strong>{parseFloat(d.discount_percent).toFixed(2)}% off</strong>
+                            </li>
                           );
                         })}
-                      </div>
-                    </div>
+                      </ul>
+                    </section>
                   );
                 })()}
 
-                {/* ── Configuration Progress (before metal selected) ── */}
                 {!selectedMetal ? (
-                  <div>
-                    <h2 style={{ fontSize: 22, fontWeight: 900, color: '#1e293b', margin: '0 0 4px' }}>Quote Summary</h2>
-                    <p style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 28 }}>Configuration Progress</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  <section className="ipw-q-section">
+                    <h2 className="ipw-q-title">Quote summary</h2>
+                    <p className="ipw-q-sub">Your choices so far</p>
+                    <ol className="ipw-q-progress">
                       {[
-                        { label: 'Production Method', value: selectedProductionService?.title, step: 0 },
+                        { label: 'Production method', value: selectedProductionService?.title, step: 0 },
                         { label: 'Category', value: selectedCategory?.name, step: 1 },
                         { label: 'Material', value: selectedMetal?.name, step: 2 },
                         { label: 'Thickness', value: selectedThickness ? (selectedThicknessDisplay || String(selectedThickness)) : null, step: 3 },
-                        { label: 'Additional Services', value: configStep >= 4 ? `${selectedAdditionalServices.length} selected` : null, step: 4 },
-                      ].map((item, i, arr) => {
+                        { label: 'Additional services', value: configStep >= 4 ? `${selectedAdditionalServices.length} selected` : null, step: 4 },
+                      ].map((item, i) => {
                         const active = configStep === item.step;
                         const displayValue = item.step === 0 && selectedProductionService?.title ? selectedProductionService.title
                           : item.step === 1 && selectedCategory?.name ? selectedCategory.name
@@ -3885,36 +3986,25 @@ const InstantPricing = () => {
                                 : item.step === 4 && configStep >= 4 ? `${selectedAdditionalServices.length} selected`
                                   : null;
                         return (
-                          <div key={i} style={{ display: 'flex', gap: 14, position: 'relative', paddingBottom: i < arr.length - 1 ? 20 : 0 }}>
-                            {i < arr.length - 1 && (
-                              <div style={{ position: 'absolute', left: 9, top: 24, width: 2, height: 'calc(100% - 4px)', background: displayValue ? '#10b981' : '#e2e8f0', transition: 'background 0.3s' }} />
-                            )}
-                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: displayValue ? '#10b981' : active ? '#ef4444' : 'transparent', border: `2px solid ${displayValue ? '#10b981' : active ? '#ef4444' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1, transition: 'all 0.25s' }}>
-                              {displayValue && <Check size={10} color="#fff" strokeWidth={3} />}
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: displayValue ? '#1e293b' : '#94a3b8' }}>{item.label}</div>
-                              <div style={{ fontSize: 12, color: displayValue ? '#10b981' : '#cbd5e1', fontWeight: displayValue ? 700 : 500, marginTop: 1 }}>{displayValue || 'Pending Selection'}</div>
-                            </div>
-                          </div>
+                          <li key={i} className={`${displayValue ? 'is-done' : ''}${active ? ' is-active' : ''}`.trim() || undefined}>
+                            <span className="ipw-q-progress-dot" aria-hidden="true">
+                              {displayValue && <Check size={10} strokeWidth={3} />}
+                            </span>
+                            <span className="ipw-q-progress-text">
+                              <strong>{item.label}</strong>
+                              <small>{displayValue || 'Not chosen yet'}</small>
+                            </span>
+                          </li>
                         );
                       })}
-                    </div>
-                  </div>
+                    </ol>
+                  </section>
                 ) : (
-                  /* ── Full Quote Panel (after metal selected) ── */
-                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    {/* ORDER QUANTITY */}
-                    <div style={{ marginBottom: 28 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Order Quantity</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '58px minmax(0, 1fr) 58px', alignItems: 'center', minHeight: 58, border: '1.5px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                        <button
-                          type="button"
-                          onClick={() => changeQuantityBy(-1)}
-                          style={{ width: 58, height: 58, background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
-                          onMouseEnter={e => e.target.style.background = '#f8fafc'}
-                          onMouseLeave={e => e.target.style.background = 'transparent'}
-                        >−</button>
+                  <div className="ipw-q-panel">
+                    <section className="ipw-q-section">
+                      <h3 className="ipw-q-section-title">Quantity</h3>
+                      <div className="ipw-qty">
+                        <button type="button" aria-label="One fewer" onClick={() => changeQuantityBy(-1)}>−</button>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -3925,113 +4015,65 @@ const InstantPricing = () => {
                           onBlur={commitQuantityInput}
                           onKeyDown={handleQuantityInputKeyDown}
                           onFocus={event => event.target.select()}
-                          style={{ minWidth: 0, width: '100%', height: 58, border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontSize: 24, fontWeight: 900, color: '#1e293b', fontFamily: 'monospace', padding: '0 12px' }}
                         />
-                        <button
-                          type="button"
-                          onClick={() => changeQuantityBy(1)}
-                          style={{ width: 58, height: 58, background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.1s' }}
-                          onMouseEnter={e => e.target.style.background = '#f8fafc'}
-                          onMouseLeave={e => e.target.style.background = 'transparent'}
-                        >+</button>
+                        <button type="button" aria-label="One more" onClick={() => changeQuantityBy(1)}>+</button>
                       </div>
-                    </div>
+                    </section>
 
-                    {/* PART SNAPSHOT */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: 0, textTransform: 'uppercase', marginBottom: 12 }}>Part Snapshot</div>
-                      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#f8fafc' }}>
+                    <section className="ipw-q-section">
+                      <h3 className="ipw-q-section-title">Part</h3>
+                      <dl className="ipw-q-specs">
                         {[
+                          { label: 'File', value: selectedFile?.file?.name || 'No file selected' },
+                          { label: 'Material', value: selectedMetal?.name || 'Select material' },
+                          { label: 'Stock', value: selectedThicknessDisplay || selectedThickness || 'Select thickness' },
                           {
-                            icon: <FileText size={14} />,
-                            label: 'File',
-                            value: selectedFile?.file?.name || 'No file selected',
-                          },
-                          {
-                            icon: <Box size={14} />,
-                            label: 'Material',
-                            value: selectedMetal?.name || 'Select material',
-                          },
-                          {
-                            icon: <Layers size={14} />,
-                            label: 'Stock',
-                            value: selectedThicknessDisplay || selectedThickness || 'Select thickness',
-                          },
-                          {
-                            icon: <Grid size={14} />,
                             label: 'Size',
                             value: displayDimensions
-                              ? `${displayDimensions.mm.l} x ${displayDimensions.mm.w} x ${displayDimensions.mm.t} mm`
+                              ? `${displayDimensions.mm.l} × ${displayDimensions.mm.w} × ${displayDimensions.mm.t} mm`
                               : 'Analyzing geometry',
                           },
-                        ].map((row, index, rows) => (
-                          <div
-                            key={row.label}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '28px minmax(0, 1fr)',
-                              gap: 10,
-                              alignItems: 'center',
-                              padding: '12px 14px',
-                              borderBottom: index < rows.length - 1 ? '1px solid #e2e8f0' : 'none',
-                            }}
-                          >
-                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {row.icon}
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: 9, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 2 }}>{row.label}</div>
-                              <div style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={String(row.value || '')}>
-                                {row.value}
-                              </div>
-                            </div>
+                        ].map((row) => (
+                          <div key={row.label}>
+                            <dt>{row.label}</dt>
+                            <dd title={String(row.value || '')}>{row.value}</dd>
                           </div>
                         ))}
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+                      </dl>
+                      <div className="ipw-q-counts">
                         {[
-                          { label: 'Pierces', value: measurementMetrics.pierceCount, color: '#2563eb' },
-                          { label: 'Bends', value: bendCountTotal, color: bendCountTotal > 0 ? '#ef4444' : '#64748b' },
-                          { label: 'Services', value: quoteAdditionalServices.length, color: '#10b981' },
+                          { label: 'Pierces', value: measurementMetrics.pierceCount },
+                          { label: 'Bends', value: bendCountTotal },
+                          { label: 'Services', value: quoteAdditionalServices.length },
                         ].map(item => (
-                          <div key={item.label} style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: 10, padding: '11px 8px', textAlign: 'center', minWidth: 0 }}>
-                            <div style={{ fontSize: 17, fontWeight: 950, color: item.color, fontFamily: 'monospace', lineHeight: 1 }}>{item.value}</div>
-                            <div style={{ fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: 5, whiteSpace: 'nowrap' }}>{item.label}</div>
+                          <div key={item.label}>
+                            <strong>{item.value}</strong>
+                            <span>{item.label}</span>
                           </div>
                         ))}
                       </div>
-
-                      <div style={{ marginTop: 10, padding: '11px 12px', borderRadius: 10, background: isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#fff7ed' : '#ecfdf5', border: `1px solid ${isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#fed7aa' : '#bbf7d0'}`, display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <p className={`ipw-q-status${isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? ' is-busy' : ' is-ready'}`} role="status">
                         {isLoadingUnfold || isDetectingHoles || isCalculatingPrice
-                          ? <Loader2 size={14} className="animate-spin" style={{ color: '#f97316', flexShrink: 0 }} />
-                          : <Check size={14} style={{ color: '#10b981', flexShrink: 0 }} />
-                        }
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 10, fontWeight: 900, color: isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? '#c2410c' : '#047857', textTransform: 'uppercase', letterSpacing: '0.9px' }}>
-                            {isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? 'Analyzing quote' : 'Quote ready'}
-                          </div>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {dimensionSourceLabel} • {thicknessSourceLabel}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                          ? <span className="ipw-spinner is-inline" aria-hidden="true" />
+                          : <Check size={13} strokeWidth={3} aria-hidden="true" />}
+                        <span>{isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? 'Working out your quote…' : 'Quote ready'}</span>
+                      </p>
+                    </section>
 
-                    {/* PROJECT BREAKDOWN */}
-                    <div style={{ flex: 1 }} />
-                    <div style={{ background: '#1a1a2e', borderRadius: 16, padding: '22px 20px', color: '#fff', marginTop: 'auto' }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#64748b', marginBottom: 18 }}>Project Breakdown</div>
+                    <div className="ipw-geo-spacer" />
+
+                    <section className="ipw-q-receipt" aria-label="Price breakdown">
+                      <h3 className="ipw-q-section-title">Breakdown</h3>
 
                       {showServiceBreakdown && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Material Cost</div>
-                            {isCalculatingPrice && <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>Analysing part geometry...</div>}
-                          </div>
+                        <div className="ipw-q-line">
+                          <span>
+                            Material
+                            {isCalculatingPrice && <small>Working out the material…</small>}
+                          </span>
                           {isCalculatingPrice
-                            ? <div className="skeleton-price" style={{ width: 56, height: 18, borderRadius: 4 }} />
-                            : <span style={{ fontSize: 14, fontWeight: 900, color: '#fff' }}>${(((priceEstimate?.breakdown?.material_cost ?? 0) * quantity) || 0).toFixed(2)}</span>
+                            ? <span className="skeleton-price ipw-q-skel" />
+                            : <strong>${(((priceEstimate?.breakdown?.material_cost ?? 0) * quantity) || 0).toFixed(2)}</strong>
                           }
                         </div>
                       )}
@@ -4040,27 +4082,21 @@ const InstantPricing = () => {
                         if (!showServiceBreakdown) return null;
                         const rows = priceEstimate?.breakdown?.service_breakdown || [];
                         if (rows.length === 0) return null;
-                        return (
-                          <div style={{ paddingBottom: 12 }}>
-                            {rows.map((r, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                                <div>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>{r.name}</div>
-                                </div>
-                                {isCalculatingPrice
-                                  ? <div className="skeleton-price" style={{ width: 48, height: 14, borderRadius: 4 }} />
-                                  : (
-                                    <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>
-                                      ${((r.pricing_mode === 'fixed_total'
-                                        ? (parseFloat(r.price) || 0)
-                                        : ((parseFloat(r.price) || 0) * quantity)) || 0).toFixed(2)}
-                                    </span>
-                                  )
-                                }
-                              </div>
-                            ))}
+                        return rows.map((r, i) => (
+                          <div key={i} className="ipw-q-line">
+                            <span>{r.name}</span>
+                            {isCalculatingPrice
+                              ? <span className="skeleton-price ipw-q-skel" />
+                              : (
+                                <strong>
+                                  ${((r.pricing_mode === 'fixed_total'
+                                    ? (parseFloat(r.price) || 0)
+                                    : ((parseFloat(r.price) || 0) * quantity)) || 0).toFixed(2)}
+                                </strong>
+                              )
+                            }
                           </div>
-                        );
+                        ));
                       })()}
 
                       {(() => {
@@ -4070,66 +4106,99 @@ const InstantPricing = () => {
                         ]));
                         if (warnings.length === 0) return null;
                         return (
-                          <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 10 }}>
-                            <div style={{ fontSize: 10, fontWeight: 800, color: '#fdba74', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Quote Warnings</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div className="ipw-q-warnings" role="note">
+                            <strong>Please note</strong>
+                            <ul>
                               {warnings.map((warning, index) => (
-                                <div key={`${warning}-${index}`} style={{ fontSize: 11, fontWeight: 700, color: '#fed7aa', lineHeight: 1.5 }}>
-                                  {warning}
-                                </div>
+                                <li key={`${warning}-${index}`}>{warning}</li>
                               ))}
-                            </div>
+                            </ul>
                           </div>
                         );
                       })()}
 
-                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4 }} />
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                          Gross Total
-                        </span>
+                      <div className="ipw-q-line is-gross">
+                        <span>Gross total</span>
                         {isCalculatingPrice
-                          ? <div className="skeleton-price" style={{ width: 78, height: 16, borderRadius: 4 }} />
-                          : <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>
-                            ${(parseFloat(priceEstimate?.breakdown?.subtotal_before_discount || 0)).toFixed(2)}
-                          </span>
+                          ? <span className="skeleton-price ipw-q-skel" />
+                          : <strong>${(parseFloat(priceEstimate?.breakdown?.subtotal_before_discount || 0)).toFixed(2)}</strong>
                         }
                       </div>
 
                       {priceEstimate?.breakdown?.discount_percent > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '9px 12px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.28)', borderRadius: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', textTransform: 'uppercase' }}>
-                            Discount Applied ({parseFloat(priceEstimate?.breakdown?.discount_percent || 0).toFixed(2)}%)
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: '#d1fae5' }}>
-                            -${(parseFloat(priceEstimate?.breakdown?.discount_amount || 0)).toFixed(2)}
-                          </span>
+                        <div className="ipw-q-line is-discount">
+                          <span>Discount ({parseFloat(priceEstimate?.breakdown?.discount_percent || 0).toFixed(2)}%)</span>
+                          <strong>−${(parseFloat(priceEstimate?.breakdown?.discount_amount || 0)).toFixed(2)}</strong>
                         </div>
                       )}
 
-                      <div style={{ marginTop: 16, marginBottom: 18 }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 }}>Discounted Total</div>
+                      <div className="ipw-q-total">
+                        <span>Total</span>
                         {isCalculatingPrice
-                          ? <div className="skeleton-price" style={{ width: 130, height: 32, borderRadius: 6 }} />
-                          : <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                            $ {(parseFloat(priceEstimate?.total_price) || 0).toFixed(2)}
-                          </div>
+                          ? <span className="skeleton-price ipw-q-skel is-lg" />
+                          : <strong>${(parseFloat(priceEstimate?.total_price) || 0).toFixed(2)}</strong>
                         }
                       </div>
 
                       <button
-                        className="ip-proceed-btn"
-                        style={{ background: '#ef4444', marginTop: 0 }}
+                        type="button"
+                        className="ipw-proceed"
                         onClick={handleProceedToReview}
                         disabled={!priceEstimate}
                       >
-                        PROCEED TO REVIEW <ChevronRight size={16} />
+                        <span className="ipw-proceed-text">
+                          <strong>Proceed to review</strong>
+                          <small>Adds this part to your cart</small>
+                        </span>
+                        <span className="ipw-proceed-arrow" aria-hidden="true">
+                          <ArrowRight size={16} />
+                        </span>
                       </button>
-                    </div>
+                    </section>
                   </div>
                 )}
               </div>
+
+              <AnimatePresence>
+                {activeHoleDrawer && (
+                  <HoleServiceDrawer
+                    key={activeHoleDrawer}
+                    kind={activeHoleDrawer}
+                    holes={detectedHoles}
+                    holeNumberById={holeIndexById}
+                    options={activeHoleDrawer === 'tap' ? tapOptions : activeHoleDrawer === 'cs' ? csOptions : (hwOptions || [])}
+                    isLoadingOptions={activeHoleDrawer === 'hw' && hwOptions === null}
+                    selections={activeHoleDrawer === 'tap' ? selectedTaps : activeHoleDrawer === 'cs' ? selectedCountersinks : selectedHardware}
+                    onSelectionsChange={activeHoleDrawer === 'tap' ? setSelectedTaps : activeHoleDrawer === 'cs' ? setSelectedCountersinks : setSelectedHardware}
+                    sheetThicknessMm={holeSheetThicknessMm}
+                    unit={unit}
+                    onClose={closeHoleDrawer}
+                    onHoverHoles={setDrawerHoverHoleIds}
+                    pickedHole={pickedHole}
+                    isFindingHoles={isDetectingHoles}
+                    lockedHoles={lockedHolesForDrawer}
+                    onUnlockHoles={unlockHoles}
+                  />
+                )}
+                {activeFinishDrawerSvc && (
+                  <FinishColorDrawer
+                    key={`finish-${activeFinishDrawerSvc.id}`}
+                    svc={activeFinishDrawerSvc}
+                    selected={selectedFinishColors[activeFinishDrawerSvc.id] || null}
+                    onSelect={(option, index) => {
+                      const svcId = activeFinishDrawerSvc.id;
+                      setSelectedFinishColors(p => ({ ...p, [svcId]: { ...option, index } }));
+                    }}
+                    onSkip={() => {
+                      const svcId = activeFinishDrawerSvc.id;
+                      setSelectedFinishColors(p => { const n = { ...p }; delete n[svcId]; return n; });
+                      closeFinishDrawer();
+                    }}
+                    onPreview={setFinishPreview}
+                    onClose={closeFinishDrawer}
+                  />
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -4137,744 +4206,6 @@ const InstantPricing = () => {
       }
 
       <StyleTag />
-
-      <AnimatePresence>
-        {activeTapHole && (
-          <motion.div key="tap-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
-            <motion.div className="bg-white rounded-5 shadow-22xl overflow-hidden d-flex flex-column" style={{ width: '90%', maxWidth: '1100px', height: '85vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.95, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
-              <div className="p-5 border-bottom d-flex justify-content-between align-items-center bg-white">
-                <div>
-                  <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">HOLE THREADING CONFIG</h3>
-                  <div className="d-flex align-items-center gap-3 mt-2">
-                    <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3 py-1 fw-bold small">HOLE #{activeTapHole.id + 1}</span>
-                    <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Diameter: {Number(activeTapHole.diameterInches || 0).toFixed(4)}&quot; ({Number((activeTapHole.diameterInches || 0) * 25.4).toFixed(3)} mm)</span>
-                    <span className="text-muted fw-bold text-uppercase letter-spacing-2" style={{ fontSize: '14px' }}>Tap Height: {Number(activeTapHole.depthMm || 0).toFixed(2)} mm ({Number(activeTapHole.depthInches || 0).toFixed(4)}&quot;)</span>
-                  </div>
-                </div>
-                <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setActiveTapHole(null)} />
-              </div>
-
-              <div className="flex-grow-1 d-flex overflow-hidden bg-white">
-                <div className="border-end bg-light-subtle bg-opacity-20 p-4 overflow-auto hide-scrollbar" style={{ width: '320px' }}>
-                  <div className="mb-4 px-2 d-flex justify-content-between align-items-center">
-                    <h4 className="fw-black text-muted text-uppercase letter-spacing-2 m-0" style={{ fontSize: '13px' }}>Detected Holes</h4>
-                    <span className="badge bg-white border text-muted rounded-pill px-2 py-1 fw-bold" style={{ fontSize: '11px' }}>{detectedHoles.length}</span>
-                  </div>
-                  {holeGroups.map((group) => {
-                    const isExpanded = expandedGroups.has(group.dia);
-                    const tappedCount = group.holes.filter(h => !!selectedTaps[h.id]).length;
-                    const allTapped = tappedCount === group.holes.length;
-                    const groupDia = parseFloat(group.dia);
-                    const compatibleForGroup = tapOptions.filter(tap =>
-                      groupDia >= ((parseFloat(tap.min_diameter) || 0) - TAP_RANGE_TOLERANCE) &&
-                      groupDia <= ((parseFloat(tap.max_diameter) || 0) + TAP_RANGE_TOLERANCE)
-                    );
-                    const isCompatible = compatibleForGroup.length > 0;
-                    const bestTap = compatibleForGroup[0];
-
-                    return (
-                      <div key={group.dia} className="mb-2">
-                        {/* Group header */}
-                        <div
-                          className={`p-3 rounded-4 cursor-pointer border-2 d-flex align-items-center justify-content-between transition-all ${isExpanded ? 'bg-danger text-white border-danger shadow-sm' : 'bg-white border-light-subtle shadow-xs'}`}
-                          onClick={() => setExpandedGroups(prev => {
-                            const next = new Set(prev);
-                            next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia);
-                            return next;
-                          })}
-                        >
-                          <div className="d-flex align-items-center gap-2">
-                            <ChevronDown
-                              size={13}
-                              style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
-                              className={isExpanded ? 'text-white' : 'text-muted'}
-                            />
-                            <div>
-                              <span className="fw-black" style={{ fontSize: '14px' }}>&Oslash; {group.dia}&quot;</span>
-                              <span className="ms-2 fw-bold" style={{ fontSize: '12px', opacity: 0.7 }}>
-                                &times; {group.holes.length}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="d-flex align-items-center gap-2">
-                            {allTapped && <Check size={13} className={isExpanded ? 'text-white' : 'text-success'} strokeWidth={3} />}
-                            {!allTapped && tappedCount > 0 && (
-                              <span className={`badge rounded-pill fw-bold ${isExpanded ? 'bg-white text-danger' : 'bg-danger text-white'}`} style={{ fontSize: '10px' }}>
-                                {tappedCount}/{group.holes.length}
-                              </span>
-                            )}
-                            {!isCompatible && <AlertCircle size={13} className={isExpanded ? 'text-white' : 'text-danger'} />}
-                          </div>
-                        </div>
-
-                        {/* Expanded content */}
-                        {isExpanded && (
-                          <div className="ps-2 pt-1">
-                            {/* Tap All button */}
-                            {group.holes.length > 1 && (() => {
-                              const sourceTap = selectedTaps[activeTapHole?.id];
-                              const theTap = sourceTap || bestTap;
-                              if (!theTap) return null;
-
-                              return (
-                                <button
-                                  className="btn btn-sm w-100 mb-2 rounded-3 fw-bold border-danger text-danger bg-white"
-                                  style={{ fontSize: '12px' }}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setSelectedTaps(prev => {
-                                      const next = { ...prev };
-                                      group.holes.forEach(h => { next[h.id] = { ...theTap, hole: h }; });
-                                      return next;
-                                    });
-                                  }}
-                                >
-                                  Tap all {group.holes.length} &rarr; {theTap.name}
-                                </button>
-                              );
-                            })()}
-                            {/* Individual holes */}
-                            {group.holes.map(hole => {
-                              const isTapped = !!selectedTaps[hole.id];
-                              const isActive = activeTapHole?.id === hole.id;
-                              const globalIdx = holeIndexById[hole.id] || 0;
-                              return (
-                                <div
-                                  key={hole.id}
-                                  className={`p-3 rounded-4 mb-1 cursor-pointer border-2 d-flex align-items-center justify-content-between ${isActive ? 'border-danger bg-danger text-white shadow-sm' : 'border-transparent bg-light hover-bg-white shadow-xs'}`}
-                                  onClick={() => setActiveTapHole(hole)}
-                                >
-                                  <div className="d-flex align-items-center gap-2">
-                                    <div
-                                      className={`rounded-circle d-flex align-items-center justify-content-center fw-black ${isActive ? 'bg-white text-danger' : isTapped ? 'bg-success text-white' : 'bg-white text-muted border'}`}
-                                      style={{ width: '26px', height: '26px', fontSize: '12px' }}
-                                    >
-                                      {globalIdx}
-                                    </div>
-                                    <span className={`fw-bold ${isActive ? 'text-white' : 'text-dark'}`} style={{ fontSize: '13px' }}>
-                                      {isTapped ? selectedTaps[hole.id].name : 'Not Tapped'}
-                                    </span>
-                                  </div>
-                                  {isTapped && !isActive && <Check size={13} className="text-success" strokeWidth={3} />}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex-grow-1 p-5 overflow-auto bg-white hide-scrollbar">
-                  {(() => {
-                    const svc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('tap'));
-                    if (!svc) return <div className="text-center py-5 text-danger fw-bold fs-5">Tapping service not added to selection</div>;
-                    const assigned = selectedTaps[activeTapHole.id];
-                    const dia = activeTapHole.diameterInches || 0;
-                    const options = tapOptions;
-                    const compatible = options.filter(tap =>
-                      dia >= ((parseFloat(tap.min_diameter) || 0) - TAP_RANGE_TOLERANCE) &&
-                      dia <= ((parseFloat(tap.max_diameter) || 0) + TAP_RANGE_TOLERANCE)
-                    );
-                    const incompatible = options.filter(tap => !compatible.includes(tap));
-
-                    return (
-                      <div className="animate-fade-in">
-                        {compatible.length > 0 && (
-                          <div className="mb-5">
-                            <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2" style={{ fontSize: '13px', letterSpacing: '2px' }}><Check size={14} className="text-success" /> RECOMMENDED TAPS</h4>
-                            <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-                              {compatible.map((tap, idx) => {
-                                const isChosen = assigned?.name === tap.name;
-                                return (
-                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-danger bg-danger text-white shadow-danger' : 'bg-white border-light-subtle shadow-xs tap-option-card-hover'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: { ...tap, hole: activeTapHole } }))} whileTap={{ scale: 0.98 }}>
-                                    <div className={`p-3 rounded-4 ${isChosen ? 'bg-white text-danger' : 'bg-light text-muted'}`}>
-                                      <Settings size={20} className={isChosen ? 'animate-spin-slow' : ''} />
-                                    </div>
-                                    <div className="flex-grow-1">
-                                      <div className="d-flex justify-content-between align-items-start">
-                                        <strong className={`d-block fs-6 fw-black mb-1 ${isChosen ? 'text-white' : 'text-dark'}`}>{tap.name}</strong>
-                                        {isChosen && <div className="bg-success rounded-circle p-1 text-white shadow-sm d-flex align-items-center justify-content-center" style={{ width: '22px', height: '22px' }}><Check size={12} strokeWidth={4} /></div>}
-                                      </div>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className={`fw-bold font-monospace ${isChosen ? 'text-white opacity-80' : 'text-muted'}`} style={{ fontSize: '12px' }}>{tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
-                                        <div className={`rounded-circle ${isChosen ? 'bg-white opacity-40' : 'bg-light-subtle'}`} style={{ width: '3px', height: '3px' }} />
-                                        <span className={`fw-black ${isChosen ? 'text-white ripple-infinite' : 'text-danger'}`} style={{ fontSize: '13px' }}>+${tap.price || '0.00'}/HOLE</span>
-                                      </div>
-                                    </div>
-                                  </motion.button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {incompatible.length > 0 && (
-                          <div>
-                            <h4 className="fw-black text-muted mb-4 d-flex align-items-center gap-2 opacity-50" style={{ letterSpacing: '2px', fontSize: '13px' }}><AlertTriangle size={18} /> INCOMPATIBLE TAP SIZES (SELECTABLE WITH WARNING)</h4>
-                            <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-                              {incompatible.map((tap, idx) => {
-                                const isChosen = assigned?.name === tap.name;
-                                return (
-                                  <motion.button key={idx} className={`btn text-start p-4 rounded-4 border-2 transition-all d-flex align-items-center gap-3 ${isChosen ? 'border-warning bg-warning shadow-warning' : 'bg-white border-light-subtle shadow-xs op-hover-100'}`} onClick={() => setSelectedTaps(prev => ({ ...prev, [activeTapHole.id]: { ...tap, hole: activeTapHole } }))} whileTap={{ scale: 0.98 }}>
-                                    <div className={`p-3 rounded-4 ${isChosen ? 'bg-white text-warning' : 'bg-light text-muted'}`}>
-                                      <AlertCircle size={20} />
-                                    </div>
-                                    <div className="flex-grow-1">
-                                      <strong className={`d-block fw-black mb-1 ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '15px' }}>{tap.name}</strong>
-                                      {isCalculatingPrice && (
-                                        <p className="ip-qf-subtitle" style={{ fontSize: '0.9rem', color: '#64748b', margin: '4px 0 0 0' }}>
-                                          Analysing part geometry...
-                                        </p>
-                                      )}
-                                      <span className={`fw-bold d-block ${isChosen ? 'text-white opacity-80' : 'text-danger'}`} style={{ fontSize: '12px' }}>Requires {tap.min_diameter}&quot; - {tap.max_diameter}&quot;</span>
-                                      <span className={`fw-black ${isChosen ? 'text-white' : 'text-muted'}`} style={{ fontSize: '13px' }}>+${tap.price || '0.00'}/HOLE</span>
-                                    </div>
-                                  </motion.button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {options.length === 0 && (
-                          <div className="h-100 d-flex flex-column align-items-center justify-content-center text-center py-5">
-                            <AlertCircle size={48} className="text-muted opacity-20 mb-3" />
-                            <h3 className="fw-bold text-muted">No Taps Configured</h3>
-                            <p className="text-muted small max-w-xs">Contact support for custom threading requirements or check your dashboard configuration.</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="p-5 border-top bg-white d-flex justify-content-between align-items-center">
-                <button className="btn btn-link text-muted text-decoration-none fw-bold hover-text-dark transition-all" style={{ fontSize: '15px' }} onClick={() => setSelectedTaps(p => { const n = { ...p }; delete n[activeTapHole.id]; return n; })}>CLEAR SELECTION</button>
-                <button className="btn btn-dark px-5 py-3 rounded-pill fw-black shadow-lg hover-translate-y transition-all border-0" onClick={() => setActiveTapHole(null)}>DISMISS CONFIGURATOR</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {activeHwHole && (() => {
-          const activeType = hwTypeById[activeHwType] || HW_TYPES[0];
-          const activeItems = (hwItemsByType[activeHwType] || []).filter(it => it.is_active !== false);
-          const assignedHw = selectedHardware[activeHwHole.id];
-          return (
-            <motion.div key="hardware-modal" className="position-fixed inset-0 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(16px)', background: 'rgba(15,23,42,0.6)' }}>
-              <motion.div className="overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1200px', height: '88vh', borderRadius: '24px', background: '#ffffff', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.96, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 20, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 350 }}>
-
-                {/* ── Header ── */}
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg, ${activeType.color}18, ${activeType.color}08)`, border: `1.5px solid ${activeType.color}25`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Boxes size={20} style={{ color: activeType.color }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.01em' }}>Hardware Insertion</h3>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', fontFamily: 'monospace' }}>&Oslash; {Number(activeHwHole.diameterInches || 0).toFixed(4)}&quot;</span>
-                        <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>{Number(activeHwHole.depthMm || activeHwHole.depth_mm || 0).toFixed(2)} mm depth</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ display: 'flex', padding: 3, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
-                      {HW_TYPES.map(t => (
-                        <button
-                          key={t.id}
-                          style={{
-                            border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: '11px', fontWeight: 800,
-                            cursor: 'pointer', transition: 'all 0.2s', letterSpacing: '0.03em',
-                            background: activeHwType === t.id ? t.color : 'transparent',
-                            color: activeHwType === t.id ? '#fff' : '#64748b',
-                            boxShadow: activeHwType === t.id ? `0 2px 8px ${t.color}40` : 'none',
-                          }}
-                          onClick={() => setActiveHwType(t.id)}
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => setActiveHwHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}>
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                  {/* ── Left: Hole List ── */}
-                  <div style={{ width: 280, minWidth: 280, borderRight: '1px solid #f1f5f9', background: '#fafbfc', padding: '16px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }} className="hw-sidebar-scroll">
-                    <div style={{ padding: '4px 8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>Holes</span>
-                      <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', background: '#f1f5f9', borderRadius: 6, padding: '2px 8px' }}>{detectedHoles.length}</span>
-                    </div>
-
-                    {holeGroupsWithHwState.map((group) => {
-                      const isExpanded = expandedHwGroups.has(group.dia);
-                      const assignedCount = group.assignedCount;
-                      const allAssigned = group.allAssigned;
-
-                      return (
-                        <div key={group.dia} style={{ marginBottom: 2 }}>
-                          <div
-                            onClick={() => setExpandedHwGroups(prev => { const next = new Set(prev); next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia); return next; })}
-                            style={{
-                              padding: '10px 12px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s',
-                              background: isExpanded ? activeType.color : '#fff',
-                              color: isExpanded ? '#fff' : '#1e293b',
-                              border: isExpanded ? `1.5px solid ${activeType.color}` : '1.5px solid #e8eaed',
-                              boxShadow: isExpanded ? `0 4px 12px ${activeType.color}30` : '0 1px 2px rgba(0,0,0,0.04)',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <ChevronDown size={12} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', opacity: 0.6 }} />
-                              <span style={{ fontSize: '13px', fontWeight: 800 }}>&Oslash; {group.dia}&quot;</span>
-                              <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.6 }}>&times;{group.holes.length}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {allAssigned && <Check size={12} strokeWidth={3} style={{ color: isExpanded ? '#fff' : '#22c55e' }} />}
-                              {!allAssigned && assignedCount > 0 && (
-                                <span style={{ fontSize: '9px', fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: isExpanded ? 'rgba(255,255,255,0.25)' : '#fef3c7', color: isExpanded ? '#fff' : '#92400e' }}>
-                                  {assignedCount}/{group.holes.length}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {isExpanded && (
-                            <div style={{ paddingLeft: 4, paddingTop: 4 }}>
-                              {group.holes.length > 1 && (() => {
-                                const sourceHw = selectedHardware[activeHwHole?.id];
-                                const theItem = sourceHw?.item || activeItems[0];
-                                if (!theItem) return null;
-
-                                return (
-                                  <button
-                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed ${activeType.color}60`, color: activeType.color, cursor: 'pointer', marginBottom: 4, transition: 'all 0.15s' }}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      const maxAllowedIn = theItem?.max_hole_diameter ? parseFloat(theItem.max_hole_diameter) : Infinity;
-                                      setSelectedHardware(prev => {
-                                        const next = { ...prev };
-                                        group.holes.forEach(h => {
-                                          const hDiaIn = parseFloat(h.diameterInches || h.diameter_in || 0);
-                                          if (hDiaIn > maxAllowedIn) return;
-                                          next[h.id] = {
-                                            item: theItem,
-                                            hole: h,
-                                            typeId: sourceHw?.typeId || activeHwType,
-                                            face: sourceHw?.face || 'up'
-                                          };
-                                        });
-                                        return next;
-                                      });
-                                    }}
-                                  >
-                                    Apply all &rarr; {theItem.name}
-                                  </button>
-                                );
-                              })()}
-                              {group.holes.map(hole => {
-                                const assigned = selectedHardware[hole.id];
-                                const isActive = activeHwHole?.id === hole.id;
-                                return (
-                                  <div
-                                    key={hole.id}
-                                    onClick={() => setActiveHwHole(hole)}
-                                    style={{
-                                      padding: '8px 10px', borderRadius: 10, marginBottom: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s',
-                                      background: isActive ? `${activeType.color}12` : '#fff',
-                                      border: isActive ? `1.5px solid ${activeType.color}` : '1.5px solid transparent',
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <div style={{
-                                        width: 22, height: 22, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800,
-                                        background: isActive ? activeType.color : assigned ? '#22c55e' : '#f1f5f9',
-                                        color: isActive || assigned ? '#fff' : '#94a3b8',
-                                      }}>
-                                        {holeIndexById[hole.id] || 0}
-                                      </div>
-                                      <div>
-                                        <span style={{ fontSize: '12px', fontWeight: 700, color: isActive ? activeType.color : '#1e293b', display: 'block', lineHeight: 1.2 }}>
-                                          {assigned ? assigned.item.name : 'Unassigned'}
-                                        </span>
-                                        {assigned && (
-                                          <span style={{ fontSize: '9px', fontWeight: 700, color: hwTypeById[assigned.typeId]?.color || '#94a3b8' }}>
-                                            {hwTypeById[assigned.typeId]?.label}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {assigned && !isActive && <Check size={11} style={{ color: '#22c55e' }} strokeWidth={3} />}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* ── Right: Hardware Catalog ── */}
-                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }} className="hw-catalog-scroll">
-                    {hwItemsByType[activeHwType] === undefined ? (
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94a3b8' }}>
-                          <Loader2 size={18} className="animate-spin" />
-                          <span style={{ fontSize: '13px', fontWeight: 700 }}>Loading {activeType.label}...</span>
-                        </div>
-                      </div>
-                    ) : activeItems.length === 0 ? (
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
-                        <AlertCircle size={40} style={{ color: '#e2e8f0', marginBottom: 12 }} />
-                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#94a3b8', margin: '0 0 4px' }}>No {activeType.label} Items</h3>
-                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: 0 }}>Configure items in admin dashboard.</p>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '24px 28px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#94a3b8' }}>Select {activeType.label}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 700, background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', color: '#64748b' }}>{activeItems.length} items</span>
-                          </div>
-                          {assignedHw && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', color: '#94a3b8' }}>Face</span>
-                              <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                <button
-                                  onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'up' } }))}
-                                  style={{ border: 'none', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedHw?.face !== 'down' ? '#0f172a' : '#fff', color: assignedHw?.face !== 'down' ? '#fff' : '#64748b' }}
-                                >↑ UP</button>
-                                <button
-                                  onClick={() => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { ...prev[activeHwHole.id], face: 'down' } }))}
-                                  style={{ border: 'none', borderLeft: '1px solid #e2e8f0', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedHw?.face === 'down' ? '#0f172a' : '#fff', color: assignedHw?.face === 'down' ? '#fff' : '#64748b' }}
-                                >↓ DOWN</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-                          {activeItems.map(item => {
-                            const isChosen = assignedHw?.item?.id === item.id && assignedHw?.typeId === activeHwType;
-                            const typeSpecs = activeType.specs(item).filter(Boolean);
-                            const holeDiaIn = activeHwHole?.diameterInches || 0;
-                            const maxAllowed = item.max_hole_diameter ? parseFloat(item.max_hole_diameter) : Infinity;
-                            const isLocked = holeDiaIn > maxAllowed;
-                            return (
-                              <motion.button
-                                key={item.id}
-                                onClick={isLocked ? undefined : () => setSelectedHardware(prev => ({ ...prev, [activeHwHole.id]: { item, hole: activeHwHole, typeId: activeHwType, face: prev[activeHwHole.id]?.face || 'up' } }))}
-                                whileTap={isLocked ? {} : { scale: 0.98 }}
-                                whileHover={isLocked ? {} : { y: -2 }}
-                                style={{
-                                  border: isLocked ? '1.5px solid #fecaca' : 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s',
-                                  background: isLocked ? '#fff5f5' : isChosen ? `linear-gradient(135deg, ${activeType.color}, ${activeType.color}dd)` : '#fff',
-                                  boxShadow: isLocked ? 'none' : isChosen ? `0 8px 24px ${activeType.color}30, 0 0 0 1.5px ${activeType.color}` : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
-                                  opacity: isLocked ? 0.55 : 1,
-                                  color: isChosen ? '#fff' : '#1e293b',
-                                }}
-                              >
-                                <div style={{
-                                  width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                  background: isChosen ? 'rgba(255,255,255,0.2)' : `${activeType.color}10`,
-                                  color: isChosen ? '#fff' : activeType.color,
-                                }}>
-                                  <Settings size={18} />
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                                    <strong style={{ fontSize: '13px', fontWeight: 800, display: 'block', lineHeight: 1.3 }}>{item.name}</strong>
-                                    {isLocked ? (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#fecaca', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>
-                                        <span style={{ fontSize: '9px', fontWeight: 800, color: '#DC2626' }}>🔒 Hole too large</span>
-                                      </div>
-                                    ) : isChosen && (
-                                      <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <Check size={11} strokeWidth={3} />
-                                      </div>
-                                    )}
-                                  </div>
-                                  {item.size_spec && (
-                                    <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'monospace', display: 'block', marginBottom: 6, opacity: isChosen ? 0.8 : 0.5 }}>{item.size_spec}</span>
-                                  )}
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                                    {item.tooling_diameter && (
-                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>Tool Ø{item.tooling_diameter}&quot;</span>
-                                    )}
-                                    {typeSpecs.map(s => (
-                                      <span key={s} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>{s}</span>
-                                    ))}
-                                    {item.min_edge_distance && (
-                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f1f5f9', color: isChosen ? '#fff' : '#64748b' }}>Edge {item.min_edge_distance}&quot;</span>
-                                    )}
-                                    {item.max_hole_diameter && (
-                                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#fecaca', color: isChosen ? '#fff' : '#DC2626' }}>Max Ø{item.max_hole_diameter}&quot;</span>
-                                    )}
-                                  </div>
-                                  <span style={{ fontSize: '13px', fontWeight: 900, color: isChosen ? '#fff' : activeType.color }}>
-                                    +${parseFloat(item.price || 0).toFixed(2)}<span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.7, marginLeft: 2 }}>/HOLE</span>
-                                  </span>
-                                </div>
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Footer ── */}
-                <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#fafbfc' }}>
-                  <button
-                    onClick={() => setSelectedHardware(p => { const n = { ...p }; delete n[activeHwHole.id]; return n; })}
-                    style={{ border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '8px 0', transition: 'color 0.15s' }}
-                  >Clear Selection</button>
-                  <button
-                    onClick={() => setActiveHwHole(null)}
-                    style={{ border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px', fontWeight: 800, cursor: 'pointer', padding: '10px 28px', borderRadius: 12, transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}
-                  >Done</button>
-                </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-
-        {activeCSHole && (() => {
-          const csSvc = allServices.find(s => s.title.toLowerCase().includes('countersink'));
-          const csOptions = csSvc?.service_options || [];
-          const assignedCS = selectedCountersinks[activeCSHole.id];
-          return (
-            <motion.div key="cs-modal" className="position-fixed inset-0 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(16px)', background: 'rgba(15,23,42,0.6)' }}>
-              <motion.div className="overflow-hidden d-flex flex-column" style={{ width: '95%', maxWidth: '1100px', height: '85vh', borderRadius: '24px', background: '#ffffff', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.2)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.96, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 20, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 350 }}>
-
-                {/* Header */}
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                  <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#0f172a' }}>Countersink Configuration</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace' }}>&Oslash; {Number(activeCSHole.diameterInches || 0).toFixed(4)}&quot;</span>
-                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Select a countersink profile for this hole</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    {assignedCS && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', color: '#94a3b8' }}>Insert Side</span>
-                        <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                          <button
-                            onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...prev[activeCSHole.id], face: 'up' } }))}
-                            style={{ border: 'none', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedCS?.face !== 'down' ? '#7c3aed' : '#fff', color: assignedCS?.face !== 'down' ? '#fff' : '#64748b' }}
-                          >↑ TOP</button>
-                          <button
-                            onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...prev[activeCSHole.id], face: 'down' } }))}
-                            style={{ border: 'none', borderLeft: '1px solid #e2e8f0', padding: '4px 12px', fontSize: '10px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s', background: assignedCS?.face === 'down' ? '#7c3aed' : '#fff', color: assignedCS?.face === 'down' ? '#fff' : '#64748b' }}
-                          >↓ BOTTOM</button>
-                        </div>
-                      </div>
-                    )}
-                    <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#f8fafc', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94a3b8' }}>
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                  {/* Left: Hole list */}
-                  <div style={{ width: 280, borderRight: '1px solid #f1f5f9', overflowY: 'auto', padding: '16px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>Detected Holes</div>
-                    {csHoleGroups.map(group => {
-                      const isExpanded = expandedCSGroups.has(group.dia);
-                      const csCount = group.holes.filter(h => !!selectedCountersinks[h.id]).length;
-                      return (
-                        <div key={group.dia} style={{ marginBottom: 8 }}>
-                          <div
-                            style={{ padding: '10px 12px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isExpanded ? '#7c3aed' : '#f8fafc', color: isExpanded ? '#fff' : '#1e293b', border: isExpanded ? '1.5px solid #7c3aed' : '1.5px solid #f1f5f9', transition: 'all 0.15s' }}
-                            onClick={() => setExpandedCSGroups(prev => { const next = new Set(prev); next.has(group.dia) ? next.delete(group.dia) : next.add(group.dia); return next; })}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <ChevronDown size={12} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                              <span style={{ fontWeight: 800, fontSize: '13px' }}>&Oslash; {group.dia}&quot; &times; {group.holes.length}</span>
-                            </div>
-                            {csCount > 0 && <span style={{ fontSize: '10px', fontWeight: 800, background: isExpanded ? 'rgba(255,255,255,0.25)' : '#7c3aed', color: isExpanded ? '#fff' : '#fff', borderRadius: 6, padding: '2px 6px' }}>{csCount}/{group.holes.length}</span>}
-                          </div>
-                          {isExpanded && (
-                            <div style={{ paddingLeft: 8, paddingTop: 4 }}>
-                              {group.holes.length > 1 && (() => {
-                                const sourceCS = selectedCountersinks[activeCSHole?.id];
-                                const theCS = sourceCS || csOptions[0];
-                                if (!theCS) return null;
-
-                                return (
-                                  <button
-                                    style={{ width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: '10px', fontWeight: 700, background: 'transparent', border: `1px dashed #7c3aed60`, color: '#7c3aed', cursor: 'pointer', marginBottom: 6, transition: 'all 0.15s' }}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      setSelectedCountersinks(prev => {
-                                        const next = { ...prev };
-                                        group.holes.forEach(h => {
-                                          next[h.id] = {
-                                            ...theCS,
-                                            hole: h,
-                                            face: sourceCS?.face || 'up'
-                                          };
-                                        });
-                                        return next;
-                                      });
-                                    }}
-                                  >
-                                    Apply all &rarr; {theCS.name}
-                                  </button>
-                                );
-                              })()}
-                              {group.holes.map(hole => {
-                                const isCS = !!selectedCountersinks[hole.id];
-                                const isActive = activeCSHole?.id === hole.id;
-                                const globalIdx = holeIndexById[hole.id] || 0;
-                                return (
-                                  <div key={hole.id}
-                                    style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? '#7c3aed' : '#f8fafc', color: isActive ? '#fff' : '#1e293b', border: isActive ? '1.5px solid #7c3aed' : '1.5px solid transparent', transition: 'all 0.15s' }}
-                                    onClick={() => setActiveCSHole(hole)}
-                                  >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: isActive ? '#fff' : isCS ? '#7c3aed' : '#e2e8f0', color: isActive ? '#7c3aed' : isCS ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>{globalIdx}</div>
-                                      <span style={{ fontSize: '12px', fontWeight: 700 }}>{isCS ? selectedCountersinks[hole.id].name : 'Not set'}</span>
-                                    </div>
-                                    {isCS && !isActive && <Check size={12} style={{ color: '#7c3aed' }} strokeWidth={3} />}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right: Countersink profiles */}
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-                    {csOptions.length === 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: '#94a3b8' }}>
-                        <AlertCircle size={40} style={{ marginBottom: 12, color: '#e2e8f0' }} />
-                        <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 4px' }}>No Profiles Configured</h3>
-                        <p style={{ fontSize: '12px', margin: 0 }}>Configure countersink profiles in the admin dashboard.</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 16 }}>Select Profile</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-                          {csOptions.map((opt, idx) => {
-                            const isChosen = assignedCS?.name === opt.name;
-                            return (
-                              <motion.button key={idx}
-                                onClick={() => setSelectedCountersinks(prev => ({ ...prev, [activeCSHole.id]: { ...opt, hole: activeCSHole, face: prev[activeCSHole.id]?.face || 'up' } }))}
-                                whileTap={{ scale: 0.98 }} whileHover={{ y: -2 }}
-                                style={{ border: 'none', textAlign: 'left', padding: '16px', borderRadius: 16, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start', transition: 'all 0.2s', background: isChosen ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#fff', boxShadow: isChosen ? '0 8px 24px rgba(124,58,237,0.3), 0 0 0 1.5px #7c3aed' : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)', color: isChosen ? '#fff' : '#1e293b' }}
-                              >
-                                <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isChosen ? 'rgba(255,255,255,0.2)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>
-                                  <Settings size={18} />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                                    <strong style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.3 }}>{opt.name}</strong>
-                                    {isChosen && <div style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3} /></div>}
-                                  </div>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                                    {opt.major_dia && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>Maj Ø{opt.major_dia}&quot;</span>}
-                                    {opt.minor_dia && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>Min Ø{opt.minor_dia}&quot;</span>}
-                                    {opt.angle && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isChosen ? 'rgba(255,255,255,0.15)' : '#f3e8ff', color: isChosen ? '#fff' : '#7c3aed' }}>{opt.angle}°</span>}
-                                  </div>
-                                  <span style={{ fontSize: '13px', fontWeight: 900, color: isChosen ? '#fff' : '#7c3aed' }}>
-                                    +${parseFloat(opt.price || 0).toFixed(2)}<span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.7, marginLeft: 2 }}>/HOLE</span>
-                                  </span>
-                                </div>
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#fafbfc' }}>
-                  <button onClick={() => setSelectedCountersinks(p => { const n = { ...p }; delete n[activeCSHole.id]; return n; })} style={{ border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '8px 0' }}>Clear Selection</button>
-                  <button onClick={() => setActiveCSHole(null)} style={{ border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px', fontWeight: 800, cursor: 'pointer', padding: '10px 28px', borderRadius: 12, boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}>Done</button>
-                </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-
-        {isAnodizingModalOpen && (
-          <motion.div key="anodizing-modal" className="position-fixed inset-0 bg-black-80 d-flex align-items-center justify-content-center z-10000" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ backdropFilter: 'blur(12px)' }}>
-            {(() => {
-              const svc = selectedAdditionalServices.find(s => s.id === activeFinishSvcId) || selectedAdditionalServices.find(s => {
-                const t = (s.title || '').toLowerCase();
-                return t.includes('anodiz') || t.includes('powder coat');
-              });
-              const isPowderCoating = svc?.title?.toLowerCase().includes('powder coat');
-              const processName = isPowderCoating ? 'powder coating' : 'anodizing';
-
-              return (
-                <motion.div className="bg-white rounded-5 shadow-22xl p-0 overflow-hidden w-100 mx-4 d-flex flex-column" style={{ maxWidth: '850px', maxHeight: '90vh', border: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 10001 }} initial={{ scale: 0.9, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 30, opacity: 0 }} transition={{ type: 'spring', damping: 25 }}>
-                  <div className="p-5 bg-white border-bottom d-flex justify-content-between align-items-center flex-shrink-0">
-                    <div>
-                      <h3 className="fw-black fs-2 m-0 text-dark letter-spacing-1">PREMIUM FINISH COLOR</h3>
-                      <p className="small text-muted fw-bold text-uppercase letter-spacing-2 mt-2">Selected metal will be treated with the chosen {processName} process</p>
-                    </div>
-                    <button className="btn-close action-btn-hover p-3 rounded-circle shadow-none" onClick={() => setIsAnodizingModalOpen(false)} />
-                  </div>
-                  <div className="p-5 bg-light-subtle bg-opacity-30 overflow-y-auto flex-grow-1">
-                    <div className="d-grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                      {(() => {
-                        const options = svc?.service_options || [];
-                        return options.map((opt, i) => {
-                          const isActive = selectedFinishColors[svc?.id]?.name === opt.name;
-                          return (
-                            <motion.button key={i} className={`group btn border-0 p-3 rounded-5 d-flex flex-column align-items-center gap-4 transition-all bg-transparent`} onClick={() => { setSelectedFinishColors(p => ({ ...p, [svc.id]: { ...opt, index: i } })); setIsAnodizingModalOpen(false); }} whileHover={{ y: -10 }}>
-                              <div className="position-relative">
-                                <div className={`rounded-circle shadow-2xl transition-all ${isActive ? 'scale-110' : 'group-hover-scale-105'}`} style={{ ...wrinkleSwatchStyle(opt.color, !!opt.is_wrinkled, 18), width: '100px', height: '100px', border: isActive ? '6px solid #ef4444' : '6px solid white', boxShadow: isActive ? '0 20px 40px -10px rgba(239, 68, 68, 0.4)' : '0 15px 30px -10px rgba(0,0,0,0.1)' }} />
-                                {isActive && <div className="position-absolute top-0 end-0 bg-danger text-white rounded-circle p-2 shadow-lg" style={{ transform: 'translate(30%, -30%)' }}><Check size={16} strokeWidth={4} /></div>}
-                              </div>
-                              <div className="text-center">
-                                <span className={`d-block fs-6 fw-black transition-all ${isActive ? 'text-danger' : 'text-dark group-hover-text-dark opacity-80'}`}>{(opt.name || '').toUpperCase()}</span>
-                                <span className="small text-muted fw-bold opacity-50 letter-spacing-1 font-monospace mt-1 d-block">{(opt.color || '').toUpperCase()}</span>
-                                {opt.is_wrinkled && (
-                                  <span className="d-inline-block mt-2 fw-bold" style={{ fontSize: '0.6rem', letterSpacing: '0.14em', padding: '3px 10px', borderRadius: '999px', background: '#1e293b', color: '#f8fafc', textTransform: 'uppercase' }}>Wrinkle Finish</span>
-                                )}
-                              </div>
-                            </motion.button>
-                          );
-                        });
-                      })()}
-                    </div>
-
-                    {(!svc?.service_options?.length) && (
-                      <div className="py-5 text-center">
-                        <Shield size={48} className="text-muted opacity-20 mb-3" />
-                        <p className="text-muted fw-bold small">NO PREMIUM FINISHES CONFIGURED IN DASHBOARD</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4 bg-white border-top text-center flex-shrink-0">
-                    <button className="btn btn-link text-muted text-decoration-none fw-bold small hover-text-dark" onClick={() => { setSelectedFinishColors(p => { const n = { ...p }; delete n[svc?.id]; return n; }); setIsAnodizingModalOpen(false); }}>SKIP {processName.toUpperCase()}</button>
-                  </div>
-                </motion.div>
-              );
-            })()}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
     </div>
 

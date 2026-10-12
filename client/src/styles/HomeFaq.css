@@ -1,0 +1,262 @@
+/* ══ Home FAQ ════════════════════════════════════════════════════════════
+   Light band, same ground and type as the services band. Heading and the
+   way to the full list on the left, centred against the questions on the
+   right, a hairline above each; a plus turns into a red cross when an
+   answer is open.
+   Own class names (hf-) because the old faq-* rules are still used by
+   the FAQ page. */
+
+.hf {
+  --hf-ground: #f7f7f8;
+  --hf-ink: #0b0c0f;
+  --hf-text: #5b5f68;
+  --hf-rule: #e3e4e8;
+  --hf-accent: #dc2626;
+  --hf-accent-strong: #b91c1c;
+
+  padding: 104px 0 112px;
+  background: var(--hf-ground);
+  color: var(--hf-ink);
+}
+
+.hf-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: center;
+  gap: 48px 80px;
+}
+
+/* ── Heading ── */
+.hf .hf-title {
+  max-width: 12ch;
+  margin: 0;
+  color: var(--hf-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.hf .hf-lede {
+  max-width: 30rem;
+  margin: 16px 0 0;
+  color: var(--hf-text);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+.hf-head-actions {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.hf-btn {
+  height: 46px;
+  padding: 0 18px 0 20px;
+  border: 1px solid var(--hf-accent);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--hf-accent);
+  color: #ffffff;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.hf-btn:hover {
+  border-color: var(--hf-accent-strong);
+  background: var(--hf-accent-strong);
+  color: #ffffff;
+}
+.hf-btn svg {
+  transition: transform 0.2s ease;
+}
+.hf-btn:hover svg {
+  transform: translateX(3px);
+}
+.hf-ask {
+  color: var(--hf-text);
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  text-decoration-color: var(--hf-rule);
+  text-underline-offset: 4px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+.hf-ask:hover {
+  color: var(--hf-accent);
+  text-decoration-color: currentColor;
+}
+
+/* ── Questions ── */
+.hf-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--hf-rule);
+}
+.hf-item {
+  border-top: 1px solid var(--hf-rule);
+}
+.hf .hf-q {
+  margin: 0;
+  font: inherit;
+}
+.hf-q-btn {
+  width: 100%;
+  padding: 24px 0;
+  border: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  background: none;
+  color: var(--hf-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.hf-q-text {
+  padding-top: 4px;
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  overflow-wrap: normal;
+}
+.hf-q-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hf-rule);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hf-text);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.hf-q-btn:hover .hf-q-icon {
+  border-color: var(--hf-accent);
+  background: #ffffff;
+  color: var(--hf-accent);
+}
+.hf-item.is-open .hf-q-icon {
+  border-color: var(--hf-accent);
+  background: var(--hf-accent);
+  color: #ffffff;
+  transform: rotate(45deg);
+}
+.hf-q-btn:focus-visible {
+  outline: 2px solid var(--hf-accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+/* The answer opens by animating the grid row from 0fr to 1fr. */
+.hf-a {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+}
+.hf-item.is-open .hf-a {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.hf-a-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 58px;
+}
+.hf .hf-a-text {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--hf-text);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.hf-a-link {
+  margin: 14px 0 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--hf-accent);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.hf-a-link:hover {
+  color: var(--hf-accent-strong);
+}
+.hf-a-link svg {
+  transition: transform 0.2s ease;
+}
+.hf-a-link:hover svg {
+  transform: translateX(3px);
+}
+.hf-btn:focus-visible,
+.hf-ask:focus-visible,
+.hf-a-link:focus-visible {
+  outline: 2px solid var(--hf-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Widths ── */
+@media (max-width: 1000px) {
+  .hf-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hf .hf-title {
+    max-width: none;
+  }
+}
+@media (max-width: 900px) {
+  .hf {
+    padding: 80px 0 88px;
+  }
+  .hf-inner {
+    padding: 0 20px;
+    gap: 40px;
+  }
+}
+@media (max-width: 640px) {
+  .hf {
+    padding: 64px 0 72px;
+  }
+  .hf-inner {
+    padding: 0 16px;
+  }
+  .hf-q-btn {
+    padding: 20px 0;
+    gap: 16px;
+  }
+  .hf-q-text {
+    padding-top: 5px;
+    font-size: 1rem;
+  }
+  .hf-a-inner {
+    padding-right: 0;
+  }
+  .hf .hf-a-text {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-a,
+  .hf-q-icon,
+  .hf-btn,
+  .hf-btn svg,
+  .hf-ask,
+  .hf-a-link svg {
+    transition: none;
+  }
+}

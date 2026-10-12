@@ -12,6 +12,9 @@ import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder, authHeaders } from '../utils/api';
+// The cart's stylesheet carries the shared empty-state card and buttons
+// (cartx-*); checkout's own rules load after it and win where they overlap.
+import '../styles/PremiumCart.css';
 import '../styles/PremiumCheckout.css';
 
 const normalizeOrderTempPath = (value) => {
@@ -160,23 +163,20 @@ const Checkout = () => {
 
     if (isSuccess) {
         return (
-            <div className="checkout-success-page cart-empty-state">
+            <div className="checkout-success-page cart-empty-state cartx checkoutx-state">
                 <div className="container">
                     <motion.div
-                        className="empty-card"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
+                        className="cartx-empty"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
                     >
-                        <div className="empty-icon-wrap">
-                            <CheckCircle2 size={64} style={{ color: '#e31b23' }} />
-                        </div>
-                        <h2>Order Confirmed!</h2>
-                        <p className="order-number" style={{ color: '#fff', fontSize: '1.4rem' }}>Order ID: <strong>#{orderId}</strong></p>
-                        <p className="success-msg">Your manufacturing request has been received and is being processed by our engineering team.</p>
-
-                        <div className="success-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px' }}>
-                            <Link to="/orders" className="btn-primary large">View My Orders</Link>
-                            <Link to="/" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none' }}>Return Home</Link>
+                        <span className="cartx-empty-icon is-good" aria-hidden="true"><CheckCircle2 size={26} /></span>
+                        <h2>Order confirmed</h2>
+                        <p className="checkoutx-order-id">Order <strong>#{orderId}</strong></p>
+                        <p>Your manufacturing request has been received and is being processed by our engineering team.</p>
+                        <div className="checkoutx-actions">
+                            <Link to="/orders" className="cartx-btn-primary">View my orders</Link>
+                            <Link to="/" className="cartx-btn-secondary">Return home</Link>
                         </div>
                     </motion.div>
                 </div>
@@ -188,28 +188,24 @@ const Checkout = () => {
     // routes them to sign in / create an account (and back to checkout after).
     if (!authLoading && !user) {
         return (
-            <div className="checkout-success-page cart-empty-state">
+            <div className="checkout-success-page cart-empty-state cartx checkoutx-state">
                 <div className="container">
                     <motion.div
-                        className="empty-card"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
+                        className="cartx-empty"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
                     >
-                        <div className="empty-icon-wrap">
-                            <Lock size={64} style={{ color: '#e31b23' }} />
-                        </div>
-                        <h2>Create an account to check out</h2>
-                        <p className="success-msg" style={{ maxWidth: '520px', margin: '0 auto' }}>
-                            To place and track your manufacturing order, you'll need a DMS Engineering account.
-                            It only takes a moment — your cart is saved and waiting for you.
+                        <span className="cartx-empty-icon" aria-hidden="true"><Lock size={24} /></span>
+                        <h2>Sign in to check out</h2>
+                        <p>
+                            You need a DMS account to place and track an order. It only takes a moment, and your cart is saved.
                         </p>
-
-                        <div className="success-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px', flexWrap: 'wrap' }}>
-                            <Link to="/signup?redirect=/checkout" className="btn-primary large" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-                                <UserPlus size={20} /> Create Account
+                        <div className="checkoutx-actions">
+                            <Link to="/signup?redirect=/checkout" className="cartx-btn-primary">
+                                <UserPlus size={18} /> Create account
                             </Link>
-                            <Link to="/login?redirect=/checkout" className="btn-primary large" style={{ background: 'rgba(255,255,255,0.1)', boxShadow: 'none', display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-                                <LogIn size={20} /> Sign In
+                            <Link to="/login?redirect=/checkout" className="cartx-btn-secondary">
+                                <LogIn size={18} /> Sign in
                             </Link>
                         </div>
                     </motion.div>
@@ -227,11 +223,11 @@ const Checkout = () => {
         : null;
 
     return (
-        <div className="checkout-page">
+        <div className="checkout-page checkoutx">
             <div className="container">
                 <div className="checkout-back">
                     <Link to="/cart">
-                        <ChevronLeft size={18} /> Back to Cart
+                        <ChevronLeft size={16} /> Back to cart
                     </Link>
                 </div>
 
@@ -244,7 +240,7 @@ const Checkout = () => {
                         >
                             <div className="section-header">
                                 <MapPin size={24} />
-                                <h2>Shipping Information</h2>
+                                <h2>Shipping information</h2>
                             </div>
 
                             <form
@@ -253,7 +249,7 @@ const Checkout = () => {
                                 onSubmit={e => e.preventDefault()}
                                 className="premium-form"
                             >
-                                <div className="form-group" style={{ marginBottom: '35px' }}>
+                                <div className="form-group">
                                     <label htmlFor="fullName">Full Name</label>
                                     <div className="input-with-icon">
                                         <User size={18} />
@@ -293,7 +289,7 @@ const Checkout = () => {
                                     </div>
                                 </div>
 
-                                <div className="form-group" style={{ marginBottom: '35px' }}>
+                                <div className="form-group">
                                     <label htmlFor="address">Street Address</label>
                                     <div className="input-with-icon">
                                         <MapPin size={18} />
@@ -328,9 +324,9 @@ const Checkout = () => {
                                 </div>
 
                                 {/* ── Payment Method Selection ─────────────── */}
-                                <div className="section-header" style={{ marginTop: '60px' }}>
+                                <div className="section-header is-spaced">
                                     <CreditCard size={24} />
-                                    <h2>Payment Method</h2>
+                                    <h2>Payment method</h2>
                                 </div>
 
                                 <div className="checkout-payment-methods">
@@ -357,12 +353,12 @@ const Checkout = () => {
                                             onClick={() => setSelectedPayment('cod')}
                                         >
                                             <div className="gateway-info">
-                                                <div className="gateway-icon" style={{ color: '#e31b23' }}>
+                                                <div className="gateway-icon">
                                                     <Truck size={30} />
                                                 </div>
                                                 <div className="gateway-text">
-                                                    <span className="gateway-name" style={{ color: 'white' }}>Cash on Delivery (COD)</span>
-                                                    <span className="gateway-desc" style={{ color: 'white' }}>Pay when your parts arrive at your doorstep.</span>
+                                                    <span className="gateway-name">Cash on Delivery (COD)</span>
+                                                    <span className="gateway-desc">Pay when your parts arrive at your doorstep.</span>
                                                 </div>
                                             </div>
                                             <div className="gateway-check">
@@ -383,8 +379,8 @@ const Checkout = () => {
                                                     </svg>
                                                 </div>
                                                 <div className="gateway-text">
-                                                    <span className="gateway-name" style={{ color: 'white' }}>PayPal</span>
-                                                    <span className="gateway-desc" style={{ color: 'white' }}>
+                                                    <span className="gateway-name">PayPal</span>
+                                                    <span className="gateway-desc">
                                                         Pay securely via PayPal{paymentConfig.paypal_mode === 'sandbox' ? ' (Sandbox)' : ''}.
                                                     </span>
                                                 </div>
@@ -435,20 +431,13 @@ const Checkout = () => {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                         >
-                            <h3>Order Summary</h3>
+                            <h3>Order summary</h3>
                             <div className="summary-items-list">
                                 {cartItems.map((item) => (
                                     <div key={item.cartId} className="summary-item">
                                         <div className="summary-item-info">
                                             <span className="name">{item.fileName}</span>
-                                            <div className="details-grid" style={{
-                                                display: 'grid',
-                                                gridTemplateColumns: '1fr',
-                                                gap: '4px',
-                                                marginTop: '6px',
-                                                fontSize: '0.8rem',
-                                                color: 'rgba(255,255,255,0.35)'
-                                            }}>
+                                            <div className="details-grid">
                                                 <span>Material: <strong>{item.configuration?.metal?.name || 'Standard Metal'}</strong></span>
                                                 <span>Thickness: <strong>{item.configuration?.thickness || '0'}mm</strong></span>
                                                 {(item.configuration?.additionalServices || []).length > 0 && (
@@ -484,7 +473,7 @@ const Checkout = () => {
                                                     </span>
                                                 )}
                                             </div>
-                                            <span className="meta" style={{ marginTop: '10px', display: 'block' }}>
+                                            <span className="meta">
                                                 Qty: <strong>{item.quantity || 1}</strong> × 
                                                 <span style={{ marginLeft: '4px' }}>
                                                     {item.pricing?.baseUnit > item.pricing?.total ? (
@@ -492,16 +481,14 @@ const Checkout = () => {
                                                             <span style={{ textDecoration: 'line-through', opacity: 0.5, marginRight: '6px' }}>
                                                                 ${item.pricing.baseUnit.toFixed(2)}
                                                             </span>
-                                                            <strong style={{ color: '#e31b23' }}>${(item.pricing?.total || 0).toFixed(2)}</strong>
+                                                            <strong className="is-discounted">${(item.pricing?.total || 0).toFixed(2)}</strong>
                                                         </>
                                                     ) : (
                                                         <strong>${(item.pricing?.total || 0).toFixed(2)}</strong>
                                                     )}
                                                 </span>
                                                 {item.quantity > 1 && (
-                                                    <span style={{ color: '#e31b23', fontSize: '0.7rem', fontWeight: 900, marginLeft: '8px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Zap size={8} fill="#e31b23" /> Discounted
-                                                    </span>
+                                                    <span className="checkoutx-discount">Discounted</span>
                                                 )}
                                             </span>
                                         </div>
@@ -510,20 +497,20 @@ const Checkout = () => {
                                 ))}
                             </div>
 
-                            <div className="summary-calculation" style={{ marginTop: '30px' }}>
+                            <div className="summary-calculation">
                                 <div className="calc-row">
-                                    <span>Gross Subtotal</span>
+                                    <span>Subtotal</span>
                                     <span>${cartSubtotal.toFixed(2)}</span>
                                 </div>
                                 {cartDiscount > 0 && (
-                                    <div className="calc-row" style={{ color: '#e31b23' }}>
-                                        <span>Volume Savings</span>
+                                    <div className="calc-row is-saving">
+                                        <span>Volume savings</span>
                                         <span>-${cartDiscount.toFixed(2)}</span>
                                     </div>
                                 )}
                                 <div className="calc-row">
                                     <span>Shipping</span>
-                                    <span style={{ color: '#e31b23', fontWeight: 700 }}>FREE</span>
+                                    <span className="is-free">Free</span>
                                 </div>
                                 <div className="calc-row total">
                                     <span>Total</span>
@@ -539,23 +526,23 @@ const Checkout = () => {
                                     className="btn-place-order"
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Processing Order...' : 'Complete Purchase'}
-                                    <ArrowRight size={22} />
+                                    {isSubmitting ? 'Placing your order…' : 'Place order'}
+                                    <ArrowRight size={18} />
                                 </button>
                             )}
 
                             {selectedPayment === 'paypal' && (
-                                <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.82rem', marginTop: 16 }}>
+                                <p className="checkoutx-hint">
                                     Use the PayPal button above to complete your payment.
                                 </p>
                             )}
 
                             <div className="security-badges">
                                 <div className="badge-item">
-                                    <ShieldCheck size={18} /> <span>Secure Checkout</span>
+                                    <ShieldCheck size={15} /> <span>Secure checkout</span>
                                 </div>
                                 <div className="badge-item">
-                                    <Package size={18} /> <span>Quality Inspected</span>
+                                    <Package size={15} /> <span>Quality inspected</span>
                                 </div>
                             </div>
                         </motion.div>

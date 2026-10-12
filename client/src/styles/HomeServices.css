@@ -1,0 +1,286 @@
+/* ══ Home services: index of what the shop does ══════════════════════════
+   A light band between the dark hero and the dark metals band. Three
+   columns of entries, each a part render on a grey tile beside its name
+   and one line of text, a hairline above every entry, red only on the
+   main button. Own class names (hs-) because the old service-card rules
+   are still used by the metal and service detail pages. */
+
+.hs {
+  --hs-ground: #f7f7f8;
+  --hs-ink: #0b0c0f;
+  --hs-text: #5b5f68;
+  --hs-faint: #8b8f98;
+  --hs-rule: #e3e4e8;
+  --hs-tile: #eceef1;
+  --hs-tile-hover: #e4e6ea;
+  --hs-accent: #dc2626;
+  --hs-accent-strong: #b91c1c;
+  --shimmer-base: #e6e8ec;
+  --shimmer-shine: rgba(255, 255, 255, 0.65);
+
+  padding: 104px 0 112px;
+  background: var(--hs-ground);
+  color: var(--hs-ink);
+}
+
+.hs-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ── Heading ── */
+.hs-head {
+  margin-bottom: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+  align-items: end;
+  gap: 20px 64px;
+}
+.hs .hs-title {
+  max-width: 16ch;
+  margin: 0;
+  color: var(--hs-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.hs .hs-lede {
+  margin: 0;
+  color: var(--hs-text);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+/* ── Entries ── */
+.hs-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 48px;
+}
+.hs-item {
+  border-top: 1px solid var(--hs-rule);
+}
+
+.hs-card {
+  height: 100%;
+  padding: 28px 0 32px;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+  color: inherit;
+  text-decoration: none;
+}
+.hs-card:hover {
+  color: inherit;
+}
+.hs-card:focus-visible {
+  outline: 2px solid var(--hs-accent);
+  outline-offset: 6px;
+  border-radius: 8px;
+}
+
+.hs-media {
+  width: 120px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--hs-tile);
+  transition: background-color 0.2s ease;
+}
+.hs-media .ti-img {
+  display: block;
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+.hs-card:hover .hs-media {
+  background: var(--hs-tile-hover);
+}
+.hs-card:hover .hs-media .ti-img {
+  transform: scale(1.06);
+}
+
+.hs-text {
+  padding-top: 6px;
+}
+.hs .hs-name {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--hs-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.hs-name svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--hs-faint);
+  transition: color 0.15s ease, transform 0.2s ease;
+}
+.hs-card:hover .hs-name svg,
+.hs-card:focus-visible .hs-name svg {
+  color: var(--hs-accent);
+  transform: translateX(3px);
+}
+.hs .hs-desc {
+  margin: 8px 0 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--hs-text);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+/* ── Loading ── */
+.hs-card.is-skeleton .hs-text {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+.hs-sk-name {
+  width: 55%;
+  height: 16px;
+  margin-bottom: 4px;
+}
+.hs-sk-line {
+  width: 92%;
+  height: 11px;
+}
+.hs-sk-line.is-short {
+  width: 64%;
+}
+
+/* ── Buttons ── */
+.hs-actions {
+  margin-top: 48px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hs-btn {
+  height: 46px;
+  padding: 0 20px;
+  border: 1px solid #d5d7dc;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--hs-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.hs-btn:hover {
+  border-color: #b9bcc3;
+  background: #ffffff;
+  color: var(--hs-ink);
+}
+.hs-btn.is-primary {
+  border-color: var(--hs-accent);
+  background: var(--hs-accent);
+  color: #ffffff;
+}
+.hs-btn.is-primary:hover {
+  border-color: var(--hs-accent-strong);
+  background: var(--hs-accent-strong);
+  color: #ffffff;
+}
+.hs-btn svg {
+  transition: transform 0.2s ease;
+}
+.hs-btn:hover svg {
+  transform: translateX(3px);
+}
+.hs-btn:focus-visible {
+  outline: 2px solid var(--hs-accent);
+  outline-offset: 3px;
+}
+
+/* ── Widths ── */
+@media (max-width: 1100px) {
+  .hs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+  }
+}
+@media (max-width: 900px) {
+  .hs {
+    padding: 80px 0 88px;
+  }
+  .hs-inner {
+    padding: 0 20px;
+  }
+  .hs-head {
+    margin-bottom: 40px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hs .hs-lede {
+    max-width: 34rem;
+  }
+}
+@media (max-width: 640px) {
+  .hs {
+    padding: 64px 0 72px;
+  }
+  .hs-inner {
+    padding: 0 16px;
+  }
+  .hs-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hs-card {
+    padding: 20px 0 22px;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .hs-media {
+    width: 88px;
+  }
+  .hs-text {
+    padding-top: 2px;
+  }
+  .hs .hs-name {
+    font-size: 1rem;
+  }
+  .hs .hs-desc {
+    font-size: 0.875rem;
+  }
+  .hs-actions {
+    margin-top: 32px;
+  }
+  .hs-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-media,
+  .hs-name svg,
+  .hs-btn,
+  .hs-btn svg {
+    transition: none;
+  }
+  .hs-card:hover .hs-media .ti-img {
+    transform: none;
+  }
+}

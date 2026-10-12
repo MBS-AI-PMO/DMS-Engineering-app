@@ -402,6 +402,83 @@ def maybe_clean(workplane_obj, do_clean=True):
     except Exception:
         return workplane_obj
 
+
+def bore_resize_tools(hole_pos, hole_axis, original_dia_mm, target_dia_mm, local_thickness, outer_dia_mm=None):
+    """The tools that make a through-hole exactly the target size.
+
+    Too small: a pilot cuts it bigger. Too big: a plug fills it flush with the
+    wall, then the pilot cuts the target hole. `outer_dia_mm` is the hole's
+    widest point (an existing countersink or counterbore rim); when it is
+    wider than the target, the plug fills out to it, so no old cone or step
+    is left. Returns (plug or None, pilot or None, action) with action
+    'unchanged', 'enlarged' or 'filled'. The hole position is mid-wall.
+    """
+    target_r = float(target_dia_mm) / 2.0
+    original_r = (float(original_dia_mm) / 2.0) if original_dia_mm else 0.0
+    outer_r = max(original_r, (float(outer_dia_mm) / 2.0) if outer_dia_mm else 0.0)
+    if original_r > 0 and abs(original_r - target_r) <= 0.02 and outer_r <= original_r + 0.02:
+        return None, None, 'unchanged'
+
+    plug = None
+    action = 'enlarged'
+    if outer_r > target_r + 0.02:
+        # Exactly the wall's thickness, centred mid-wall, so its ends lie in
+        # the part's own faces and merge into them. Any extra height would
+        # leave a raised disc on both faces.
+        plug = make_axis_cylinder(hole_pos, hole_axis, outer_r + 0.02, max(local_thickness, 0.1))
+        action = 'filled'
+
+    pilot = make_axis_cylinder(hole_pos, hole_axis, max(target_r - 0.002, 0.01), max(local_thickness + 0.08, 0.7))
+    return plug, pilot, action
+
+
+def _apply_batch(model, tools, op, preview_mode, clean_each_step, label):
+    """Apply many tools in one boolean (much faster than one per hole).
+
+    The holes never overlap, so one fuse or cut with all the tools gives the
+    same part as doing them one by one. If the kernel rejects the batch, fall
+    back to one by one so a single awkward hole cannot lose the others.
+    """
+    tools = [tool for tool in tools if tool is not None]
+    if not tools:
+        return model
+    try:
+        tool = tools[0] if len(tools) == 1 else cq.Compound.makeCompound(tools)
+        model = op(model, tool, preview_mode, clean_each_step)
+        print(f"[CAD-KERNEL] Batched {label}: {len(tools)} in one pass")
+        return model
+    except Exception as batch_err:
+        print(f"[CAD-KERNEL] Batched {label} failed ({batch_err}); applying one by one")
+    for index, tool in enumerate(tools):
+        try:
+            model = op(model, tool, preview_mode, clean_each_step)
+        except Exception as one_err:
+            print(f"[CAD-KERNEL] {label} #{index + 1} failed: {one_err}")
+    return model
+
+
+def hole_outer_diameter_mm(hole_data):
+    """The widest point of a hole: its countersink/counterbore rim if any."""
+    rim_mm = parse_numeric((hole_data or {}).get('rim_diameter_mm'))
+    return rim_mm if rim_mm is not None and rim_mm > 0 else None
+
+
+def tap_target_diameter_mm(tap_info, original_dia_mm, outer_dia_mm=None):
+    """The hole a tap needs, from the admin's hole range for that thread.
+
+    Returns (target_mm, needs_resize). A plain hole already inside the range
+    is left alone; any other hole (including one with an old countersink or
+    counterbore around it) is re-cut to the middle of the range.
+    """
+    min_mm = parse_inches_to_mm(tap_info.get('min_diameter'))
+    max_mm = parse_inches_to_mm(tap_info.get('max_diameter'))
+    if not min_mm or not max_mm or min_mm <= 0 or max_mm < min_mm:
+        return original_dia_mm, False
+    has_rim = bool(outer_dia_mm and original_dia_mm and outer_dia_mm > original_dia_mm + 0.04)
+    if not has_rim and original_dia_mm and (min_mm - 0.01) <= original_dia_mm <= (max_mm + 0.01):
+        return original_dia_mm, False
+    return (min_mm + max_mm) / 2.0, True
+
 def process_configured_model(input_path, output_path, configuration_json, mode='full', report_output_path=None):
     """
     Physical hole cutting (taps + hardware fit + countersinks) and high-fidelity coloring.
@@ -436,8 +513,10 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
         if thickness_mm is None or thickness_mm <= 0:
             thickness_mm = 2.0
         
-        # 1. Perform Tapping Cuts
+        # 1. Perform Tapping Cuts (all holes gathered, then applied together)
         if selected_taps:
+            tap_plugs = []
+            tap_pilots = []
             for tap_id, tap_info in selected_taps.items():
                 if not tap_info:
                     continue
@@ -460,25 +539,40 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
 
                 local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
 
-                tap_cut_depth = max(local_thickness + 0.08, 0.7)
-                tap_radius = max((target_dia_mm / 2.0) - 0.002, 0.01)
+                # Any thread can go in any hole: the hole is re-cut to the
+                # size that thread needs (cut bigger, or filled and re-cut).
+                original_dia_mm = target_dia_mm
+                outer_dia_mm = hole_outer_diameter_mm(hole_data)
+                target_dia_mm, needs_resize = tap_target_diameter_mm(tap_info, original_dia_mm, outer_dia_mm)
 
                 print(
-                    f"[CAD-KERNEL] CUTTING TAP HOLE: id={tap_id}, "
+                    f"[CAD-KERNEL] TAP HOLE: id={tap_id}, "
                     f"pos=({hole_pos[0]:.2f},{hole_pos[1]:.2f},{hole_pos[2]:.2f}), "
                     f"axis=({hole_axis[0]:.3f},{hole_axis[1]:.3f},{hole_axis[2]:.3f}), "
-                    f"dia={target_dia_mm:.3f}mm, depth={tap_cut_depth:.3f}mm"
+                    f"hole={original_dia_mm:.3f}mm -> {target_dia_mm:.3f}mm, wall={local_thickness:.3f}mm"
                 )
 
+                # A hole already in the thread's range needs no cut at all.
+                if not needs_resize:
+                    print(f"[CAD-KERNEL] Tap hole {tap_id} unchanged")
+                    continue
                 try:
-                    tool = make_axis_cylinder(hole_pos, hole_axis, tap_radius, tap_cut_depth)
-                    model = _apply_cut(model, tool, preview_mode, clean_each_step)
+                    plug, pilot, action = bore_resize_tools(
+                        hole_pos, hole_axis, original_dia_mm, target_dia_mm,
+                        local_thickness, outer_dia_mm=outer_dia_mm,
+                    )
+                    tap_plugs.append(plug)
+                    tap_pilots.append(pilot)
+                    print(f"[CAD-KERNEL] Tap hole {tap_id} {action}")
                 except Exception as tap_cut_err:
-                    print(f"[CAD-KERNEL] Failed tap cut {tap_id}: {tap_cut_err}")
+                    print(f"[CAD-KERNEL] Failed tap tools {tap_id}: {tap_cut_err}")
+
+            model = _apply_batch(model, tap_plugs, _apply_fuse, preview_mode, clean_each_step, 'tap fills')
+            model = _apply_batch(model, tap_pilots, _apply_cut, preview_mode, clean_each_step, 'tap holes')
 
         hardware_resize_report = {}
-        batched_resize_plugs = []
-        batched_resize_pilots = []
+        hardware_plugs = []
+        hardware_pilots = []
 
         # 1.5 Resize holes for hardware requiring bore fit (flush studs + standoffs + nuts):
         # shrink oversized bores or enlarge undersized bores.
@@ -536,65 +630,21 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                     }
                     continue
 
-                target_hole_r = max((target_dia_mm / 2.0) - 0.002, 0.01)
-
                 # If source hole diameter is unknown, still enforce target by cutting to bore size.
                 if original_hole_dia_mm is None or original_hole_dia_mm <= 0:
                     original_hole_dia_mm = 0.0
 
-                original_hole_r = original_hole_dia_mm / 2.0
-                resize_tol = 0.02
-                radius_delta = original_hole_r - target_hole_r
-                if abs(radius_delta) <= resize_tol:
-                    hardware_resize_report[hw_key] = {
-                        'type': hw_type_int,
-                        'action': 'unchanged',
-                        'direction': 'none',
-                        'original_dia_mm': round(original_hole_dia_mm, 6),
-                        'target_dia_mm': round(target_dia_mm, 6),
-                    }
-                    continue
-
                 local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
+                outer_dia_mm = hole_outer_diameter_mm(hole_data)
 
+                # The same re-cut as taps and countersinks: too small is cut
+                # bigger; too big is filled (out to any countersink or
+                # counterbore rim) and cut again at the size the part needs.
                 try:
-                    if radius_delta > 0:
-                        # Hole is too large: fill then re-drill to target.
-                        fill_overrun = 0.02
-                        resize_depth = max(local_thickness + fill_overrun, 0.6)
-                        plug_radius = original_hole_r + 0.02
-                        plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
-                        pilot_depth = max(local_thickness + 0.08, 0.7)
-                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
-
-                        if preview_mode:
-                            batched_resize_plugs.append(plug)
-                            batched_resize_pilots.append(pilot)
-                        else:
-                            model = _apply_fuse(model, plug, preview_mode, clean_each_step)
-                            model = _apply_cut(model, pilot, preview_mode, clean_each_step)
-                        direction = "reduced"
-                    else:
-                        # Hole is too small (or unknown): open it directly to target.
-                        pilot_depth = max(local_thickness + 0.08, 0.7)
-                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_r, pilot_depth)
-                        if preview_mode:
-                            batched_resize_pilots.append(pilot)
-                        else:
-                            model = _apply_cut(model, pilot, preview_mode, clean_each_step)
-                        direction = "enlarged"
-
-                    print(
-                        f"[CAD-KERNEL] RESIZED HOLE FOR HARDWARE(type={hw_type_int}): id={hw_id}, "
-                        f"{direction}, original={original_hole_dia_mm:.3f}mm -> target={target_dia_mm:.3f}mm"
+                    plug, pilot, action = bore_resize_tools(
+                        hole_pos, hole_axis, original_hole_dia_mm, target_dia_mm,
+                        local_thickness, outer_dia_mm=outer_dia_mm,
                     )
-                    hardware_resize_report[hw_key] = {
-                        'type': hw_type_int,
-                        'action': 'resized',
-                        'direction': direction,
-                        'original_dia_mm': round(original_hole_dia_mm, 6),
-                        'target_dia_mm': round(target_dia_mm, 6),
-                    }
                 except Exception as hw_resize_err:
                     print(f"[CAD-KERNEL] Failed hardware resize {hw_id}: {hw_resize_err}")
                     hardware_resize_report[hw_key] = {
@@ -604,20 +654,42 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                         'original_dia_mm': round(original_hole_dia_mm, 6),
                         'target_dia_mm': round(target_dia_mm, 6),
                     }
+                    continue
 
-            if preview_mode:
-                try:
-                    if batched_resize_plugs:
-                        plug_shape = batched_resize_plugs[0] if len(batched_resize_plugs) == 1 else cq.Compound.makeCompound(batched_resize_plugs)
-                        model = _apply_fuse(model, plug_shape, preview_mode, clean_each_step)
-                    if batched_resize_pilots:
-                        pilot_shape = batched_resize_pilots[0] if len(batched_resize_pilots) == 1 else cq.Compound.makeCompound(batched_resize_pilots)
-                        model = _apply_cut(model, pilot_shape, preview_mode, clean_each_step)
-                except Exception as batch_resize_err:
-                    print(f"[CAD-KERNEL] Failed batched hardware resize pass: {batch_resize_err}")
-        
-        # 2. Perform Countersink Cuts
+                if action == 'unchanged':
+                    hardware_resize_report[hw_key] = {
+                        'type': hw_type_int,
+                        'action': 'unchanged',
+                        'direction': 'none',
+                        'original_dia_mm': round(original_hole_dia_mm, 6),
+                        'target_dia_mm': round(target_dia_mm, 6),
+                    }
+                    continue
+
+                hardware_plugs.append(plug)
+                hardware_pilots.append(pilot)
+                direction = 'reduced' if action == 'filled' else 'enlarged'
+                print(
+                    f"[CAD-KERNEL] RESIZED HOLE FOR HARDWARE(type={hw_type_int}): id={hw_id}, "
+                    f"{direction}, original={original_hole_dia_mm:.3f}mm -> target={target_dia_mm:.3f}mm"
+                )
+                hardware_resize_report[hw_key] = {
+                    'type': hw_type_int,
+                    'action': 'resized',
+                    'direction': direction,
+                    'original_dia_mm': round(original_hole_dia_mm, 6),
+                    'target_dia_mm': round(target_dia_mm, 6),
+                }
+
+            model = _apply_batch(model, hardware_plugs, _apply_fuse, preview_mode, clean_each_step, 'hardware fills')
+            model = _apply_batch(model, hardware_pilots, _apply_cut, preview_mode, clean_each_step, 'hardware holes')
+
+        # 2. Perform Countersink Cuts (all holes gathered, then applied together)
         if selected_countersinks:
+            cs_plugs = []
+            cs_pilots = []
+            cs_cones = []
+            cs_witnesses = []
             for cs_id, cs_info in selected_countersinks.items():
                 if not cs_info:
                     continue
@@ -666,31 +738,22 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
 
                 local_thickness = resolve_local_hole_depth_mm(hole_data, thickness_mm)
 
-                # If the existing hole is larger than the countersink's minor diameter,
-                # rebuild that bore first so the countersink fits correctly.
-                original_hole_r = (original_hole_dia_mm / 2.0) if original_hole_dia_mm else None
-                oversize_tol = 0.02
-                if original_hole_r is not None and original_hole_r > (minor_r + oversize_tol):
-                    try:
-                        # Fill oversized bores almost flush to avoid any raised witness ring,
-                        # then heal split faces so the patch blends like native geometry.
-                        fill_overrun = 0.02
-                        resize_depth = max(local_thickness + fill_overrun, 0.6)
-                        plug_radius = original_hole_r + 0.02
-                        plug = make_axis_cylinder(hole_pos, hole_axis, plug_radius, resize_depth)
-                        model = _apply_fuse(model, plug, preview_mode, clean_each_step)
-
-                        target_hole_radius = max(minor_r - 0.002, 0.01)
-                        pilot_depth = max(local_thickness + 0.08, 0.7)
-                        pilot = make_axis_cylinder(hole_pos, hole_axis, target_hole_radius, pilot_depth)
-                        model = _apply_cut(model, pilot, preview_mode, clean_each_step)
-
-                        print(
-                            f"[CAD-KERNEL] RESIZED HOLE FOR COUNTERSINK: id={cs_id}, "
-                            f"original={original_hole_dia_mm:.3f}mm -> target={minor_dia_mm:.3f}mm"
-                        )
-                    except Exception as resize_err:
-                        print(f"[CAD-KERNEL] Failed hole resize for countersink {cs_id}: {resize_err}")
+                # Any countersink can go on any hole: the through-hole becomes
+                # the countersink's minor diameter first (cut bigger, or filled
+                # and re-cut), then the cone is cut into it.
+                try:
+                    plug, pilot, action = bore_resize_tools(
+                        hole_pos, hole_axis, original_hole_dia_mm, minor_r * 2.0,
+                        local_thickness, outer_dia_mm=hole_outer_diameter_mm(hole_data),
+                    )
+                    cs_plugs.append(plug)
+                    cs_pilots.append(pilot)
+                    print(
+                        f"[CAD-KERNEL] COUNTERSINK HOLE {cs_id}: {action}, "
+                        f"{(original_hole_dia_mm or 0.0):.3f}mm -> {minor_r * 2.0:.3f}mm"
+                    )
+                except Exception as resize_err:
+                    print(f"[CAD-KERNEL] Failed hole resize for countersink {cs_id}: {resize_err}")
 
                 max_depth = max(0.2, local_thickness * 0.95)
                 cone_depth_mm = min(cone_depth_mm, max_depth)
@@ -715,104 +778,87 @@ def process_configured_model(input_path, output_path, configuration_json, mode='
                 )
                 tool_depth = cone_depth_mm + 0.08
 
+                # The cone, from the chosen face inward. A kernel that cannot
+                # loft it gets a plain recess so the countersink still shows.
                 try:
-                    if preview_mode:
-                        # Use a lightweight cone/frustum cutter so preview reflects countersinks.
-                        try:
-                            preview_tool = make_axis_cone(
-                                entry_origin,
-                                inward_dir,
-                                max(major_r, 0.05),
-                                max(minor_r, 0.01),
-                                max(tool_depth, 0.1)
-                            )
-                            model = _apply_cut(model, preview_tool, preview_mode, clean_each_step)
-                            print(
-                                f"[CAD-KERNEL] PREVIEW COUNTERSINK CUT: id={cs_id}, "
-                                f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm"
-                            )
-                        except Exception as preview_cut_err:
-                            print(f"[CAD-KERNEL] Preview cone cut failed for countersink {cs_id}: {preview_cut_err}")
-                            # Fallback: cylindrical recess so preview still shows a visible cut.
-                            fallback_tool = make_axis_cylinder(
-                                entry_origin,
-                                inward_dir,
-                                max(major_r, 0.05),
-                                max(tool_depth, 0.1)
-                            )
-                            model = _apply_cut(model, fallback_tool, preview_mode, clean_each_step)
-                            print(
-                                f"[CAD-KERNEL] PREVIEW COUNTERSINK CYLINDER CUT: id={cs_id}, "
-                                f"major={major_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm"
-                            )
-                    else:
-                        # Full mode: robust frustum cut, with fallback for runtime kernel differences.
-                        try:
-                            tool = make_axis_cone(
-                                entry_origin,
-                                inward_dir,
-                                max(major_r, 0.05),
-                                max(minor_r, 0.01),
-                                max(tool_depth, 0.1)
-                            )
-                        except Exception as full_cone_err:
-                            print(f"[CAD-KERNEL] Full cone tool failed for countersink {cs_id}: {full_cone_err}")
-                            tool = make_axis_cylinder(
-                                entry_origin,
-                                inward_dir,
-                                max(major_r, 0.05),
-                                max(tool_depth, 0.1)
-                            )
-
-                        print(
-                            f"[CAD-KERNEL] CUTTING COUNTERSINK: id={cs_id}, "
-                            f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
-                            f"face={'down' if face_sign < 0 else 'up'}"
+                    cone_tool = make_axis_cone(
+                        entry_origin,
+                        inward_dir,
+                        max(major_r, 0.05),
+                        max(minor_r, 0.01),
+                        max(tool_depth, 0.1)
+                    )
+                except Exception as cone_err:
+                    print(f"[CAD-KERNEL] Cone tool failed for countersink {cs_id}: {cone_err}")
+                    try:
+                        cone_tool = make_axis_cylinder(
+                            entry_origin,
+                            inward_dir,
+                            max(major_r, 0.05),
+                            max(tool_depth, 0.1)
                         )
-                        model = _apply_cut(model, tool, preview_mode, clean_each_step)
+                    except Exception as recess_err:
+                        print(f"[CAD-KERNEL] Recess tool failed for countersink {cs_id}: {recess_err}")
+                        cone_tool = None
+                cs_cones.append(cone_tool)
+                print(
+                    f"[CAD-KERNEL] COUNTERSINK {cs_id}: "
+                    f"major={major_dia_mm:.3f}mm, minor={minor_dia_mm:.3f}mm, depth={cone_depth_mm:.3f}mm, "
+                    f"face={'down' if face_sign < 0 else 'up'}"
+                )
 
-                        # The witness-ring detail is only needed in final manufacturing output.
-                        back_face_sign = -face_sign
-                        back_inward_dir = normalize_vector3(
-                            (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),
-                            fallback=(0.0, 0.0, 1.0 if face_sign > 0 else -1.0)
-                        )
-                        back_surface_center = (
-                            hole_pos[0] + hole_axis[0] * back_face_sign * (local_thickness * 0.5),
-                            hole_pos[1] + hole_axis[1] * back_face_sign * (local_thickness * 0.5),
-                            hole_pos[2] + hole_axis[2] * back_face_sign * (local_thickness * 0.5),
-                        )
-                        back_entry_origin = (
-                            back_surface_center[0] - back_inward_dir[0] * 0.03,
-                            back_surface_center[1] - back_inward_dir[1] * 0.03,
-                            back_surface_center[2] - back_inward_dir[2] * 0.03,
-                        )
+                # The witness-ring detail is only needed in final manufacturing output.
+                if preview_mode:
+                    continue
+                try:
+                    back_face_sign = -face_sign
+                    back_inward_dir = normalize_vector3(
+                        (-hole_axis[0] * back_face_sign, -hole_axis[1] * back_face_sign, -hole_axis[2] * back_face_sign),
+                        fallback=(0.0, 0.0, 1.0 if face_sign > 0 else -1.0)
+                    )
+                    back_surface_center = (
+                        hole_pos[0] + hole_axis[0] * back_face_sign * (local_thickness * 0.5),
+                        hole_pos[1] + hole_axis[1] * back_face_sign * (local_thickness * 0.5),
+                        hole_pos[2] + hole_axis[2] * back_face_sign * (local_thickness * 0.5),
+                    )
+                    back_entry_origin = (
+                        back_surface_center[0] - back_inward_dir[0] * 0.03,
+                        back_surface_center[1] - back_inward_dir[1] * 0.03,
+                        back_surface_center[2] - back_inward_dir[2] * 0.03,
+                    )
 
-                        witness_depth = min(max(0.06, cone_depth_mm * 0.12), max(0.12, local_thickness * 0.2))
-                        witness_inner_r = max(minor_r * 1.01, minor_r + 0.01)
-                        witness_outer_r = min(max(witness_inner_r + 0.05, minor_r * 1.35), major_r * 0.92)
+                    witness_depth = min(max(0.06, cone_depth_mm * 0.12), max(0.12, local_thickness * 0.2))
+                    witness_inner_r = max(minor_r * 1.01, minor_r + 0.01)
+                    witness_outer_r = min(max(witness_inner_r + 0.05, minor_r * 1.35), major_r * 0.92)
 
-                        if witness_outer_r > witness_inner_r + 1e-4 and witness_depth > 0:
-                            witness_plane = cq.Plane(
-                                origin=cq.Vector(*back_entry_origin),
-                                normal=cq.Vector(*back_inward_dir)
-                            )
-                            witness_tool = (
-                                cq.Workplane(witness_plane)
-                                .circle(witness_outer_r)
-                                .circle(witness_inner_r)
-                                .extrude(max(witness_depth, 0.02))
-                                .val()
-                            )
-                            model = _apply_cut(model, witness_tool, preview_mode, clean_each_step)
-                except Exception as cut_err:
-                    print(f"[CAD-KERNEL] Failed countersink cut {cs_id}: {cut_err}")
+                    if witness_outer_r > witness_inner_r + 1e-4 and witness_depth > 0:
+                        witness_plane = cq.Plane(
+                            origin=cq.Vector(*back_entry_origin),
+                            normal=cq.Vector(*back_inward_dir)
+                        )
+                        cs_witnesses.append(
+                            cq.Workplane(witness_plane)
+                            .circle(witness_outer_r)
+                            .circle(witness_inner_r)
+                            .extrude(max(witness_depth, 0.02))
+                            .val()
+                        )
+                except Exception as witness_err:
+                    print(f"[CAD-KERNEL] Failed witness ring {cs_id}: {witness_err}")
+
+            model = _apply_batch(model, cs_plugs, _apply_fuse, preview_mode, clean_each_step, 'countersink fills')
+            model = _apply_batch(model, cs_pilots, _apply_cut, preview_mode, clean_each_step, 'countersink holes')
+            model = _apply_batch(model, cs_cones, _apply_cut, preview_mode, clean_each_step, 'countersink cones')
+            model = _apply_batch(model, cs_witnesses, _apply_cut, preview_mode, clean_each_step, 'countersink witness rings')
 
         # Export the final asset; preview mode skips expensive assembly/color wrapping.
         path_obj = Path(output_path)
         path_obj.parent.mkdir(parents=True, exist_ok=True)
         if preview_mode:
-            shape = model.val() if hasattr(model, 'val') else model
+            # One tidy-up for the whole preview (full mode cleans every step):
+            # each fill plug merges into the face it fills, so a filled hole's
+            # old edge does not show on the part as a ring.
+            shape = maybe_clean(cq.Workplane(_shape_of(model)), True).val()
             cq.exporters.export(shape, output_path)
         else:
             anodizing_color = config.get('anodizingColor')
