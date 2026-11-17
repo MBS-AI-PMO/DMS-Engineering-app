@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { ArrowRight, Search, X } from 'lucide-react';
 import { metalsData as staticMetalsData } from '../data/metalsData';
-import { fetchMetals, fetchCategories } from '../utils/api';
+import { fetchMetalList, fetchCategories } from '../utils/api';
 import { displayMetalName, parseThickness, thicknessBounds } from '../utils/metalDisplay';
 import ThumbImage from '../components/ThumbImage';
+import metalsHeroImg from '../assets/metals-hero.webp';
 import '../styles/Shimmer.css';
 import '../styles/MetalsPage.css';
 
 /**
- * The metals catalog: a dark heading band with live counts, then every
+ * The metals catalog: a dark heading band over the coil-stock photo with
+ * live counts, then every
  * metal as a card (swatch, family, name, description, thicknesses) with
  * family filters and search, then a band that leads to instant pricing.
  * Numbers, filters and cards shimmer until the catalog has loaded.
@@ -37,7 +39,7 @@ const MetalsPage = () => {
     useEffect(() => {
         let cancelled = false;
         async function loadInitialData() {
-            const [categoriesResult, metalsResult] = await Promise.allSettled([fetchCategories(), fetchMetals()]);
+            const [categoriesResult, metalsResult] = await Promise.allSettled([fetchCategories(), fetchMetalList()]);
             if (cancelled) return;
 
             if (categoriesResult.status === 'fulfilled' && Array.isArray(categoriesResult.value)) {
@@ -105,7 +107,9 @@ const MetalsPage = () => {
         <div className="mp">
             {/* ── Heading band ── */}
             <section className="mp-hero" aria-labelledby="mp-title">
-                <div className="mp-inner">
+                <img className="mp-hero-img" src={metalsHeroImg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                <div className="mp-hero-shade" aria-hidden="true" />
+                <div className="mp-inner mp-hero-content">
                     <nav className="mp-crumbs" aria-label="Breadcrumb">
                         <Link to="/">Home</Link>
                         <span aria-hidden="true">/</span>
@@ -246,6 +250,7 @@ const MetalsPage = () => {
                                                     <ThumbImage
                                                         key={metal.image}
                                                         className="mp-swatch"
+                                                        width={64}
                                                         src={metal.image}
                                                         fallback={staticImageFor(metal)}
                                                     />

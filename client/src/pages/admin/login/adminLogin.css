@@ -1,0 +1,94 @@
+/*
+ * Admin sign-in (/admin/login). It sits outside the admin shell, so the kit
+ * tokens are declared here too (same values as styles/adminKit.css).
+ */
+.al-page {
+  --ak-ink: #0f172a;
+  --ak-text: #334155;
+  --ak-muted: #64748b;
+  --ak-faint: #94a3b8;
+  --ak-rule: #e5e7eb;
+  --ak-rule-soft: #f1f5f9;
+  --ak-ground: #f8fafc;
+  --ak-card: #ffffff;
+  --ak-accent: #e31b23;
+  --ak-accent-ink: #b91c1c;
+  --ak-accent-soft: #fef2f2;
+  --ak-focus: 0 0 0 3px rgba(227, 27, 35, 0.18);
+  --ak-radius: 14px;
+  --ak-display: 'Montserrat', 'Outfit', system-ui, sans-serif;
+  --ak-font: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 32px 16px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(227, 27, 35, 0.06), transparent 55%),
+    var(--ak-ground);
+  color: var(--ak-text);
+  font-family: var(--ak-font);
+}
+.al-page * { box-sizing: border-box; }
+
+.al-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px 32px 28px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 18px;
+  background: var(--ak-card);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+.al-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; color: var(--ak-ink); }
+.al-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e31b23, #c91520);
+  color: #fff;
+  font-family: var(--ak-display);
+  font-size: 18px;
+  font-weight: 800;
+}
+.al-brand-text { font-family: var(--ak-display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+.al-brand-text span { color: var(--ak-muted); font-weight: 700; }
+
+.al-title {
+  margin: 0;
+  color: var(--ak-ink);
+  font-family: var(--ak-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.al-sub { margin: 6px 0 22px; color: var(--ak-muted); font-size: 14px; line-height: 1.5; }
+
+.al-form { display: flex; flex-direction: column; }
+.al-form .ak-banner { margin-bottom: 14px; }
+.al-form .ak-check { margin: 2px 0 20px; }
+
+.al-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  color: var(--ak-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.al-back:hover { color: var(--ak-ink); }
+.al-back:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+
+@media (max-width: 480px) {
+  .al-page { justify-content: flex-start; padding-top: 40px; }
+  .al-card { padding: 24px 20px 22px; }
+}

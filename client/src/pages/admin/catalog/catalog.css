@@ -1,0 +1,188 @@
+/*
+ * Admin › Metals, Categories, Services, Hero Sections: what the admin kit
+ * (styles/adminKit.css) does not have yet. Prefix: cat-. Uses the kit's
+ * --ak-* tokens. Components: pages/admin/catalog/*.jsx.
+ *
+ * Rows editor   .cat-rows > .cat-rows-head + .cat-rows-row (> .cat-rows-cell, .cat-rows-tools)
+ * Chips         .cat-chips > label.cat-chip[.is-on]            (multi-select checkboxes)
+ * Folds         details.cat-fold > summary                     (collapsible sections)
+ * Gallery       .cat-gallery > .cat-gallery-item               (image tiles with a remove button)
+ * Misc          .cat-save-note, .cat-swatch, .cat-tile-grid / .cat-tile, .cat-inline, .cat-muted
+ */
+
+/* ── Rows editor ── */
+.cat-rows { display: flex; flex-direction: column; gap: 8px; }
+.cat-rows-head,
+.cat-rows-row { display: grid; align-items: center; gap: 8px; }
+.cat-rows-head {
+  padding: 0 2px;
+  color: var(--ak-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.cat-rows-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+.cat-rows-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cat-rows-tools { display: inline-flex; justify-content: flex-end; gap: 4px; }
+.cat-rows-empty { margin: 0; padding: 14px; border: 1px dashed var(--ak-rule); border-radius: 10px; color: var(--ak-muted); font-size: 13.5px; text-align: center; }
+.cat-rows-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.cat-rows textarea.ak-input { min-height: 64px; }
+
+/* ── Chips (multi-select) ── */
+.cat-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.cat-chips.is-compact { display: flex; flex-wrap: wrap; }
+.cat-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 10px;
+  background: var(--ak-card);
+  color: var(--ak-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.cat-chip:hover { border-color: var(--ak-faint); }
+.cat-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cat-chip-box {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 5px;
+  background: var(--ak-card);
+  color: #fff;
+}
+.cat-chip.is-on { border-color: var(--ak-accent); background: var(--ak-accent-soft); color: var(--ak-ink); }
+.cat-chip.is-on .cat-chip-box { border-color: var(--ak-accent); background: var(--ak-accent); }
+.cat-chip:focus-within { box-shadow: var(--ak-focus); }
+.cat-chip.is-disabled { cursor: not-allowed; opacity: 0.55; }
+.cat-chip-sub { margin-left: auto; color: var(--ak-muted); font-size: 12px; font-weight: 600; }
+
+/* ── Collapsible sections ── */
+.cat-fold { border: 1px solid var(--ak-rule); border-radius: 12px; background: var(--ak-card); }
+.cat-fold + .cat-fold { margin-top: 8px; }
+.cat-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  color: var(--ak-ink);
+  font-size: 14px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+.cat-fold > summary::-webkit-details-marker { display: none; }
+.cat-fold > summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--ak-faint);
+  border-bottom: 2px solid var(--ak-faint);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.cat-fold[open] > summary::before { transform: rotate(45deg); }
+.cat-fold > summary:focus-visible { outline: 0; box-shadow: var(--ak-focus); border-radius: 12px; }
+.cat-fold-count { margin-left: auto; color: var(--ak-muted); font-size: 12.5px; font-weight: 600; }
+.cat-fold-body { padding: 4px 14px 14px; }
+
+/* ── Image gallery ── */
+.cat-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.cat-gallery-item { position: relative; }
+.cat-gallery-item .ak-image-tile { aspect-ratio: 4 / 3; }
+.cat-gallery-item .ak-image-tile button { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.cat-gallery-remove { position: absolute; top: 6px; right: 6px; }
+.cat-zoom { display: block; max-width: 100%; max-height: 72vh; margin: 0 auto; border-radius: 10px; object-fit: contain; }
+.cat-zoomable { padding: 0; border: 0; background: none; cursor: zoom-in; }
+
+/* ── Tiles (pick one of several: hardware types, …) ── */
+.cat-tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.cat-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  background: var(--ak-card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.cat-tile:hover { border-color: var(--ak-faint); }
+.cat-tile:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.cat-tile > svg:last-child { margin-left: auto; color: var(--ak-faint); }
+
+/* ── Misc ── */
+.cat-save-note { display: inline-flex; align-items: center; gap: 7px; margin-right: auto; color: var(--ak-muted); font-size: 13.5px; font-weight: 600; }
+.cat-save-note.is-dirty { color: #b45309; }
+.cat-save-note .ak-dot { background: currentColor; }
+.cat-swatch {
+  display: inline-block;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--ak-rule), 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+.cat-swatch.is-lg { width: 44px; height: 44px; }
+.cat-color-input { position: relative; flex: none; overflow: hidden; cursor: pointer; }
+.cat-color-input input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.cat-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cat-inline > .ak-input { flex: 1 1 160px; width: auto; }
+.cat-muted { color: var(--ak-muted); }
+.cat-mono-path { font-family: var(--ak-mono); font-size: 12.5px; }
+.cat-section-title { margin: 6px 0 10px; color: var(--ak-ink); font-size: 14px; font-weight: 800; }
+.cat-hint-block { margin: 0 0 14px; color: var(--ak-muted); font-size: 13.5px; line-height: 1.5; }
+
+@media (max-width: 560px) {
+  .cat-rows-head { display: none; }
+  .cat-rows-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 10px;
+    border: 1px solid var(--ak-rule);
+    border-radius: 10px;
+  }
+  .cat-rows-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; color: var(--ak-muted); font-size: 12px; font-weight: 600; }
+  .cat-chips { grid-template-columns: minmax(0, 1fr); }
+  .cat-tile-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Static tiles (a colour, an option) ── */
+.cat-tile.is-static { cursor: default; }
+.cat-tile.is-static:hover { border-color: var(--ak-rule); }
+.cat-tile-text { flex: 1; min-width: 0; }
+.cat-tile-text .ak-cell-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-tile-img { flex: none; width: 48px; height: 48px; border: 1px solid var(--ak-rule); border-radius: 10px; background: var(--ak-ground); object-fit: cover; }
+.cat-tile-img.is-lg { width: 72px; height: 72px; border-radius: 12px; }
+.cat-tile-img.is-empty { display: grid; place-items: center; color: var(--ak-faint); }
+.cat-specs { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--ak-text); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cat-specs b { color: var(--ak-muted); font-weight: 600; }
+.cat-specs .is-limit { color: var(--ak-accent-ink); }
+.cat-tile-action { display: block; margin-top: 8px; }
+
+/* ── Tree rows (services) ── */
+.cat-tree-cell { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: calc(var(--depth, 0) * 22px); }
+.cat-tree-mark { flex: none; color: var(--ak-faint); }
+.cat-tree-cell .ak-ellipsis { max-width: 340px; }
+@media (max-width: 860px) {
+  .cat-tree-cell { padding-left: calc(var(--depth, 0) * 12px); text-align: left; }
+  .cat-tree-cell .ak-ellipsis { max-width: 180px; }
+}
+
+/* ── Metal assignment cards ── */
+.cat-assign.is-on { border-color: #fecaca; box-shadow: 0 0 0 3px var(--ak-accent-soft); }

@@ -1,0 +1,168 @@
+/* ══ My orders > Quote requests ══════════════════════════════════════════
+   Sits under the orders on /orders and uses the account page's colours
+   (.acc variables, .acc-h2, .acc-status). One white panel, a row per
+   request, the shop's answer under it once quoted. Own class names (mq-). */
+
+.mq {
+  margin-top: 40px;
+}
+.mq-head {
+  margin-bottom: 14px;
+}
+.mq-sub {
+  margin: 4px 0 0;
+  color: var(--acc-text, #5b5f68);
+  font-size: 0.9375rem;
+}
+.mq-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--acc-accent-strong, #b91c1c);
+  font-size: 0.875rem;
+}
+.mq-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--acc-rule, #e3e4e8);
+  border-radius: 14px;
+  list-style: none;
+  background: #ffffff;
+  overflow: hidden;
+}
+.mq-item + .mq-item {
+  border-top: 1px solid var(--acc-rule-soft, #eceef1);
+}
+.mq-row {
+  min-height: 64px;
+  padding: 12px 20px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 140px 130px;
+  align-items: center;
+  gap: 16px;
+}
+.mq-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--acc-tile, #f3f4f6);
+  color: var(--acc-ink, #0b0c0f);
+}
+.mq-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: baseline;
+}
+.mq-ref {
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.mq-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.mq-specs {
+  grid-column: 1 / -1;
+  color: var(--acc-text, #5b5f68);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.mq-date {
+  color: var(--acc-text, #5b5f68);
+  font-size: 0.9375rem;
+}
+
+/* The shop's answer */
+.mq-answer {
+  margin: 0 20px 18px 72px;
+  padding: 14px 16px;
+  border: 1px solid var(--acc-rule-soft, #eceef1);
+  border-radius: 10px;
+  background: var(--acc-ground, #f7f7f8);
+}
+.mq-price {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+}
+.mq-price dt {
+  color: var(--acc-faint, #8b8f98);
+  font-size: 0.75rem;
+}
+.mq-price dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.mq-price dd.is-total {
+  color: var(--acc-ink, #0b0c0f);
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+.mq-reply {
+  margin: 14px 0 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--acc-accent, #dc2626);
+}
+.mq-reply-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--acc-faint, #8b8f98);
+  font-size: 0.75rem;
+}
+.mq-reply p {
+  margin: 4px 0 0;
+  color: var(--acc-ink, #0b0c0f);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mq-accept {
+  margin: 12px 0 0;
+  color: var(--acc-text, #5b5f68);
+  font-size: 0.875rem;
+}
+.mq-accept a {
+  color: var(--acc-accent, #dc2626);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .mq {
+    margin-top: 32px;
+  }
+  .mq-row {
+    padding: 14px 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main main"
+      "date status";
+    gap: 8px 12px;
+  }
+  .mq-icon {
+    display: none;
+  }
+  .mq-main { grid-area: main; }
+  .mq-date { grid-area: date; font-size: 0.8125rem; }
+  .mq-row .acc-status { grid-area: status; justify-self: end; }
+  .mq-answer {
+    margin: 0 16px 16px;
+  }
+  .mq-price {
+    gap: 10px 24px;
+  }
+}

@@ -208,6 +208,37 @@
 .cr-price-unit s {
   margin-right: 4px;
 }
+/* A part with no instant price */
+.cr-needs-quote strong {
+  color: #b91c1c;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.cr-needs-quote a,
+.cr-needs-quote .cr-quote-btn {
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.cr-needs-quote .cr-quote-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cr-quote-note {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
 
 .cr-specs {
   margin: 0;
@@ -348,6 +379,28 @@
   justify-content: center;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+/* The typeable quantity between − and + */
+.cr-qty-input {
+  width: 56px;
+  height: 100%;
+  padding: 0 4px;
+  border: 0;
+  border-left: 1px solid var(--cr-rule);
+  border-right: 1px solid var(--cr-rule);
+  background: none;
+  color: var(--cr-ink);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.cr-qty-input:focus {
+  outline: 2px solid var(--cr-ink);
+  outline-offset: -2px;
+}
+.cr-qty-input:disabled {
+  color: #9ca3af;
 }
 .cr-volume {
   color: var(--cr-good);

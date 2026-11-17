@@ -5,6 +5,7 @@ import { Menu, X, Search, ChevronDown, Settings, LogOut, ShoppingBag, Package, A
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext.js';
 import { fetchSettings } from '../utils/api';
+import { imageVariant } from '../utils/imageUrl';
 import SearchOverlay from './SearchOverlay';
 import '../styles/SiteNav.css';
 
@@ -20,6 +21,7 @@ const NAV_LINKS = [
   { name: 'Services', path: '/services' },
   { name: 'Guidelines', path: '/guidelines' },
   { name: 'FAQ', path: '/faq' },
+  { name: 'About', path: '/about' },
   { name: 'Contact', path: '/contact' },
 ];
 
@@ -30,7 +32,8 @@ const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo.webp');
+  // logo-480.webp: the 1600 px logo.webp sized for a ~100 px wide bar logo.
+  const [logo, setLogo] = useState(localStorage.getItem('navbar_logo') || '/logo-480.webp');
   const [seenPath, setSeenPath] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -116,7 +119,7 @@ const Navbar = () => {
 
   const handleLogoError = () => {
     localStorage.removeItem('navbar_logo');
-    setLogo('/logo.webp');
+    setLogo('/logo-480.webp');
   };
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
@@ -138,7 +141,7 @@ const Navbar = () => {
       <header className={`sn${isScrolled ? ' is-scrolled' : ''}`}>
         <div className="sn-bar">
           <Link to="/" className="sn-logo" aria-label="Home">
-            <img src={logo} alt="DMS" decoding="async" onError={handleLogoError} />
+            <img src={imageVariant(logo, 320)} alt="DMS" decoding="async" onError={handleLogoError} />
           </Link>
 
           <nav className="sn-links" aria-label="Main">

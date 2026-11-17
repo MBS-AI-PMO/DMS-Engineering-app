@@ -1,0 +1,33 @@
+/*
+ * Admin > Payment methods: only what the admin kit lacks. Prefix: pm-.
+ * .pm-method (a payment method card with its switch), .pm-keys (one mode's keys).
+ */
+.pm-method.is-on { border-color: #bbf7d0; }
+.pm-method-head { display: flex; align-items: center; gap: 14px; }
+.pm-method-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--ak-rule-soft);
+  color: var(--ak-muted);
+}
+.pm-method.is-on .pm-method-icon { background: var(--ak-accent-soft); color: var(--ak-accent); }
+.pm-method-text { flex: 1; min-width: 0; }
+.pm-method-switch { display: flex; flex: none; align-items: center; gap: 12px; }
+.pm-method-body { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--ak-rule-soft); }
+
+.pm-keys { margin: 4px 0 8px; padding: 14px 16px 2px; border: 1px solid var(--ak-rule); border-radius: 12px; }
+.pm-keys.is-idle { background: var(--ak-ground); }
+.pm-keys.is-idle .ak-input { background: var(--ak-ground); }
+.pm-keys-title { display: flex; align-items: center; gap: 8px; padding: 0 6px; color: var(--ak-ink); font-size: 13px; font-weight: 700; }
+.pm-method-body .ak-seg { align-self: flex-start; max-width: 100%; }
+.pm-test { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; }
+.pm-unsaved { margin-right: auto; align-self: center; color: var(--ak-ink); font-size: 14px; font-weight: 600; }
+
+@media (max-width: 560px) {
+  .pm-method-head { flex-wrap: wrap; }
+  .pm-method-switch { width: 100%; justify-content: space-between; }
+}

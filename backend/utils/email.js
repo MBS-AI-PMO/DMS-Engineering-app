@@ -72,7 +72,8 @@ function createTransporter(config) {
     });
 }
 
-async function sendEmail({ to, subject, html, replyTo }) {
+// Branded emails are built in ../emails; this only hands them to the SMTP server.
+async function sendEmail({ to, subject, html, text, replyTo, attachments }) {
     const config = await getEmailConfig();
     if (!config) throw new Error('Email not configured. Go to Admin > Email Config to set up SMTP.');
 
@@ -80,17 +81,19 @@ async function sendEmail({ to, subject, html, replyTo }) {
 
     try {
         const info = await transporter.sendMail({
-            from: `"${config.sender_name || 'DMS Engineering'}" <${config.email}>`,
+            from: { name: config.sender_name || 'DMS', address: config.email },
             to,
             subject,
             html,
+            ...(text ? { text } : {}),
             ...(replyTo ? { replyTo } : {}),
+            ...(attachments?.length ? { attachments } : {}),
         });
         console.log(`[Email] Sent to ${to} | subject: "${subject}" | messageId: ${info.messageId}`);
         return info;
     } catch (err) {
         const detail = classifyEmailError(err);
-        console.error(`[Email] FAILED to ${to} | code: ${err.code || 'unknown'} | ${err.message}`);
+        console.error(`[Email] FAILED to ${to} | code: ${err.code || 'unknown'} | ${err.message.split('\n')[0]}`);
         throw new Error(detail);
     }
 }

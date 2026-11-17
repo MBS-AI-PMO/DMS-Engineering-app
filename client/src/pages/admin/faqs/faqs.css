@@ -1,0 +1,5 @@
+/* Admin › FAQs and FAQ categories: only what the kit lacks. Prefix: ac-faq-. */
+.ac-faq-count { color: var(--ak-accent-ink); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.ac-faq-count:hover { text-decoration: underline; }
+.ac-faq-count.is-zero { color: var(--ak-muted); }
+.ac-faq-slug { color: var(--ak-muted); }

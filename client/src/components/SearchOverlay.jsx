@@ -4,7 +4,8 @@ import OptimizedImage from './OptimizedImage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Box, Settings, ArrowRight, Command } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { fetchMetals, fetchServices } from '../utils/api';
+import { fetchMetalList, fetchServices } from '../utils/api';
+import { imageVariant } from '../utils/imageUrl';
 
 const SearchOverlay = ({ isOpen, onClose }) => {
     const [query, setQuery] = useState('');
@@ -27,7 +28,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
         const loadData = async () => {
             try {
                 const [metalsData, servicesData] = await Promise.all([
-                    fetchMetals(),
+                    fetchMetalList(),
                     fetchServices()
                 ]);
                 if (!ignore) {
@@ -181,7 +182,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                                 onMouseEnter={() => setSelectedIndex(globalIdx)}
                                             >
                                                 <div className="search-item-thumb">
-                                                    <OptimizedImage src={metal.image_path} alt={metal.name} />
+                                                    <OptimizedImage src={imageVariant(metal.image_path, 160)} alt={metal.name} />
                                                 </div>
                                                 <div className="search-item-info">
                                                     <div className="search-item-title">{metal.name}</div>
@@ -207,7 +208,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                                 onMouseEnter={() => setSelectedIndex(globalIdx)}
                                             >
                                                 <div className="search-item-thumb">
-                                                    <OptimizedImage src={svc.image_path} alt={svc.title} />
+                                                    <OptimizedImage src={imageVariant(svc.image_path, 160)} alt={svc.title} />
                                                 </div>
                                                 <div className="search-item-info">
                                                     <div className="search-item-title">{svc.title}</div>

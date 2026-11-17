@@ -1,0 +1,699 @@
+/* ══ Legal pages (/privacy-policy, /terms-of-service) ═════════════════════
+   A flat dark heading band: breadcrumbs, a red rule running in from the
+   left edge, the title as a bold white word over a light red one, and on
+   the right a red line icon with a much bigger, faint outline of it
+   bleeding off the band. Then on the light ground the "On this page" list
+   in a white panel that stays in view, and the document in a white panel
+   set at a reading measure (~70ch). Own class names (lg-). */
+
+.lg {
+  --lg-dark: #0b0c0f;
+  --lg-ground: #f7f7f8;
+  --lg-ink: #0b0c0f;
+  --lg-text: #4b4f58;
+  --lg-faint: #8b8f98;
+  --lg-rule: #e3e4e8;
+  --lg-rule-soft: #eceef1;
+  --lg-rule-strong: #cfd2d8;
+  --lg-accent: #dc2626;
+  --lg-accent-strong: #b91c1c;
+  --lg-accent-on-dark: #e5383b;
+  --lg-accent-tint: rgba(220, 38, 38, 0.08);
+  --lg-on-dark: #f4f4f5;
+  --lg-on-dark-text: rgba(244, 244, 245, 0.74);
+  --lg-on-dark-faint: rgba(244, 244, 245, 0.5);
+
+  background: var(--lg-ground);
+  color: var(--lg-ink);
+}
+
+.lg-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+.lg a:focus-visible,
+.lg button:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 3px;
+}
+
+/* ── Heading band ── */
+.lg-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--lg-dark);
+  color: var(--lg-on-dark);
+  --shimmer-base: rgba(255, 255, 255, 0.1);
+  --shimmer-shine: rgba(255, 255, 255, 0.1);
+}
+/* The faint oversized outline, bleeding off the right and bottom edges. */
+.lg-hero-mark {
+  position: absolute;
+  right: -72px;
+  bottom: -190px;
+  width: 540px;
+  height: auto;
+  color: rgba(244, 244, 245, 0.06);
+  pointer-events: none;
+}
+.lg-hero.is-document .lg-hero-mark {
+  right: -48px;
+  bottom: -230px;
+}
+.lg-hero-content {
+  position: relative;
+  padding-top: 64px;
+  padding-bottom: 76px;
+}
+.lg-hero-text {
+  position: relative;
+  z-index: 1;
+}
+.lg-hero-icon {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: 96px;
+  width: 168px;
+  height: auto;
+  color: var(--lg-accent-on-dark);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.lg-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lg-on-dark-faint);
+  font-size: 0.8125rem;
+}
+.lg-crumbs a {
+  color: var(--lg-on-dark-text);
+  text-decoration: none;
+}
+.lg-crumbs a:hover {
+  color: var(--lg-on-dark);
+}
+.lg-crumbs [aria-current] {
+  color: var(--lg-on-dark);
+}
+
+/* The red rule: 56px under the text, and a run of the same red out to the
+   band's left edge (the band clips it). */
+.lg-rule {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin: 40px 0 24px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lg-accent);
+}
+.lg-rule::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: 100vw;
+  height: 100%;
+  background: inherit;
+}
+
+.lg .lg-title {
+  margin: 0;
+  color: var(--lg-on-dark);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.lg-title-strong,
+.lg-title-light {
+  display: block;
+  -webkit-text-fill-color: currentColor;
+}
+.lg-title-strong {
+  font-weight: 800;
+}
+.lg-title-light {
+  margin-top: 0.08em;
+  color: var(--lg-accent-on-dark);
+  font-weight: 300;
+}
+.lg .lg-lede {
+  max-width: 34rem;
+  margin: 24px 0 0;
+  color: var(--lg-on-dark-text);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+.lg .lg-meta {
+  min-height: 20px;
+  margin: 16px 0 0;
+  display: flex;
+  align-items: center;
+  color: var(--lg-on-dark-faint);
+  font-size: 0.875rem;
+}
+.lg-meta time {
+  margin-left: 0.3em;
+  color: var(--lg-on-dark-text);
+}
+.lg-sk-meta {
+  width: 190px;
+  height: 12px;
+}
+
+/* ── Body ── */
+.lg-body {
+  padding: 56px 0 96px;
+  --shimmer-base: #e8e9ed;
+  --shimmer-shine: rgba(255, 255, 255, 0.65);
+}
+.lg-layout {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 820px);
+  align-items: start;
+  gap: 48px;
+}
+.lg-layout.is-single {
+  grid-template-columns: minmax(0, 820px);
+}
+
+/* On this page: one white panel, a hairline between rows, the section
+   being read marked by a red bar and bolder text. */
+.lg-toc {
+  position: sticky;
+  top: 88px;
+}
+.lg-toc-label {
+  display: block;
+  margin: 0 0 10px 2px;
+  color: var(--lg-faint);
+  font-size: 0.8125rem;
+}
+.lg-toc-list {
+  max-height: calc(100vh - 190px);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--lg-rule);
+  border-radius: 14px;
+  list-style: none;
+  background: #ffffff;
+  overflow-y: auto;
+}
+.lg-toc-list > li + li {
+  border-top: 1px solid var(--lg-rule-soft);
+}
+.lg-toc-link {
+  position: relative;
+  min-height: 46px;
+  padding: 12px 16px 12px 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--lg-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.lg-toc-link:hover {
+  color: var(--lg-ink);
+}
+.lg-toc-link.is-active {
+  color: var(--lg-ink);
+  font-weight: 600;
+}
+.lg-toc-link.is-active::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lg-accent);
+}
+.lg .lg-toc-link:focus-visible {
+  outline-offset: -2px;
+}
+.lg-toc-num {
+  flex: none;
+  min-width: 1.5em;
+  color: var(--lg-faint);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.lg-toc-sk {
+  height: 46px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+}
+.lg-toc-sk .lg-sk-line {
+  width: 70%;
+}
+.lg-toc-sk:nth-child(2n) .lg-sk-line {
+  width: 54%;
+}
+.lg-toc-sk:nth-child(3n) .lg-sk-line {
+  width: 82%;
+}
+.lg-toc-related {
+  margin: 16px 0 0 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lg-accent);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.lg-toc-related:hover {
+  color: var(--lg-accent-strong);
+}
+.lg-toc-related svg {
+  transition: transform 0.2s ease;
+}
+.lg-toc-related:hover svg {
+  transform: translateX(3px);
+}
+
+/* The document */
+.lg-doc {
+  padding: 44px 56px 40px;
+  border: 1px solid var(--lg-rule);
+  border-radius: 14px;
+  background: #ffffff;
+}
+.lg-section {
+  scroll-margin-top: 88px;
+}
+.lg-section + .lg-section {
+  margin-top: 40px;
+  padding-top: 40px;
+  border-top: 1px solid var(--lg-rule-soft);
+}
+.lg-section-head {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.lg-section-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lg-accent-tint);
+  color: var(--lg-accent);
+}
+.lg .lg-h2 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--lg-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: clamp(1.25rem, 2vw, 1.4375rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.lg .lg-h2:focus {
+  outline: none;
+}
+.lg-h2-num {
+  color: var(--lg-faint);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Admin text: paragraphs and lists at a reading measure. */
+.lg-prose {
+  max-width: 68ch;
+  color: var(--lg-text);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+.lg .lg-prose p,
+.lg .lg-prose ul,
+.lg .lg-prose ol {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+.lg .lg-prose > :is(p, ul, ol) + :is(p, ul, ol) {
+  margin-top: 1em;
+}
+.lg .lg-prose ul,
+.lg .lg-prose ol {
+  padding-left: 1.4em;
+}
+.lg .lg-prose li + li {
+  margin-top: 0.5em;
+}
+.lg .lg-prose li {
+  padding-left: 0.2em;
+}
+.lg .lg-prose ul li::marker {
+  color: var(--lg-accent);
+}
+.lg .lg-prose ol li::marker {
+  color: var(--lg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Closing note (terms) and the questions foot */
+.lg-note {
+  max-width: 68ch;
+  margin-top: 44px;
+  padding: 22px 24px;
+  border-left: 3px solid var(--lg-accent);
+  border-radius: 0 12px 12px 0;
+  background: var(--lg-ground);
+}
+.lg .lg-note-title {
+  margin: 0;
+  color: var(--lg-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.lg .lg-note p {
+  margin: 8px 0 0;
+  color: var(--lg-text);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+.lg-foot {
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid var(--lg-rule);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 32px;
+}
+.lg-foot-copy {
+  max-width: 34rem;
+}
+.lg .lg-foot-title {
+  margin: 0;
+  color: var(--lg-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.lg .lg-foot p {
+  margin: 6px 0 0;
+  color: var(--lg-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.lg-foot-actions,
+.lg-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lg-btn {
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid #d5d7dc;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ffffff;
+  color: var(--lg-ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.lg-btn:hover {
+  border-color: #b9bcc3;
+  color: var(--lg-ink);
+}
+.lg-btn.is-primary {
+  border-color: var(--lg-accent);
+  background: var(--lg-accent);
+  color: #ffffff;
+}
+.lg-btn.is-primary:hover {
+  border-color: var(--lg-accent-strong);
+  background: var(--lg-accent-strong);
+  color: #ffffff;
+}
+.lg-btn svg {
+  flex: none;
+  transition: transform 0.2s ease;
+}
+.lg-btn.is-primary:hover svg:last-child {
+  transform: translateX(3px);
+}
+
+/* Empty and error */
+.lg-state {
+  padding: 12px 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.lg .lg-state-title {
+  margin: 0;
+  color: var(--lg-ink);
+  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.lg .lg-state p {
+  max-width: 52ch;
+  margin: 0 0 6px;
+  color: var(--lg-text);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Loading */
+.lg-sk-line {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+.lg-sk-line.is-heading {
+  width: 46%;
+  height: 20px;
+}
+.lg-sk-prose {
+  max-width: 68ch;
+  display: grid;
+  gap: 12px;
+}
+.lg-sk-prose .lg-sk-line:nth-child(2) {
+  width: 94%;
+}
+.lg-sk-prose .lg-sk-line:last-child {
+  width: 58%;
+}
+.lg-section.is-skeleton .lg-section-icon {
+  background: var(--shimmer-base);
+}
+
+/* ── Widths ── */
+@media (max-width: 1000px) {
+  .lg-layout,
+  .lg-layout.is-single {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .lg-toc {
+    position: static;
+    min-width: 0;
+  }
+  .lg-toc-label,
+  .lg-toc-related {
+    display: none;
+  }
+  /* The sections become one scrolling row of pills. */
+  .lg-toc-list {
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    gap: 6px;
+    background: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .lg-toc-list::-webkit-scrollbar {
+    display: none;
+  }
+  .lg-toc-list > li {
+    flex: none;
+  }
+  .lg-toc-list > li + li {
+    border-top: 0;
+  }
+  .lg-toc-link {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--lg-rule);
+    border-radius: 999px;
+    align-items: center;
+    background: #ffffff;
+    white-space: nowrap;
+  }
+  .lg-toc-link.is-active {
+    border-color: var(--lg-ink);
+    background: var(--lg-ink);
+    color: #ffffff;
+  }
+  .lg-toc-link.is-active::before {
+    display: none;
+  }
+  .lg-toc-link.is-active .lg-toc-num {
+    color: rgba(255, 255, 255, 0.65);
+  }
+  .lg-toc-num {
+    min-width: 0;
+  }
+  .lg-toc-sk {
+    width: 150px;
+    height: 40px;
+    flex: none;
+  }
+  .lg-doc {
+    max-width: 820px;
+  }
+}
+@media (max-width: 900px) {
+  .lg-inner {
+    padding: 0 20px;
+  }
+  .lg-hero-content {
+    padding-top: 52px;
+    padding-bottom: 60px;
+  }
+  .lg-hero-icon {
+    right: 40px;
+    width: 128px;
+  }
+  .lg-hero-mark {
+    width: 420px;
+    right: -80px;
+    bottom: -170px;
+  }
+  .lg-hero.is-document .lg-hero-mark {
+    right: -60px;
+    bottom: -200px;
+  }
+}
+@media (max-width: 640px) {
+  .lg-inner {
+    padding: 0 16px;
+  }
+  .lg-hero-content {
+    padding-top: 36px;
+    padding-bottom: 48px;
+  }
+  .lg-rule {
+    margin: 32px 0 20px;
+  }
+  .lg .lg-title {
+    font-size: clamp(2.25rem, 11vw, 3rem);
+  }
+  .lg .lg-lede {
+    font-size: 1rem;
+  }
+  /* The icon sits behind the title, quiet, so the words never run into it. */
+  .lg-hero-icon {
+    top: 64px;
+    right: 4px;
+    width: 104px;
+    opacity: 0.28;
+    transform: none;
+  }
+  .lg-hero-mark {
+    width: 300px;
+    right: -90px;
+    bottom: -120px;
+    color: rgba(244, 244, 245, 0.05);
+  }
+  .lg-hero.is-document .lg-hero-mark {
+    right: -80px;
+    bottom: -140px;
+  }
+  .lg-body {
+    padding: 28px 0 64px;
+  }
+  .lg-toc-list {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+  .lg-doc {
+    padding: 26px 18px 24px;
+  }
+  .lg-section + .lg-section {
+    margin-top: 32px;
+    padding-top: 32px;
+  }
+  .lg-section-head {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .lg-section-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .lg .lg-h2 {
+    padding-top: 6px;
+  }
+  .lg-prose {
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+  .lg-note {
+    padding: 18px;
+  }
+  .lg-foot-actions .lg-btn,
+  .lg-state-actions .lg-btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-btn,
+  .lg-btn svg,
+  .lg-toc-link,
+  .lg-toc-related svg {
+    transition: none;
+  }
+}

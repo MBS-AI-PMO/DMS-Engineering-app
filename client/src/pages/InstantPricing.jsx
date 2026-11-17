@@ -14,15 +14,15 @@ import {
 } from '../utils/api';
 import { useCart } from '../context/CartContext.js';
 import { useToast } from '../context/ToastContext';
-import StepModelViewer from '../components/viewer/StepModelViewer';
-import DxfModelViewer from '../components/viewer/DxfModelViewer';
-import CadFlatPatternViewer from '../components/viewer/CadFlatPatternViewer';
-import HierarchicalProjectViewer from '../components/viewer/HierarchicalProjectViewer';
+// Loaded on demand so the page can paint before three.js arrives.
+import { StepModelViewer, DxfModelViewer, CadFlatPatternViewer } from '../components/viewer/LazyViewers';
 import PricingSidebar from '../components/pricing/PricingSidebar';
 import HoleServiceDrawer from '../components/pricing/HoleServiceDrawer';
 import FinishColorDrawer from '../components/pricing/FinishColorDrawer';
 import { HARDWARE_TYPES, countersinkLabel, optionBlockedReason } from '../utils/holeFeatures';
 import { analyzeDxfFile } from '../utils/dxfAnalysis';
+import QuoteRequestDialog from '../components/QuoteRequestDialog';
+import { configurationSummary } from '../utils/quoteRequest';
 import '../styles/PremiumPricing.css';
 import '../styles/InstantPricingWorkbench.css';
 
@@ -417,6 +417,9 @@ const deriveQuoteItem = (item, config = {}, allServices = []) => {
   };
 };
 
+// A pricing reply that settles a file: a price, or "request a quote".
+const hasPricingOutcome = (estimate) => Boolean(estimate?.success || estimate?.quote_required);
+
 const buildPricingPayloadForQuoteItem = (item, config = {}, allServices = [], derived = null) => {
   const info = derived || deriveQuoteItem(item, config, allServices);
   if (!info.displayDimensions || (!config.metal && !config.productionService)) return null;
@@ -426,6 +429,8 @@ const buildPricingPayloadForQuoteItem = (item, config = {}, allServices = [], de
   return {
     metal_id: config.metal?.id || null,
     service_id: config.productionService?.id || null,
+    // The uploaded file, so the server prices from its own measurement of it.
+    file_ref: item.tempPath || null,
     thickness_value: thicknessValueIn,
     length_in: info.displayDimensions.inches.l,
     height_in: info.displayDimensions.inches.w,
@@ -461,7 +466,9 @@ const buildPricingKeyForQuoteItem = (item, config = {}, allServices = [], derive
 const buildCartItemFromQuoteItem = (item, config = {}, allServices = []) => {
   const info = deriveQuoteItem(item, config, allServices);
   const estimate = item.pricing?.estimate;
-  if (!estimate?.breakdown || !info.displayDimensions) return null;
+  if (!estimate?.success || !estimate?.breakdown || !info.displayDimensions) return null;
+  // The exact request that was priced, so the cart and checkout reprice the same part.
+  const pricingInput = buildPricingPayloadForQuoteItem(item, config, allServices, info);
 
   const qty = Math.max(1, parseInt(config.quantity, 10) || 1);
   const unitBasePrice = parseFloat(estimate.breakdown?.unit_total || 0);
@@ -498,11 +505,13 @@ const buildCartItemFromQuoteItem = (item, config = {}, allServices = []) => {
       selectedFinishColors: config.selectedFinishColors || {},
       pricingTechnicalData: info.pricingTechnicalData,
     },
+    pricingInput,
     pricing: {
       baseUnit: unitBasePrice,
       discount_percent: discountPercent,
       finish: 0,
-      total: unitFinalPrice
+      total: unitFinalPrice,
+      lineTotal: parseFloat(estimate.total_price || 0) || unitFinalPrice * qty
     },
     quantity: qty
   };
@@ -633,6 +642,7 @@ const InstantPricing = () => {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [quoteRequestPart, setQuoteRequestPart] = useState(null); // open "Request a quote" dialog
   const [quantityInputValue, setQuantityInputValue] = useState('1');
   const [isModelFadedManually, setIsModelFadedManually] = useState(false);
   const [bendTree, setBendTree] = useState(null);
@@ -1456,6 +1466,36 @@ const InstantPricing = () => {
     handleAddAllToCart();
   }
 
+  const closeQuoteRequest = useCallback(() => setQuoteRequestPart(null), []);
+
+  // "Request a quote": the part, what was chosen and the uploaded file go to
+  // the shop as a quote request (components/QuoteRequestDialog).
+  function handleRequestQuote() {
+    const item = { ...selectedFile, analysis: { dimensions, dxfSvg, dxfTechData, backendData, bendTree, detectedHoles, detectedBends } };
+    setQuoteRequestPart({
+      source: 'quote-page',
+      openedAt: Date.now(),
+      fileName: selectedFile?.file?.name || selectedFile?.fileName || 'Uploaded part',
+      fileRef: selectedFile?.tempPath || null,
+      quantity,
+      reasons: priceEstimate?.reasons || [],
+      configuration: configurationSummary({
+        productionService: selectedProductionService,
+        metal: selectedMetal,
+        selectedThickness,
+        additionalServices: quoteAdditionalServices,
+        selectedFinishColors,
+        selectedTaps,
+        selectedCountersinks,
+        selectedHardware,
+        dimensions: displayDimensions,
+        bendCount: bendCountTotal,
+        detectedHoles,
+      }),
+      pricingInput: buildPricingPayloadForQuoteItem(item, buildCurrentQuoteConfig(), allServices),
+    });
+  }
+
   // ── Fetch all hardware types when hardware service is selected ──────────
   useEffect(() => {
     const hwSvc = selectedAdditionalServices.find(s => s.title.toLowerCase().includes('hardware'));
@@ -1826,6 +1866,8 @@ const InstantPricing = () => {
         const payload = {
           metal_id: selectedMetal?.id || null,
           service_id: selectedProductionService?.id || null,
+          // The uploaded file, so the server prices from its own measurement of it.
+          file_ref: selectedFile?.tempPath || null,
           thickness_value: thicknessValueIn,
           length_in: displayDimensions.inches.l,
           height_in: displayDimensions.inches.w,
@@ -1862,7 +1904,10 @@ const InstantPricing = () => {
         };
         const res = await calculatePrice(payload);
         if (!isLatest()) return;
-        if (res.success) {
+        if (res.quote_required) {
+          // No instant price for this part: keep the reasons for the quote panel.
+          setPriceEstimate({ ...res, __pricingKey: activePricingKey });
+        } else if (res.success) {
           setPriceEstimate({ ...res, __pricingKey: activePricingKey });
           // Anchor the Qty 1 price for cart subtotal transparency établissements
           if (quantity === 1) {
@@ -1893,7 +1938,7 @@ const InstantPricing = () => {
     return () => clearTimeout(timeoutId);
     // toast/isCNC are derived — including them triggers unnecessary recalcs on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMetal, selectedProductionService, selectedAdditionalServices, quoteAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData]);
+  }, [selectedMetal, selectedProductionService, selectedAdditionalServices, quoteAdditionalServices, selectedTaps, selectedHardware, selectedCountersinks, selectedFinishColors, displayDimensions, quantity, pricingThicknessInches, pricingTechnicalData, selectedFile?.tempPath]);
 
   useEffect(() => {
     if (!selectedFile) return;
@@ -1908,14 +1953,16 @@ const InstantPricing = () => {
     });
     const config = buildCurrentQuoteConfig();
     const itemForKey = { ...selectedFile, analysis };
-    const pricingKey = priceEstimate?.success
+    const pricingKey = hasPricingOutcome(priceEstimate)
       ? (priceEstimate.__pricingKey || buildPricingKeyForQuoteItem(itemForKey, config, allServices))
       : '';
     const status = isCalculatingPrice
       ? 'calculating'
       : priceEstimate?.success
         ? 'ready'
-        : 'idle';
+        : priceEstimate?.quote_required
+          ? 'quote'
+          : 'idle';
 
     setFiles(prev => prev.map(f => (
       f.id === selectedFile.id
@@ -2013,8 +2060,8 @@ const InstantPricing = () => {
     const derived = deriveQuoteItem(item, config, allServices);
     const key = buildPricingKeyForQuoteItem(item, config, allServices, derived);
     if (!key) return;
-    if (item.pricing?.key === key && item.pricing?.estimate?.success) return;
-    if (item.pricing?.key === key && (item.pricing?.status === 'calculating' || item.pricing?.status === 'error')) return;
+    if (item.pricing?.key === key && hasPricingOutcome(item.pricing?.estimate)) return;
+    if (item.pricing?.key === key && ['calculating', 'error', 'incomplete'].includes(item.pricing?.status)) return;
     if (backgroundPricingRef.current.has(item.id)) return;
 
     backgroundPricingRef.current.add(item.id);
@@ -2027,14 +2074,15 @@ const InstantPricing = () => {
     try {
       const payload = buildPricingPayloadForQuoteItem(item, config, allServices, derived);
       const res = await calculatePrice(payload);
-      if (!res.success) throw new Error(res.error || 'Pricing failed');
+      if (!res.success && !res.quote_required && !res.incomplete) throw new Error(res.error || 'Pricing failed');
       setFiles(prev => prev.map(f => (
         f.id === item.id
           ? {
             ...f,
             pricing: {
-              estimate: { ...res, __pricingKey: key },
-              status: 'ready',
+              // An unfinished set-up (no material yet …) has no price and no error.
+              estimate: res.incomplete ? null : { ...res, __pricingKey: key },
+              status: res.incomplete ? 'incomplete' : res.quote_required ? 'quote' : 'ready',
               error: '',
               key,
             }
@@ -2070,7 +2118,7 @@ const InstantPricing = () => {
       const derived = deriveQuoteItem(f, config, allServices);
       const key = buildPricingKeyForQuoteItem(f, config, allServices, derived);
       if (!key) return false;
-      if (f.pricing?.key === key && (f.pricing?.status === 'calculating' || f.pricing?.status === 'error')) return false;
+      if (f.pricing?.key === key && ['calculating', 'error', 'incomplete'].includes(f.pricing?.status)) return false;
       return !(f.pricing?.key === key && f.pricing?.estimate?.success);
     });
     if (nextItem) priceQuoteItem(nextItem);
@@ -2388,6 +2436,11 @@ const InstantPricing = () => {
         file.pricing?.estimate?.success &&
         file.pricing?.key === pricingKey
       );
+      const needsQuote = Boolean(
+        pricingKey &&
+        file.pricing?.estimate?.quote_required &&
+        file.pricing?.key === pricingKey
+      );
       const analysisStatus = file.analysisStatus || 'idle';
       const pricingStatus = file.pricing?.status || 'idle';
       const status = analysisStatus === 'error'
@@ -2400,7 +2453,9 @@ const InstantPricing = () => {
               ? 'Calculating'
               : ready
                 ? 'Ready'
-                : 'Needs config';
+                : needsQuote
+                  ? 'Needs quote'
+                  : 'Needs config';
       return {
         id: file.id,
         file,
@@ -2408,6 +2463,7 @@ const InstantPricing = () => {
         derived,
         pricingKey,
         ready,
+        needsQuote,
         status,
         error: file.analysisError || file.pricing?.error || '',
         total: ready ? (parseFloat(file.pricing?.estimate?.total_price || 0) || 0) : 0,
@@ -2418,9 +2474,14 @@ const InstantPricing = () => {
   const queueReadyCount = quoteQueueRows.filter(row => row.ready).length;
   const queueTotal = quoteQueueRows.reduce((sum, row) => sum + row.total, 0);
   const allQueueItemsReady = files.length > 0 && queueReadyCount === files.length;
-  const blockedQueueRow = quoteQueueRows.find(row => !row.ready);
+  const blockedQueueRow = quoteQueueRows.find(row => !row.ready && !row.needsQuote);
+  // Files that need a quote don't block the rest: the priced ones can still go to the cart.
+  const queueQuoteCount = quoteQueueRows.filter(row => row.needsQuote).length;
+  const queueCanAdd = files.length > 0 && queueReadyCount > 0 && !blockedQueueRow;
   const queueBlockedReason = !files.length
     ? 'Upload files first'
+    : !blockedQueueRow && queueQuoteCount > 0
+      ? `${queueQuoteCount} file${queueQuoteCount === 1 ? ' needs' : 's need'} a quote and won't be added to the cart.`
     : blockedQueueRow?.status === 'Error'
       ? (blockedQueueRow.error || 'Fix the errored file before adding all items')
       : blockedQueueRow?.status === 'Analyzing'
@@ -2444,7 +2505,7 @@ const InstantPricing = () => {
 
     return filesRef.current.map(f => {
       if (f.id !== activeId) return f;
-      const activeKey = priceEstimate?.success
+      const activeKey = hasPricingOutcome(priceEstimate)
         ? (priceEstimate.__pricingKey || buildPricingKeyForQuoteItem({ ...f, analysis: activeAnalysis }, activeConfig, allServices))
         : '';
       return {
@@ -2458,7 +2519,7 @@ const InstantPricing = () => {
         analysis: activeAnalysis,
         pricing: {
           estimate: priceEstimate,
-          status: isCalculatingPrice ? 'calculating' : priceEstimate?.success ? 'ready' : 'idle',
+          status: isCalculatingPrice ? 'calculating' : priceEstimate?.success ? 'ready' : priceEstimate?.quote_required ? 'quote' : 'idle',
           error: '',
           key: activeKey,
         }
@@ -2543,16 +2604,27 @@ const InstantPricing = () => {
       const derived = deriveQuoteItem(file, config, allServices);
       const pricingKey = buildPricingKeyForQuoteItem(file, config, allServices, derived);
       const ready = Boolean(pricingKey && file.pricing?.estimate?.success && file.pricing?.key === pricingKey);
-      return { file, config, ready, cartItem: ready ? buildCartItemFromQuoteItem(file, config, allServices) : null };
+      const needsQuote = Boolean(pricingKey && file.pricing?.estimate?.quote_required && file.pricing?.key === pricingKey);
+      return { file, config, ready, needsQuote, cartItem: ready ? buildCartItemFromQuoteItem(file, config, allServices) : null };
     });
 
-    const blocked = rows.find(row => !row.ready || !row.cartItem);
-    if (blocked) {
-      toast(queueBlockedReason || 'Every uploaded file must be configured and priced first.', 'error');
+    const blocked = rows.find(row => !row.needsQuote && (!row.ready || !row.cartItem));
+    const priced = rows.filter(row => row.ready && row.cartItem);
+    if (blocked || !priced.length) {
+      toast(
+        !blocked && rows.length
+          ? 'These parts need a quote, so there is nothing to add to the cart. Use "Request a quote" instead.'
+          : (queueBlockedReason || 'Every uploaded file must be configured and priced first.'),
+        'error'
+      );
       return;
     }
 
-    addManyToCart(rows.map(row => row.cartItem));
+    const quoteNames = rows.filter(row => row.needsQuote).map(row => row.file.file?.name || row.file.fileName || 'A file');
+    addManyToCart(priced.map(row => row.cartItem));
+    if (quoteNames.length) {
+      toast(`Not added (needs a quote): ${quoteNames.join(', ')}`, 'info');
+    }
     navigate('/cart');
   }
 
@@ -2977,9 +3049,9 @@ const InstantPricing = () => {
                     type="button"
                     className="ipw-btn ipw-btn-primary"
                     onClick={handleAddAllToCart}
-                    disabled={!allQueueItemsReady}
+                    disabled={!queueCanAdd}
                   >
-                    Add {files.length} to cart <ChevronRight size={14} />
+                    Add {queueReadyCount < files.length && queueCanAdd ? queueReadyCount : files.length} to cart <ChevronRight size={14} />
                   </button>
                 </div>
               </aside>
@@ -4052,12 +4124,19 @@ const InstantPricing = () => {
                           </div>
                         ))}
                       </div>
-                      <p className={`ipw-q-status${isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? ' is-busy' : ' is-ready'}`} role="status">
-                        {isLoadingUnfold || isDetectingHoles || isCalculatingPrice
-                          ? <span className="ipw-spinner is-inline" aria-hidden="true" />
-                          : <Check size={13} strokeWidth={3} aria-hidden="true" />}
-                        <span>{isLoadingUnfold || isDetectingHoles || isCalculatingPrice ? 'Working out your quote…' : 'Quote ready'}</span>
-                      </p>
+                      {(() => {
+                        const busy = isLoadingUnfold || isDetectingHoles || isCalculatingPrice;
+                        const state = busy ? 'busy' : priceEstimate?.success ? 'ready' : priceEstimate?.quote_required ? 'quote' : 'pending';
+                        const label = { busy: 'Working out your quote…', ready: 'Quote ready', quote: 'Needs a quote', pending: 'Finish choosing to see the price' }[state];
+                        return (
+                          <p className={`ipw-q-status is-${state}`} role="status">
+                            {state === 'busy' && <span className="ipw-spinner is-inline" aria-hidden="true" />}
+                            {state === 'ready' && <Check size={13} strokeWidth={3} aria-hidden="true" />}
+                            {state === 'quote' && <AlertCircle size={13} strokeWidth={2.5} aria-hidden="true" />}
+                            <span>{label}</span>
+                          </p>
+                        );
+                      })()}
                     </section>
 
                     <div className="ipw-geo-spacer" />
@@ -4065,6 +4144,22 @@ const InstantPricing = () => {
                     <section className="ipw-q-receipt" aria-label="Price breakdown">
                       <h3 className="ipw-q-section-title">Breakdown</h3>
 
+                      {priceEstimate?.quote_required && !isCalculatingPrice && (
+                        <div className="ipw-q-quote" role="status">
+                          <strong>Instant price not available</strong>
+                          <p>We need to look at this part before we can price it:</p>
+                          <ul>
+                            {(priceEstimate.reasons || []).map((reason, index) => (
+                              <li key={`${reason.code}-${index}`}>{reason.message}</li>
+                            ))}
+                          </ul>
+                          <button type="button" className="ipw-q-quote-btn" onClick={handleRequestQuote}>
+                            Request a quote <ArrowRight size={14} />
+                          </button>
+                        </div>
+                      )}
+
+                      {!(priceEstimate?.quote_required && !isCalculatingPrice) && (<>
                       {showServiceBreakdown && (
                         <div className="ipw-q-line">
                           <span>
@@ -4139,12 +4234,13 @@ const InstantPricing = () => {
                           : <strong>${(parseFloat(priceEstimate?.total_price) || 0).toFixed(2)}</strong>
                         }
                       </div>
+                      </>)}
 
                       <button
                         type="button"
                         className="ipw-proceed"
                         onClick={handleProceedToReview}
-                        disabled={!priceEstimate}
+                        disabled={!priceEstimate?.success}
                       >
                         <span className="ipw-proceed-text">
                           <strong>Proceed to review</strong>
@@ -4206,6 +4302,8 @@ const InstantPricing = () => {
       }
 
       <StyleTag />
+
+      <QuoteRequestDialog part={quoteRequestPart} onClose={closeQuoteRequest} />
 
     </div>
 

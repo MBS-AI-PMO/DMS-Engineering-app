@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { ChevronDown, Download, Eye, Package, Search, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Download, Eye, Package, Search, Truck, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { authHeaders } from '../utils/api';
 import { displayMetalName } from '../utils/metalDisplay';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import ConfirmDialog from '../components/ConfirmDialog';
+import MyQuoteRequests from '../components/MyQuoteRequests';
 // Not used by this page any more, but the admin orders list leans on its
 // global rules (.preview-modal-overlay, status badges), so it stays loaded.
 import '../styles/PremiumOrders.css';
@@ -28,7 +29,7 @@ const parseConfig = (config) => {
     return config || {};
 };
 
-const STATUS_LABEL = { pending: 'Pending', processing: 'In production', completed: 'Completed', cancelled: 'Cancelled', shipped: 'Shipped' };
+const STATUS_LABEL = { pending: 'Received', processing: 'In production', shipping: 'Shipped', shipped: 'Shipped', completed: 'Completed', rejected: 'Needs attention', cancelled: 'Cancelled' };
 const statusLabel = (status) => STATUS_LABEL[status] || (status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown');
 const money = (value) => `$${(Number(value) || 0).toFixed(2)}`;
 const dateText = (value) => {
@@ -36,6 +37,68 @@ const dateText = (value) => {
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 const fileUrl = (path) => (path ? `/${String(path).replace(/^\/+/, '')}` : '');
+
+const dayText = (day) => {
+    const m = String(day || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+};
+
+/* Tracking, photos the shop shared, and the shop's messages for an order. */
+const OrderExtras = ({ shipments = [], photos = [], updates = [] }) => {
+    const notes = updates.filter(u => u.body);
+    if (!shipments.length && !photos.length && !notes.length) return null;
+    return (
+        <div className="acc-extras">
+            {shipments.length > 0 && (
+                <div className="acc-extra">
+                    <h3 className="acc-extra-title"><Truck size={15} aria-hidden="true" /> {shipments.length > 1 ? 'Shipments' : 'Shipment'}</h3>
+                    <ul className="acc-ships">
+                        {shipments.map(s => (
+                            <li key={s.id} className="acc-ship">
+                                <span className="acc-ship-carrier">{s.carrier}{s.service ? ` · ${s.service}` : ''}</span>
+                                {s.tracking_number && <span className="acc-ship-number">{s.tracking_number}</span>}
+                                {s.shipped_at && <span className="acc-ship-date">{s.no_tracking ? '' : 'Shipped '}{dayText(s.shipped_at)}</span>}
+                                {s.tracking_link && (
+                                    <a className="acc-btn is-small" href={s.tracking_link} target="_blank" rel="noreferrer">
+                                        Track package <ArrowUpRight size={14} aria-hidden="true" />
+                                    </a>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {notes.length > 0 && (
+                <div className="acc-extra">
+                    <h3 className="acc-extra-title">Messages from our team</h3>
+                    <ul className="acc-notes">
+                        {notes.map(n => (
+                            <li key={n.id}>
+                                <p>{n.body}</p>
+                                <span>{dateText(n.created_at)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {photos.length > 0 && (
+                <div className="acc-extra">
+                    <h3 className="acc-extra-title">Photos of your parts</h3>
+                    <ul className="acc-photos">
+                        {photos.map((p, i) => (
+                            <li key={p.id}>
+                                <a href={p.url} target="_blank" rel="noreferrer" aria-label={`Open photo ${i + 1}${p.caption ? `: ${p.caption}` : ''}`}>
+                                    <img src={p.thumb_url} alt={p.caption || `Photo ${i + 1} of your parts`} loading="lazy" decoding="async" />
+                                </a>
+                                {p.caption && <span>{p.caption}</span>}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const OrderItems = ({ items, loading, onPreview }) => {
     if (loading) {
@@ -187,7 +250,12 @@ const Orders = () => {
         try {
             const response = await fetch(`/api/orders/${orderId}`, { credentials: 'include', headers: { ...authHeaders() } });
             const data = await response.json();
-            setItemsCache(prev => ({ ...prev, [orderId]: { items: data.success ? data.items : [], loading: false } }));
+            setItemsCache(prev => ({
+                ...prev,
+                [orderId]: data.success
+                    ? { items: data.items, shipments: data.shipments || [], photos: data.photos || [], updates: data.updates || [], loading: false }
+                    : { items: [], loading: false },
+            }));
         } catch (err) {
             console.error('Failed to fetch items:', err);
             setItemsCache(prev => ({ ...prev, [orderId]: { items: [], loading: false } }));
@@ -367,6 +435,7 @@ const Orders = () => {
                                                         >
                                                             <div className="acc-order-inner">
                                                                 <OrderItems items={cache?.items} loading={!cache || cache.loading} onPreview={(item, mode) => setPreview({ item, mode })} />
+                                                                {cache && !cache.loading && <OrderExtras shipments={cache.shipments} photos={cache.photos} updates={cache.updates} />}
                                                                 <div className="acc-order-foot">
                                                                     <dl className="acc-order-meta">
                                                                         {shipTo && <div><dt>Ship to</dt><dd>{shipTo}</dd></div>}
@@ -385,6 +454,7 @@ const Orders = () => {
                                     })}
                                 </ul>
                             )}
+                            <MyQuoteRequests />
                         </>
                     )}
                 </div>

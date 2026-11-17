@@ -1,0 +1,101 @@
+/*
+ * Admin > Discounts: only what the admin kit lacks. Prefix: dc-.
+ * .dc-switch (the on/off panel), .dc-ranges / .dc-range (removable range
+ * chips in the tier dialog), .dc-chips (each-quantity view), .dc-percent.
+ */
+
+/* ── On/off panel ── */
+.dc-switch.is-off { border-color: #fecaca; background: #fff7f7; }
+.dc-switch.is-on { border-color: #bbf7d0; background: #f6fef9; }
+.dc-switch-row { display: flex; align-items: center; gap: 16px; }
+.dc-switch-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--ak-rule-soft);
+  color: var(--ak-muted);
+}
+.dc-switch.is-off .dc-switch-icon { background: #fee2e2; color: #b91c1c; }
+.dc-switch.is-on .dc-switch-icon { background: #dcfce7; color: #15803d; }
+.dc-switch-text { flex: 1; min-width: 0; }
+.dc-switch-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+  color: var(--ak-ink);
+  font-size: 18px;
+  font-weight: 800;
+}
+.dc-switch-sub { margin: 4px 0 0; color: var(--ak-text); font-size: 14px; line-height: 1.5; }
+.dc-switch .ak-switch > span:first-of-type { transform: scale(1.25); transform-origin: right center; }
+
+/* ── Tier table ── */
+.dc-percent { color: var(--ak-ink); font-size: 15px; font-weight: 800; }
+.dc-percent.is-idle { color: var(--ak-muted); }
+.dc-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 520px; }
+.dc-chip {
+  padding: 2px 7px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 6px;
+  background: var(--ak-ground);
+  color: var(--ak-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tier dialog ── */
+.dc-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 44px;
+  max-height: 180px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px dashed var(--ak-rule);
+  border-radius: 10px;
+  background: var(--ak-ground);
+}
+.dc-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 999px;
+  background: var(--ak-card);
+  color: var(--ak-ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dc-range button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ak-muted);
+  cursor: pointer;
+}
+.dc-range button:hover { background: var(--ak-accent-soft); color: var(--ak-accent-ink); }
+.dc-range button:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.dc-add-row { display: flex; gap: 8px; }
+.dc-add-row .ak-input { flex: 1; }
+
+@media (max-width: 560px) {
+  .dc-switch-row { flex-wrap: wrap; align-items: flex-start; }
+  .dc-switch-text { flex: 1 1 calc(100% - 62px); }
+  .dc-switch .ak-switch { margin-left: 62px; }
+  .dc-switch .ak-switch > span:first-of-type { transform-origin: left center; }
+}

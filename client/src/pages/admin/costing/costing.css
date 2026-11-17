@@ -1,0 +1,147 @@
+/*
+ * Admin > Costing: only what the admin kit (styles/adminKit.css) lacks.
+ * Prefix: ck-.
+ *
+ * Section tabs  .ck-tabs (the Segmented bar scrolls sideways on phones)
+ * Intro         .ck-intro (tab title + explanation + tools)
+ * Edit table    .ck-edit-card / .ck-edit-table (inputs in cells, dirty / warn rows, sticky actions column)
+ * Chips         .ck-chips > .ck-chip[.is-on | .is-muted] (multi-select toggles)
+ * Operations    .ck-split (list + editor), .ck-op-list, .ck-op-item, .ck-op-picker (phones)
+ * Calculator    .ck-number-grid, .ck-result, .ck-total, .ck-totals, .ck-working
+ */
+
+/* ── Section tabs ── */
+.ck-tabs {
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ck-tabs::-webkit-scrollbar { display: none; }
+.ck-tabs .ak-seg { display: flex; width: max-content; min-width: 100%; }
+.ck-tabs .ak-seg button { flex: 1 0 auto; justify-content: center; white-space: nowrap; }
+
+/* ── Tab intro ── */
+.ck-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 16px;
+}
+.ck-intro-text { flex: 1 1 420px; min-width: 0; }
+.ck-intro-text .ak-hint { max-width: 90ch; margin-top: 4px; font-size: 13.5px; }
+.ck-h3 {
+  margin: 0 0 12px;
+  color: var(--ak-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Editable table ── */
+.ck-edit-table td { padding: 7px 8px; }
+.ck-edit-table th { padding: 11px 8px; white-space: normal; }
+.ck-edit-table .ak-input,
+.ck-edit-table .ak-select { min-width: 64px; }
+.ck-edit-table tbody tr.is-dirty { background: #fffbeb; }
+.ck-edit-table tbody tr.is-dirty:hover { background: #fef3c7; }
+.ck-edit-table tbody tr.is-warn td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+.ck-edit-table .ak-input.ck-needs-price { border-color: #f59e0b; background: #fffbeb; }
+.ck-edit-table .ak-input.ck-needs-price::placeholder { color: #b45309; }
+/* Keep the first column and Save / Delete in view when a wide table scrolls sideways. */
+.ck-edit-table.is-sticky-first td:first-child,
+.ck-edit-table.is-sticky-first th:first-child { position: sticky; z-index: 1; left: 0; background: var(--ak-card); box-shadow: 1px 0 0 var(--ak-rule-soft); }
+.ck-edit-table.is-sticky-first thead th:first-child { background: var(--ak-ground); }
+.ck-edit-table.is-sticky-first tbody tr.is-dirty td:first-child { background: #fffbeb; }
+.ck-edit-table.is-sticky-first tbody tr.is-warn td:first-child { box-shadow: inset 3px 0 0 #f59e0b, 1px 0 0 var(--ak-rule-soft); }
+.ck-edit-table .ck-actions {
+  position: sticky;
+  right: 0;
+  min-width: 112px;
+  background: var(--ak-card);
+  box-shadow: -1px 0 0 var(--ak-rule-soft);
+}
+.ck-edit-table thead .ck-actions { background: var(--ak-ground); }
+.ck-edit-table tbody tr.is-dirty .ck-actions { background: #fffbeb; }
+.ck-edit-table .ck-actions .ak-row-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.ck-table-foot { padding: 12px 14px; border-top: 1px solid var(--ak-rule-soft); }
+.ck-empty { padding: 28px 16px; color: var(--ak-muted); text-align: center; }
+.ck-unsaved { margin-right: auto; align-self: center; color: var(--ak-ink); font-size: 14px; font-weight: 600; }
+
+/* ── Chips ── */
+.ck-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 999px;
+  background: var(--ak-card);
+  color: var(--ak-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.ck-chip:hover { border-color: var(--ak-faint); }
+.ck-chip input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.ck-chip:focus-within { box-shadow: var(--ak-focus); }
+.ck-chip.is-on { border-color: var(--ak-ink); background: var(--ak-ink); color: #fff; }
+.ck-chip.is-muted:not(.is-on) { color: var(--ak-faint); border-style: dashed; }
+.ck-chip.is-muted.is-on { opacity: 0.75; }
+
+/* ── Operations ── */
+.ck-split { display: grid; grid-template-columns: 290px minmax(0, 1fr); align-items: start; gap: 20px; }
+.ck-op-list { max-height: calc(100vh - 220px); margin: 0; padding: 6px; overflow-y: auto; list-style: none; }
+.ck-op-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ck-op-item:hover { background: var(--ak-ground); }
+.ck-op-item:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.ck-op-item.is-active { border-color: #fecaca; background: var(--ak-accent-soft); }
+.ck-op-item.is-off .ak-cell-main { color: var(--ak-muted); text-decoration: line-through; }
+.ck-op-main { min-width: 0; }
+.ck-op-picker { display: none; }
+.ck-value-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 14px; }
+.ck-op-editor .ak-switch { margin-bottom: 4px; }
+
+/* ── Calculator ── */
+.ck-number-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 12px; }
+.ck-result { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--ak-rule-soft); }
+.ck-total { margin: 0 0 14px; color: var(--ak-ink); font-size: 28px; font-weight: 800; line-height: 1.2; }
+.ck-total span { color: var(--ak-muted); font-size: 14px; font-weight: 500; }
+.ck-totals { max-width: 560px; margin-top: 14px; }
+.ck-working { color: var(--ak-muted); font-size: 12px; }
+.ck-reasons { margin: 6px 0 0; padding-left: 18px; }
+.ck-inline-icon { vertical-align: -2px; }
+
+@media (max-width: 860px) {
+  .ck-split { grid-template-columns: minmax(0, 1fr); }
+  .ck-op-list-card { display: none; }
+  .ck-op-picker { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 10px; margin-bottom: 4px; }
+  .ck-op-picker .ak-field { flex: 1 1 200px; }
+  .ck-op-picker .ak-btn { margin-bottom: 14px; }
+  /* Stacked rows: label on the left, the control on the right. */
+  .ck-edit-table td > .ak-input,
+  .ck-edit-table td > .ak-select { flex: 0 1 62%; min-width: 0; }
+  .ck-edit-table .ck-actions { position: static; min-width: 0; box-shadow: none; background: transparent; }
+  .ck-edit-table tbody tr.is-dirty .ck-actions { background: transparent; }
+  .ck-edit-table tbody tr.is-warn { box-shadow: inset 3px 0 0 #f59e0b; }
+  .ck-edit-table tbody tr.is-warn td:first-child,
+  .ck-edit-table.is-sticky-first td:first-child { position: static; box-shadow: none; background: transparent; }
+  .ck-edit-table.is-sticky-first tbody tr.is-warn td:first-child { box-shadow: none; }
+}

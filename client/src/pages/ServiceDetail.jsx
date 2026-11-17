@@ -7,7 +7,7 @@ import {
     fetchServices,
     fetchMetalsByServiceId,
     fetchAllHardwareWithItems,
-    fetchMetals,
+    fetchMetalList,
     fetchHardwareTypes,
     fetchHardwareItemsByType,
     fetchGuideline,
@@ -145,6 +145,10 @@ const ServiceDetail = () => {
         setHeroFailed(false);
         window.scrollTo(0, 0);
 
+        // The other services do not depend on this one; ask for them now.
+        const othersRequest = fetchServices();
+        othersRequest.catch(() => { });
+
         (async () => {
             let svc;
             try {
@@ -164,7 +168,7 @@ const ServiceDetail = () => {
             const isHw = /hardware/i.test(svc.title || '');
 
             // Hardware works with every metal; other services list theirs.
-            (isHw ? fetchMetals() : fetchMetalsByServiceId(svc.id))
+            (isHw ? fetchMetalList() : fetchMetalsByServiceId(svc.id, { list: true }))
                 .then(list => { if (!cancelled) setMetals(Array.isArray(list) ? list : []); })
                 .catch(() => { if (!cancelled) setMetals([]); });
 
@@ -173,7 +177,7 @@ const ServiceDetail = () => {
                 .catch(() => {})
                 .finally(() => { if (!cancelled) setGuidelineDone(true); });
 
-            fetchServices()
+            othersRequest
                 .then(list => { if (!cancelled) setOthers((list || []).filter(s => s.id !== svc.id)); })
                 .catch(() => {});
 
@@ -584,6 +588,7 @@ const ServiceDetail = () => {
                                                     <ThumbImage
                                                         key={metal.image_path}
                                                         className="sd-metal-swatch"
+                                                        width={48}
                                                         src={toBackendAssetUrl(metal.image_path)}
                                                         fallback={staticMetalImage(metal)}
                                                     />
@@ -615,6 +620,7 @@ const ServiceDetail = () => {
                                                     <ThumbImage
                                                         key={other.image_path}
                                                         className="sd-other-media"
+                                                        width={180}
                                                         src={toBackendAssetUrl(other.image_path)}
                                                         fallback={staticServiceImage(other)}
                                                     />

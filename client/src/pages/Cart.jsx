@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { ArrowRight, Layers, Minus, Plus, Settings, ShieldCheck, ShoppingBag, Trash2, Package, Droplet } from 'lucide-react';
 import { useCart } from '../context/CartContext.js';
 import ProjectViewer from '../components/viewer/ProjectViewer';
 import { displayMetalName } from '../utils/metalDisplay';
+import QuoteRequestDialog from '../components/QuoteRequestDialog';
+import { configurationSummary } from '../utils/quoteRequest';
 import '../styles/Shimmer.css';
 import '../styles/CartPage.css';
 
@@ -46,11 +48,58 @@ const VolumeTiers = ({ allDiscounts, quantity }) => {
 
 const Shimmer = ({ w, h = 14 }) => <span className="shimmer cr-sk" style={{ width: w, height: h }} aria-hidden="true" />;
 
+// The number between − and +: type a quantity, then Enter or leave the box
+// to apply it; Escape puts the old number back. The parent keys it on the
+// quantity, so a change from the buttons resets what is typed.
+const MAX_QTY = 100000;
+const QtyInput = ({ value, disabled, label, onCommit }) => {
+    const [draft, setDraft] = useState(String(value));
+    const commit = () => {
+        const typed = parseInt(draft, 10);
+        if (!Number.isFinite(typed) || typed < 1) { setDraft(String(value)); return; }
+        const next = Math.min(MAX_QTY, typed);
+        if (next === value) { setDraft(String(value)); return; }
+        onCommit(next);
+    };
+    return (
+        <input
+            className="cr-qty-input"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={draft}
+            disabled={disabled}
+            aria-label={label}
+            onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onFocus={(e) => e.target.select()}
+            onBlur={commit}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+                if (e.key === 'Escape') setDraft(String(value));
+            }}
+        />
+    );
+};
+
 const Cart = () => {
     const { cartItems, removeFromCart, updateQuantity, cartTotal, cartSubtotal, cartDiscount, allDiscounts } = useCart();
     const reduceMotion = useReducedMotion();
     const count = cartItems.length;
     const anyUpdating = cartItems.some(i => i.isUpdating);
+    const anyNeedsQuote = cartItems.some(i => i.quoteRequired);
+    // "Request a quote" for a part with no instant price (components/QuoteRequestDialog).
+    const [quotePart, setQuotePart] = useState(null);
+    const closeQuote = useCallback(() => setQuotePart(null), []);
+    const requestQuote = (item) => setQuotePart({
+        source: 'cart',
+        openedAt: item.cartId,
+        fileName: item.fileName,
+        fileRef: item.tempPath || item.configuration?.tempPath || null,
+        quantity: item.quantity || 1,
+        reasons: item.quoteReasons || [],
+        configuration: configurationSummary(item.configuration || {}),
+        pricingInput: item.pricingInput || null,
+    });
 
     return (
         <div className="cr">
@@ -87,7 +136,7 @@ const Cart = () => {
                                     {cartItems.map((item) => {
                                         const config = item.configuration || {};
                                         const unitPrice = item.pricing?.total || 0;
-                                        const lineTotal = unitPrice * (item.quantity || 1);
+                                        const lineTotal = Number(item.pricing?.lineTotal) > 0 ? Number(item.pricing.lineTotal) : unitPrice * (item.quantity || 1);
                                         const hasBaseDiscount = item.pricing?.baseUnit > item.pricing?.total;
                                         const tapCount = Object.keys(config.selectedTaps || {}).length;
                                         const hardwareCount = Object.keys(config.selectedHardware || {}).length;
@@ -127,6 +176,14 @@ const Cart = () => {
                                                 <div className="cr-main">
                                                     <div className="cr-main-head">
                                                         <h2 className="cr-name" title={item.fileName}>{item.fileName}</h2>
+                                                        {item.quoteRequired && !item.isUpdating ? (
+                                                            <div className="cr-price cr-needs-quote">
+                                                                <strong>Needs a quote</strong>
+                                                                <button type="button" className="cr-quote-btn" onClick={() => requestQuote(item)}>
+                                                                    Request a quote
+                                                                </button>
+                                                            </div>
+                                                        ) : (
                                                         <div className="cr-price">
                                                             <strong className="cr-price-total">
                                                                 {item.isUpdating ? <Shimmer w={96} h={24} /> : `$${lineTotal.toFixed(2)}`}
@@ -137,6 +194,7 @@ const Cart = () => {
                                                                 ) : `$${unitPrice.toFixed(2)} each`}
                                                             </span>
                                                         </div>
+                                                        )}
                                                     </div>
 
                                                     <dl className="cr-specs">
@@ -190,9 +248,13 @@ const Cart = () => {
                                                             >
                                                                 <Minus size={15} aria-hidden="true" />
                                                             </button>
-                                                            <span className="cr-qty-value" aria-live="polite">
-                                                                {item.isUpdating ? <Shimmer w={18} h={16} /> : item.quantity}
-                                                            </span>
+                                                            <QtyInput
+                                                                key={item.quantity}
+                                                                value={item.quantity}
+                                                                disabled={item.isUpdating}
+                                                                label={`Quantity of ${item.fileName}`}
+                                                                onCommit={(n) => updateQuantity(item.cartId, n)}
+                                                            />
                                                             <button
                                                                 type="button"
                                                                 aria-label="One more"
@@ -237,11 +299,16 @@ const Cart = () => {
                                         <span>Estimated total</span>
                                         <strong>{anyUpdating ? <Shimmer w={110} h={28} /> : `$${cartTotal.toFixed(2)}`}</strong>
                                     </div>
+                                    {anyNeedsQuote && (
+                                        <p className="cr-quote-note" role="note">
+                                            Remove the parts that need a quote (or request one) before checking out.
+                                        </p>
+                                    )}
                                     <Link
                                         to="/checkout"
-                                        className={`cr-btn is-primary is-block${anyUpdating ? ' is-waiting' : ''}`}
-                                        aria-disabled={anyUpdating || undefined}
-                                        onClick={(e) => { if (anyUpdating) e.preventDefault(); }}
+                                        className={`cr-btn is-primary is-block${anyUpdating || anyNeedsQuote ? ' is-waiting' : ''}`}
+                                        aria-disabled={anyUpdating || anyNeedsQuote || undefined}
+                                        onClick={(e) => { if (anyUpdating || anyNeedsQuote) e.preventDefault(); }}
                                     >
                                         Proceed to checkout
                                         <ArrowRight size={16} aria-hidden="true" />
@@ -265,6 +332,8 @@ const Cart = () => {
                     )}
                 </div>
             </section>
+
+            <QuoteRequestDialog part={quotePart} onClose={closeQuote} />
         </div>
     );
 };

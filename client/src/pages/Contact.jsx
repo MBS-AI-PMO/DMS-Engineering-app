@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { ArrowRight, CheckCircle2, Linkedin, Facebook, Instagram, Loader2, Mail, MapPin, Phone } from 'lucide-react';
 import { fetchSettings, sendContactMessage } from '../utils/api';
 import Dropdown from '../components/Dropdown';
-import contactHeroImg from '../assets/contact-hero.jpg';
+import contactHeroImg from '../assets/contact-hero.webp';
 import '../styles/Shimmer.css';
 import '../styles/ContactPage.css';
 
@@ -33,7 +33,18 @@ const SHORTCUTS = [
 const EMPTY_FORM = { name: '', email: '', company: '', subject: TOPICS[0], message: '', website: '' };
 
 const Contact = () => {
-    const [form, setForm] = useState(EMPTY_FORM);
+    // "Request a quote" on the pricing page links here with ?topic=&message=
+    // describing the part, so the form opens filled in.
+    const [searchParams] = useSearchParams();
+    const [form, setForm] = useState(() => {
+        const topic = searchParams.get('topic');
+        const message = searchParams.get('message');
+        return {
+            ...EMPTY_FORM,
+            subject: TOPICS.includes(topic) ? topic : EMPTY_FORM.subject,
+            message: message ? message.slice(0, 5000) : '',
+        };
+    });
     const [status, setStatus] = useState('idle'); // idle | sending | sent
     const [error, setError] = useState('');
     const [contact, setContact] = useState(null);

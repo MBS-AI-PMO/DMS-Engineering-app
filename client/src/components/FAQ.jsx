@@ -53,7 +53,7 @@ const FAQ = () => {
         <section id="faq" className="hf" aria-labelledby="hf-title">
             <div className="hf-inner">
                 <motion.div className="hf-head" {...reveal()}>
-                    <h2 id="hf-title" className="hf-title">Frequently asked questions</h2>
+                    <h2 id="hf-title" className="hf-title">Frequently Asked Questions</h2>
                     <p className="hf-lede">Quick answers to the most common questions about ordering, quoting, and production.</p>
                     <div className="hf-head-actions">
                         <Link to="/faq" className="hf-btn">

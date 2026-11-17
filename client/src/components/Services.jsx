@@ -85,6 +85,7 @@ const Services = () => {
                                 <ThumbImage
                                     key={service.image}
                                     className="hs-media"
+                                    width={120}
                                     src={service.image}
                                     fallback={service.fallbackImage}
                                 />

@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // es
 import { ArrowRight, Plus, Search, X } from 'lucide-react';
 import { faqData as staticFaqData, faqCategories as staticFaqCategories } from '../data/faqData';
 import { fetchFaqs, fetchFaqCategories } from '../utils/api';
-import faqHeroImg from '../assets/faq-hero.jpg';
+import faqHeroImg from '../assets/faq-hero-parts.jpg';
 import '../styles/Shimmer.css';
 import '../styles/FaqPage.css';
 

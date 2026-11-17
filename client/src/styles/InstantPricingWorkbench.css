@@ -1639,6 +1639,8 @@
 }
 .ipw-q-status.is-ready { color: #047857; }
 .ipw-q-status.is-busy { color: #b45309; }
+.ipw-q-status.is-quote { color: #b91c1c; }
+.ipw-q-status.is-pending { color: #64748b; }
 .ipw-q-receipt {
   display: grid;
 }
@@ -1701,6 +1703,50 @@
 .ipw-q-warnings ul {
   margin: 4px 0 0;
   padding-left: 16px;
+}
+/* No instant price: reasons and a way to ask for a quote. */
+.ipw-q-quote {
+  margin: 6px 0 12px;
+  padding: 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ipw-q-quote strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+.ipw-q-quote p {
+  margin: 4px 0 0;
+}
+.ipw-q-quote ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.ipw-q-quote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ipw-q-quote-btn:hover {
+  background: #b91c1c;
+}
+.ipw-q-quote-btn:focus-visible {
+  outline: 2px solid #7f1d1d;
+  outline-offset: 2px;
 }
 .ipw-q-total {
   display: flex;

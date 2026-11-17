@@ -1,0 +1,101 @@
+/*
+ * Admin › content screens (FAQs, guidelines, terms & policy, contact, SEO):
+ * the few shared pieces the admin kit (adminKit.css) does not have.
+ * Prefix: ac-. Area files: faqs/faqs.css (ac-faq-), guidelines/guidelines.css
+ * (ac-gd-), legal/legal.css (ac-lg-), contact/contact.css (ac-ct-), seo/seo.css (ac-seo-).
+ */
+
+/* Sticky save bar status (SaveBar.jsx) */
+.ac-savebar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: var(--ak-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.ac-savebar-status .ak-dot { background: #22c55e; }
+.ac-savebar-status.is-dirty { color: #b45309; }
+.ac-savebar-status.is-dirty .ak-dot { background: #f59e0b; }
+
+/* Up / down buttons (MoveButtons.jsx) */
+.ac-move { display: inline-flex; gap: 4px; }
+
+/* Character counter (CharCount.jsx), sits right of a field label */
+.ac-count {
+  margin-left: auto;
+  color: var(--ak-faint);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ac-count.is-over { color: #b45309; }
+.ac-label-row { display: flex; align-items: baseline; gap: 8px; }
+
+/* Pager under a table (Pager.jsx) */
+.ac-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ak-rule-soft);
+  color: var(--ak-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Numbered list of texts (ListEditor.jsx) */
+.ac-list { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.ac-list > .ak-btn { flex: none; }
+.ac-list-rows { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.ac-list-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: start; gap: 10px; }
+.ac-list-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  border-radius: 8px;
+  background: var(--ak-rule-soft);
+  color: var(--ak-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ac-list-tools { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; }
+.ac-list-empty {
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  border: 1.5px dashed var(--ak-rule);
+  border-radius: 12px;
+  color: var(--ak-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* A select that sits in a toolbar (the kit's select is full width) */
+.ac-toolbar-select { width: auto; min-width: 200px; max-width: 100%; }
+
+/* Small muted text with an icon, e.g. "Updated 3 Mar" */
+.ac-meta { display: inline-flex; align-items: center; gap: 6px; color: var(--ak-muted); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .ac-toolbar-select { flex: 1 1 100%; width: 100%; }
+  /* The main column of a stacked table row reads as a left-aligned title, without its label. */
+  .ak-table.is-stackable td.ac-td-lead { display: block; padding-bottom: 8px; text-align: left; }
+  .ak-table.is-stackable td.ac-td-lead::before { content: none; }
+}
+@media (max-width: 560px) {
+  .ac-list-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .ac-list-num { display: none; }
+  .ac-list-tools { justify-content: flex-end; margin-top: 0; }
+  .ak-sticky-actions .ac-savebar-status { flex: 1 1 100%; }
+}
+
+/* One muted line of help between the toolbar and a table */
+.ac-hint-line { margin: -4px 0 14px; color: var(--ak-muted); font-size: 13.5px; }
+.ac-hint-line strong { color: var(--ak-ink); }

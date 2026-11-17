@@ -1,251 +1,181 @@
+/*
+ * Services (Laser Cutting, Bending, Powder Coating, …). Mounted at /api/services.
+ *
+ *   GET    /                 every active service with parent_ids (?includeInactive=true for all)
+ *   GET    /usage            same, plus metal_count
+ *   GET    /:id/metals       metals that offer a service (?view=list for list columns only)
+ *   GET    /slug/:slug       one active service with its hero image
+ *   POST   /admin/upload     upload a picture (admin) -> { path }
+ *   POST   /admin            create (admin)
+ *   PUT    /admin/:id        update (admin; most fields not sent are kept)
+ *   PUT    /admin/:id/metals which metals / thicknesses offer it (admin)
+ *   PATCH  /admin/:id/status show or hide it (admin)
+ *   DELETE /admin/:id        delete (admin)
+ *
+ * Pricing lives in Admin > Costing (routes/costing.js); pricing_config here
+ * is only stored and returned as before.
+ */
 const express = require('express');
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { optimizeImage } = require('../utils/imageOptimizer');
+const {
+    route, ok, created, HttpError, badRequest, validate, withTransaction, imageUpload, handleUpload, saveImage,
+} = require('../helpers');
 
 const router = express.Router();
+const admin = [authenticate, requireAdmin];
 
-// Helper to generate slug
-const generateSlug = (title) => {
-    return title.toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-};
+const generateSlug = (title) => title.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 
 const shouldIncludeInactive = (req) => String(req.query.includeInactive || '').toLowerCase() === 'true';
+const notFound = () => new HttpError(404, 'Service not found');
 
-// Configure multer for service images
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = path.join(__dirname, '../uploads/services');
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext).replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        cb(null, `${Date.now()}_${name}${ext}`);
-    }
-});
+const PARENT_IDS = `COALESCE((
+    SELECT jsonb_agg(parent_id)
+    FROM service_relationships
+    WHERE service_id = s.id
+), '[]'::jsonb) as parent_ids`;
 
-const upload = multer({
-    storage,
-    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
-    fileFilter: (req, file, cb) => {
-        const allowed = /jpeg|jpg|png|webp|svg/;
-        const ext = allowed.test(path.extname(file.originalname).toLowerCase());
-        const mime = allowed.test(file.mimetype);
-        if (ext && mime) return cb(null, true);
-        cb(new Error('Only images (jpg, png, webp, svg) are allowed'));
-    }
-});
+// Metal rows offering service $1, either for the whole metal or for one of its thicknesses.
+const THICKNESS_OFFERS = `EXISTS (
+    SELECT 1 FROM jsonb_array_elements(
+        CASE WHEN m.quick_look IS NOT NULL AND m.quick_look ? 'thicknesses'
+             THEN m.quick_look->'thicknesses'
+             ELSE '[]'::jsonb END
+    ) t
+    WHERE t->'services' @> to_jsonb($1::int)
+)`;
 
 // ── Public ───────────────────────────────────────────────
 
 // GET /api/services — List all services with their parent IDs
-router.get('/', async (req, res) => {
-    try {
-        const includeInactive = shouldIncludeInactive(req);
-        const result = await db.query(`
-            SELECT s.*, 
-                   COALESCE((
-                       SELECT jsonb_agg(parent_id) 
-                       FROM service_relationships 
-                       WHERE service_id = s.id
-                   ), '[]'::jsonb) as parent_ids
-            FROM services s 
-            WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
-            ORDER BY s.display_order, s.id
-        `, [includeInactive]);
-        res.json({ success: true, data: result.rows });
-    } catch (err) {
-        console.error('Error fetching services:', err);
-        res.status(500).json({ success: false, error: 'Failed to fetch services' });
-    }
-});
+router.get('/', route('load the services', async (req, res) => {
+    const result = await db.query(`
+        SELECT s.*, ${PARENT_IDS}
+        FROM services s
+        WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
+        ORDER BY s.display_order, s.id
+    `, [shouldIncludeInactive(req)]);
+    ok(res, result.rows);
+}));
 
 // GET /api/services/usage — Services with metal usage counts
-router.get('/usage', async (req, res) => {
-    try {
-        const includeInactive = shouldIncludeInactive(req);
-        const result = await db.query(`
-            SELECT s.*,
-                COALESCE((SELECT jsonb_agg(parent_id) 
-                  FROM service_relationships 
-                  WHERE service_id = s.id
-                ), '[]'::jsonb) as parent_ids,
-                s.pricing_config,
-                (SELECT COUNT(*) FROM metals m
-                 WHERE m.services IS NOT NULL
-                   AND jsonb_typeof(m.services) = 'array'
-                   AND m.services::jsonb @> to_jsonb(s.id)
-                ) as metal_count
-            FROM services s
-            WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
-            ORDER BY s.display_order, s.id
-        `, [includeInactive]);
-        res.json({ success: true, data: result.rows });
-    } catch (err) {
-        console.error('Error fetching services usage:', err);
-        res.status(500).json({ success: false, error: 'Failed to fetch services usage: ' + err.message });
-    }
-});
+router.get('/usage', route('load the services', async (req, res) => {
+    const result = await db.query(`
+        SELECT s.*, ${PARENT_IDS},
+            s.pricing_config,
+            (SELECT COUNT(*) FROM metals m
+             WHERE m.services IS NOT NULL
+               AND jsonb_typeof(m.services) = 'array'
+               AND m.services::jsonb @> to_jsonb(s.id)
+            ) as metal_count
+        FROM services s
+        WHERE ($1::boolean OR COALESCE(s.is_active, true) = true)
+        ORDER BY s.display_order, s.id
+    `, [shouldIncludeInactive(req)]);
+    ok(res, result.rows);
+}));
 
 // GET /api/services/:id/metals — Metals using a specific service (full data for frontend)
-router.get('/:id/metals', async (req, res) => {
-    try {
-        const serviceId = parseInt(req.params.id);
-        if (isNaN(serviceId)) {
-            return res.status(400).json({ success: false, error: 'Invalid service ID' });
-        }
+router.get('/:id/metals', route('load the metals for this service', async (req, res) => {
+    const serviceId = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(serviceId)) throw badRequest('Invalid service ID');
 
-        const result = await db.query(`
-            SELECT m.*,
-                mc.name as category_name,
-                mc.slug as category_slug,
-                m.services::jsonb @> to_jsonb($1::int) as metal_level,
-                EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(
-                        CASE WHEN m.quick_look IS NOT NULL AND m.quick_look ? 'thicknesses'
-                             THEN m.quick_look->'thicknesses'
-                             ELSE '[]'::jsonb END
-                    ) t
-                    WHERE t->'services' @> to_jsonb($1::int)
-                ) as thickness_level
-            FROM metals m
-            LEFT JOIN metal_categories mc ON m.category_id = mc.id
-            WHERE (m.services IS NOT NULL AND jsonb_typeof(m.services::jsonb) = 'array' AND m.services::jsonb @> to_jsonb($1::int))
-               OR EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(
-                        CASE WHEN m.quick_look IS NOT NULL AND m.quick_look ? 'thicknesses'
-                             THEN m.quick_look->'thicknesses'
-                             ELSE '[]'::jsonb END
-                    ) t
-                    WHERE t->'services' @> to_jsonb($1::int)
-                )
-            ORDER BY m.display_order, m.name
-        `, [serviceId]);
-
-        res.json({ success: true, data: result.rows });
-    } catch (err) {
-        console.error('Error fetching metals for service:', err);
-        res.status(500).json({ success: false, error: 'Failed to fetch metals for service' });
-    }
-});
+    // ?view=list: only what a list of metals shows, not every spec and FAQ.
+    const columns = req.query.view === 'list'
+        ? 'm.id, m.slug, m.name, m.thickness, m.description, m.image_path, m.category_id, m.display_order'
+        : 'm.*';
+    const result = await db.query(`
+        SELECT ${columns},
+            mc.name as category_name,
+            mc.slug as category_slug,
+            m.services::jsonb @> to_jsonb($1::int) as metal_level,
+            ${THICKNESS_OFFERS} as thickness_level
+        FROM metals m
+        LEFT JOIN metal_categories mc ON m.category_id = mc.id
+        WHERE (m.services IS NOT NULL AND jsonb_typeof(m.services::jsonb) = 'array' AND m.services::jsonb @> to_jsonb($1::int))
+           OR ${THICKNESS_OFFERS}
+        ORDER BY m.display_order, m.name
+    `, [serviceId]);
+    ok(res, result.rows);
+}));
 
 // GET /api/services/slug/:slug — Fetch a single service by its slug
-router.get('/slug/:slug', async (req, res) => {
-    try {
-        const result = await db.query(`
-            SELECT s.*, 
-              hs.hero_image,
-                   COALESCE((
-                       SELECT jsonb_agg(parent_id) 
-                       FROM service_relationships 
-                       WHERE service_id = s.id
-                   ), '[]'::jsonb) as parent_ids
-            FROM services s 
-            LEFT JOIN hero_sections hs ON hs.service_id = s.id
-            WHERE s.slug = $1 AND COALESCE(s.is_active, true) = true
-        `, [req.params.slug]);
+router.get('/slug/:slug', route('load the service', async (req, res) => {
+    const result = await db.query(`
+        SELECT s.*,
+          hs.hero_image,
+          ${PARENT_IDS}
+        FROM services s
+        LEFT JOIN hero_sections hs ON hs.service_id = s.id
+        WHERE s.slug = $1 AND COALESCE(s.is_active, true) = true
+    `, [req.params.slug]);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: true, data: null, message: 'Service not found' });
-        }
-
-        res.json({ success: true, data: result.rows[0] });
-    } catch (err) {
-        console.error('Error fetching service by slug:', err);
-        res.status(500).json({ success: false, error: 'Failed to fetch service' });
-    }
-});
+    // The public service page reads this 404 shape (success with data: null).
+    if (!result.rows.length) return res.status(404).json({ success: true, data: null, message: 'Service not found' });
+    ok(res, result.rows[0]);
+}));
 
 // ── Admin ────────────────────────────────────────────────
 
-// POST /api/services/admin/upload — Upload service image
-router.post('/admin/upload', authenticate, requireAdmin, upload.single('image'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No file uploaded' });
+// POST /api/services/admin/upload — Upload service image (WebP + thumbnail under uploads/services)
+router.post('/admin/upload', admin,
+    handleUpload(imageUpload({ maxMb: 25, maxFiles: 1 }).single('image'), { maxMb: 25, maxFiles: 1 }),
+    route('upload the image', async (req, res) => {
+        const img = await saveImage(req.file, { folder: 'services', maxWidth: 1600, thumbWidth: 480 });
+        ok(res, { path: img.url });
+    }));
+
+const parentIdsOf = (value) => (Array.isArray(value) ? value.map(id => validate.id(id, 'Parent service')) : []);
+
+async function setParents(client, serviceId, parentIds) {
+    await client.query('DELETE FROM service_relationships WHERE service_id = $1', [serviceId]);
+    for (const parentId of parentIds) {
+        await client.query('INSERT INTO service_relationships (service_id, parent_id) VALUES ($1, $2)', [serviceId, parentId]);
     }
-
-    // Optimize the uploaded image immediately
-    const optimizedFilename = await optimizeImage(req.file.path);
-    const relativePath = `/uploads/services/${optimizedFilename}`;
-
-    res.json({ success: true, data: { path: relativePath } });
-});
+}
 
 // POST /api/services/admin
-router.post('/admin', authenticate, requireAdmin, async (req, res) => {
-    const {
-        title, description, image_path, display_order, is_production, parent_ids,
-        min_length, max_length, min_width, max_width, min_height, max_height,
-        dimensions_unit, service_options, base_price, pricing_config, is_active
-    } = req.body;
+router.post('/admin', admin, route('create the service', async (req, res) => {
+    const b = req.body;
+    const title = validate.text(b.title, 'Title', { required: true, max: 200 });
+    const parentIds = parentIdsOf(b.parent_ids);
 
-    try {
-        await db.query('BEGIN');
-
-        const serviceSlug = generateSlug(title);
-
-        const serviceResult = await db.query(
+    const service = await withTransaction(async (client) => {
+        const result = await client.query(
             `INSERT INTO services (
                 title, description, image_path, display_order, is_production,
                 min_length, max_length, min_width, max_width, min_height, max_height,
                 dimensions_unit, service_options, base_price, pricing_config, slug, is_active
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
             [
-                title, description, image_path, display_order || 0, is_production || false,
-                min_length || 0, max_length || 0, min_width || 0, max_width || 0, min_height || 0, max_height || 0,
-                dimensions_unit || 'in', JSON.stringify(service_options || []),
-                parseFloat(base_price) || 0, JSON.stringify(pricing_config || {}), serviceSlug, is_active !== false
+                title, b.description, b.image_path, b.display_order || 0, b.is_production || false,
+                b.min_length || 0, b.max_length || 0, b.min_width || 0, b.max_width || 0, b.min_height || 0, b.max_height || 0,
+                b.dimensions_unit || 'in', JSON.stringify(b.service_options || []),
+                parseFloat(b.base_price) || 0, JSON.stringify(b.pricing_config || {}), generateSlug(title), b.is_active !== false,
             ]
         );
+        const row = result.rows[0];
+        await setParents(client, row.id, parentIds);
+        return row;
+    });
 
-        const newService = serviceResult.rows[0];
-
-        // Handle multiple parents
-        if (parent_ids && Array.isArray(parent_ids) && parent_ids.length > 0) {
-            for (const parentId of parent_ids) {
-                await db.query(
-                    'INSERT INTO service_relationships (service_id, parent_id) VALUES ($1, $2)',
-                    [newService.id, parentId]
-                );
-            }
-        }
-
-        await db.query('COMMIT');
-
-        // Return service with parent_ids
-        newService.parent_ids = parent_ids || [];
-        res.status(201).json({ success: true, data: newService });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error('Error creating service:', err);
-        res.status(500).json({ success: false, error: 'Failed to create service: ' + err.message });
-    }
-});
+    service.parent_ids = b.parent_ids || [];
+    created(res, service);
+}));
 
 // PUT /api/services/admin/:id
-router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
-    const {
-        title, description, image_path, display_order, is_production, parent_ids,
-        min_length, max_length, min_width, max_width, min_height, max_height,
-        dimensions_unit, service_options, base_price, pricing_config, is_active
-    } = req.body;
+router.put('/admin/:id', admin, route('update the service', async (req, res) => {
+    const id = validate.id(req.params.id, 'Service');
+    const b = req.body;
+    const title = validate.text(b.title, 'Title', { max: 200 });
+    const parentIds = parentIdsOf(b.parent_ids);
 
-    console.log('UPDATING SERVICE:', req.params.id, 'with parent_ids:', parent_ids);
-
-    try {
-        await db.query('BEGIN');
-
-        const result = await db.query(`
+    const service = await withTransaction(async (client) => {
+        const result = await client.query(`
             UPDATE services SET
                 title = COALESCE($1, title),
                 description = COALESCE($2, description),
@@ -267,162 +197,95 @@ router.put('/admin/:id', authenticate, requireAdmin, async (req, res) => {
             WHERE id = $18
             RETURNING *
         `, [
-            title, description, image_path, display_order, is_production,
-            min_length, max_length, min_width, max_width, min_height, max_height,
-            dimensions_unit,
-            JSON.stringify(service_options),
-            parseFloat(base_price) || 0,
-            JSON.stringify(pricing_config || {}),
+            title, b.description, b.image_path, b.display_order, b.is_production,
+            b.min_length, b.max_length, b.min_width, b.max_width, b.min_height, b.max_height,
+            b.dimensions_unit,
+            b.service_options === undefined ? null : JSON.stringify(b.service_options),
+            parseFloat(b.base_price) || 0,
+            JSON.stringify(b.pricing_config || {}),
             title ? generateSlug(title) : null,
-            typeof is_active === 'boolean' ? is_active : null,
-            req.params.id
+            typeof b.is_active === 'boolean' ? b.is_active : null,
+            id,
         ]);
+        if (!result.rows.length) throw notFound();
+        await setParents(client, id, parentIds);
+        return result.rows[0];
+    });
 
-        if (result.rows.length === 0) {
-            await db.query('ROLLBACK');
-            return res.status(404).json({ success: false, error: 'Service not found' });
-        }
+    service.parent_ids = b.parent_ids || [];
+    ok(res, service);
+}));
 
-        // Update parents
-        await db.query('DELETE FROM service_relationships WHERE service_id = $1', [req.params.id]);
-        if (parent_ids && Array.isArray(parent_ids)) {
-            for (const parentId of parent_ids) {
-                await db.query(
-                    'INSERT INTO service_relationships (service_id, parent_id) VALUES ($1, $2)',
-                    [req.params.id, parentId]
-                );
-            }
-        }
+// PUT /api/services/admin/:id/metals — which metals (and which of their thicknesses) offer this service.
+// body: { assignments: [{ id, assigned, thicknesses: [value, …] }] }
+router.put('/admin/:id/metals', admin, route('update the metal assignments', async (req, res) => {
+    const serviceId = Number.parseInt(req.params.id, 10);
+    const { assignments } = req.body;
+    if (!assignments || !Array.isArray(assignments)) throw badRequest('Assignments array is required');
 
-        await db.query('COMMIT');
-
-        const updatedService = result.rows[0];
-        updatedService.parent_ids = parent_ids || [];
-        res.json({ success: true, data: updatedService });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error('Error updating service:', err);
-        res.status(500).json({ success: false, error: 'Failed to update service: ' + err.message });
-    }
-});
-
-// PUT /api/services/admin/:id/metals — Bulk update metal/thickness assignments for this service
-router.put('/admin/:id/metals', authenticate, requireAdmin, async (req, res) => {
-    const serviceId = parseInt(req.params.id);
-    const { assignments } = req.body; // Array of { id, assigned, thicknesses: [value1, ...] }
-
-    if (!assignments || !Array.isArray(assignments)) {
-        return res.status(400).json({ success: false, error: 'Assignments array is required' });
-    }
-
-    try {
-        await db.query('BEGIN');
+    await withTransaction(async (client) => {
         for (const ass of assignments) {
-            // 1. Fetch current metal
-            const metalRes = await db.query('SELECT id, services, quick_look FROM metals WHERE id = $1', [ass.id]);
-            if (metalRes.rows.length === 0) continue;
+            const metalRes = await client.query('SELECT id, services, quick_look, thickness_specs FROM metals WHERE id = $1', [ass.id]);
+            if (!metalRes.rows.length) continue;
+            let { services, quick_look: quickLook, thickness_specs: thicknessSpecs } = metalRes.rows[0];
 
-            let { services, quick_look } = metalRes.rows[0];
-
-            // Normalize services array
-            if (!services) services = [];
-            else if (typeof services === 'string') {
-                try { services = JSON.parse(services); } catch (e) { services = []; }
+            if (typeof services === 'string') {
+                try { services = JSON.parse(services); } catch { services = []; }
             }
             if (!Array.isArray(services)) services = [];
 
-            // 2. Update metal-level services
-            const numServiceId = parseInt(serviceId);
+            // Metal-wide
             if (ass.assigned) {
-                if (!services.some(id => Number(id) === numServiceId)) {
-                    services.push(numServiceId);
-                }
+                if (!services.some(sid => Number(sid) === serviceId)) services.push(serviceId);
             } else {
-                services = services.filter(id => Number(id) !== numServiceId);
+                services = services.filter(sid => Number(sid) !== serviceId);
             }
 
-            // 3. Update thickness-level services in quick_look.thicknesses[n].services (canonical)
-            if (quick_look && Array.isArray(quick_look.thicknesses)) {
-                quick_look.thicknesses = quick_look.thicknesses.map(t => {
-                    let tServices = t.services || [];
-                    if (!Array.isArray(tServices)) tServices = [];
-
+            // Per thickness: quick_look.thicknesses[n].services is the source of truth …
+            if (quickLook && Array.isArray(quickLook.thicknesses)) {
+                quickLook.thicknesses = quickLook.thicknesses.map(t => {
+                    let tServices = Array.isArray(t.services) ? t.services : [];
                     if (ass.thicknesses && ass.thicknesses.includes(t.value)) {
-                        if (!tServices.some(id => Number(id) === numServiceId)) {
-                            tServices.push(numServiceId);
-                        }
+                        if (!tServices.some(sid => Number(sid) === serviceId)) tServices = [...tServices, serviceId];
                     } else {
-                        tServices = tServices.filter(id => Number(id) !== numServiceId);
+                        tServices = tServices.filter(sid => Number(sid) !== serviceId);
                     }
                     return { ...t, services: tServices };
                 });
             }
 
-            // 4. Save back — both quick_look (canonical) and thickness_specs (legacy mirror)
-            // Rebuild thickness_specs to mirror quick_look.thicknesses[n].services
-            const metalFullRes = await db.query('SELECT thickness_specs FROM metals WHERE id = $1', [ass.id]);
-            let thickness_specs = metalFullRes.rows[0]?.thickness_specs || {};
-            if (quick_look && Array.isArray(quick_look.thicknesses)) {
-                quick_look.thicknesses.forEach(t => {
+            // … and thickness_specs[value].available_services mirrors it.
+            thicknessSpecs = thicknessSpecs || {};
+            if (quickLook && Array.isArray(quickLook.thicknesses)) {
+                quickLook.thicknesses.forEach(t => {
                     if (!t.value) return;
-                    thickness_specs[t.value] = {
-                        ...(thickness_specs[t.value] || {}),
-                        available_services: (t.services || []).map(id => Number(id))
-                    };
+                    thicknessSpecs[t.value] = { ...(thicknessSpecs[t.value] || {}), available_services: (t.services || []).map(Number) };
                 });
             }
 
-            await db.query(
+            await client.query(
                 'UPDATE metals SET services = $1, quick_look = $2, thickness_specs = $3 WHERE id = $4',
-                [JSON.stringify(services), JSON.stringify(quick_look), JSON.stringify(thickness_specs), ass.id]
+                [JSON.stringify(services), JSON.stringify(quickLook), JSON.stringify(thicknessSpecs), ass.id]
             );
         }
-        await db.query('COMMIT');
-        res.json({ success: true, message: 'Metal assignments updated successfully' });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error('Error updating metal assignments:', err);
-        res.status(500).json({ success: false, error: 'Failed to update metal assignments: ' + err.message });
-    }
-});
+    });
+    ok(res, undefined, { message: 'Metal assignments updated successfully' });
+}));
 
 // PATCH /api/services/admin/:id/status — Toggle active/inactive without deleting service data
-router.patch('/admin/:id/status', authenticate, requireAdmin, async (req, res) => {
-    const { is_active } = req.body;
-
-    if (typeof is_active !== 'boolean') {
-        return res.status(400).json({ success: false, error: 'is_active must be true or false' });
-    }
-
-    try {
-        const result = await db.query(
-            'UPDATE services SET is_active = $1 WHERE id = $2 RETURNING *',
-            [is_active, req.params.id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Service not found' });
-        }
-
-        res.json({ success: true, data: result.rows[0] });
-    } catch (err) {
-        console.error('Error updating service status:', err);
-        res.status(500).json({ success: false, error: 'Failed to update service status' });
-    }
-});
+router.patch('/admin/:id/status', admin, route('update the service status', async (req, res) => {
+    const { is_active: isActive } = req.body;
+    if (typeof isActive !== 'boolean') throw badRequest('is_active must be true or false');
+    const result = await db.query('UPDATE services SET is_active = $1 WHERE id = $2 RETURNING *', [isActive, validate.id(req.params.id, 'Service')]);
+    if (!result.rows.length) throw notFound();
+    ok(res, result.rows[0]);
+}));
 
 // DELETE /api/services/admin/:id
-router.delete('/admin/:id', authenticate, requireAdmin, async (req, res) => {
-    try {
-        const result = await db.query('DELETE FROM services WHERE id = $1 RETURNING title', [req.params.id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Service not found' });
-        }
-        res.json({ success: true, message: `Service "${result.rows[0].title}" deleted` });
-    } catch (err) {
-        console.error('Error deleting service:', err);
-        res.status(500).json({ success: false, error: 'Failed to delete service' });
-    }
-});
+router.delete('/admin/:id', admin, route('delete the service', async (req, res) => {
+    const result = await db.query('DELETE FROM services WHERE id = $1 RETURNING title', [validate.id(req.params.id, 'Service')]);
+    if (!result.rows.length) throw notFound();
+    ok(res, undefined, { message: `Service "${result.rows[0].title}" deleted` });
+}));
 
 module.exports = router;

@@ -34,7 +34,7 @@ from FreeCAD import Matrix, Vector, Rotation
 import Part
 import networkx as nx
 
-UNFOLD_LIB_ENGINE_VERSION = "2026-10-12-analysis-v16"
+UNFOLD_LIB_ENGINE_VERSION = "2026-10-30-analysis-v17"
 
 # Stub out GUI modules before importing unfold.py — the library does
 # `import FreeCADGui`, `import Draft`, `import importDXF`, `import importSVG`
@@ -3338,6 +3338,96 @@ def _empty_cnc_features():
     }
 
 
+def _wire_circle(wire):
+    """(center, radius) when every edge of the wire lies on one circle, else None.
+    STEP files often split a circle into two arcs, so all edges are checked."""
+    try:
+        center = None
+        radius = None
+        for edge in wire.Edges:
+            curve = edge.Curve
+            if curve.TypeId != "Part::GeomCircle":
+                return None
+            c = np.array([float(curve.Center.x), float(curve.Center.y), float(curve.Center.z)], dtype=float)
+            r = float(curve.Radius)
+            if center is None:
+                center, radius = c, r
+            elif np.linalg.norm(c - center) > 0.05 or abs(r - radius) > 0.05:
+                return None
+        return (center, radius) if center is not None else None
+    except Exception:
+        return None
+
+
+def _classify_hole_step_faces(flagged_faces, thickness_mm):
+    """
+    Sort flat faces that sit inside the sheet into hole features:
+    - a ring between two concentric circles is the step of a counterbore;
+    - a disc bounded by one circle is the floor of a blind hole.
+    Depth is measured from the skin the face looks towards (its open side).
+    """
+    out = {"counterbores": [], "blindHoles": [], "classified": 0}
+    for face, signed_offset, alignment in flagged_faces:
+        try:
+            circles = [_wire_circle(w) for w in face.Wires]
+        except Exception:
+            continue
+        if not circles or any(c is None for c in circles):
+            continue
+        # The root face's material lies below its plane (negative offsets);
+        # a face looking the same way as the root opens on the root skin.
+        if thickness_mm > 0:
+            depth = -signed_offset if alignment > 0 else thickness_mm + signed_offset
+        else:
+            depth = abs(signed_offset)
+        depth = max(0.0, float(depth))
+        if len(circles) == 2 and np.linalg.norm(circles[0][0] - circles[1][0]) <= 0.05:
+            radii = sorted([circles[0][1], circles[1][1]])
+            if radii[1] - radii[0] > 0.05:
+                out["counterbores"].append({"throughMm": radii[0] * 2, "counterboreMm": radii[1] * 2, "depthMm": depth})
+                out["classified"] += 1
+        elif len(circles) == 1:
+            out["blindHoles"].append({"diameterMm": circles[0][1] * 2, "depthMm": depth})
+            out["classified"] += 1
+    return out
+
+
+# Written as an escape: FreeCAD's Python on Windows reads this file as cp1252.
+DIAMETER_SIGN = chr(0xD8)  # the diameter sign, kept ASCII in this file
+
+
+def _describe_hole_step_features(features):
+    """One plain sentence for the customer: what was found and what to do."""
+    def group(items, key):
+        groups = {}
+        for item in items:
+            groups.setdefault(key(item), []).append(item)
+        return groups
+
+    parts = []
+    for (through, bore, depth), items in group(
+        features["counterbores"],
+        lambda c: (round(c["throughMm"], 2), round(c["counterboreMm"], 2), round(c["depthMm"], 2)),
+    ).items():
+        n = len(items)
+        parts.append(
+            f"{n} counterbored hole{'s' if n != 1 else ''} ({DIAMETER_SIGN}{through:.2f} mm through, "
+            f"{DIAMETER_SIGN}{bore:.2f} mm counterbore {depth:.2f} mm deep)"
+        )
+    for (diameter, depth), items in group(
+        features["blindHoles"],
+        lambda b: (round(b["diameterMm"], 2), round(b["depthMm"], 2)),
+    ).items():
+        n = len(items)
+        parts.append(f"{n} blind hole{'s' if n != 1 else ''} ({DIAMETER_SIGN}{diameter:.2f} mm, {depth:.2f} mm deep)")
+
+    found = " and ".join(parts)
+    return (
+        f"This part has {found}. A laser cuts straight through the sheet, so these need machining: "
+        "choose CNC Machining, or change them to plain through holes to use Laser Cutting."
+    )
+
+
 def _detect_non_flat_features(fc_shape, root_idx, thickness, sheet_face_indices=None):
     """
     Detect raised planar features (boss/emboss-like geometry) on otherwise flat sheet parts.
@@ -3383,6 +3473,7 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness, sheet_face_indices=
         raised_opposite_orientation = 0
         parallel_faces = 0
         max_offset = 0.0
+        flagged_faces = []  # (face, signed_offset, alignment) for each face that locks Laser
 
         # Tightened tolerances to detect low-height emboss/boss geometry (sub-mm to ~1 mm)
         # that should still lock laser process selection.
@@ -3430,23 +3521,38 @@ def _detect_non_flat_features(fc_shape, root_idx, thickness, sheet_face_indices=
                     if not near_root_plane:
                         raised_faces += 1
                         raised_same_orientation += 1
+                        flagged_faces.append((face, signed_offset, alignment))
                 else:
                     # Opposite-direction faces should generally sit on the opposite skin plane.
                     if not near_opposite_skin:
                         raised_faces += 1
                         raised_opposite_orientation += 1
+                        flagged_faces.append((face, signed_offset, alignment))
             else:
                 if alignment > 0 and offset > 0.45:
                     raised_faces += 1
                     raised_same_orientation += 1
+                    flagged_faces.append((face, signed_offset, alignment))
                 elif alignment < 0 and offset > 0.65:
                     raised_faces += 1
                     raised_opposite_orientation += 1
+                    flagged_faces.append((face, signed_offset, alignment))
 
         result["parallelPlanarFaceCount"] = int(parallel_faces)
         result["raisedFeatureFaceCount"] = int(raised_faces)
         result["maxOffsetMm"] = round(float(max_offset), 4)
         result["hasRaisedFeatures"] = raised_faces > 0
+
+        # Most "raised" faces on a flat plate are really hole features: the
+        # step of a counterbore or the floor of a blind hole. Name them, so
+        # the customer reads why Laser is locked instead of "raised planar faces".
+        hole_features = _classify_hole_step_faces(flagged_faces, thickness_mm)
+        if hole_features["counterbores"] or hole_features["blindHoles"]:
+            result["counterboreCount"] = len(hole_features["counterbores"])
+            result["blindHoleCount"] = len(hole_features["blindHoles"])
+        if raised_faces > 0 and hole_features["classified"] == raised_faces:
+            result["reasons"].append(_describe_hole_step_features(hole_features))
+            return result
 
         if raised_faces > 0:
             if thickness_mm > 0:

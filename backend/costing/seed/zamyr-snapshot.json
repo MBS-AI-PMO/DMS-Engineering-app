@@ -1,0 +1,890 @@
+{
+  "source": "prod-postgres-2026-09-21_1805.dump",
+  "extractedAt": "2026-10-30T11:42:03.140Z",
+  "sheetSizes": [
+    {
+      "name": "5 x 10 Sheet",
+      "length_in": 120,
+      "width_in": 60,
+      "is_default": true,
+      "is_active": true
+    },
+    {
+      "name": "4 x 8 Sheet",
+      "length_in": 96,
+      "width_in": 48,
+      "is_default": false,
+      "is_active": true
+    },
+    {
+      "name": "4 x 10 Sheet",
+      "length_in": 120,
+      "width_in": 48,
+      "is_default": false,
+      "is_active": true
+    }
+  ],
+  "sheetCosts": [
+    {
+      "zamyrRowId": 1512,
+      "family": "Aluminum",
+      "ga": "10.0",
+      "min_thick": 0.13,
+      "max_thick": 0.137,
+      "costs": {
+        "4x8": 0,
+        "5x10": 0,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1513,
+      "family": "Aluminum",
+      "ga": "11.0",
+      "min_thick": 0.117,
+      "max_thick": 0.125,
+      "costs": {
+        "4x8": 283,
+        "5x10": 380,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1514,
+      "family": "Aluminum",
+      "ga": "12.0",
+      "min_thick": 0.089,
+      "max_thick": 0.11,
+      "costs": {
+        "4x8": 220,
+        "5x10": 221,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1515,
+      "family": "Aluminum",
+      "ga": "14.0",
+      "min_thick": 0.072,
+      "max_thick": 0.085,
+      "costs": {
+        "4x8": 180,
+        "5x10": 181,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1516,
+      "family": "Aluminum",
+      "ga": "16.0",
+      "min_thick": 0.058,
+      "max_thick": 0.065,
+      "costs": {
+        "4x8": 115,
+        "5x10": 160,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1517,
+      "family": "Aluminum",
+      "ga": "250.0",
+      "min_thick": 0.23,
+      "max_thick": 0.26,
+      "costs": {
+        "4x8": 650,
+        "5x10": 651,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1518,
+      "family": "Aluminum",
+      "ga": "18.0",
+      "min_thick": 0.043,
+      "max_thick": 0.053,
+      "costs": {
+        "4x8": 0,
+        "5x10": 0,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1519,
+      "family": "Carbon Steel",
+      "ga": "500.0",
+      "min_thick": 0.45,
+      "max_thick": 0.55,
+      "costs": {
+        "4x8": 650,
+        "5x10": 801,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1520,
+      "family": "Carbon Steel",
+      "ga": "10.0",
+      "min_thick": 0.13,
+      "max_thick": 0.137,
+      "costs": {
+        "4x8": 160,
+        "5x10": 161,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1521,
+      "family": "Carbon Steel",
+      "ga": "11.0",
+      "min_thick": 0.117,
+      "max_thick": 0.125,
+      "costs": {
+        "4x8": 160,
+        "5x10": 210,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1522,
+      "family": "Carbon Steel",
+      "ga": "12.0",
+      "min_thick": 0.096,
+      "max_thick": 0.11,
+      "costs": {
+        "4x8": 135,
+        "5x10": 160,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1523,
+      "family": "Carbon Steel",
+      "ga": "14.0",
+      "min_thick": 0.072,
+      "max_thick": 0.085,
+      "costs": {
+        "4x8": 105,
+        "5x10": 125,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1524,
+      "family": "Carbon Steel",
+      "ga": "16.0",
+      "min_thick": 0.058,
+      "max_thick": 0.065,
+      "costs": {
+        "4x8": 95,
+        "5x10": 110,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1525,
+      "family": "Carbon Steel",
+      "ga": "18.0",
+      "min_thick": 0.043,
+      "max_thick": 0.053,
+      "costs": {
+        "4x8": 75,
+        "5x10": 95,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1526,
+      "family": "Stainless Steel",
+      "ga": "10.0",
+      "min_thick": 0.13,
+      "max_thick": 0.137,
+      "costs": {
+        "4x8": 160,
+        "5x10": 161,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1527,
+      "family": "Stainless Steel",
+      "ga": "11.0",
+      "min_thick": 0.117,
+      "max_thick": 0.125,
+      "costs": {
+        "4x8": 600,
+        "5x10": 601,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1528,
+      "family": "Stainless Steel",
+      "ga": "12.0",
+      "min_thick": 0.095,
+      "max_thick": 0.105,
+      "costs": {
+        "4x8": 560,
+        "5x10": 561,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1529,
+      "family": "Stainless Steel",
+      "ga": "14.0",
+      "min_thick": 0.072,
+      "max_thick": 0.085,
+      "costs": {
+        "4x8": 440,
+        "5x10": 441,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1530,
+      "family": "Stainless Steel",
+      "ga": "16.0",
+      "min_thick": 0.058,
+      "max_thick": 0.065,
+      "costs": {
+        "4x8": 250,
+        "5x10": 340,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1531,
+      "family": "Stainless Steel",
+      "ga": "18.0",
+      "min_thick": 0.043,
+      "max_thick": 0.053,
+      "costs": {
+        "4x8": 180,
+        "5x10": 181,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1532,
+      "family": "Steel",
+      "ga": "500.0",
+      "min_thick": 0.45,
+      "max_thick": 0.55,
+      "costs": {
+        "4x8": 650,
+        "5x10": 801,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1533,
+      "family": "Steel",
+      "ga": "10.0",
+      "min_thick": 0.13,
+      "max_thick": 0.137,
+      "costs": {
+        "4x8": 160,
+        "5x10": 161,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1534,
+      "family": "Steel",
+      "ga": "11.0",
+      "min_thick": 0.117,
+      "max_thick": 0.125,
+      "costs": {
+        "4x8": 120,
+        "5x10": 121,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1535,
+      "family": "Steel",
+      "ga": "12.0",
+      "min_thick": 0.096,
+      "max_thick": 0.11,
+      "costs": {
+        "4x8": 95,
+        "5x10": 96,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1536,
+      "family": "Steel",
+      "ga": "14.0",
+      "min_thick": 0.072,
+      "max_thick": 0.085,
+      "costs": {
+        "4x8": 86,
+        "5x10": 87,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1537,
+      "family": "Steel",
+      "ga": "16.0",
+      "min_thick": 0.058,
+      "max_thick": 0.065,
+      "costs": {
+        "4x8": 72,
+        "5x10": 73,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1538,
+      "family": "Steel",
+      "ga": "18.0",
+      "min_thick": 0.043,
+      "max_thick": 0.053,
+      "costs": {
+        "4x8": 55,
+        "5x10": 56,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1539,
+      "family": "Carbon Steel",
+      "ga": ".250",
+      "min_thick": 0.235,
+      "max_thick": 0.265,
+      "costs": {
+        "4x8": 350,
+        "5x10": 400,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1540,
+      "family": "Aluminum",
+      "ga": "19",
+      "min_thick": 0.032,
+      "max_thick": 0.04,
+      "costs": {
+        "4x8": 140,
+        "5x10": 165,
+        "4x10": 110,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1541,
+      "family": "Carbon Steel",
+      "ga": "12",
+      "min_thick": 0.089,
+      "max_thick": 0.093,
+      "costs": {
+        "4x8": 180,
+        "5x10": 250,
+        "4x10": 230,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1542,
+      "family": "Stainless Steel",
+      "ga": "20",
+      "min_thick": 0.032,
+      "max_thick": 0.036,
+      "costs": {
+        "4x8": 130,
+        "5x10": 160,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1543,
+      "family": "Stainless Steel",
+      "ga": ".188",
+      "min_thick": 0.185,
+      "max_thick": 0.189,
+      "costs": {
+        "4x8": 480,
+        "5x10": 550,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1544,
+      "family": "Aluminum",
+      "ga": ".05",
+      "min_thick": 0.048,
+      "max_thick": 0.052,
+      "costs": {
+        "4x8": 160,
+        "5x10": 210,
+        "4x10": null,
+        "3x10": null
+      }
+    },
+    {
+      "zamyrRowId": 1545,
+      "family": "Copper C110",
+      "ga": "16",
+      "min_thick": 0.058,
+      "max_thick": 0.063,
+      "costs": {
+        "4x8": null,
+        "5x10": null,
+        "4x10": null,
+        "3x10": 1220
+      }
+    },
+    {
+      "zamyrRowId": 1546,
+      "family": "Stainless Steel",
+      "ga": "250",
+      "min_thick": 0.23,
+      "max_thick": 0.26,
+      "costs": {
+        "4x8": null,
+        "5x10": 1125,
+        "4x10": null,
+        "3x10": null
+      }
+    }
+  ],
+  "laserRates": [
+    {
+      "zamyrRowId": 10,
+      "material_family": "generic",
+      "thickness": 0.0001,
+      "cut_rate": 140,
+      "pierce_time": 1
+    },
+    {
+      "zamyrRowId": 11,
+      "material_family": "generic",
+      "thickness": 0.06,
+      "cut_rate": 140,
+      "pierce_time": 0.2
+    },
+    {
+      "zamyrRowId": 12,
+      "material_family": "generic",
+      "thickness": 0.1,
+      "cut_rate": 110,
+      "pierce_time": 0.2
+    },
+    {
+      "zamyrRowId": 13,
+      "material_family": "generic",
+      "thickness": 0.12,
+      "cut_rate": 90,
+      "pierce_time": 0.4
+    },
+    {
+      "zamyrRowId": 14,
+      "material_family": "generic",
+      "thickness": 0.25,
+      "cut_rate": 20,
+      "pierce_time": 1
+    },
+    {
+      "zamyrRowId": 15,
+      "material_family": "generic",
+      "thickness": 0.5,
+      "cut_rate": 8,
+      "pierce_time": 7
+    },
+    {
+      "zamyrRowId": 16,
+      "material_family": "generic",
+      "thickness": 99,
+      "cut_rate": 59,
+      "pierce_time": 1.5
+    }
+  ],
+  "pricingItems": [
+    {
+      "name": "Inside Labor Markup",
+      "calc_type": "Markup",
+      "category": "Inside",
+      "percent": 30
+    },
+    {
+      "name": "Total Jobtime",
+      "calc_type": "Markup",
+      "category": "General",
+      "percent": 0
+    },
+    {
+      "name": "Material Markup",
+      "calc_type": "Markup",
+      "category": "Material",
+      "percent": 30
+    },
+    {
+      "name": "Outside Service Markup",
+      "calc_type": "Markup",
+      "category": "Outside",
+      "percent": 30
+    },
+    {
+      "name": "General Markup",
+      "calc_type": "Markup",
+      "category": "General",
+      "percent": 10
+    },
+    {
+      "name": "Overhead Markup",
+      "calc_type": "Markup",
+      "category": "General",
+      "percent": 10
+    },
+    {
+      "name": "Purchased Component Markup",
+      "calc_type": "Markup",
+      "category": "Purchased Component",
+      "percent": 30
+    }
+  ],
+  "addOns": [
+    {
+      "name": "FAI / PPAP Fee",
+      "required": false,
+      "amount": 250
+    },
+    {
+      "name": "Tooling Charge",
+      "required": true,
+      "amount": 0
+    }
+  ],
+  "operations": {
+    "Material | Sheet": {
+      "outside": false,
+      "category": "Material",
+      "variables": {
+        "Part Thickness (in)": "0",
+        "Part Length (in)": "0",
+        "Part Width (in)": "0",
+        "Gage (4X8 pricing only)": "0",
+        "Sheet cost from table": "0",
+        "Edge Buffer (in)": "0.15",
+        "Part Buffer (in)": "0.15",
+        "Kerf Width (in)": "0.005",
+        "Is Using Sheet Nest?": "No",
+        "Sheet Length (in)": "96",
+        "Sheet Width (in)": "48",
+        "Sheet Thickness (in)": "0",
+        "Sheet Cost": "0",
+        "Parts Per Sheet": "0",
+        "# of Sheets Used By Nest": "0",
+        "# of Sheets": "1"
+      }
+    },
+    "Deburr": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0.0833",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "18"
+      }
+    },
+    "Bend": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Large Bend Threshold (in)": "72",
+        "Med Bend Threshold (in)": "24",
+        "Small Bend Count": "0",
+        "Med Bend Count": "0",
+        "Large Bend Count": "0",
+        "Offset Count": "0",
+        "Unique Offsets": "0",
+        "Curl Count": "0",
+        "Unique Curls": "0",
+        "Hem Count": "0",
+        "Unique Hems": "0",
+        "Unique Bends": "0",
+        "Unique Formed Features": "0",
+        "Setup Time Per Unique Formed Feature": "0",
+        "setup_time": "0.0833",
+        "Cost Per Small Bend (sec)": "1.5",
+        "Cost Per Med Bend (sec)": "5.00",
+        "Cost Per Large Bend (sec)": "8.00",
+        "Cost Per Other Formed Feature (sec)": "8.00",
+        "Other Formed Feature Count": "0",
+        "Time Per Bend (secons)": "15",
+        "Operation Runtime": "0",
+        "runtime": "0",
+        "Labor Rate ($/hr)": "35",
+        "Daily Capacity (Hours)": "0"
+      }
+    },
+    "Hardware insert (construction)": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Unique Inserts": "0",
+        "Hardware Count": "0",
+        "Time Per Insert (s)": "30",
+        "setup_time": "0",
+        "runtime": "0",
+        "Hourly Rate": "25.00",
+        "Daily Capacity (Hours)": "0"
+      }
+    },
+    "Anodize": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Minimum Lot Charge ($)": "0",
+        "Piece Price ($/part)": "0"
+      }
+    },
+    "Assembly": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "100"
+      }
+    },
+    "Laser": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Flat Thickness (in)": "0",
+        "Etching Length (in)": "0",
+        "Total Cut Length (in)": "0",
+        "Pierce Count": "0",
+        "Mat Cut Rate (in / min)": "0",
+        "Mat Pierce Rate (Sec)": "0",
+        "Labor Rate": "120",
+        "setup_time": "0.0833",
+        "runtime": "0",
+        "Daily Capacity (days)": "0"
+      }
+    },
+    "Weld": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "70"
+      }
+    },
+    "Powder Coat": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0.25",
+        "Usable Oven Width (In)": "90",
+        "Usable Oven Length (In)": "162",
+        "Usable Oven height (In)": "0",
+        "Part Thickness (in)": "0",
+        "Part Length (in)": "0",
+        "Part Width (in)": "0",
+        "test1": "0",
+        "test2": "0",
+        "parts per batch Batches": "0",
+        "Number of Batches": "1",
+        "Cost per Batch": "85",
+        "Shop Rate ($/Hr)": "38"
+      }
+    },
+    "Gas Consumption": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Tank Size (CF)": "12000",
+        "Consumption Rate (CF/Min)": "5",
+        "Laser Runtime (Min)": "4",
+        "Job Consumption (CF)": "0",
+        "Job Consumption (Tank)": "0"
+      }
+    },
+    "PC Piece Price": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "piece_price": "0"
+      }
+    },
+    "Saw": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "100"
+      }
+    },
+    "Lathe": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "100"
+      }
+    },
+    "Mill": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "100"
+      }
+    },
+    "Drill Press": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {
+        "Tap Count": "0",
+        "Runtime Per Tap (s)": "30",
+        "Countersink Count": "0",
+        "Runtime Per Countersink (s)": "30",
+        "Counterbore Count": "0",
+        "Runtime Per Counterbore (s)": "30",
+        "Drilled Hole Count": "0",
+        "Runtime Per Drilled Hole (s)": "30",
+        "setup_time": "0.0833",
+        "runtime": "0",
+        "Labor Rate ($)": "25.00"
+      }
+    },
+    "Milling": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {}
+    },
+    "OSV Op": {
+      "outside": true,
+      "category": "Operation",
+      "variables": {
+        "Minimum Lot Charge ($)": "0",
+        "Piece Price ($/part)": "0"
+      }
+    },
+    "Inspect": {
+      "outside": true,
+      "category": "Operation",
+      "variables": {
+        "setup_time": "0",
+        "runtime": "0",
+        "Shop Rate ($/Hr)": "100"
+      }
+    },
+    "Shipping": {
+      "outside": false,
+      "category": "Operation",
+      "variables": {}
+    }
+  },
+  "processes": [
+    {
+      "name": "Sheet Metal",
+      "operations": [
+        "Material | Sheet",
+        "Laser",
+        "Deburr",
+        "Bend",
+        "Hardware insert (construction)",
+        "Powder Coat"
+      ],
+      "pricingItems": [
+        "General Markup",
+        "Inside Labor Markup",
+        "Material Markup",
+        "Outside Service Markup",
+        "Overhead Markup",
+        "Purchased Component Markup",
+        "Total Jobtime"
+      ],
+      "addOns": []
+    },
+    {
+      "name": "Assembly",
+      "operations": [
+        "Assembly",
+        "Weld"
+      ],
+      "pricingItems": [
+        "General Markup",
+        "Inside Labor Markup",
+        "Material Markup",
+        "Overhead Markup",
+        "Purchased Component Markup",
+        "Total Jobtime",
+        "Outside Service Markup"
+      ],
+      "addOns": []
+    },
+    {
+      "name": "Purchased Components",
+      "operations": [
+        "PC Piece Price"
+      ],
+      "pricingItems": [],
+      "addOns": []
+    },
+    {
+      "name": "CNC Machining",
+      "operations": [],
+      "pricingItems": [
+        "Material Markup",
+        "Inside Labor Markup",
+        "Outside Service Markup",
+        "Purchased Component Markup",
+        "Total Jobtime"
+      ],
+      "addOns": [
+        "FAI / PPAP Fee",
+        "Tooling Charge"
+      ]
+    },
+    {
+      "name": "Tube",
+      "operations": [],
+      "pricingItems": [
+        "Inside Labor Markup",
+        "Material Markup"
+      ],
+      "addOns": []
+    }
+  ]
+}

@@ -27,6 +27,7 @@ Important public routes:
 - `/get-instant-pricing`
 - `/quote`
 - `/contact`
+- `/about`
 - `/faq`
 - `/guidelines`
 - `/privacy-policy`

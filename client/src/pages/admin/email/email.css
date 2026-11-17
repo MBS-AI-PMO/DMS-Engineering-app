@@ -1,0 +1,94 @@
+/*
+ * Admin > Email: only what the admin kit lacks. Prefix: em-.
+ * .em-problem (the "what is wrong and how to fix it" panel), .em-steps,
+ * .em-checks, .em-templates (list + preview), .em-preview-frame.
+ */
+
+/* ── Problem panel ── */
+.em-top { scroll-margin-top: 16px; }
+.em-problem {
+  padding: 18px 20px;
+  border: 1px solid #fecaca;
+  border-left: 4px solid var(--ak-accent);
+  border-radius: var(--ak-radius);
+  background: #fff7f7;
+  color: var(--ak-text);
+}
+.em-problem-head { display: flex; align-items: flex-start; gap: 14px; }
+.em-problem-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: #fee2e2;
+  color: var(--ak-accent-ink);
+}
+.em-problem-context { margin: 0 0 2px; color: var(--ak-accent-ink); font-size: 13px; font-weight: 700; }
+.em-problem-title { margin: 0; color: var(--ak-ink); font-size: 18px; font-weight: 800; }
+.em-problem-summary { margin: 4px 0 0; font-size: 14.5px; line-height: 1.55; }
+.em-problem-raw { margin: 8px 0 0; color: var(--ak-muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.em-steps { display: grid; gap: 8px; margin: 14px 0 0 54px; padding: 0 0 0 18px; font-size: 14px; line-height: 1.55; }
+.em-steps li::marker { color: var(--ak-accent-ink); font-weight: 800; }
+.em-steps .ak-link { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.em-problem-note { margin: 10px 0 12px 54px; }
+.em-problem > .ak-btn { margin: 12px 0 0 54px; }
+
+/* ── Checks ── */
+.em-checks { display: grid; gap: 4px; }
+.em-checks .ak-hint { margin-bottom: 8px; }
+.em-checks + .ak-banner { margin: 8px 0 0; }
+.em-h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--ak-ink); font-size: 14px; font-weight: 800; }
+.em-inline-icon { vertical-align: -3px; }
+.em-unsaved { margin-right: auto; align-self: center; color: var(--ak-ink); font-size: 14px; font-weight: 600; }
+.ak-form-actions .em-remove { margin-right: auto; color: var(--ak-accent-ink); }
+
+/* ── Templates ── */
+.em-templates { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.em-template-picker { display: none; }
+.em-template-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.em-template {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.em-template:hover { background: var(--ak-ground); }
+.em-template:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.em-template.is-active { border-color: #fecaca; background: var(--ak-accent-soft); }
+.em-preview { min-width: 0; overflow: hidden; border: 1px solid var(--ak-rule); border-radius: 12px; }
+.em-preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ak-rule-soft);
+  background: var(--ak-ground);
+}
+.em-preview-subject { display: flex; flex-direction: column; min-width: 0; }
+.em-preview-subject strong { color: var(--ak-ink); font-size: 14px; overflow-wrap: anywhere; }
+.em-preview-frame { display: block; width: 100%; height: 640px; border: 0; background: #fff; transition: opacity 0.15s ease; }
+.em-preview-frame.is-loading { opacity: 0.4; }
+.em-preview-error { padding: 16px; }
+
+@media (max-width: 860px) {
+  .em-templates { grid-template-columns: minmax(0, 1fr); }
+  .em-template-list { display: none; }
+  .em-template-picker { display: block; }
+  .em-preview-frame { height: 520px; }
+}
+@media (max-width: 560px) {
+  .em-steps, .em-problem-note { margin-left: 0; }
+  .em-problem > .ak-btn { margin-left: 0; }
+  .em-problem { padding: 16px; }
+}

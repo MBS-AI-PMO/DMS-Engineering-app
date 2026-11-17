@@ -1,0 +1,357 @@
+/*
+ * Admin shell: the frame around every admin page (components/admin/AdminLayout.jsx).
+ * Moved here from admin.css. Colours and fonts are the kit tokens (--ak-*,
+ * styles/adminKit.css): white panels, light grey rules, red accents.
+ *
+ * .admin-shell [.is-collapsed (icon rail) | .is-drawer (≤1024px) + .is-drawer-open]
+ *   > .admin-sidebar > .admin-sidebar-head (.admin-brand) + .admin-nav (.admin-nav-section > .admin-nav-heading
+ *     + .admin-nav-list > .admin-nav-item[.is-active]) + .admin-sidebar-foot
+ *   > .admin-scrim (drawer backdrop)
+ *   > .admin-main > .admin-topbar (.admin-crumbs, .admin-topbar-tools) + main.admin-content > .admin-content-inner
+ */
+
+.admin-shell {
+  --admin-menu-w: 248px;
+  --admin-rail-w: 72px;
+  --admin-bar-h: 60px;
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--ak-ground);
+  color: var(--ak-text);
+  font-family: var(--ak-font);
+}
+
+.admin-skip {
+  position: absolute;
+  z-index: 2000;
+  top: 8px;
+  left: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--ak-ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.admin-skip:focus { outline: 0; box-shadow: var(--ak-focus); transform: none; }
+
+/* ── Sidebar ── */
+.admin-sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--admin-menu-w);
+  height: 100%;
+  border-right: 1px solid var(--ak-rule);
+  background: var(--ak-card);
+  transition: width 0.2s ease;
+}
+.admin-shell.is-collapsed .admin-sidebar { width: var(--admin-rail-w); }
+
+.admin-sidebar-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: var(--admin-bar-h);
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--ak-rule);
+}
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border-radius: 10px;
+  color: var(--ak-ink);
+  text-decoration: none;
+}
+.admin-brand:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.admin-brand-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #e31b23, #c91520);
+  color: #fff;
+  font-family: var(--ak-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+.admin-brand-text {
+  overflow: hidden;
+  font-family: var(--ak-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.admin-brand-text span { color: var(--ak-muted); font-weight: 700; }
+.admin-shell.is-collapsed .admin-sidebar-head { justify-content: center; padding: 0; }
+.admin-shell.is-collapsed .admin-brand-text { display: none; }
+
+.admin-sidebar-btn,
+.admin-topbar-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--ak-rule);
+  border-radius: 10px;
+  background: var(--ak-card);
+  color: var(--ak-muted);
+  cursor: pointer;
+}
+.admin-sidebar-btn:hover,
+.admin-topbar-btn:hover { border-color: var(--ak-faint); color: var(--ak-ink); }
+.admin-sidebar-btn:focus-visible,
+.admin-topbar-btn:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+
+/* ── Menu ── */
+.admin-nav {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 12px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.admin-nav-section + .admin-nav-section { margin-top: 16px; }
+.admin-nav-heading {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--ak-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.admin-nav-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.admin-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  font-family: var(--ak-font);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-nav-icon { flex: none; color: #6b7280; transition: color 0.15s ease; }
+.admin-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.admin-nav-item:hover { background: #f3f4f6; color: var(--ak-ink); }
+.admin-nav-item:hover .admin-nav-icon { color: var(--ak-ink); }
+.admin-nav-item:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.admin-nav-item.is-active { background: var(--ak-accent-soft); color: var(--ak-accent-ink); font-weight: 600; }
+.admin-nav-item.is-active .admin-nav-icon { color: var(--ak-accent); }
+.admin-nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ak-accent);
+}
+
+.admin-sidebar-foot { flex: none; padding: 10px 12px; border-top: 1px solid var(--ak-rule); }
+.admin-collapse-btn { color: var(--ak-muted); }
+
+/* Icon rail: labels stay for screen readers; headings become thin rules. */
+.admin-shell.is-collapsed .admin-nav { padding: 14px 10px 16px; }
+.admin-shell.is-collapsed .admin-sidebar-foot { padding: 10px; }
+.admin-shell.is-collapsed .admin-nav-heading {
+  height: 1px;
+  margin: 0 8px 10px;
+  padding: 0;
+  background: var(--ak-rule);
+  color: transparent;
+  font-size: 0;
+}
+.admin-shell.is-collapsed .admin-nav-item { justify-content: center; gap: 0; padding: 8px 0; }
+.admin-shell.is-collapsed .admin-nav-item.is-active::before { left: -10px; }
+.admin-shell.is-collapsed .admin-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Main column ── */
+.admin-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ── Top bar ── */
+.admin-topbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  height: var(--admin-bar-h);
+  padding: 0 24px;
+  border-bottom: 1px solid var(--ak-rule);
+  background: var(--ak-card);
+}
+.admin-crumbs { flex: 1; min-width: 0; }
+.admin-crumbs ol { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.admin-crumbs li {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ak-muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.admin-crumbs li:last-child { flex: 0 1 auto; }
+.admin-crumbs a { border-radius: 4px; color: var(--ak-muted); text-decoration: none; }
+.admin-crumbs a:hover { color: var(--ak-ink); text-decoration: underline; }
+.admin-crumbs a:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.admin-crumb-sep { flex: none; color: #cbd5e1; }
+.admin-crumb-current { min-width: 0; overflow: hidden; color: var(--ak-ink); font-weight: 600; text-overflow: ellipsis; }
+
+.admin-topbar-tools { display: flex; flex: none; align-items: center; gap: 4px; }
+.admin-topbar-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ak-muted);
+  font: inherit;
+  font-family: var(--ak-font);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.admin-topbar-link:hover:not(:disabled) { background: #f3f4f6; color: var(--ak-ink); }
+.admin-topbar-link:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.admin-topbar-link:disabled { opacity: 0.6; cursor: progress; }
+.admin-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 36px;
+  margin: 0 6px;
+  padding: 0 14px;
+  border-right: 1px solid var(--ak-rule);
+  border-left: 1px solid var(--ak-rule);
+}
+.admin-user-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.admin-user-name,
+.admin-user-email { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-user-name { color: var(--ak-ink); font-size: 14px; font-weight: 600; }
+.admin-user-email { color: var(--ak-muted); font-size: 12px; }
+
+/* ── Content ── */
+.admin-content {
+  flex: 1;
+  min-width: 0;
+  padding: 0 32px 48px;
+  overflow-x: auto;
+  overflow-y: auto;
+  outline: 0;
+}
+.admin-content-inner { max-width: 1520px; margin: 0 auto; }
+/* App.jsx wraps every admin page in .px-desktop (40px sides from index.css);
+   the content area already has its gutter, so that one is dropped here. */
+.admin-content-inner > .px-desktop { padding-right: 0 !important; padding-left: 0 !important; }
+
+/* ── Drawer (narrow screens) ── */
+.admin-shell.is-drawer .admin-sidebar {
+  position: fixed;
+  z-index: 1100;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(300px, 86vw);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  transform: translateX(-105%);
+  transition: transform 0.22s ease;
+}
+.admin-shell.is-drawer-open .admin-sidebar { transform: none; }
+.admin-scrim {
+  position: fixed;
+  z-index: 1050;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  animation: admin-fade 0.2s ease;
+}
+@keyframes admin-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 1024px) {
+  .admin-topbar { gap: 10px; padding: 0 16px; }
+  .admin-content { padding: 0 24px 48px; }
+}
+@media (max-width: 860px) {
+  .admin-user { margin: 0 2px; padding: 0 8px; border: 0; }
+  .admin-user-text { display: none; }
+}
+@media (max-width: 768px) {
+  .admin-content { padding: 0 16px 40px; overflow-x: hidden; }
+}
+@media (max-width: 640px) {
+  .admin-topbar { gap: 8px; padding: 0 12px; }
+  .admin-crumbs li.is-section { display: none; }
+  .admin-crumbs li.is-section + li .admin-crumb-sep { display: none; }
+  .admin-topbar-tools { gap: 2px; }
+  .admin-topbar-link { padding: 0; }
+  .admin-topbar-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar,
+  .admin-shell.is-drawer .admin-sidebar,
+  .admin-nav-item,
+  .admin-nav-icon { transition: none; }
+  .admin-scrim { animation: none; }
+}

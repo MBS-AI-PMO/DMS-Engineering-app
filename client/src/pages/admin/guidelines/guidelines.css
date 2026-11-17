@@ -1,0 +1,79 @@
+/* Admin › Guidelines: the size-table grid and a few layout bits the kit lacks. Prefix: ac-gd-. */
+
+.ac-gd-gap { margin-top: 20px; }
+.ac-gd-issues { display: flex; flex-direction: column; gap: 2px; }
+
+/* Material name + its buttons */
+.ac-gd-table-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin-top: 6px; }
+.ac-gd-material { flex: 1 1 280px; max-width: 420px; margin-bottom: 0; }
+.ac-gd-table-head .ak-row-actions { margin-bottom: 3px; }
+
+/* The grid */
+.ac-gd-grid-block { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.ac-gd-grid-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  background: var(--ak-card);
+}
+.ac-gd-grid { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ac-gd-grid th {
+  padding: 8px;
+  border-bottom: 1px solid var(--ak-rule);
+  background: var(--ak-ground);
+  text-align: left;
+  vertical-align: middle;
+}
+.ac-gd-grid td { padding: 0; border-bottom: 1px solid var(--ak-rule-soft); border-left: 1px solid var(--ak-rule-soft); }
+.ac-gd-grid tbody tr:last-child td { border-bottom: 0; }
+.ac-gd-grid td.ac-gd-rownum,
+.ac-gd-grid th.ac-gd-rownum {
+  width: 40px;
+  border-left: 0;
+  color: var(--ak-faint);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ac-gd-grid .ac-gd-tools { width: 44px; padding: 0 8px; text-align: center; white-space: nowrap; }
+.ac-gd-colhead { display: flex; align-items: center; gap: 4px; min-width: 130px; }
+.ac-gd-head-input,
+.ac-gd-cell {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ak-ink);
+  font: inherit;
+  font-family: var(--ak-font);
+  font-size: 14px;
+}
+.ac-gd-head-input {
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--ak-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ac-gd-head-input:hover { border-color: var(--ak-rule); background: var(--ak-card); }
+.ac-gd-cell { display: block; min-width: 110px; height: 40px; padding: 8px 10px; border-radius: 0; font-variant-numeric: tabular-nums; }
+.ac-gd-cell:hover { background: var(--ak-ground); }
+.ac-gd-head-input:focus,
+.ac-gd-cell:focus {
+  position: relative;
+  z-index: 1;
+  border-color: var(--ak-accent);
+  outline: 0;
+  background: var(--ak-card);
+  box-shadow: var(--ak-focus);
+}
+.ac-gd-norows { padding: 18px !important; color: var(--ak-muted); text-align: center; }
+.ac-gd-grid-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.ac-gd-grid-actions .ak-hint { margin-left: 4px; }
+
+@media (max-width: 560px) {
+  .ac-gd-material { max-width: none; }
+  .ac-gd-table-head .ak-row-actions { width: 100%; }
+}

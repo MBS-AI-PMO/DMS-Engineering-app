@@ -155,6 +155,10 @@ const MetalDetail = () => {
         let cancelled = false;
         window.scrollTo(0, 0);
 
+        // Both requests only need the slug, so they go out together.
+        const servicesRequest = fetchMetalServices(lookupSlug);
+        servicesRequest.catch(() => { }); // handled below once the metal is in
+
         (async () => {
             try {
                 const data = await fetchMetalBySlug(lookupSlug);
@@ -176,7 +180,7 @@ const MetalDetail = () => {
                     customFields: data.custom_fields,
                 });
                 setLoading(false);
-                fetchMetalServices(lookupSlug)
+                servicesRequest
                     .then(svc => { if (!cancelled) setResolvedServices(svc || { metalLevel: [], thicknessLevel: [] }); })
                     .catch(() => { if (!cancelled) setResolvedServices({ metalLevel: [], thicknessLevel: [] }); });
             } catch (err) {
@@ -364,7 +368,7 @@ const MetalDetail = () => {
                         </div>
                     ) : (
                         <div className="md-hero-head">
-                            <ThumbImage key={metal.image} className="md-swatch" src={metal.image} fallback={staticImage} />
+                            <ThumbImage key={metal.image} className="md-swatch" width={72} src={metal.image} fallback={staticImage} />
                             <span className="md-hero-names">
                                 {metal.category && <span className="md-family">{metal.category}</span>}
                                 <h1 id="md-title" className="md-title">{displayMetalName(metal.name)}</h1>
@@ -564,7 +568,7 @@ const MetalDetail = () => {
                                     {showcase.length > 0 && (
                                         <div className="md-showcase">
                                             {showcase.slice(0, 3).map(src => (
-                                                <ThumbImage key={src} className="md-showcase-img" src={src} />
+                                                <ThumbImage key={src} className="md-showcase-img" width={480} sizes="(max-width: 640px) 100vw, 480px" src={src} />
                                             ))}
                                         </div>
                                     )}
@@ -628,7 +632,7 @@ const MetalDetail = () => {
                                                 return (
                                                     <li key={s.id}>
                                                         <Link to={`/service/${s.slug || s.id}`} className="md-service">
-                                                            <ThumbImage key={s.image_path || s.image} className="md-service-media" src={s.image_path || s.image} fallback={fallback} />
+                                                            <ThumbImage key={s.image_path || s.image} className="md-service-media" width={320} src={s.image_path || s.image} fallback={fallback} />
                                                             <span className="md-service-name">{s.title}</span>
                                                             {thicknesses.length > 0 && <span className="md-service-reach">{reach}</span>}
                                                         </Link>
@@ -650,7 +654,7 @@ const MetalDetail = () => {
                                             {(about.title || about.text) && !about.comparisonTable && (
                                                 <div className="md-panel md-about">
                                                     {about.image && (
-                                                        <ThumbImage key={about.image} className="md-about-img" src={about.image} />
+                                                        <ThumbImage key={about.image} className="md-about-img" width={960} sizes="(max-width: 1000px) 100vw, 480px" src={about.image} />
                                                     )}
                                                     <div className="md-about-text">
                                                         {about.title && <h3 className="md-h3">{clean(about.title)}</h3>}

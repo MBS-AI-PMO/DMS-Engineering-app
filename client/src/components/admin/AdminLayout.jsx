@@ -1,175 +1,102 @@
-/* eslint-disable no-unused-vars */
-import { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-    LayoutDashboard, Box, Tag, HelpCircle, FolderOpen, Wrench, Shield, Mail, Users,
-    LogOut, Menu, X, ChevronRight, FileText, UserCheck, DollarSign, ShoppingBag, Cpu, CreditCard, Calculator, Zap, Layers, Images
-} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { useToast } from '../../context/ToastContext';
+// The admin kit (components/admin/ui) and its loading shimmer, for every admin screen.
+import '../../styles/Shimmer.css';
+import '../../styles/adminKit.css';
+import './layout/adminShell.css';
+import Sidebar from './layout/Sidebar';
+import Topbar from './layout/Topbar';
+import { breadcrumbsFor } from './layout/navigation';
+import { useMediaQuery, useStoredFlag } from './layout/useShell';
 
-const navItems = [
-    { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
-    { to: '/admin/metals', label: 'Metals', icon: Box },
-    { to: '/admin/categories', label: 'Categories', icon: Tag },
-    { to: '/admin/faqs', label: 'FAQs', icon: HelpCircle },
-    { to: '/admin/faq-categories', label: 'FAQ Categories', icon: FolderOpen },
-    { to: '/admin/services', label: 'Services', icon: Wrench },
-    { to: '/admin/hero-sections', label: 'Hero Sections', icon: Images },
-    { to: '/admin/pricing', label: 'Discounts', icon: DollarSign },
-    { to: '/admin/pricing-calculator', label: 'Markups', icon: Calculator },
-    { to: '/admin/laser-rates', label: 'Laser Rates', icon: Zap },
-    { to: '/admin/sheet-cost-rates', label: 'Sheet Costs', icon: Layers },
-    { to: '/admin/guidelines', label: 'Guidelines', icon: FileText },
-    { to: '/admin/legal', label: 'Terms & Policy', icon: Shield },
+const NARROW = '(max-width: 1024px)';
 
-    { to: '/admin/customers', label: 'Customers', icon: UserCheck },
-    { to: '/admin/admins', label: 'Admins', icon: Shield },
-    { to: '/admin/email', label: 'Email Config', icon: Mail },
-    { to: '/admin/payment', label: 'Payment Methods', icon: CreditCard },
-    { to: '/admin/subscribers', label: 'Subscribers', icon: Users },
-    { to: '/admin/contact', label: 'Contact', icon: Mail },
-];
-
+/**
+ * The frame around every admin page: the sectioned menu on the left (an
+ * icon rail when collapsed, a drawer on narrow screens), the top bar with
+ * breadcrumbs, the live-site link, the signed-in admin and log out, and the
+ * scrolling content area the page renders into.
+ */
 export default function AdminLayout({ children }) {
     const { admin, logout } = useAdminAuth();
+    const toast = useToast();
     const navigate = useNavigate();
-    const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
-    const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
+    const navigationType = useNavigationType();
+    const { pathname } = useLocation();
+    const drawer = useMediaQuery(NARROW);
+    const [collapsed, setCollapsed] = useStoredFlag('dms_admin_menu_collapsed');
+    // The drawer stays open only on the page it was opened on, so picking a page closes it.
+    const [drawerPath, setDrawerPath] = useState(null);
+    const open = drawer && drawerPath === pathname;
+    const [loggingOut, setLoggingOut] = useState(false);
+    const menuButtonRef = useRef(null);
+    const closeButtonRef = useRef(null);
+    const contentRef = useRef(null);
 
-    // Handle resize
+    const closeDrawer = useCallback(() => setDrawerPath(null), []);
+
+    // The drawer: focus its close button and let Escape close it; once it
+    // closes, focus goes back to the menu button.
+    const drawerWasOpen = useRef(false);
     useEffect(() => {
-        const handleResize = () => {
-            const mobile = window.innerWidth <= 1024;
-            setIsMobile(mobile);
-            if (!mobile) setSidebarOpen(true);
-            else setSidebarOpen(false);
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+        if (!open) {
+            if (drawerWasOpen.current) menuButtonRef.current?.focus();
+            drawerWasOpen.current = false;
+            return undefined;
+        }
+        drawerWasOpen.current = true;
+        closeButtonRef.current?.focus();
+        const onKey = (e) => { if (e.key === 'Escape') closeDrawer(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [open, closeDrawer]);
+
+    // The page scrolls inside the content area: start each new page at the top
+    // (back/forward keeps where you were).
+    useEffect(() => {
+        if (navigationType !== 'POP') contentRef.current?.scrollTo(0, 0);
+    }, [pathname, navigationType]);
 
     const handleLogout = async () => {
-        await logout();
-        navigate('/admin/login');
+        setLoggingOut(true);
+        try {
+            await logout();
+            navigate('/admin/login');
+        } catch (err) {
+            setLoggingOut(false);
+            toast(`Could not log out: ${err.message}`, 'error');
+        }
     };
 
+    const classes = ['admin-shell', drawer ? 'is-drawer' : collapsed && 'is-collapsed', open && 'is-drawer-open'].filter(Boolean).join(' ');
+
     return (
-        <div className={`admin-shell ${isMobile ? 'is-mobile' : ''} ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-            {/* Mobile Overlay */}
-            <AnimatePresence>
-                {isMobile && sidebarOpen && (
-                    <motion.div
-                        className="admin-sidebar-overlay"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSidebarOpen(false)}
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* Sidebar */}
-            <motion.aside
-                className="admin-sidebar"
-                initial={false}
-                animate={{
-                    width: isMobile ? 280 : (sidebarOpen ? 240 : 64),
-                    x: isMobile && !sidebarOpen ? -280 : 0
-                }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            >
-                <div className="admin-sidebar-header">
-                    <AnimatePresence>
-                        {(sidebarOpen || isMobile) && (
-                            <motion.span
-                                className="admin-logo-text"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                            >
-                                DMS Admin
-                            </motion.span>
-                        )}
-                    </AnimatePresence>
-                    <button
-                        className="admin-sidebar-toggle"
-                        onClick={() => setSidebarOpen(o => !o)}
-                    >
-                        {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
-                    </button>
-                </div>
-                <nav className="admin-nav" onClick={() => isMobile && setSidebarOpen(false)}>
-                    {navItems.map(({ to, label, icon: IconComponent, end }) => (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            end={end}
-                            className={({ isActive }) =>
-                                `admin-nav-item${isActive ? ' active' : ''}`
-                            }
-                        >
-                            <IconComponent size={20} className="admin-nav-icon" />
-                            <AnimatePresence>
-                                {(sidebarOpen || isMobile) && (
-                                    <motion.span
-                                        className="admin-nav-label"
-                                        initial={{ opacity: 0, x: -8 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -8 }}
-                                        transition={{ duration: 0.15 }}
-                                    >
-                                        {label}
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                        </NavLink>
-                    ))}
-                </nav>
-
-                <div className="admin-sidebar-footer">
-                    <button className="admin-nav-item logout-btn" onClick={handleLogout}>
-                        <LogOut size={20} className="admin-nav-icon" />
-                        <AnimatePresence>
-                            {(sidebarOpen || isMobile) && (
-                                <motion.span
-                                    className="admin-nav-label"
-                                    initial={{ opacity: 0, x: -8 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -8 }}
-                                    transition={{ duration: 0.15 }}
-                                >
-                                    Logout
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </div>
-            </motion.aside>
-
-            {/* Main */}
-            <div className="admin-main">
-                <header className="admin-topbar">
-                    <div className="admin-topbar-left">
-                        {isMobile && (
-                            <button className="admin-mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                                <Menu size={20} />
-                            </button>
-                        )}
-                        <div className="admin-topbar-breadcrumb">
-                            <ChevronRight size={16} />
-                        </div>
-                    </div>
-                    <div className="admin-topbar-user">
-                        <div className="admin-user-avatar">
-                            {admin?.name?.[0]?.toUpperCase() || 'A'}
-                        </div>
-                        <span className="admin-user-name">{admin?.name || admin?.email}</span>
-                    </div>
-                </header>
-                <main className="admin-content">
-                    {children}
+        <div className={classes}>
+            <a className="admin-skip" href="#admin-content">Skip to content</a>
+            <Sidebar
+                drawer={drawer}
+                open={open}
+                collapsed={collapsed}
+                onToggleCollapsed={() => setCollapsed(c => !c)}
+                onClose={closeDrawer}
+                closeRef={closeButtonRef}
+            />
+            {open && <div className="admin-scrim" onClick={closeDrawer} aria-hidden="true" />}
+            <div className="admin-main" inert={open || undefined}>
+                <Topbar
+                    ref={menuButtonRef}
+                    crumbs={breadcrumbsFor(pathname)}
+                    admin={admin}
+                    showMenuButton={drawer}
+                    menuOpen={open}
+                    onOpenMenu={() => setDrawerPath(pathname)}
+                    onLogout={handleLogout}
+                    loggingOut={loggingOut}
+                />
+                <main ref={contentRef} id="admin-content" className="admin-content" tabIndex={-1}>
+                    <div className="admin-content-inner">{children}</div>
                 </main>
             </div>
         </div>

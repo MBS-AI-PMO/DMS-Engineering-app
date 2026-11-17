@@ -38,6 +38,17 @@ export const adminAuthHeaders = () => {
 };
 
 async function request(url, options = {}) {
+    // Any write may change what the public pages show (a price calculation is not a write).
+    const isWrite = String(options.method || 'GET').toUpperCase() !== 'GET' && !url.startsWith('/pricing/calculate');
+    if (isWrite) clearPublicDataCache();
+    try {
+        return await send(url, options);
+    } finally {
+        if (isWrite) clearPublicDataCache();
+    }
+}
+
+async function send(url, options) {
     const isFormData = options.body instanceof FormData;
     const baseHeaders = isFormData ? {} : { 'Content-Type': 'application/json' };
     const headers = { ...baseHeaders, ...(options.headers || {}) };
@@ -68,23 +79,60 @@ async function request(url, options = {}) {
     return data;
 }
 
+// ── Public data cache ───────────────────────────────────
+// Settings, metals, services and FAQs are read by several parts of one page
+// (navbar, footer, SEO tags and hero all read settings) and again on the
+// next page. One request serves them all for a minute. Every caller gets
+// its own copy, so changing what came back never changes the cache. Admin
+// pages always fetch fresh, and any write made through request() empties it.
+const PUBLIC_TTL_MS = 60 * 1000;
+const publicData = new Map(); // url -> { promise, at }
+
+export function clearPublicDataCache() {
+    publicData.clear();
+}
+
+const copyOf = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
+const onAdminPage = () => typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+
+function cachedGet(url) {
+    if (onAdminPage()) {
+        clearPublicDataCache();
+        return request(url);
+    }
+    const hit = publicData.get(url);
+    if (hit && Date.now() - hit.at < PUBLIC_TTL_MS) return hit.promise.then(copyOf);
+    const entry = { promise: request(url), at: Date.now() };
+    publicData.set(url, entry);
+    entry.promise.catch(() => {
+        if (publicData.get(url) === entry) publicData.delete(url);
+    });
+    return entry.promise.then(copyOf);
+}
+
 // ── Metals ──────────────────────────────────────────────
 
 export async function fetchMetals(category) {
     const params = category ? `?category=${encodeURIComponent(category)}` : '';
-    const { data } = await request(`/metals${params}`);
+    const { data } = await cachedGet(`/metals${params}`);
+    return data;
+}
+
+/** Metals for a list: id, slug, name, thickness, description, image_path, category_name/slug only. */
+export async function fetchMetalList() {
+    const { data } = await cachedGet('/metals?view=list');
     return data;
 }
 
 export async function fetchMetalBySlug(slug) {
-    const { data } = await request(`/metals/${slug}`);
+    const { data } = await cachedGet(`/metals/${slug}`);
     return data;
 }
 
 // ── Categories ──────────────────────────────────────────
 
 export async function fetchCategories() {
-    const { data } = await request('/categories');
+    const { data } = await cachedGet('/categories');
     return data;
 }
 
@@ -92,12 +140,12 @@ export async function fetchCategories() {
 
 export async function fetchFaqs(category) {
     const params = category ? `?category=${encodeURIComponent(category)}` : '';
-    const { data } = await request(`/faqs${params}`);
+    const { data } = await cachedGet(`/faqs${params}`);
     return data;
 }
 
 export async function fetchFaqCategories() {
-    const { data } = await request(`/faqs/categories`);
+    const { data } = await cachedGet(`/faqs/categories`);
     return data;
 }
 
@@ -222,7 +270,7 @@ export async function deleteFaqCategory(id) {
 export async function fetchServices(options = {}) {
     const includeInactive = typeof options === 'boolean' ? options : options.includeInactive;
     const params = includeInactive ? '?includeInactive=true' : '';
-    const { data } = await request(`/services${params}`);
+    const { data } = await cachedGet(`/services${params}`);
     return data;
 }
 
@@ -234,17 +282,18 @@ export async function fetchServicesWithUsage(options = {}) {
 }
 
 export async function fetchServiceBySlug(slug) {
-    const { data } = await request(`/services/slug/${slug}`);
+    const { data } = await cachedGet(`/services/slug/${slug}`);
     return data;
 }
 
-export async function fetchMetalsByServiceId(serviceId) {
-    const { data } = await request(`/services/${serviceId}/metals`);
+/** `{ list: true }` returns only the columns a list of metals shows. */
+export async function fetchMetalsByServiceId(serviceId, { list = false } = {}) {
+    const { data } = await cachedGet(`/services/${serviceId}/metals${list ? '?view=list' : ''}`);
     return data;
 }
 
 export async function fetchMetalServices(slug) {
-    const { data } = await request(`/metals/${slug}/services`);
+    const { data } = await cachedGet(`/metals/${slug}/services`);
     return data;
 }
 
@@ -421,6 +470,20 @@ export async function sendTestEmail() {
     return request('/email/test-send', { method: 'POST' });
 }
 
+export async function fetchEmailTemplates() {
+    const { data } = await request('/email/templates');
+    return data;
+}
+
+export async function fetchEmailPreview(template) {
+    const { data } = await request(`/email/preview/${encodeURIComponent(template)}`);
+    return data;
+}
+
+export async function sendSampleEmail(template) {
+    return request('/email/send-sample', { method: 'POST', body: { template } });
+}
+
 // ── Newsletter ─────────────────────────────────────────
 
 export async function sendContactMessage(message) {
@@ -443,7 +506,7 @@ export async function deleteSubscriber(id) {
 // ── Site Settings ───────────────────────────────────────
 
 export async function fetchSettings() {
-    const { data } = await request('/settings');
+    const { data } = await cachedGet('/settings');
     return data;
 }
 
@@ -470,12 +533,12 @@ export async function uploadSettingLogo(key, file) {
 // ── Guidelines ─────────────────────────────────────────
 
 export async function fetchGuidelines() {
-    const { data } = await request('/guidelines');
+    const { data } = await cachedGet('/guidelines');
     return data;
 }
 
 export async function fetchGuideline(serviceId) {
-    const { data } = await request(`/guidelines/${serviceId}`);
+    const { data } = await cachedGet(`/guidelines/${serviceId}`);
     return data;
 }
 
@@ -504,17 +567,6 @@ export async function fetchPricingMetadata() {
     return request('/pricing/admin/metadata');
 }
 
-export async function fetchPricingRules(metalId, serviceId) {
-    return request(`/pricing/admin/rules/${metalId}/${serviceId}`);
-}
-
-export async function savePricingRules(payload) {
-    return request('/pricing/admin/upsert', {
-        method: 'POST',
-        body: payload
-    });
-}
-
 // ── Payment ───────────────────────────────────────────
 
 export async function fetchPaymentConfig() {
@@ -526,9 +578,25 @@ export async function testPaypalKeys({ mode, client_id, secret }) {
     return request('/payment/test-paypal', { method: 'POST', body: { mode, client_id, secret } });
 }
 
-export async function createPaypalOrder(amount, currency = 'USD') {
-    const { orderID } = await request('/payment/paypal/create-order', { method: 'POST', body: { amount, currency } });
-    return orderID;
+/* Starts a PayPal payment for the cart. The server prices the items itself;
+ * a 409 carries `code` (PRICE_CHANGED / QUOTE_REQUIRED) and `items` on the
+ * thrown error so checkout can update the cart. */
+export async function createPaypalOrder(items) {
+    const response = await fetch(`${API_BASE}/payment/paypal/create-order`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ items }),
+    });
+    let data = {};
+    try { data = await response.json(); } catch { /* no body */ }
+    if (!response.ok || !data.success) {
+        const err = new Error(data.error || 'Could not start the PayPal payment');
+        err.code = data.code;
+        err.items = data.items;
+        throw err;
+    }
+    return data.orderID;
 }
 
 export async function capturePaypalOrder(orderID) {
@@ -556,7 +624,7 @@ export async function deleteDiscountTier(id) {
 }
 
 export async function fetchPublicDiscounts() {
-    const { data } = await request('/pricing/discounts');
+    const { data } = await cachedGet('/pricing/discounts');
     return data;
 }
 
@@ -568,32 +636,3 @@ export async function calculatePrice(payload) {
     });
 }
 
-// ── Admin: Laser Cut Rates ────────────────────────────────
-export async function fetchLaserRates() {
-    const { data } = await request('/pricing/admin/laser-rates');
-    return data;
-}
-export async function createLaserRate(data) {
-    return request('/pricing/admin/laser-rates', { method: 'POST', body: data });
-}
-export async function updateLaserRate(id, data) {
-    return request(`/pricing/admin/laser-rates/${id}`, { method: 'PUT', body: data });
-}
-export async function deleteLaserRate(id) {
-    return request(`/pricing/admin/laser-rates/${id}`, { method: 'DELETE' });
-}
-
-// ── Admin: Sheet Cost Rates ───────────────────────────────
-export async function fetchSheetCostRates() {
-    const { data } = await request('/pricing/admin/sheet-cost-rates');
-    return data;
-}
-export async function createSheetCostRate(data) {
-    return request('/pricing/admin/sheet-cost-rates', { method: 'POST', body: data });
-}
-export async function updateSheetCostRate(id, data) {
-    return request(`/pricing/admin/sheet-cost-rates/${id}`, { method: 'PUT', body: data });
-}
-export async function deleteSheetCostRate(id) {
-    return request(`/pricing/admin/sheet-cost-rates/${id}`, { method: 'DELETE' });
-}

@@ -3,6 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { notifyOrderPlaced } = require('../emails');
+const { changeStatus, customerExtras, OrderInputError } = require('../orders/service');
+const { priceForSite } = require('./pricing');
+const { priceCart, cartHash } = require('../costing/checkout');
 const { spawn } = require('child_process');
 const util = require('util');
 
@@ -388,20 +392,75 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Missing PayPal payment reference' });
     }
 
+    // Prices come from the server, never from the browser. A PayPal order
+    // uses the prices that were paid (worked out when the payment was
+    // created); a cash order is priced now.
+    let priced;
+    let session = null;
     try {
-        await db.query('BEGIN');
+        if (paymentMethod === 'PAYPAL') {
+            const found = await db.query('SELECT * FROM payment_checkout_sessions WHERE provider_capture_id = $1', [paymentId]);
+            session = found.rows[0] || null;
+            if (!session || session.status !== 'captured') {
+                return res.status(400).json({ success: false, error: 'That PayPal payment was not found or has already been used.' });
+            }
+            if (session.user_id && userId && Number(session.user_id) !== Number(userId)) {
+                return res.status(403).json({ success: false, error: 'That PayPal payment belongs to another account.' });
+            }
+            if (session.items_hash !== cartHash(items)) {
+                return res.status(409).json({ success: false, code: 'CART_CHANGED', error: 'Your cart changed after payment. Please contact us so we can sort it out.' });
+            }
+            const lines = session.priced_lines || [];
+            priced = { lines, total: Number(session.amount), engine: lines[0]?.snapshot?.engine || null };
+        } else {
+            const result = await priceCart(items, priceForSite);
+            if (result.quoteRequired.length) {
+                return res.status(409).json({
+                    success: false,
+                    code: 'QUOTE_REQUIRED',
+                    error: 'Some parts need a quote before they can be ordered.',
+                    items: result.quoteRequired,
+                });
+            }
+            if (result.changed.length) {
+                return res.status(409).json({
+                    success: false,
+                    code: 'PRICE_CHANGED',
+                    error: 'Some prices have changed. Please review your cart.',
+                    items: result.changed,
+                    total: result.total,
+                });
+            }
+            priced = { ...result, engine: result.lines[0]?.snapshot?.engine || null };
+        }
+    } catch (err) {
+        console.error('Error pricing order:', err);
+        const statusCode = err.statusCode || 500;
+        return res.status(statusCode).json({ success: false, error: statusCode >= 500 ? 'Failed to price the order' : err.message });
+    }
+
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
 
         // 1. Create the Order
-        const orderRes = await db.query(
-            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, payment_id, status, admin_deletion_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', 'active')
+        const orderRes = await client.query(
+            `INSERT INTO orders (user_id, email, full_name, phone, address, city, zip_code, total_price, payment_method, payment_id, status, admin_deletion_status, client_total_price, pricing_version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', 'active', $11, $12)
              RETURNING *`,
-            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, totalPrice, paymentMethod, paymentId]
+            [userId, email.toLowerCase(), fullName, phone, address, city, zipCode, priced.total, paymentMethod, paymentId,
+                Number.isFinite(Number(totalPrice)) ? Number(totalPrice) : null, priced.engine]
         );
         const orderId = orderRes.rows[0].id;
 
         // 2. Create Order Items
-        for (let item of items) {
+        for (const [index, item] of items.entries()) {
+            const line = priced.lines.find(l => l.index === index);
+            if (!line) {
+                const err = new Error(`${item.fileName || 'A part'} could not be priced. Please remove it and add it again.`);
+                err.statusCode = 400;
+                throw err;
+            }
             const rawPath = finalizeOrderFile(item.tempPath);
             if (!rawPath) {
                 const err = new Error(`${item.fileName || 'Uploaded file'} is no longer available. Please re-upload it and try again.`);
@@ -409,9 +468,9 @@ router.post('/', async (req, res) => {
                 throw err;
             }
 
-            const itemRes = await db.query(
-                `INSERT INTO order_items (order_id, file_name, original_file_path, configured_file_path, flat_file_path, configuration_json, quantity, unit_price)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            const itemRes = await client.query(
+                `INSERT INTO order_items (order_id, file_name, original_file_path, configured_file_path, flat_file_path, configuration_json, quantity, unit_price, line_total, client_unit_price, quote_snapshot_json)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
                 [
                     orderId,
                     item.fileName,
@@ -419,22 +478,41 @@ router.post('/', async (req, res) => {
                     rawPath, // Initial fallback établissements établissements
                     null,
                     JSON.stringify(item.configuration || {}),
-                    item.quantity || 1,
-                    item.unitPrice || 0
+                    line.quantity,
+                    line.unitPrice,
+                    line.lineTotal,
+                    Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
+                    JSON.stringify(line.snapshot || null),
                 ]
             );
             item.dbId = itemRes.rows[0].id;
             item.persistedRawPath = rawPath;
         }
 
-        await db.query('COMMIT');
+        if (session) {
+            const used = await client.query(
+                "UPDATE payment_checkout_sessions SET status = 'used', order_id = $1, updated_at = NOW() WHERE id = $2 AND status = 'captured'",
+                [orderId, session.id]
+            );
+            if (!used.rowCount) {
+                const err = new Error('That PayPal payment has already been used.');
+                err.statusCode = 409;
+                throw err;
+            }
+        }
+
+        await client.query('COMMIT');
 
         // 3. Return success immediately établissement établissement
         res.status(201).json({
             success: true,
             orderId,
+            total: priced.total,
             message: 'Order placed successfully. Manufacturing assets are being generated in the background.'
         });
+
+        // Confirmation to the customer, alert to staff (sent in the background).
+        notifyOrderPlaced(orderId);
 
         // 4. Background CAD Processing établissement établissement
         setImmediate(() => {
@@ -448,13 +526,15 @@ router.post('/', async (req, res) => {
         });
 
     } catch (err) {
-        await db.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => {});
         console.error('Error placing order:', err);
         const statusCode = err.statusCode || 500;
         res.status(statusCode).json({
             success: false,
             error: statusCode >= 500 ? 'Failed to place order' : err.message
         });
+    } finally {
+        client.release();
     }
 });
 
@@ -538,8 +618,10 @@ router.get('/:id', authenticate, async (req, res) => {
             return res.status(403).json({ success: false, error: 'Unauthorized access to this order' });
         }
 
-        const itemsRes = await db.query(`SELECT * FROM order_items WHERE order_id = $1`, [orderId]);
-        res.json({ success: true, order, items: itemsRes.rows });
+        const itemsRes = await db.query(`SELECT * FROM order_items WHERE order_id = $1 ORDER BY id`, [orderId]);
+        // Tracking, photos the shop chose to share, and status updates.
+        const extras = await customerExtras(order.id);
+        res.json({ success: true, order, items: itemsRes.rows, ...extras });
     } catch (err) {
         console.error('Error fetching order details:', err);
         res.status(500).json({ success: false, error: 'Internal server error' });
@@ -560,23 +642,16 @@ const useAdminAuth = (req, res, next) => {
  * PUT /api/orders/:id/status — ADMIN ONLY: Update order production status
  */
 router.put('/:id/status', authenticate, requireAdmin, async (req, res) => {
-    const allowedStatuses = ['pending', 'processing', 'shipping', 'completed', 'rejected'];
-    const { status } = req.body;
-
-    if (!status || !allowedStatuses.includes(status)) {
-        return res.status(400).json({ success: false, error: 'Invalid status. Allowed: ' + allowedStatuses.join(', ') });
-    }
-
     try {
-        const result = await db.query(
-            'UPDATE orders SET status = $1 WHERE id = $2 RETURNING id, status',
-            [status, req.params.id]
-        );
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Order not found' });
-        }
-        res.json({ success: true, order: result.rows[0] });
+        const result = await changeStatus(Number.parseInt(req.params.id, 10), {
+            status: req.body?.status,
+            notify: req.body?.notify !== false,
+            note: req.body?.note,
+            actor: req.user?.email || null,
+        });
+        res.json({ success: true, order: { id: Number(req.params.id), status: result.status }, email: result.email });
     } catch (err) {
+        if (err instanceof OrderInputError) return res.status(err.status).json({ success: false, error: err.message });
         console.error('Status update error:', err);
         res.status(500).json({ success: false, error: 'Failed to update status' });
     }
@@ -672,7 +747,8 @@ router.delete('/:id', useAdminAuth, authenticate, requireAdmin, async (req, res)
         await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
         await db.query('COMMIT');
 
-        // Physical File Cleanup établissementsétablissement
+        // Physical file cleanup: the parts' files and the order's photos.
+        await fs.promises.rm(path.join(__dirname, '..', 'uploads', 'orders', 'photos', String(Number(orderId))), { recursive: true, force: true }).catch(() => {});
         for (const item of items) {
             const filesToDelete = [item.original_file_path, item.configured_file_path, item.flat_file_path];
             for (const relPath of filesToDelete) {

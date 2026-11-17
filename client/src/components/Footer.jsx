@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Linkedin, Facebook, Instagram, Mail, Phone, MapPin, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
 import { subscribeNewsletter, fetchSettings } from '../utils/api';
+import { imageVariant } from '../utils/imageUrl';
 import { displayMetalName } from '../utils/metalDisplay';
 import '../styles/Shimmer.css';
 import '../styles/SiteFooter.css';
@@ -20,10 +21,11 @@ const NO_CTA_PATHS = ['/get-instant-pricing', '/quote', '/cart', '/checkout', '/
 const PAGE_LINKS = [
     { name: 'Home', path: '/' },
     { name: 'Metals', path: '/metals' },
-    { name: 'Services', path: '/#services' },
+    { name: 'Services', path: '/services' },
     { name: 'Instant pricing', path: '/get-instant-pricing' },
     { name: 'Guidelines', path: '/guidelines' },
     { name: 'FAQ', path: '/faq' },
+    { name: 'About us', path: '/about' },
     { name: 'Contact us', path: '/contact' },
 ];
 
@@ -47,7 +49,7 @@ const Footer = () => {
     const onMetals = pathname === '/metals';
     const [settings, setSettings] = useState(null);
     const [loaded, setLoaded] = useState(false);
-    const [logo, setLogo] = useState(localStorage.getItem('footer_logo') || '/logo.webp');
+    const [logo, setLogo] = useState(localStorage.getItem('footer_logo') || '/logo-480.webp');
     const [nlEmail, setNlEmail] = useState('');
     const [nlLoading, setNlLoading] = useState(false);
     const [nlStatus, setNlStatus] = useState(null); // { type: 'success'|'error', msg }
@@ -70,7 +72,7 @@ const Footer = () => {
 
     const handleLogoError = () => {
         localStorage.removeItem('footer_logo');
-        setLogo('/logo.webp');
+        setLogo('/logo-480.webp');
     };
 
     const handleSubscribe = async (e) => {
@@ -135,7 +137,7 @@ const Footer = () => {
                 <div className="sf-top">
                     <div className="sf-brand">
                         <Link to="/" className="sf-logo" aria-label="DMS home">
-                            <img src={logo} alt="DMS" decoding="async" loading="lazy" onError={handleLogoError} />
+                            <img src={imageVariant(logo, 480)} alt="DMS" decoding="async" loading="lazy" onError={handleLogoError} />
                         </Link>
                         <p className="sf-desc">
                             Premium metal processing and laser cutting services.

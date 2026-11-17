@@ -214,6 +214,8 @@ const ServicesPage = () => {
                                                     <ThumbImage
                                                         key={service.image_path}
                                                         className="sp-process-media"
+                                                        width={640}
+                                                        sizes="(max-width: 640px) 100vw, 168px"
                                                         src={service.image_path}
                                                         fallback={staticImageFor(service)}
                                                     />
@@ -266,6 +268,7 @@ const ServicesPage = () => {
                                                         <ThumbImage
                                                             key={service.image_path}
                                                             className="sp-addon-media"
+                                                            width={320}
                                                             src={service.image_path}
                                                             fallback={staticImageFor(service)}
                                                         />

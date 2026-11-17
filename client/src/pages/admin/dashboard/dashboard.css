@@ -1,0 +1,62 @@
+/*
+ * Admin › Dashboard: the bits the kit does not have. Prefix: db-.
+ * LinkList rows (.db-links > .db-link), the recent-orders card body, spacing.
+ */
+
+.db-section { margin-top: 20px; }
+.db-pad { padding: 14px 20px; }
+.db-gap { margin-top: 12px; }
+.db-gap .ak-banner { margin: 0; }
+.db-note { margin: 0; color: var(--ak-muted); font-size: 14px; line-height: 1.5; }
+.db-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* The side column (Needs attention, Email): side by side once it drops under the orders. */
+.db-side { display: flex; flex-direction: column; gap: 20px; }
+@media (min-width: 861px) and (max-width: 1100px) {
+  .db-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+
+/* "All caught up" in Needs attention. */
+.db-calm { display: flex; align-items: center; gap: 12px; }
+
+/* Recent orders: the table sits flush inside the card, under the status tabs. */
+.db-recent .db-tabs { border-bottom: 1px solid var(--ak-rule-soft); }
+.db-recent .ak-table-card { border: 0; border-radius: 0; box-shadow: none; }
+
+/* LinkList */
+.db-links { display: flex; flex-direction: column; margin: -6px -8px; padding: 0; list-style: none; }
+.db-links li + li { border-top: 1px solid var(--ak-rule-soft); }
+.db-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 9px 8px;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.db-link:hover { background: var(--ak-ground); }
+.db-link:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.db-link-icon { display: grid; flex: none; place-items: center; width: 20px; color: var(--ak-accent); }
+.db-link-icon.is-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+.db-link-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.db-link-label { color: var(--ak-ink); font-size: 14px; font-weight: 600; line-height: 1.35; }
+.db-link-sub { margin-top: 1px; color: var(--ak-muted); font-size: 12.5px; line-height: 1.4; }
+.db-link-value {
+  flex: none;
+  color: var(--ak-ink);
+  font-family: var(--ak-display);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.db-link-value .ak-sk { margin: 0; }
+.db-link-go { flex: none; color: var(--ak-faint); }
+.db-link:hover .db-link-go { color: var(--ak-ink); }

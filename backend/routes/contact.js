@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { sendEmail } = require('../utils/email');
+const { sendTemplate } = require('../emails');
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ const router = express.Router();
  *   quiet success and nothing is sent;
  * - length caps on every field, a real-looking email, a message of at
  *   least 10 characters, no line breaks in name/email (header safety);
- * - every value HTML-escaped in the email body;
+ * - every value HTML-escaped in the email body (emails/templates.js);
  * - at most 5 messages per sender per 15 minutes, and 60 per hour across
  *   the site (behind a proxy many people can share one address, so the
  *   site-wide cap is what bounds abuse).
@@ -57,9 +57,6 @@ const allowSend = (key) => {
     return true;
 };
 
-const escapeHtml = (value) => String(value).replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
 const clip = (value, max) => String(value ?? '').trim().slice(0, max);
 const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
 const TOPICS = ['Quote question', 'Order help', 'Material or service question', 'File or design help', 'Something else'];
@@ -108,29 +105,11 @@ router.post('/', async (req, res) => {
             return res.status(503).json({ success: false, error: 'Messages cannot be sent right now. Please email or call us instead.' });
         }
 
-        const row = (label, value) => (value
-            ? `<tr><td style="padding:6px 16px 6px 0;color:#5b5f68;vertical-align:top;white-space:nowrap;">${label}</td><td style="padding:6px 0;color:#0b0c0f;">${escapeHtml(value)}</td></tr>`
-            : '');
-        const html = `
-            <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;">
-                <h1 style="margin:0 0 16px;color:#0b0c0f;font-size:20px;">New message from the website</h1>
-                <table style="border-collapse:collapse;font-size:14px;">
-                    ${row('Name', name)}
-                    ${row('Email', email)}
-                    ${row('Company', company)}
-                    ${row('Topic', topic)}
-                </table>
-                <div style="margin-top:16px;padding:16px;border:1px solid #e3e4e8;border-radius:8px;color:#0b0c0f;font-size:14px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</div>
-                <p style="margin-top:16px;color:#8b8f98;font-size:12px;">Reply to this email to answer ${escapeHtml(name)} directly.</p>
-            </div>
-        `;
-
-        await sendEmail({
-            to,
-            subject: `Website message: ${topic} from ${name}`.slice(0, 200),
-            html,
-            replyTo: { name: name.replace(/["\\]/g, ''), address: email },
-        });
+        await sendTemplate(
+            'contact-message',
+            { name, email, company, topic, message, receivedAt: new Date().toISOString() },
+            { to, replyTo: { name: name.replace(/["\\]/g, ''), address: email } }
+        );
 
         res.json({ success: true });
     } catch (err) {

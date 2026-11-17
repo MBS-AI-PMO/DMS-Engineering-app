@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { metalsData } from '../data/metalsData';
-import { fetchMetals } from '../utils/api';
+import { fetchMetalList } from '../utils/api';
 import { displayMetalName, displayThickness } from '../utils/metalDisplay';
 import ThumbImage from './ThumbImage';
 import '../styles/HomeMetals.css';
@@ -48,7 +48,7 @@ const Metals = () => {
     useEffect(() => {
         async function loadMetals() {
             try {
-                const data = await fetchMetals();
+                const data = await fetchMetalList();
                 setMetals(data.map(m => ({
                     id: m.id,
                     slug: m.slug,
@@ -124,6 +124,7 @@ const Metals = () => {
                                                 <ThumbImage
                                                     key={metal.image}
                                                     className="hm-swatch"
+                                                    width={52}
                                                     src={metal.image}
                                                     fallback={staticImageFor(metal)}
                                                 />

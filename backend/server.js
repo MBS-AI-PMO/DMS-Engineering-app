@@ -24,11 +24,44 @@ const guidelinesRoutes = require('./routes/guidelines');
 const configurationsRoutes = require('./routes/configurations');
 const pricingRoutes = require('./routes/pricing');
 const orderRoutes = require('./routes/orders');
+const adminOrderRoutes = require('./routes/adminOrders');
+const { ensureOrderOpsSchema } = require('./orders/schema');
+const quoteRequestRoutes = require('./routes/quoteRequests');
+const adminQuoteRoutes = require('./routes/adminQuotes');
+const { ensureQuoteSchema } = require('./quotes/schema');
 const hardwareRoutes = require('./routes/hardware');
 const paymentRoutes = require('./routes/payment');
 const legalRoutes = require('./routes/legal');
 const heroSectionsRoutes = require('./routes/heroSections');
 const contactRoutes = require('./routes/contact');
+const costingRoutes = require('./routes/costing');
+const { imageVariants } = require('./utils/imageVariants');
+const { publicCache } = require('./utils/publicCache');
+const { ensureCostingSchema } = require('./costing/schema');
+const { hashBuffer, recordStepAnalysis } = require('./costing/measure');
+
+// STEP analysis jobs waiting to finish: job id -> hash of the file it measures.
+const pendingMeasureJobs = new Map();
+
+// Every price comes from the costing set-up, so a new database gets the
+// shop's values (from Zamyr) on first start instead of pricing nothing.
+async function seedCostingIfEmpty() {
+    const { seedCosting } = require('./costing/seed/seedCosting');
+    const client = await db.pool.connect();
+    try {
+        const existing = await client.query('SELECT count(*)::int AS n FROM costing_operations');
+        if (existing.rows[0].n > 0) return;
+        await client.query('BEGIN');
+        const report = await seedCosting(client);
+        await client.query('COMMIT');
+        console.log(`[Costing] Loaded the shop's costing set-up:\n  ${report.join('\n  ')}`);
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('[Costing] Could not load the costing set-up:', err.message);
+    } finally {
+        client.release();
+    }
+}
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -67,16 +100,23 @@ app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 app.use(compression()); // Enable Gzip compression for all responses
 
-// Serve static images with aggressive 1-year caching
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+// Serve static images with aggressive 1-year caching. Every upload gets a new
+// timestamped file name, so a changed picture always has a new URL.
+// `?w=<width>` serves a resized WebP copy, made once and kept in uploads/.variants.
+const uploadsDir = path.join(__dirname, 'uploads');
+app.use('/uploads', imageVariants(uploadsDir), express.static(uploadsDir, {
     maxAge: '1y',
     immutable: true
 }));
 // Also expose persisted assets behind /api for production proxies that only route /api to the backend.
-app.use('/api/uploads', express.static(path.join(__dirname, 'uploads'), {
+app.use('/api/uploads', imageVariants(uploadsDir), express.static(uploadsDir, {
     maxAge: '1y',
     immutable: true
 }));
+
+// Public read-only JSON (settings, metals, services, FAQs...) is kept for a
+// minute and dropped as soon as an admin saves a change.
+app.use('/api', publicCache);
 
 // Serve temporary CAD assets for cart persistence établissement
 app.use('/temp_uploads', express.static(path.join(__dirname, 'temp_uploads')));
@@ -94,11 +134,15 @@ app.use('/api/users', usersRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/costing', costingRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/guidelines', guidelinesRoutes);
 app.use('/api/configurations', configurationsRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/admin/orders', adminOrderRoutes);
+app.use('/api/quote-requests', quoteRequestRoutes);
+app.use('/api/admin/quotes', adminQuoteRoutes);
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/legal', legalRoutes);
@@ -373,6 +417,8 @@ app.post('/api/unfold', upload.single('file'), async (req, res) => {
         form.append('file', blob, req.file.originalname || 'model.step');
 
         const data = await callPython('/unfold', form);
+        // Keep the server's own measurement of this file for pricing.
+        recordStepAnalysis(hashBuffer(fileBuffer), data);
         return res.json({ success: true, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
@@ -401,6 +447,11 @@ app.post('/api/unfold-job/start', upload.single('file'), async (req, res) => {
         form.append('file', blob, req.file.originalname || 'model.step');
 
         const data = await callPython('/unfold-job/start', form);
+        // Remember which file this job measures; the result is stored when it completes.
+        if (data?.jobId) {
+            pendingMeasureJobs.set(String(data.jobId), { hash: hashBuffer(fileBuffer), at: Date.now() });
+            for (const [id, job] of pendingMeasureJobs) if (Date.now() - job.at > 60 * 60 * 1000) pendingMeasureJobs.delete(id);
+        }
         return res.json({ success: true, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
@@ -419,6 +470,11 @@ app.get('/api/unfold-job/:jobId', async (req, res) => {
 
     try {
         const data = await callPythonGet(`/unfold-job/status?jobId=${encodeURIComponent(jobId)}`);
+        const pending = pendingMeasureJobs.get(jobId);
+        if (pending && data?.status === 'completed') {
+            pendingMeasureJobs.delete(jobId);
+            recordStepAnalysis(pending.hash, data.result);
+        }
         return res.json({ success: true, ...data });
     } catch (err) {
         console.error('[CAD-ERROR]', err);
@@ -432,6 +488,8 @@ app.listen(port, async () => {
     try {
         await db.query('SELECT NOW()');
         console.log(`\x1b[45m\x1b[30m Database Integrated & Connected Successfully \x1b[0m`);
+        await ensureCostingSchema(db);
+        await seedCostingIfEmpty();
         // Ensure customer profile columns exist
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`);
@@ -512,6 +570,10 @@ app.listen(port, async () => {
         await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT;`);
         await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_deleted_by_user BOOLEAN DEFAULT FALSE;`);
         await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_deletion_status VARCHAR(20) DEFAULT 'active';`);
+        // Activity log, tracking and photos for Admin > Orders.
+        await ensureOrderOpsSchema(db);
+        // Quote requests (parts with no instant price) for Admin > Quotes.
+        await ensureQuoteSchema(db);
 
         // Hardware Item Specification Migration
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);

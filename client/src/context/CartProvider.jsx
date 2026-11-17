@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartContext } from './CartContext';
 import { calculatePrice, fetchPublicDiscounts } from '../utils/api';
+import { trackEvent, cartEventParams } from '../utils/tracking';
 
 const normalizeStoredAssetPath = (value) => {
   let raw = String(value || '').trim();
@@ -20,6 +21,39 @@ const normalizeStoredAssetPath = (value) => {
   if (raw.startsWith('api/uploads/')) return `/${raw}`;
   if (raw.startsWith('uploads/')) return `/${raw}`;
   return `/${raw}`;
+};
+
+// What a cart line costs: the server's line total when the cart has one.
+const lineTotalOf = (item) => {
+  const qty = item.quantity || 1;
+  const lineTotal = Number(item.pricing?.lineTotal);
+  return Number.isFinite(lineTotal) && lineTotal > 0 ? lineTotal : (item.pricing?.total || 0) * qty;
+};
+
+/* A cart item after a /pricing/calculate reply for a new quantity: new
+ * prices, or "needs a quote" when there is no instant price. */
+const withServerPrice = (item, res, quantity, payload) => {
+  if (res?.quote_required) {
+    return { ...item, isUpdating: false, quoteRequired: true, quoteReasons: res.reasons || [], pricingInput: item.pricingInput ? payload : item.pricingInput };
+  }
+  // No new price: drop the old line total, which was for the previous
+  // quantity; checkout prices the line on the server anyway.
+  if (!res?.success) return { ...item, isUpdating: false, pricing: { ...item.pricing, lineTotal: null } };
+  const unitFinal = parseFloat(res.breakdown?.final_unit_price || (quantity > 0 ? (parseFloat(res.total_price || 0) / quantity) : 0));
+  return {
+    ...item,
+    isUpdating: false,
+    quoteRequired: false,
+    quoteReasons: [],
+    pricingInput: item.pricingInput ? payload : item.pricingInput,
+    pricing: {
+      ...item.pricing,
+      baseUnit: parseFloat(res.breakdown?.unit_total || 0),
+      discount_percent: parseFloat(res.breakdown?.discount_percent || 0),
+      total: unitFinal,
+      lineTotal: parseFloat(res.total_price || 0) || unitFinal * quantity,
+    },
+  };
 };
 
 export const CartProvider = ({ children }) => {
@@ -76,6 +110,7 @@ export const CartProvider = ({ children }) => {
 
   const addToCart = (item) => {
     // item: { id, fileName, file, tempPath, configuration, pricing, quantity: 1 }
+    trackEvent('AddToCart', cartEventParams([item]));
     setCartItems(prev => {
       // Prevent duplicate cartId issues
       const newItem = {
@@ -88,6 +123,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const addManyToCart = (items = []) => {
+    if (items.length) trackEvent('AddToCart', cartEventParams(items));
     setCartItems(prev => {
       const now = Date.now();
       const newItems = items.map((item, index) => ({
@@ -117,6 +153,15 @@ export const CartProvider = ({ children }) => {
       if (!itemToUpdate) return;
 
       const { configuration } = itemToUpdate;
+
+      // Newer cart items carry the exact request that was priced; reuse it.
+      if (itemToUpdate.pricingInput) {
+        const payload = { ...itemToUpdate.pricingInput, quantity: newQuantity };
+        const res = await calculatePrice(payload);
+        setCartItems(prev => prev.map(item => (item.cartId === cartId ? withServerPrice(item, res, newQuantity, payload) : item)));
+        return;
+      }
+
       const isCNC = configuration.productionService?.title?.toLowerCase()?.includes('cnc');
       const normalizedThicknessInches = (() => {
         if (isCNC) return configuration.dimensions?.inches?.t;
@@ -129,6 +174,7 @@ export const CartProvider = ({ children }) => {
       const payload = {
         metal_id: configuration.metal?.id,
         service_id: configuration.productionService?.id,
+        file_ref: itemToUpdate.tempPath || null,
         thickness_value: normalizedThicknessInches,
         length_in: configuration.dimensions?.inches?.l,
         height_in: configuration.dimensions?.inches?.w,
@@ -159,38 +205,11 @@ export const CartProvider = ({ children }) => {
       };
 
       const res = await calculatePrice(payload);
-
-      if (res.success) {
-        const unitBase = parseFloat(res.breakdown?.unit_total || 0);
-        const unitFinal = parseFloat(
-          res.breakdown?.final_unit_price ||
-          (newQuantity > 0 ? (parseFloat(res.total_price || 0) / newQuantity) : 0)
-        );
-        const discountPercent = parseFloat(res.breakdown?.discount_percent || 0);
-
-        setCartItems(prev => prev.map(item =>
-          item.cartId === cartId
-            ? {
-              ...item,
-              pricing: {
-                ...item.pricing,
-                baseUnit: unitBase,
-                discount_percent: discountPercent,
-                total: unitFinal
-              },
-              isUpdating: false
-            }
-            : item
-        ));
-      } else {
-        setCartItems(prev => prev.map(item =>
-          item.cartId === cartId ? { ...item, isUpdating: false } : item
-        ));
-      }
+      setCartItems(prev => prev.map(item => (item.cartId === cartId ? withServerPrice(item, res, newQuantity, payload) : item)));
     } catch (err) {
       console.error('Failed to recalculate price in cart:', err);
       setCartItems(prev => prev.map(item =>
-        item.cartId === cartId ? { ...item, isUpdating: false } : item
+        item.cartId === cartId ? { ...item, isUpdating: false, pricing: { ...item.pricing, lineTotal: null } } : item
       ));
     }
   };
@@ -206,12 +225,35 @@ export const CartProvider = ({ children }) => {
     return sum + (basePrice * (item.quantity || 1));
   }, 0);
 
+  // A line's total is the server's line total when known (it is rounded per
+  // line, not per part); parts that need a quote are not counted.
   const cartTotal = cartItems.reduce((sum, item) => {
-    const finalPrice = item.pricing?.total || 0;
-    return sum + (finalPrice * (item.quantity || 1));
+    if (item.quoteRequired) return sum;
+    return sum + lineTotalOf(item);
   }, 0);
 
   const cartDiscount = cartSubtotal - cartTotal;
+
+  /* Checkout found new prices on the server: [{ index, unitPrice, lineTotal }]. */
+  const applyServerPrices = (changed = []) => {
+    setCartItems(prev => prev.map((item, index) => {
+      const hit = changed.find(c => c.index === index);
+      if (!hit) return item;
+      return {
+        ...item,
+        quoteRequired: false,
+        pricing: { ...item.pricing, baseUnit: hit.unitPrice, total: hit.unitPrice, lineTotal: hit.lineTotal, discount_percent: 0 },
+      };
+    }));
+  };
+
+  /* Checkout found parts with no instant price: [{ index, reasons }]. */
+  const markQuoteRequired = (items = []) => {
+    setCartItems(prev => prev.map((item, index) => {
+      const hit = items.find(c => c.index === index);
+      return hit ? { ...item, quoteRequired: true, quoteReasons: hit.reasons || [] } : item;
+    }));
+  };
 
   return (
     <CartContext.Provider value={{
@@ -224,7 +266,9 @@ export const CartProvider = ({ children }) => {
       clearCart,
       cartTotal,
       cartSubtotal,
-      cartDiscount
+      cartDiscount,
+      applyServerPrices,
+      markQuoteRequired
     }}>
       {children}
     </CartContext.Provider>

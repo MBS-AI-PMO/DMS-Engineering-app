@@ -12,6 +12,7 @@ import { useCart } from '../context/CartContext.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fetchPaymentConfig, createPaypalOrder, capturePaypalOrder, authHeaders } from '../utils/api';
+import { trackEvent } from '../utils/tracking';
 // The cart's stylesheet carries the shared empty-state card and buttons
 // (cartx-*); checkout's own rules load after it and win where they overlap.
 import '../styles/PremiumCart.css';
@@ -37,7 +38,7 @@ const normalizeOrderTempPath = (value) => {
 };
 
 const Checkout = () => {
-    const { cartItems, cartTotal, cartSubtotal, cartDiscount, clearCart } = useCart();
+    const { cartItems, cartTotal, cartSubtotal, cartDiscount, clearCart, applyServerPrices, markQuoteRequired } = useCart();
     const { user, loading: authLoading } = useAuth();
     const showToast = useToast();
     const navigate = useNavigate();
@@ -75,6 +76,8 @@ const Checkout = () => {
             .finally(() => setPaymentConfigLoading(false));
     }, []);
 
+    useEffect(() => { if (cartItems.length) trackEvent('InitiateCheckout', { value: cartTotal, currency: 'USD', num_items: cartItems.length }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (cartItems.length === 0 && !isSuccess) {
             navigate('/get-instant-pricing');
@@ -103,6 +106,33 @@ const Checkout = () => {
         submitOrder(paymentMethod, paymentId);
     };
 
+    // The cart as sent to the server, which prices every line itself.
+    const buildOrderItems = () => cartItems.map(item => ({
+        fileName: item.fileName || item.file_name,
+        tempPath: normalizeOrderTempPath(item.tempPath || item.temp_path || item.file?.path || ''),
+        configuration: item.configuration || {},
+        pricingInput: item.pricingInput || null,
+        quantity: item.quantity || 1,
+        unitPrice: item.pricing?.total || 0
+    }));
+
+    /* The server said the cart's prices are out of date, or some parts need
+     * a quote: update the cart and tell the customer. Returns true if handled. */
+    const handlePriceProblem = ({ code, items } = {}) => {
+        if (code === 'PRICE_CHANGED') {
+            applyServerPrices(items || []);
+            showToast({ title: 'Prices updated', message: 'Some prices changed since you added these parts. Please check the new total and place your order again.' }, 'info');
+            return true;
+        }
+        if (code === 'QUOTE_REQUIRED') {
+            markQuoteRequired(items || []);
+            showToast({ title: 'Quote needed', message: 'Some parts need a quote before they can be ordered. Remove them from your cart or request a quote.' }, 'error');
+            navigate('/cart');
+            return true;
+        }
+        return false;
+    };
+
     const submitOrder = async (paymentMethod = 'cod', paymentId = null) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
@@ -113,13 +143,7 @@ const Checkout = () => {
                 return;
             }
 
-            const normalizedItems = cartItems.map(item => ({
-                fileName: item.fileName || item.file_name,
-                tempPath: normalizeOrderTempPath(item.tempPath || item.temp_path || item.file?.path || ''),
-                configuration: item.configuration || {},
-                quantity: item.quantity || 1,
-                unitPrice: item.pricing?.total || 0
-            }));
+            const normalizedItems = buildOrderItems();
 
             if (normalizedItems.some(item => !item.tempPath)) {
                 showToast({
@@ -149,9 +173,10 @@ const Checkout = () => {
             if (data.success) {
                 setIsSuccess(true);
                 setOrderId(data.orderId);
+                trackEvent('Purchase', { value: data.total ?? payload.totalPrice, currency: 'USD', order_id: data.orderId, num_items: normalizedItems.length });
                 clearCart();
                 showToast({ title: 'Order Confirmed!', message: `Order #${data.orderId} placed successfully` }, 'success');
-            } else {
+            } else if (!handlePriceProblem(data)) {
                 showToast({ title: 'Order Failed', message: data.error || 'Failed to place order' }, 'error');
             }
         } catch (err) {
@@ -401,7 +426,14 @@ const Checkout = () => {
                                                 disabled={isSubmitting}
                                                 createOrder={async () => {
                                                     if (!validateForm()) throw new Error('Form incomplete');
-                                                    return createPaypalOrder(cartTotal);
+                                                    try {
+                                                        return await createPaypalOrder(buildOrderItems());
+                                                    } catch (err) {
+                                                        if (!handlePriceProblem(err)) {
+                                                            showToast({ title: 'PayPal Error', message: err.message || 'Could not start the payment' }, 'error');
+                                                        }
+                                                        throw err;
+                                                    }
                                                 }}
                                                 onApprove={async (data) => {
                                                     try {
@@ -492,7 +524,7 @@ const Checkout = () => {
                                                 )}
                                             </span>
                                         </div>
-                                        <span className="price">${((item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                                        <span className="price">${(Number(item.pricing?.lineTotal) > 0 ? Number(item.pricing.lineTotal) : (item.pricing?.total || 0) * (item.quantity || 1)).toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
