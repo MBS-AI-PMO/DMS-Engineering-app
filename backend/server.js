@@ -25,16 +25,22 @@ const configurationsRoutes = require('./routes/configurations');
 const pricingRoutes = require('./routes/pricing');
 const orderRoutes = require('./routes/orders');
 const adminOrderRoutes = require('./routes/adminOrders');
+const trackOrderRoutes = require('./routes/trackOrder');
 const { ensureOrderOpsSchema } = require('./orders/schema');
 const quoteRequestRoutes = require('./routes/quoteRequests');
 const adminQuoteRoutes = require('./routes/adminQuotes');
 const { ensureQuoteSchema } = require('./quotes/schema');
+const { ensureFaqPlacementSchema } = require('./faqs/schema');
 const hardwareRoutes = require('./routes/hardware');
 const paymentRoutes = require('./routes/payment');
 const legalRoutes = require('./routes/legal');
 const heroSectionsRoutes = require('./routes/heroSections');
 const contactRoutes = require('./routes/contact');
 const costingRoutes = require('./routes/costing');
+const blogRoutes = require('./routes/blog');
+const adminBlogRoutes = require('./routes/adminBlog');
+const seoRoutes = require('./routes/seo');
+const { ensureBlogSchema } = require('./blog/schema');
 const { imageVariants } = require('./utils/imageVariants');
 const { publicCache } = require('./utils/publicCache');
 const { ensureCostingSchema } = require('./costing/schema');
@@ -73,6 +79,7 @@ const DEFAULT_CORS_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
+    'http://localhost:5176',
     'https://dmscuts.com',
     'https://www.dmscuts.com'
 ];
@@ -141,12 +148,16 @@ app.use('/api/configurations', configurationsRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
+app.use('/api/track-order', trackOrderRoutes);
 app.use('/api/quote-requests', quoteRequestRoutes);
 app.use('/api/admin/quotes', adminQuoteRoutes);
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/legal', legalRoutes);
 app.use('/api/hero-sections', heroSectionsRoutes);
+app.use('/api/blog', blogRoutes);
+app.use('/api/admin/blog', adminBlogRoutes);
+app.use('/api/seo', seoRoutes);
 
 // Global Error Handler for Multer errors
 app.use((err, req, res, next) => {
@@ -574,6 +585,10 @@ app.listen(port, async () => {
         await ensureOrderOpsSchema(db);
         // Quote requests (parts with no instant price) for Admin > Quotes.
         await ensureQuoteSchema(db);
+        // FAQs placed on pages other than the FAQ page (Admin > FAQs).
+        await ensureFaqPlacementSchema(db);
+        // Blog posts (Admin > Blog, /blog).
+        await ensureBlogSchema(db);
 
         // Hardware Item Specification Migration
         await db.query(`ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS length NUMERIC(12,4);`);

@@ -5,7 +5,7 @@ import { ArrowRight } from 'lucide-react';
 import { fetchServices } from '../utils/api';
 import { servicesData } from '../data/servicesData';
 import ThumbImage from '../components/ThumbImage';
-import serviceHeroBg from '../assets/services/service-hero-bg.webp';
+import usePageHero from '../hooks/usePageHero';
 import '../styles/Shimmer.css';
 import '../styles/ServicesPage.css';
 
@@ -48,6 +48,7 @@ const parentIdsOf = (service) => {
 };
 
 const ServicesPage = () => {
+    const hero = usePageHero('services');
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
     const reduceMotion = useReducedMotion();
@@ -100,15 +101,17 @@ const ServicesPage = () => {
         <div className="sp">
             {/* ── Heading band ── */}
             <section className="sp-hero" aria-labelledby="sp-title">
-                <img
+                {hero.src && <img
                     className="sp-hero-img"
-                    src={serviceHeroBg}
+                    src={hero.src}
+                    srcSet={hero.srcSet}
+                    sizes="100vw"
                     alt=""
                     aria-hidden="true"
                     loading="eager"
                     fetchPriority="high"
                     decoding="async"
-                />
+                />}
                 <div className="sp-hero-shade" aria-hidden="true" />
                 <div className="sp-inner sp-hero-content">
                     <nav className="sp-crumbs" aria-label="Breadcrumb">

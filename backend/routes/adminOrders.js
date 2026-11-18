@@ -15,6 +15,8 @@ const {
     STATUS_LABELS, OrderInputError, addEvent, emailAndLog, changeStatus, shipmentView, photoView, fileUrl,
 } = require('../orders/service');
 const { streamZip } = require('../orders/zip');
+const costing = require('../costing');
+const { pricingInputForItem } = require('../costing/input/fromCart');
 
 const router = express.Router();
 router.use(authenticate, requireAdmin);
@@ -136,6 +138,32 @@ async function fileInfo(kind, label, relPath) {
     };
 }
 
+/* What a part cost the shop. Orders placed since server-side pricing keep
+ * the costing worked out at checkout. Older ones are estimated with today's
+ * rules from the part details saved with the order (the measurements taken
+ * then, not a new reading of the file), and say so. */
+async function itemCosting(item) {
+    const snap = item.quote_snapshot_json;
+    if (snap?.totals) {
+        return { source: 'checkout', pricedAt: snap.priced_at || null, operations: snap.operations || [], markups: snap.markups || [], totals: snap.totals };
+    }
+    let cfg = item.configuration_json;
+    if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch { cfg = {}; } }
+    const input = pricingInputForItem({ configuration: cfg || {}, quantity: item.quantity });
+    if (!input) return { source: 'none', reasons: [{ message: 'The saved part details are not enough to work out a cost.' }] };
+    const out = await costing.priceQuote({ ...input, file_ref: null }).catch(() => null);
+    const r = out?.result;
+    if (!r) return { source: 'none', reasons: [{ message: out?.body?.error || 'The cost could not be worked out.' }] };
+    if (r.status !== 'priced') return { source: 'none', reasons: r.reasons || [] };
+    return {
+        source: 'estimate',
+        pricedAt: new Date().toISOString(),
+        operations: r.operations.map(o => ({ name: o.name, bucket: o.bucket, details: o.details, totalCost: o.totalCost })),
+        markups: r.markups,
+        totals: r.totals,
+    };
+}
+
 router.get('/:id', handle('load the order', async (req, res) => {
     const id = orderIdOf(req);
     const order = await requireOrder(id);
@@ -156,10 +184,9 @@ router.get('/:id', handle('load the order', async (req, res) => {
         const files = (await Promise.all([
             fileInfo('original', "Customer's file", item.original_file_path),
             fileInfo('configured', 'Manufacturing model', item.configured_file_path),
-            fileInfo('flat', 'Flat pattern', item.flat_file_path),
         ])).filter(Boolean);
         const { configuration_json: cfg, ...rest } = item;
-        return { ...rest, configuration: slimConfig(cfg), files };
+        return { ...rest, configuration: slimConfig(cfg), files, costing: await itemCosting(item) };
     }));
 
     res.json({
@@ -446,7 +473,6 @@ router.get('/:id/files.zip', handle('build the zip', async (req, res) => {
         const ext = (rel) => path.extname(rel || '');
         add(item.original_file_path, `${folder}/Customer file - ${safeName(item.file_name, `part${ext(item.original_file_path)}`)}`);
         add(item.configured_file_path, `${folder}/Manufacturing model${ext(item.configured_file_path)}`);
-        add(item.flat_file_path, `${folder}/Flat pattern${ext(item.flat_file_path)}`);
     });
     photos.rows.forEach((p, i) => add(p.file_path, `${root}/Photos/${String(i + 1).padStart(2, '0')} - ${safeName(path.parse(p.original_name || '').name, `photo-${p.id}`)}.jpg`));
     if (!entries.length) throw new OrderInputError('This order has no files on the server.', 404);

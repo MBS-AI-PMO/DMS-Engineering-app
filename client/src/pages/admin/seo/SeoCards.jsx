@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Search, Share2 } from 'lucide-react';
+import { AlertTriangle, AppWindow, BarChart3, Search, Share2 } from 'lucide-react';
 import { Banner, Card, Field, FieldRow, Input, Select, Switch, Textarea } from '../../../components/admin/ui';
 import CharCount from '../content/CharCount';
 import ImageUrlField from './ImageUrlField';
@@ -88,6 +88,37 @@ export function SocialSharingCard({ d, set, errors, onUpload, uploading }) {
                     <Input value={d.twitterSite} maxLength={20} onChange={on('twitterSite')} placeholder="@yourcompany" invalid={!!errors.twitterSite} spellCheck={false} />
                 </Field>
             </FieldRow>
+        </Card>
+    );
+}
+
+/* Favicon, home screen icon and the browser theme colour. */
+export function BrowserIconsCard({ d, set, errors }) {
+    const color = /^#[0-9a-f]{6}$/i.test(d.themeColor) ? d.themeColor : '#ffffff';
+    return (
+        <Card title="Browser icons" icon={AppWindow} subtitle="The icon in the browser tab and on phone home screens, and the colour some phones give the browser bar.">
+            <ImageUrlField
+                label="Favicon"
+                hint="An .ico, .png or .svg file. Empty uses the built-in /favicon.ico."
+                value={d.favicon}
+                onChange={v => set('favicon', v)}
+                error={errors.favicon}
+                placeholder="/favicon.ico (built in)"
+            />
+            <ImageUrlField
+                label="Home screen icon"
+                hint="Used when someone adds the site to an iPhone or iPad home screen. A 180 × 180 px PNG."
+                value={d.appleTouchIcon}
+                onChange={v => set('appleTouchIcon', v)}
+                error={errors.appleTouchIcon}
+                placeholder="Optional, e.g. /apple-touch-icon.png"
+            />
+            <Field label="Theme colour" optional hint="Empty: the phone picks." error={errors.themeColor}>
+                <span className="ac-seo-color">
+                    <Input type="color" value={color} onChange={e => set('themeColor', e.target.value)} aria-label="Pick the theme colour" className="ac-seo-swatch" />
+                    <Input value={d.themeColor} maxLength={7} onChange={e => set('themeColor', e.target.value.trim())} placeholder="#e31b23" invalid={!!errors.themeColor} spellCheck={false} className="ak-mono" />
+                </span>
+            </Field>
         </Card>
     );
 }

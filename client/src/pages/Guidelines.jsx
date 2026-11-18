@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // es
 import { Check, Info } from 'lucide-react';
 import { guidelinesData as staticGuidelines } from '../data/guidelinesData';
 import { fetchGuidelines } from '../utils/api';
+import usePageHero from '../hooks/usePageHero';
 import { normalizeGuideline } from '../utils/guidelineUtils';
 import Dropdown from '../components/Dropdown';
 import '../styles/Shimmer.css';
@@ -37,6 +38,7 @@ const cellText = (value) => {
 const isEmptyCell = (text) => text === '—' || /^n\/?a$/i.test(text);
 
 const Guidelines = () => {
+    const hero = usePageHero('guidelines');
     const [searchParams] = useSearchParams();
     const wantedService = searchParams.get('service');
     const [activeTab, setActiveTab] = useState(null);
@@ -100,15 +102,17 @@ const Guidelines = () => {
         <div className="gl">
             {/* ── Heading band ── */}
             <section className="gl-hero" aria-labelledby="gl-title">
-                <img
+                {hero.src && <img
                     className="gl-hero-img"
-                    src="/assets/guidelines-hero.webp"
+                    src={hero.src}
+                    srcSet={hero.srcSet}
+                    sizes="100vw"
                     alt=""
                     aria-hidden="true"
                     loading="eager"
                     fetchPriority="high"
                     decoding="async"
-                />
+                />}
                 <div className="gl-hero-shade" aria-hidden="true" />
                 <div className="gl-inner gl-hero-content">
                     <nav className="gl-crumbs" aria-label="Breadcrumb">

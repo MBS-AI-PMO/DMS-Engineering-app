@@ -145,7 +145,7 @@
   max-width: 14em;
   margin: 28px 0 0;
   color: var(--ab-on-dark);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 700;
   line-height: 1.04;
@@ -186,7 +186,7 @@
   display: flex;
   align-items: center;
   color: var(--ab-on-dark);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.625rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -237,7 +237,7 @@
 .ab .ab-h2 {
   margin: 0;
   color: var(--ab-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: clamp(1.625rem, 2.6vw, 2.125rem);
   font-weight: 700;
   line-height: 1.15;
@@ -246,7 +246,7 @@
 .ab .ab-h3 {
   margin: 0;
   color: var(--ab-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.0625rem;
   font-weight: 600;
   line-height: 1.3;
@@ -337,7 +337,7 @@
   justify-content: center;
   background: var(--ab-accent-tint);
   color: var(--ab-accent);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -422,7 +422,7 @@ a.ab-service:hover {
 }
 .ab-service-name {
   color: var(--ab-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;

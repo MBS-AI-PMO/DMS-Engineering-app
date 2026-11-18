@@ -1,10 +1,10 @@
 import { CheckCircle2, FlaskConical, KeyRound } from 'lucide-react';
-import { Banner, Button, Field, FieldRow, Input, Pill, Segmented } from '../../../components/admin/ui';
+import { Banner, Button, Field, FieldRow, Input, OptionCards, Pill } from '../../../components/admin/ui';
 import SecretInput from './SecretInput';
 
 const MODES = [
-    { value: 'sandbox', label: 'Sandbox (testing)', icon: FlaskConical },
-    { value: 'live', label: 'Live', icon: CheckCircle2 },
+    { value: 'sandbox', label: 'Sandbox', description: 'Testing with PayPal test accounts. No real money moves.', icon: FlaskConical, tone: 'amber' },
+    { value: 'live', label: 'Live', description: 'Real payments: customers are charged.', icon: CheckCircle2, tone: 'green' },
 ];
 
 const cx = (...parts) => parts.filter(Boolean).join(' ');
@@ -40,11 +40,9 @@ export default function PaypalSettings({ form, set, errors, onTest, testing }) {
     return (
         <>
             <Field as="div" label="Mode">
-                <Segmented items={MODES} value={mode} onChange={v => set('paypal_mode', v)} label="PayPal mode" />
+                <OptionCards items={MODES} value={mode} onChange={v => set('paypal_mode', v)} label="PayPal mode" />
             </Field>
-            {mode === 'live'
-                ? <Banner tone="warn">Live mode: customers are charged real money.</Banner>
-                : <Banner>Sandbox mode: payments use PayPal test accounts and no real money moves. Switch to Live when you are ready to take payments.</Banner>}
+            {mode === 'live' && <Banner tone="warn">Live mode: customers are charged real money.</Banner>}
             <KeyPair mode="sandbox" form={form} set={set} inUse={mode === 'sandbox'} errors={errors} />
             <KeyPair mode="live" form={form} set={set} inUse={mode === 'live'} errors={errors} />
             <div className="pm-test">

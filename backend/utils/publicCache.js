@@ -32,17 +32,30 @@ const PUBLIC_GET = [
     /^\/services\/\d+\/metals$/,
     /^\/faqs$/,
     /^\/faqs\/categories$/,
+    /^\/faqs\/for-page$/, // one entry per ?path= (the key is the full URL)
+    /^\/faqs\/placed$/,
     /^\/guidelines$/,
     /^\/guidelines\/[^/]+$/,
     /^\/hardware\/all$/,
+    // Blog: live posts only. The TTL also bounds how late a scheduled post
+    // shows up (the query checks the clock), so at most a minute.
+    /^\/blog$/,
+    /^\/blog\/[^/]+$/,
+    // <head> tags of one page (routes/seo.js): one entry per ?path= (and origin).
+    /^\/seo\/head$/,
 ];
 
 const store = new Map(); // url -> { body, expires }
 let generation = 0;
 
+// Other in-memory copies of public data (seo/crawl.js) empty with this one.
+const listeners = [];
+const onClear = (fn) => { listeners.push(fn); };
+
 const clear = () => {
     store.clear();
     generation += 1;
+    listeners.forEach(fn => { try { fn(); } catch { /* ignore */ } });
 };
 
 const isCacheable = (req) => {
@@ -59,7 +72,8 @@ const publicCache = (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
         res.on('finish', () => {
             const byAdmin = req.user?.role === 'admin' || /\/admin(\/|$)/.test(req.originalUrl.split('?')[0]);
-            if (byAdmin && res.statusCode < 400) clear();
+            // A route that only reads (the admin head preview) sets res.locals.keepPublicCache.
+            if (byAdmin && res.statusCode < 400 && !res.locals.keepPublicCache) clear();
         });
         return next();
     }
@@ -91,4 +105,4 @@ const publicCache = (req, res, next) => {
     return next();
 };
 
-module.exports = { publicCache, clearPublicCache: clear, PUBLIC_CACHE_TTL_MS: TTL_MS };
+module.exports = { publicCache, clearPublicCache: clear, onPublicCacheClear: onClear, PUBLIC_CACHE_TTL_MS: TTL_MS };

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { ViteImageOptimizer } from 'vite-plugin-image-optimizer'
+import headTags from './vite/headTags.js'
 
 // Production runs `vite preview`, which sends every file with
 // `Cache-Control: no-cache`, so each visit re-checks every script, style and
@@ -51,6 +52,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       cacheHashedAssets(),
+      // Each page's <head> tags (Admin > SEO & tracking), in the HTML itself, dev and preview.
+      headTags({ apiTarget }),
       ViteImageOptimizer({
         png: { quality: 80 },
         jpeg: { quality: 80 },
@@ -91,15 +94,29 @@ export default defineConfig(({ mode }) => {
 
     server: {
       host: '0.0.0.0',
-      port: 3000,
+      // Local development. Production (`vite preview`, below) stays on 3000: the live server's proxy points there.
+      port: 5176,
+      strictPort: true,
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
+      // `vite preview` (production) uses these too.
       proxy: {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+        },
+        // Built by the backend from the site's pages, metals, services and blog posts (backend/seo/crawl.js).
+        '/robots.txt': {
+          target: apiTarget,
+          changeOrigin: true,
+          rewrite: () => '/api/seo/robots.txt',
+        },
+        '/sitemap.xml': {
+          target: apiTarget,
+          changeOrigin: true,
+          rewrite: () => '/api/seo/sitemap.xml',
         },
         '/uploads': {
           target: apiTarget,

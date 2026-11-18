@@ -179,7 +179,7 @@
 }
 
 .order-id-chip {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.85rem;
     font-weight: 800;
     color: var(--admin-accent);

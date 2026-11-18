@@ -1,8 +1,9 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const { route, ok, fail, conflict, one, withTransaction, validate } = require('../helpers');
+const { route, ok, fail, conflict, one, withTransaction, validate, HttpError } = require('../helpers');
 const { OP_TYPES } = require('../costing/engine/ops');
+const { measurementForUpload } = require('../costing/measure');
 const { bumpConfigVersion, readSetting } = require('../costing/config/loadConfig');
 const costing = require('../costing');
 
@@ -207,7 +208,10 @@ router.delete('/admin/sheet-sizes/:id', change('delete the sheet size', async (r
 }));
 
 // ── Sheet costs ──
-async function saveSheetCostRow(client, body, id = null) {
+/* A sheet cost row from the request: its column values (in SHEET_COST_COLUMNS
+ * order) and its prices as [sizeId, cost]. Throws a 400 before anything is written. */
+const SHEET_COST_COLUMNS = 'family, metal_id, ga, thickness_in, min_thick, max_thick, sort_order, notes';
+function sheetCostFields(body) {
     const family = str(body.family, 'Family', { required: true });
     const ga = str(body.ga, 'Gauge', { max: 40 });
     const name = `${family} ${ga || ''}`;
@@ -218,16 +222,37 @@ async function saveSheetCostRow(client, body, id = null) {
     if (min_thick > 0 && max_thick > 0 && min_thick > max_thick) fail(`${name}: min thickness is above max.`);
     const metal_id = optionalId(body.metal_id, 'Metal');
     const sort_order = num(body.sort_order, 'Order', { min: -100000, max: 1000000 });
+    const prices = Object.entries(body.prices || {})
+        .filter(([, cost]) => !(cost === null || cost === undefined || cost === '')) // blank = not stocked in that size
+        .map(([sizeId, cost]) => [validate.id(sizeId, 'Sheet size'), num(cost, `${name} sheet price`, { min: 0, max: 1e7 })]);
     const values = [family, metal_id, ga, thickness_in, min_thick, max_thick, sort_order, str(body.notes, 'Notes', { max: 500 })];
+    return { values, prices };
+}
+
+/* Rows of values as one multi-row VALUES list: { sql: "($1,$2),($3,$4)", params }. */
+function valuesList(rows, extra = '') {
+    const params = [];
+    const tuples = rows.map(row => `(${row.map(v => { params.push(v); return `$${params.length}`; }).join(',')}${extra})`);
+    return { sql: tuples.join(','), params };
+}
+
+/* Prices as [sheetCostId, sizeId, cost], a thousand per statement (the
+ * database is remote, so one statement per price is slow). */
+async function insertPrices(client, triples) {
+    for (let i = 0; i < triples.length; i += 1000) {
+        const { sql, params } = valuesList(triples.slice(i, i + 1000));
+        await client.query(`INSERT INTO costing_sheet_cost_prices (sheet_cost_id, sheet_size_id, cost) VALUES ${sql}`, params);
+    }
+}
+
+async function saveSheetCostRow(client, body, id = null) {
+    const { values, prices } = sheetCostFields(body);
     const r = id
         ? await client.query('UPDATE costing_sheet_costs SET family=$1, metal_id=$2, ga=$3, thickness_in=$4, min_thick=$5, max_thick=$6, sort_order=$7, notes=$8, updated_at=NOW() WHERE id=$9 RETURNING *', [...values, id])
-        : await client.query("INSERT INTO costing_sheet_costs (family, metal_id, ga, thickness_in, min_thick, max_thick, sort_order, notes, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'admin') RETURNING *", values);
+        : await client.query(`INSERT INTO costing_sheet_costs (${SHEET_COST_COLUMNS}, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'admin') RETURNING *`, values);
     const row = one(r, 'Sheet cost row');
-    await client.query('DELETE FROM costing_sheet_cost_prices WHERE sheet_cost_id = $1', [row.id]);
-    for (const [sizeId, cost] of Object.entries(body.prices || {})) {
-        if (cost === null || cost === undefined || cost === '') continue; // blank = not stocked in that size
-        await client.query('INSERT INTO costing_sheet_cost_prices (sheet_cost_id, sheet_size_id, cost) VALUES ($1,$2,$3)', [row.id, validate.id(sizeId, 'Sheet size'), num(cost, `${name} sheet price`, { min: 0, max: 1e7 })]);
-    }
+    if (id) await client.query('DELETE FROM costing_sheet_cost_prices WHERE sheet_cost_id = $1', [row.id]);
+    await insertPrices(client, prices.map(([sizeId, cost]) => [row.id, sizeId, cost]));
     return row;
 }
 
@@ -238,15 +263,28 @@ router.delete('/admin/sheet-costs/:id', change('delete the sheet cost', async (r
 }));
 
 /* Replace every sheet cost row with an uploaded list (CSV parsed in the
- * browser). dryRun checks it and reports without saving. */
+ * browser). dryRun checks it and reports without saving. Every row is
+ * checked first (a problem names its line in the CSV); then all rows go in
+ * with one statement and their prices with another. */
 router.post('/admin/sheet-costs/import', route('import the sheet costs', async (req, res) => {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : fail('No rows to import.');
     if (!rows.length) fail('The file has no rows.');
     if (rows.length > 2000) fail('Too many rows (max 2000).');
     const dryRun = Boolean(req.body?.dryRun);
+    const parsed = rows.map((row, i) => {
+        try {
+            return sheetCostFields({ ...row, sort_order: i });
+        } catch (err) {
+            if (err instanceof HttpError) throw new HttpError(err.status, `Row ${i + 2}: ${err.message}`);
+            throw err;
+        }
+    });
     const count = await applyChange(async (client) => {
         await client.query('DELETE FROM costing_sheet_costs');
-        for (const [i, row] of rows.entries()) await saveSheetCostRow(client, { ...row, sort_order: i });
+        const { sql, params } = valuesList(parsed.map(p => p.values), ",'admin'");
+        const inserted = await client.query(`INSERT INTO costing_sheet_costs (${SHEET_COST_COLUMNS}, source) VALUES ${sql} RETURNING id, sort_order`, params);
+        const idByOrder = new Map(inserted.rows.map(r => [Number(r.sort_order), r.id]));
+        await insertPrices(client, parsed.flatMap((p, i) => p.prices.map(([sizeId, cost]) => [idByOrder.get(i), sizeId, cost])));
         return rows.length;
     }, { dryRun });
     ok(res, dryRun ? { dryRun: true, rows: count } : { rows: count });
@@ -340,10 +378,33 @@ router.put('/admin/metals/:id/family', change('save the metal family', async (re
 }));
 
 // ── Try a price with the full working shown (admin only) ──
+// With file_ref (an upload from POST /api/upload-asset) the server measures
+// the file itself, as it does for orders: its flat size, cut length, holes
+// and bends replace the typed ones. A STEP file goes through the CAD
+// service, which can take a minute or two the first time. `measured` says
+// what the file gave.
 router.post('/admin/preview', route('price the part', async (req, res) => {
-    const out = await costing.priceQuote(req.body || {});
+    const body = req.body || {};
+    const fromFile = Boolean(body.file_ref);
+    const out = await costing.priceQuote(body, { requireMeasured: fromFile });
     if (!out.result) return res.status(out.status).json(out.body);
-    ok(res, { response: out.body, result: out.result, input: out.input });
+    let measured;
+    if (fromFile) {
+        const part = out.input?.part || {};
+        const stored = out.input?.measuredBy === 'server' ? await measurementForUpload(body.file_ref).catch(() => null) : null;
+        measured = out.input?.measuredBy === 'server' ? {
+            kind: stored?.kind || null,
+            lengthIn: part.lengthIn,
+            widthIn: part.widthIn,
+            cutLengthIn: part.cutLengthIn,
+            pierces: part.holeCount,          // one per hole, as the shop counts them
+            laserPierces: part.holeCount + 1, // the laser also pierces once for the outline
+            bends: (part.bends || []).length,
+            hems: part.hems || 0,
+            thicknessIn: stored?.thicknessMm > 0 ? stored.thicknessMm / 25.4 : null,
+        } : null;
+    }
+    ok(res, { response: out.body, result: out.result, input: out.input, ...(fromFile ? { measured } : {}) });
 }));
 
 module.exports = router;

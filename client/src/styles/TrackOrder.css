@@ -1,0 +1,497 @@
+/* ══ Track order (/track-order, /track-order/:n) ═════════════════════════
+   Built on the account pages (AccountPages.css, acc-): the page sits in
+   .acc and uses its panels, fields, buttons and part rows. Here: the
+   heading band over the page picture (like Contact), the lookup form, the
+   order's status with its stepper, and the updates timeline. Own class
+   names (trk-). */
+
+/* ── Heading band ── */
+.trk-hero {
+  position: relative;
+  overflow: hidden;
+  background: #0b0c0f;
+  color: #f4f4f5;
+  --shimmer-base: rgba(255, 255, 255, 0.1);
+  --shimmer-shine: rgba(255, 255, 255, 0.1);
+}
+.trk-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+}
+.trk-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(11, 12, 15, 0.95) 0%, rgba(11, 12, 15, 0.84) 45%, rgba(11, 12, 15, 0.5) 100%),
+    linear-gradient(0deg, rgba(11, 12, 15, 0.6) 0%, rgba(11, 12, 15, 0) 50%);
+}
+.trk-hero-content {
+  position: relative;
+  padding-top: 72px;
+  padding-bottom: 84px;
+}
+.acc .trk-title {
+  margin: 28px 0 0;
+  color: #f4f4f5;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.acc .trk-lede {
+  max-width: 38rem;
+  min-height: 1.6em;
+  margin: 18px 0 0;
+  color: rgba(244, 244, 245, 0.74);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+.trk-sk-lede {
+  display: inline-block;
+  width: 320px;
+  max-width: 100%;
+  height: 14px;
+}
+
+/* ── Body ── */
+.trk-body {
+  padding-top: 40px;
+}
+.acc .trk-h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.acc .trk-h2 svg {
+  color: var(--acc-accent);
+}
+
+/* Lookup */
+.trk-find {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: start;
+  gap: 24px;
+}
+.trk-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 18px;
+}
+.trk-form-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.trk-form .acc-btn.is-primary svg:last-child {
+  transition: transform 0.2s ease;
+}
+.trk-form .acc-btn.is-primary:hover:not(:disabled) svg:last-child {
+  transform: translateX(3px);
+}
+.acc .trk-notice,
+.acc .trk-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.acc .trk-notice {
+  background: var(--acc-tile);
+  color: var(--acc-ink);
+}
+.acc .trk-error {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--acc-accent-strong);
+}
+.trk-help-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  color: var(--acc-text);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+.trk-help-list li {
+  position: relative;
+  padding-left: 18px;
+}
+.trk-help-list li::before {
+  content: '';
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background: var(--acc-accent);
+}
+.trk-help .acc-btn {
+  justify-self: start;
+}
+
+/* The order */
+.trk-order {
+  display: grid;
+  gap: 24px;
+}
+.trk-status {
+  gap: 28px;
+}
+.trk-status-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+.trk-status-icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--acc-accent);
+}
+.trk-status.is-delivered .trk-status-icon {
+  background: #dcfce7;
+  color: #166534;
+}
+.trk-status.is-attention .trk-status-icon,
+.trk-status.is-cancelled .trk-status-icon {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.trk-status-text {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.acc .trk-kicker {
+  margin: 0;
+  color: var(--acc-faint);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.acc .trk-stage {
+  margin: 0;
+  color: var(--acc-ink);
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.acc .trk-stage:focus {
+  outline: none;
+}
+.acc .trk-stage-text {
+  max-width: 46rem;
+  margin: 4px 0 0;
+  color: var(--acc-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Stepper: a row of steps joined by a line, red as far as the order got. */
+.trk-steps {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--trk-steps, 4), minmax(0, 1fr));
+  list-style: none;
+}
+.trk-step {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding-right: 12px;
+}
+.trk-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 44px;
+  right: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--acc-rule);
+}
+.trk-step.is-done:not(:last-child)::after {
+  background: var(--acc-accent);
+}
+.trk-step-dot {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--acc-rule-strong);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: var(--acc-faint);
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.trk-step.is-done .trk-step-dot {
+  border-color: var(--acc-accent);
+  background: var(--acc-accent);
+  color: #ffffff;
+}
+.trk-step.is-current .trk-step-dot {
+  border-color: var(--acc-accent);
+  color: var(--acc-accent);
+  box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.12);
+}
+.trk-step.is-stopped .trk-step-dot {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #991b1b;
+}
+.trk-step-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.trk-step-label {
+  color: var(--acc-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.trk-step.is-todo .trk-step-label {
+  color: var(--acc-faint);
+  font-weight: 500;
+}
+.trk-step.is-stopped .trk-step-label {
+  color: #991b1b;
+}
+.trk-step-date {
+  color: var(--acc-faint);
+  font-size: 0.8125rem;
+}
+.trk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.trk-meta {
+  margin: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--acc-rule-soft);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px 24px;
+}
+.trk-meta dt {
+  color: var(--acc-faint);
+  font-size: 0.75rem;
+}
+.trk-meta dd {
+  margin: 3px 0 0;
+  color: var(--acc-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.trk-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: start;
+  gap: 24px;
+}
+.trk-main,
+.trk-side {
+  min-width: 0;
+  display: grid;
+  gap: 24px;
+}
+.trk-part {
+  flex-wrap: nowrap;
+}
+.trk-part .acc-part-text {
+  flex: 1;
+}
+.acc .trk-part .acc-part-spec {
+  line-height: 1.5;
+}
+.trk-qty {
+  flex: none;
+  color: var(--acc-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Updates: newest first, down a thin line. */
+.trk-updates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.trk-update {
+  position: relative;
+  padding: 0 0 20px 24px;
+}
+.trk-update:last-child {
+  padding-bottom: 0;
+}
+.trk-update::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--acc-rule-strong);
+}
+.trk-update:first-child::before {
+  background: var(--acc-accent);
+}
+.trk-update:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  bottom: 2px;
+  left: 4px;
+  width: 2px;
+  background: var(--acc-rule-soft);
+}
+.acc .trk-update-title {
+  margin: 0;
+  color: var(--acc-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.trk-update-detail {
+  color: var(--acc-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.trk-update-date {
+  display: block;
+  margin-top: 2px;
+  color: var(--acc-faint);
+  font-size: 0.8125rem;
+}
+.acc .trk-update-body {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--acc-accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--acc-ground);
+  color: var(--acc-ink);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.trk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Loading */
+.trk-sk-icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+}
+.trk-sk-steps {
+  display: block;
+  height: 60px;
+  border-radius: 10px;
+}
+
+/* ── Widths ── */
+@media (max-width: 1000px) {
+  .trk-find,
+  .trk-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .trk-hero-content {
+    padding-top: 56px;
+    padding-bottom: 64px;
+  }
+}
+@media (max-width: 640px) {
+  .trk-hero-content {
+    padding-top: 40px;
+    padding-bottom: 52px;
+  }
+  .acc .trk-lede {
+    font-size: 1rem;
+  }
+  .trk-body {
+    padding-top: 24px;
+  }
+  .trk-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .trk-form-foot .acc-btn {
+    width: 100%;
+  }
+  .trk-status-head {
+    gap: 14px;
+  }
+  .trk-status-icon,
+  .trk-sk-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .acc .trk-stage {
+    font-size: 1.5rem;
+  }
+  /* The stepper runs down the page. */
+  .trk-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .trk-step {
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    padding-right: 0;
+  }
+  .trk-step:not(:last-child)::after {
+    top: 38px;
+    bottom: -16px;
+    left: 16px;
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+  .trk-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trk-form .acc-btn.is-primary svg:last-child {
+    transition: none;
+  }
+}

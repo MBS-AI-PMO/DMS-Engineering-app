@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Percent, Ruler, Settings2, TriangleAlert } from 'lucide-react';
-import { Banner, StatCard, StatGrid, Stack } from '../../../components/admin/ui';
+import { StatCard, StatGrid, Stack } from '../../../components/admin/ui';
 import { discountsService } from '../../../services/admin/discounts';
 import PriceCalculator from './PriceCalculator';
 
 /**
- * Overview: what these rules drive, the numbers worth a look (rows still
- * without a price, the default sheet, whether quantity discounts apply)
- * and the price calculator.
+ * Overview: the numbers worth a look (rows still without a price, the
+ * default sheet, whether quantity discounts apply) and the price calculator.
  */
 export default function OverviewTab({ config, toast }) {
     const [discountsOn, setDiscountsOn] = useState(null);
@@ -25,12 +24,6 @@ export default function OverviewTab({ config, toast }) {
 
     return (
         <Stack>
-            <Banner tone="success">
-                <strong>These rules price the website.</strong> Instant prices, the cart, checkout and PayPal all use them,
-                with the server&apos;s own measurement of each uploaded file. A change here applies to the next price.
-                {config.seededFrom ? ` Rates were first loaded from Zamyr (${config.seededFrom}).` : ''}
-            </Banner>
-
             <StatGrid label="Costing at a glance">
                 <StatCard icon={Settings2} value={`${activeOps} / ${config.operations.length}`} label="Operations" to="/admin/costing/operations" title={`${activeOps} of ${config.operations.length} operations are on`} />
                 <StatCard

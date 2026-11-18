@@ -267,3 +267,49 @@ export function Switch({ label, checked, onChange, disabled, className, descript
 export function FormActions({ children, sticky = false }) {
     return <div className={sticky ? 'ak-sticky-actions' : 'ak-form-actions'}>{children}</div>;
 }
+
+/**
+ * A choice between a few options shown as cards (radio group): icon, label,
+ * one line of explanation and a radio dot. For settings where each option
+ * needs a word of explanation (PayPal sandbox / live). Arrow keys move the choice.
+ * items: [{ value, label, description?, icon?, tone? ('green' | 'amber' | 'blue' | 'red' | 'gray') }]. onChange(value).
+ */
+export function OptionCards({ items, value, onChange, label, columns = 2, disabled = false }) {
+    const move = (e, index) => {
+        const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        const next = items[(index + step + items.length) % items.length];
+        onChange(next.value);
+        e.currentTarget.parentElement?.querySelector(`[data-value="${CSS.escape(String(next.value))}"]`)?.focus();
+    };
+    return (
+        <div className="ak-choices" role="radiogroup" aria-label={label} style={{ '--ak-choice-cols': columns }}>
+            {items.map((item, index) => {
+                const Icon = item.icon;
+                const on = item.value === value;
+                return (
+                    <button
+                        key={item.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        tabIndex={on || (value === undefined && index === 0) ? 0 : -1}
+                        data-value={item.value}
+                        className={cx('ak-choice', on && 'is-on', `is-${item.tone || 'red'}`)}
+                        onClick={() => onChange(item.value)}
+                        onKeyDown={(e) => move(e, index)}
+                        disabled={disabled}
+                    >
+                        {Icon && <span className="ak-choice-icon"><Icon size={18} aria-hidden="true" /></span>}
+                        <span className="ak-choice-text">
+                            <span className="ak-choice-label">{item.label}</span>
+                            {item.description && <span className="ak-choice-desc">{item.description}</span>}
+                        </span>
+                        <span className="ak-choice-radio" aria-hidden="true" />
+                    </button>
+                );
+            })}
+        </div>
+    );
+}

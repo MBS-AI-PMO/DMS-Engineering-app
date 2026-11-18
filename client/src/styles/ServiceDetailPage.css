@@ -124,7 +124,7 @@
   max-width: 18ch;
   margin: 28px 0 0;
   color: var(--sd-on-dark);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 700;
   line-height: 1.04;
@@ -155,6 +155,13 @@
   padding-left: 0;
   border-left: 0;
 }
+.sd-fact-pre {
+  margin-right: 6px;
+  color: var(--sd-on-dark-faint);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
 .sd-fact dt {
   color: var(--sd-on-dark-faint);
   font-size: 0.8125rem;
@@ -162,7 +169,7 @@
 .sd-fact dd {
   margin: 6px 0 0;
   color: var(--sd-on-dark);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -251,7 +258,7 @@
 .sd .sd-h2 {
   margin: 0;
   color: var(--sd-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.2;
@@ -532,7 +539,7 @@
 .sd-metal-name {
   overflow: hidden;
   color: var(--sd-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 0.9375rem;
   font-weight: 600;
   text-overflow: ellipsis;

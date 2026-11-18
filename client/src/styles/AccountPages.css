@@ -62,7 +62,7 @@
 .acc .acc-title {
   margin: 20px 0 0;
   color: #f4f4f5;
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 700;
   line-height: 1.05;
@@ -99,7 +99,7 @@
   justify-content: center;
   background: #2a2c31;
   color: #f4f4f5;
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
 }
@@ -111,7 +111,7 @@
 .acc .acc-h2 {
   margin: 0;
   color: var(--acc-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -327,7 +327,7 @@
   outline-offset: -2px;
 }
 .acc-order-id {
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -445,6 +445,12 @@
   justify-content: space-between;
   gap: 12px 24px;
 }
+.acc-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+}
 .acc-order-meta {
   margin: 0;
   display: flex;
@@ -513,6 +519,7 @@
   margin-left: auto;
 }
 .acc-btn.is-small {
+  height: 36px;
   min-height: 0;
   padding: 6px 12px;
   font-size: 0.8125rem;
@@ -661,7 +668,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--acc-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.0625rem;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -670,7 +677,7 @@
 .acc-dialog-sub {
   margin-left: 10px;
   color: var(--acc-faint);
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 0.875rem;
   font-weight: 400;
 }

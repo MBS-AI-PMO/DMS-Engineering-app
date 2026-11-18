@@ -6,7 +6,7 @@ import { metalsData as staticMetalsData } from '../data/metalsData';
 import { fetchMetalList, fetchCategories } from '../utils/api';
 import { displayMetalName, parseThickness, thicknessBounds } from '../utils/metalDisplay';
 import ThumbImage from '../components/ThumbImage';
-import metalsHeroImg from '../assets/metals-hero.webp';
+import usePageHero from '../hooks/usePageHero';
 import '../styles/Shimmer.css';
 import '../styles/MetalsPage.css';
 
@@ -28,6 +28,7 @@ const staticImageFor = (metal) => {
 const ALL = 'All';
 
 const MetalsPage = () => {
+    const hero = usePageHero('metals');
     const [selectedCategory, setSelectedCategory] = useState(ALL);
     const [searchQuery, setSearchQuery] = useState('');
     const [metals, setMetals] = useState([]);
@@ -107,7 +108,7 @@ const MetalsPage = () => {
         <div className="mp">
             {/* ── Heading band ── */}
             <section className="mp-hero" aria-labelledby="mp-title">
-                <img className="mp-hero-img" src={metalsHeroImg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                {hero.src && <img className="mp-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />}
                 <div className="mp-hero-shade" aria-hidden="true" />
                 <div className="mp-inner mp-hero-content">
                     <nav className="mp-crumbs" aria-label="Breadcrumb">

@@ -1,7 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { Box, ChevronDown, Download, Eye, FileWarning, Layers } from 'lucide-react';
 import { Button, Card, IconButton, Modal } from '../../../components/admin/ui';
-import { dateText, fileSize, money, outlinePath, partDetails } from './orderFormat';
+import { BUCKET_LABEL, costView, dateText, fileSize, money, outlinePath, partDetails, percent } from './orderFormat';
 
 // three.js is heavy: load the viewer only when a preview is opened.
 const ProjectViewer = lazy(() => import('../../../components/viewer/ProjectViewer'));
@@ -36,41 +36,80 @@ function Spec({ label, children }) {
 
 const counted = (list) => list.map(x => `${x.name}${x.count > 1 ? ` ×${x.count}` : ''}`).join(', ');
 
-function PriceBreakdown({ snapshot, quantity }) {
+/* What the part cost the shop and what it earned: always shown as a strip,
+ * with every operation's cost, markup and price one click away. */
+function CostProfit({ item }) {
     const [open, setOpen] = useState(false);
-    if (!snapshot?.totals) return null;
-    const ops = snapshot.operations || [];
-    const markups = (snapshot.markups || []).filter(m => Number(m.totalCost) !== 0);
-    const t = snapshot.totals;
+    const v = costView(item);
+    if (!v.known) {
+        return (
+            <div className="ao-profit is-unknown">
+                <span className="ao-profit-note">
+                    Cost not available{v.reasons.length ? `: ${v.reasons.map(r => r.message).join(' ')}` : '.'}
+                </span>
+            </div>
+        );
+    }
+    const loss = v.profit < 0;
     return (
-        <div className={`ao-breakdown${open ? ' is-open' : ''}`}>
-            <button type="button" className="ao-breakdown-toggle" aria-expanded={open} onClick={() => setOpen(v => !v)}>
-                <Layers size={14} aria-hidden="true" /> How this price was worked out
+        <div className={`ao-profit${open ? ' is-open' : ''}`}>
+            <dl className="ao-profit-strip">
+                <div><dt>Customer paid</dt><dd>{money(v.paid)}</dd></div>
+                <div><dt>Cost</dt><dd>{money(v.cost)}</dd></div>
+                <div className={loss ? 'is-loss' : 'is-gain'}><dt>Profit</dt><dd>{money(v.profit)}</dd></div>
+                <div className={loss ? 'is-loss' : 'is-gain'}><dt>Margin</dt><dd>{percent(v.margin)}</dd></div>
+            </dl>
+            {v.source === 'estimate' && (
+                <p className="ao-fine">Estimate: this order was placed before costs were saved, so the cost is worked out with today&apos;s rules from the part details saved with it.</p>
+            )}
+            <button type="button" className="ao-breakdown-toggle" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+                <Layers size={14} aria-hidden="true" /> {open ? 'Hide' : 'Show'} the cost of each step
                 <ChevronDown size={14} aria-hidden="true" className="ao-chev" />
             </button>
             {open && (
                 <div className="ao-breakdown-body">
-                    <table className="ao-mini-table">
+                    <div className="ao-mini-scroll">
+                        <table className="ao-mini-table ao-cost-table">
+                            <thead>
+                                <tr><th scope="col">Step</th><th scope="col">Cost</th><th scope="col">Markup</th><th scope="col">Price</th></tr>
+                            </thead>
+                            <tbody>
+                                {v.ops.map((op, i) => (
+                                    <tr key={i}>
+                                        <th scope="row">{op.name}<span className="ao-bucket">{BUCKET_LABEL[op.bucket] || op.bucket}</span></th>
+                                        <td>{money(op.cost)}</td>
+                                        <td className="is-gain">{money(op.markup)}</td>
+                                        <td>{money(op.price)}</td>
+                                    </tr>
+                                ))}
+                                <tr className="is-total">
+                                    <th scope="row">Total ({Number(item.quantity) || 1} pcs)</th>
+                                    <td>{money(v.cost)}</td>
+                                    <td className="is-gain">{money(v.ops.reduce((s, o) => s + o.markup, 0))}</td>
+                                    <td>{money(v.ops.reduce((s, o) => s + o.price, 0))}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <table className="ao-mini-table ao-markup-table">
                         <tbody>
-                            {ops.map((op, i) => (
-                                <tr key={`op-${i}`}>
-                                    <th scope="row">{op.name}<span className="ao-bucket">{op.bucket}</span></th>
-                                    <td>{money(op.totalCost)}</td>
-                                </tr>
-                            ))}
-                            <tr className="is-sum"><th scope="row">Cost ({quantity} pcs)</th><td>{money(t.totalEstimatedCost)}</td></tr>
-                            {markups.map((m, i) => (
-                                <tr key={`mk-${i}`}>
+                            {v.markups.map((m, i) => (
+                                <tr key={i}>
                                     <th scope="row">{m.name} <span className="ao-bucket">{m.percent}% of {money(m.baseCost)}</span></th>
-                                    <td>{money(m.totalCost)}</td>
+                                    <td className="is-gain">{money(m.totalCost)}</td>
                                 </tr>
                             ))}
-                            {Number(t.addOnCost) > 0 && <tr><th scope="row">Add-ons</th><td>{money(t.addOnCost)}</td></tr>}
-                            {Number(t.discountAmount) > 0 && <tr><th scope="row">Discount ({t.discountPercent}%)</th><td>−{money(t.discountAmount)}</td></tr>}
-                            <tr className="is-total"><th scope="row">Line total · {money(t.finalUnitPrice ?? t.unitPrice)} each</th><td>{money(t.finalTotal ?? t.subtotal)}</td></tr>
+                            {v.addOns > 0 && <tr><th scope="row">Add-ons</th><td className="is-gain">{money(v.addOns)}</td></tr>}
+                            {v.discount > 0 && <tr><th scope="row">Quantity discount</th><td className="is-loss">−{money(v.discount)}</td></tr>}
+                            {v.source === 'estimate' && Math.abs(v.rulePrice - v.paid) >= 0.01 && (
+                                <tr><th scope="row">Today&apos;s rules would charge</th><td>{money(v.rulePrice)}</td></tr>
+                            )}
                         </tbody>
                     </table>
-                    <p className="ao-fine">Priced by the server at checkout{snapshot.priced_at ? ` on ${dateText(snapshot.priced_at, true)}` : ''} · engine {snapshot.engine || '—'}</p>
+                    <p className="ao-fine">
+                        {v.source === 'checkout' ? `Costs saved by the server at checkout${v.pricedAt ? ` on ${dateText(v.pricedAt, true)}` : ''}.` : "Worked out just now with today's rules."}
+                        {' '}Markups on a cost group are shared over its steps; overhead and general markups over all steps.
+                    </p>
                 </div>
             )}
         </div>
@@ -157,7 +196,7 @@ function PartCard({ item, index, total, onPreview }) {
                     {!item.files.length && <p className="ao-fine">No files were saved with this part.</p>}
                 </div>
 
-                <PriceBreakdown snapshot={item.quote_snapshot_json} quantity={qty} />
+                <CostProfit item={item} />
             </div>
         </article>
     );

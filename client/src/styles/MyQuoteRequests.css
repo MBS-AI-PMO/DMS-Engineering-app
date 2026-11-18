@@ -61,7 +61,7 @@
   align-items: baseline;
 }
 .mq-ref {
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

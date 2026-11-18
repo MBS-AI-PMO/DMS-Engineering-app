@@ -410,6 +410,31 @@
 }
 .ao-event-meta { display: flex; flex-wrap: wrap; align-items: center; margin-top: 4px; color: var(--ak-faint); font-size: 12px; }
 
+/* ── Cost and profit ── */
+.ao-profit { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--ak-rule); border-radius: 12px; background: var(--ak-card); }
+.ao-profit.is-unknown { background: var(--ak-ground); }
+.ao-profit-note { color: var(--ak-muted); font-size: 13px; }
+.ao-profit-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 14px; margin: 0 0 6px; }
+.ao-profit-strip dt { color: var(--ak-muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.ao-profit-strip dd { margin: 2px 0 0; color: var(--ak-ink); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ao-profit .is-gain dd,
+.ao-cost-table td.is-gain,
+.ao-markup-table td.is-gain { color: #15803d; }
+.ao-profit .is-loss dd,
+.ao-markup-table td.is-loss { color: var(--ak-accent-ink); }
+.ao-profit .ao-breakdown-toggle { margin-top: 6px; }
+.ao-mini-scroll { overflow-x: auto; }
+.ao-cost-table thead th { padding: 6px 0; border-bottom: 1px solid var(--ak-rule); color: var(--ak-muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-align: right; text-transform: uppercase; }
+.ao-cost-table thead th:first-child { text-align: left; }
+.ao-cost-table td { padding-left: 14px; }
+.ao-markup-table { margin-top: 10px; }
+.ao-profit-hero { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; padding: 12px 14px; border-radius: 12px; background: #f0fdf4; }
+.ao-profit-hero.is-loss { background: var(--ak-accent-soft); }
+.ao-profit-hero strong { color: #15803d; font-family: var(--ak-display); font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ao-profit-hero.is-loss strong { color: var(--ak-accent-ink); }
+.ao-profit-label { width: 100%; color: var(--ak-muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.ao-profit-margin { color: var(--ak-muted); font-size: 13px; font-weight: 600; }
+
 /* ── Narrower screens ── */
 @media (max-width: 860px) {
   .ao-part { grid-template-columns: 1fr; }
@@ -417,6 +442,7 @@
   .ao-part-thumb { width: 120px; flex: none; }
 }
 @media (max-width: 560px) {
+  .ao-profit-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ao-part-head { flex-direction: column; }
   .ao-part-money { align-items: flex-start; }
   .ao-note-form { flex-direction: column; align-items: stretch; }

@@ -5,8 +5,8 @@ import ServiceLinksCard from './ServiceLinksCard';
 
 /**
  * Services: which operations each service runs, and for production methods
- * (Laser Cutting, CNC …) which markups and add-ons the whole line gets —
- * the same links Zamyr keeps on its processes. A finishing service with no
+ * (Laser Cutting, CNC …) which markups and add-ons the whole line gets.
+ * A finishing service with no
  * operation is charged its own catalog price per part.
  */
 export default function ServicesTab({ config, reload, toast, onDirtyChange }) {

@@ -21,7 +21,7 @@ const OP_COLUMNS = [
 export default function PriceBreakdown({ result: r }) {
     const totals = r.totals;
     return (
-        <div className="ck-result" aria-live="polite">
+        <div className="ck-breakdown" aria-live="polite">
             {r.status !== 'priced' ? (
                 <Banner tone="warn">
                     <strong><AlertTriangle size={15} aria-hidden="true" className="ck-inline-icon" /> Customers would be asked to request a quote.</strong>

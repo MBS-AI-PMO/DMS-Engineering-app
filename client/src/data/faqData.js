@@ -32,7 +32,7 @@ export const faqData = [
     {
         id: 3,
         category: "recent",
-        question: "What bending specifications does DMS Engineering use for each material?",
+        question: "What bending specifications does Dynamic Manufacturing Solutions use for each material?",
         answer: "Our bending specifications — including bend radius, K factor, flange length, bend angle limits, and more — are listed in our Material Catalog and Bending Calculator. Use them exactly as provided to ensure your parts form within tolerance."
     },
     {
@@ -69,12 +69,12 @@ export const faqData = [
         id: 9,
         category: "recent",
         question: "How do I fund orders with credit terms?",
-        answer: "We offer Net 30 terms at DMS Engineering! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
+        answer: "We offer Net 30 terms at Dynamic Manufacturing Solutions! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
     },
     {
         id: 10,
         category: "recent",
-        question: "Does DMS Engineering have gauge tables for Autodesk Fusion?",
+        question: "Does Dynamic Manufacturing Solutions have gauge tables for Autodesk Fusion?",
         answer: "Yes — we offer free Fusion 360 gauge tables with our bending specs built in. Import them to set the correct bend radius, K factor, and bend relief for each material thickness we bend."
     },
     {
@@ -86,7 +86,7 @@ export const faqData = [
     {
         id: 12,
         category: "recent",
-        question: "What are DMS Engineering’s bending requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bending requirements?",
         answer: "Our bending service requirements are detailed in our Bending Guidelines. Use this checklist of bending considerations to review your designs before uploading part files!"
     },
     {
@@ -104,7 +104,7 @@ export const faqData = [
     {
         id: 15,
         category: "recent",
-        question: "What are DMS Engineering’s bend relief requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bend relief requirements?",
         answer: "Bend relief notches reduce stress and tearing where bends meet corners. For sheet metal, we recommend reliefs — especially on thicker materials."
     },
     {
@@ -135,7 +135,7 @@ export const faqData = [
         id: 20,
         category: "recent",
         question: "How to order mirrored parts?",
-        answer: "Mirrored parts are easy to order at DMS Engineering. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
+        answer: "Mirrored parts are easy to order at Dynamic Manufacturing Solutions. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
     },
     {
         id: 21,
@@ -165,7 +165,7 @@ export const faqData = [
         id: 26,
         category: "most-asked",
         question: "How do I fund orders with credit terms?",
-        answer: "We offer Net 30 terms at DMS Engineering! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
+        answer: "We offer Net 30 terms at Dynamic Manufacturing Solutions! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
     },
     {
         id: 27,
@@ -182,26 +182,26 @@ export const faqData = [
     {
         id: 29,
         category: "most-asked",
-        question: "Does DMS Engineering make parts in house?",
-        answer: "Team DMS Engineering manufactures all parts with their own equipment in two US facilities. This includes everything from DFM, cutting, post processing, and quality control before shipping parts."
+        question: "Does Dynamic Manufacturing Solutions make parts in house?",
+        answer: "Team Dynamic Manufacturing Solutions manufactures all parts with their own equipment in two US facilities. This includes everything from DFM, cutting, post processing, and quality control before shipping parts."
     },
     {
         id: 30,
         category: "most-asked",
-        question: "Can DMS Engineering provide partial depth cuts?",
+        question: "Can Dynamic Manufacturing Solutions provide partial depth cuts?",
         answer: "We provide partial depth cuts in CNC machined metal billet. For sheet and plate stock, we only provide 2D perpendicular full depth cutting."
     },
     {
         id: 31,
         category: "most-asked",
         question: "Can Formal Quotes be tax exempt?",
-        answer: "Formal quotes can be tax exempt! Just make sure the person creating the formal quote has tax exempt status set up for their DMS Engineering account before they create the quote. Then when creating the formal quote, check the tax exempt box at the Address & Billing step."
+        answer: "Formal quotes can be tax exempt! Just make sure the person creating the formal quote has tax exempt status set up for their Dynamic Manufacturing Solutions account before they create the quote. Then when creating the formal quote, check the tax exempt box at the Address & Billing step."
     },
     {
         id: 32,
         category: "most-asked",
         question: "Why won’t my STEP or STP file upload?",
-        answer: "If your STEP/STP format file is having trouble uploading to DMS Engineering’s website for a sheet metal or plate part, ensure your design meets our 3D file guidelines."
+        answer: "If your STEP/STP format file is having trouble uploading to Dynamic Manufacturing Solutions’ website for a sheet metal or plate part, ensure your design meets our 3D file guidelines."
     },
     {
         id: 33,
@@ -225,13 +225,13 @@ export const faqData = [
         id: 36,
         category: "most-asked",
         question: "Do you offer white label packaging or drop shipping?",
-        answer: "We do not offer white label packaging or drop shipping at this time. Currently all parts ship in DMS Engineering branded packaging."
+        answer: "We do not offer white label packaging or drop shipping at this time. Currently all parts ship in Dynamic Manufacturing Solutions branded packaging."
     },
     {
         id: 37,
         category: "most-asked",
-        question: "Does DMS Engineering offer multiaxis CNC machining or milling?",
-        answer: "We offer multiaxis CNC machining and milling for billet material at DMS Engineering. Our machining service can produce dimensional features including pockets, slots, holes, bosses, webs, and flanges of varying heights and thicknesses."
+        question: "Does Dynamic Manufacturing Solutions offer multiaxis CNC machining or milling?",
+        answer: "We offer multiaxis CNC machining and milling for billet material at Dynamic Manufacturing Solutions. Our machining service can produce dimensional features including pockets, slots, holes, bosses, webs, and flanges of varying heights and thicknesses."
     },
     {
         id: 38,
@@ -260,13 +260,13 @@ export const faqData = [
     {
         id: 42,
         category: "bending",
-        question: "What bending specifications does DMS Engineering use for each material?",
+        question: "What bending specifications does Dynamic Manufacturing Solutions use for each material?",
         answer: "Our bending specifications — including bend radius, K factor, flange length, bend angle limits, and more — are listed in our Material Catalog and Bending Calculator. Use them exactly as provided to ensure your parts form within tolerance."
     },
     {
         id: 43,
         category: "bending",
-        question: "Does DMS Engineering have gauge tables for Autodesk Fusion?",
+        question: "Does Dynamic Manufacturing Solutions have gauge tables for Autodesk Fusion?",
         answer: "Yes — we offer free Fusion 360 gauge tables with our bending specs built in. Import them to set the correct bend radius, K factor, and bend relief for each material thickness we bend."
     },
     {
@@ -278,7 +278,7 @@ export const faqData = [
     {
         id: 45,
         category: "bending",
-        question: "What are DMS Engineering’s bending requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bending requirements?",
         answer: "Our bending service requirements are detailed in our Bending Guidelines. Use this checklist of bending considerations to review your designs before uploading part files!"
     },
     {
@@ -296,7 +296,7 @@ export const faqData = [
     {
         id: 48,
         category: "bending",
-        question: "What are DMS Engineering’s bend relief requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bend relief requirements?",
         answer: "Bend relief notches reduce stress and tearing where bends meet corners. For sheet metal, we recommend reliefs — especially on thicker materials."
     },
     {
@@ -327,7 +327,7 @@ export const faqData = [
         id: 53,
         category: "bending",
         question: "How to order mirrored parts?",
-        answer: "Mirrored parts are easy to order at DMS Engineering. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
+        answer: "Mirrored parts are easy to order at Dynamic Manufacturing Solutions. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
     },
     {
         id: 54,
@@ -356,8 +356,8 @@ export const faqData = [
     {
         id: 59,
         category: "edge-quality",
-        question: "Can DMS Engineering chamfer or machine the edges of parts?",
-        answer: "At DMS Engineering we can chamfer or machine the edges of parts that meet our guidelines for CNC machining. We only machine parts out of billet stock at this time."
+        question: "Can Dynamic Manufacturing Solutions chamfer or machine the edges of parts?",
+        answer: "At Dynamic Manufacturing Solutions we can chamfer or machine the edges of parts that meet our guidelines for CNC machining. We only machine parts out of billet stock at this time."
     },
     {
         id: 60,
@@ -375,7 +375,7 @@ export const faqData = [
         id: 62,
         category: "edge-quality",
         question: "Will my parts have burr and dross?",
-        answer: "DMS Engineering’s laser cutting methods prevent major burr and dross buildup, but both imperfections are still unavoidable parts of the manufacturing process. Read through our material pages to see examples of dross and burr in different thicknesses."
+        answer: "Dynamic Manufacturing Solutions’ laser cutting methods prevent major burr and dross buildup, but both imperfections are still unavoidable parts of the manufacturing process. Read through our material pages to see examples of dross and burr in different thicknesses."
     },
     {
         id: 63,
@@ -386,14 +386,14 @@ export const faqData = [
     {
         id: 64,
         category: "edge-quality",
-        question: "Does DMS Engineering offer beveling or 3D cutting?",
+        question: "Does Dynamic Manufacturing Solutions offer beveling or 3D cutting?",
         answer: "We offer beveling and 3D cutting in billet stock with our CNC machining service. CNC machining is not available for laser cut sheet and plate."
     },
     {
         id: 65,
         category: "edge-quality",
         question: "Will my parts be tapered?",
-        answer: "Yes, it is possible your parts thicker than 0.250” will have a slight taper from top to bottom. The thicker the material, the more it will be tapered. DMS Engineering’s state of the art laser cutting and waterjet cutting technology is able to reduce the amount of taper during the process, but it cannot be completely eliminated."
+        answer: "Yes, it is possible your parts thicker than 0.250” will have a slight taper from top to bottom. The thicker the material, the more it will be tapered. Dynamic Manufacturing Solutions’ state of the art laser cutting and waterjet cutting technology is able to reduce the amount of taper during the process, but it cannot be completely eliminated."
     },
     {
         id: 66,
@@ -410,7 +410,7 @@ export const faqData = [
     {
         id: 68,
         category: "file-setup",
-        question: "What bending specifications does DMS Engineering use for each material?",
+        question: "What bending specifications does Dynamic Manufacturing Solutions use for each material?",
         answer: "Our bending specifications — including bend radius, K factor, flange length, bend angle limits, and more — are listed in our Material Catalog and Bending Calculator. Use them exactly as provided to ensure your parts form within tolerance."
     },
     {
@@ -428,13 +428,13 @@ export const faqData = [
     {
         id: 71,
         category: "file-setup",
-        question: "Does DMS Engineering have gauge tables for Autodesk Fusion?",
+        question: "Does Dynamic Manufacturing Solutions have gauge tables for Autodesk Fusion?",
         answer: "Yes — we offer free Fusion 360 gauge tables with our bending specs built in. Import them to set the correct bend radius, K factor, and bend relief for each material thickness we bend."
     },
     {
         id: 72,
         category: "file-setup",
-        question: "What are DMS Engineering’s bending requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bending requirements?",
         answer: "Our bending service requirements are detailed in our Bending Guidelines. Use this checklist of bending considerations to review your designs before uploading part files!"
     },
     {
@@ -446,7 +446,7 @@ export const faqData = [
     {
         id: 74,
         category: "file-setup",
-        question: "What are DMS Engineering’s bend relief requirements?",
+        question: "What are Dynamic Manufacturing Solutions’ bend relief requirements?",
         answer: "Bend relief notches reduce stress and tearing where bends meet corners. For sheet metal, we recommend reliefs — especially on thicker materials."
     },
     {
@@ -471,7 +471,7 @@ export const faqData = [
         id: 78,
         category: "file-setup",
         question: "How to order mirrored parts?",
-        answer: "Mirrored parts are easy to order at DMS Engineering. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
+        answer: "Mirrored parts are easy to order at Dynamic Manufacturing Solutions. Learn about operation and material considerations for part mirroring and how to order these types of parts by either using our Duplicate item button or uploading a separate file."
     },
     {
         id: 80,
@@ -488,7 +488,7 @@ export const faqData = [
     {
         id: 82,
         category: "materials",
-        question: "What bending specifications does DMS Engineering use for each material?",
+        question: "What bending specifications does Dynamic Manufacturing Solutions use for each material?",
         answer: "Our bending specifications — including bend radius, K factor, flange length, bend angle limits, and more — are listed in our Material Catalog and Bending Calculator. Use them exactly as provided to ensure your parts form within tolerance."
     },
     {
@@ -525,18 +525,18 @@ export const faqData = [
         id: 88,
         category: "materials",
         question: "What metal colors do you offer?",
-        answer: "At DMS Engineering we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
+        answer: "At Dynamic Manufacturing Solutions we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
     },
     {
         id: 89,
         category: "materials",
-        question: "Does DMS Engineering cut tubing or piping?",
+        question: "Does Dynamic Manufacturing Solutions cut tubing or piping?",
         answer: "We do not cut tubing or piping. We only cut in-stock materials which include sheet, plate, and billet options. Take a look at our Materials Catalog and Services page to learn more!"
     },
     {
         id: 90,
         category: "materials",
-        question: "Can DMS Engineering use a different cutting method for my parts?",
+        question: "Can Dynamic Manufacturing Solutions use a different cutting method for my parts?",
         answer: "We choose the best cutting method for each material, so we aren’t able to use a different cut process upon request for individual orders. You can find the process by material on our design guidelines pages."
     },
     {
@@ -549,25 +549,25 @@ export const faqData = [
         id: 92,
         category: "materials",
         question: "How thick can you cut?",
-        answer: "If you need to know how thick we can cut at DMS Engineering, the best way to confirm this is by visiting our Material Minimum and Maximum Sizes chart. There you can find every stock thickness of material we offer and confirm the cutting process (fiber laser, waterjet, or CNC mill)."
+        answer: "If you need to know how thick we can cut at Dynamic Manufacturing Solutions, the best way to confirm this is by visiting our Material Minimum and Maximum Sizes chart. There you can find every stock thickness of material we offer and confirm the cutting process (fiber laser, waterjet, or CNC mill)."
     },
     {
         id: 93,
         category: "orders",
         question: "How do I fund orders with credit terms?",
-        answer: "We offer Net 30 terms at DMS Engineering! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
+        answer: "We offer Net 30 terms at Dynamic Manufacturing Solutions! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
     },
     {
         id: 94,
         category: "orders",
         question: "How to set up a business account for my company?",
-        answer: "We refer to our business accounts as ‘Organizations’, which enable employees to benefit from their company’s tax exempt status, credit terms, and more. To set one up for your company, email support@DMS Engineering.com and request to set up an Organization."
+        answer: "We refer to our business accounts as ‘Organizations’, which enable employees to benefit from their company’s tax exempt status, credit terms, and more. To set one up for your company, email support@Dynamic Manufacturing Solutions.com and request to set up an Organization."
     },
     {
         id: 95,
         category: "orders",
         question: "How to join my company’s Organization?",
-        answer: "To join your company’s Organization, you can either choose to join as soon as you set up a DMS Engineering account using your work email address, accept an invitation from a coworker who is already part of your company’s Organization, or contact our Support team and request to be added."
+        answer: "To join your company’s Organization, you can either choose to join as soon as you set up a Dynamic Manufacturing Solutions account using your work email address, accept an invitation from a coworker who is already part of your company’s Organization, or contact our Support team and request to be added."
     },
     {
         id: 96,
@@ -602,26 +602,26 @@ export const faqData = [
     {
         id: 101,
         category: "orders",
-        question: "How to get a custom quote from DMS Engineering?",
+        question: "How to get a custom quote from Dynamic Manufacturing Solutions?",
         answer: "If you upload your part file to our website and the overall part size exceeds the maximum size for instant quoting in that material, you’ll be prompted to submit a custom quote."
     },
     {
         id: 102,
         category: "orders",
         question: "How to change the email address for my order?",
-        answer: "If you want to change the email address for an order, you’ll need to change the contact email for your DMS Engineering account. The contact email address associated with your account will receive all communication about orders."
+        answer: "If you want to change the email address for an order, you’ll need to change the contact email for your Dynamic Manufacturing Solutions account. The contact email address associated with your account will receive all communication about orders."
     },
     {
         id: 103,
         category: "orders",
-        question: "What is my DMS Engineering order status?",
-        answer: "You can check the status of any order by logging into your DMS Engineering account, navigating to the Orders page, and clicking the Track Order link on the order."
+        question: "What is my Dynamic Manufacturing Solutions order status?",
+        answer: "You can check the status of any order by logging into your Dynamic Manufacturing Solutions account, navigating to the Orders page, and clicking the Track Order link on the order."
     },
     {
         id: 104,
         category: "orders",
         question: "Can I send you a PDF?",
-        answer: "PDFs can’t be uploaded for instant quoting or emailed to DMS Engineering to create or configure orders. However our trusted Design Partners can help with converting PDFs to CAD files if your PDF if needed."
+        answer: "PDFs can’t be uploaded for instant quoting or emailed to Dynamic Manufacturing Solutions to create or configure orders. However our trusted Design Partners can help with converting PDFs to CAD files if your PDF if needed."
     },
     {
         id: 105,
@@ -632,20 +632,20 @@ export const faqData = [
     {
         id: 106,
         category: "orders",
-        question: "How do I get a Formal Quote from DMS Engineering?",
+        question: "How do I get a Formal Quote from Dynamic Manufacturing Solutions?",
         answer: "Formal Quotes make it easy to send a link to your accounts payable department so they can process payment for orders online, while the order itself remains associated with your account. This allows you to remain the point of contact if there are any questions during production. Read the complete FAQ for detailed info!"
     },
     {
         id: 107,
         category: "orders",
         question: "How to reorder parts?",
-        answer: "Create a free DMS Engineering account and you can easily reorder instant-quoted parts anytime. Just log into your account, navigate to the Orders tab, find the order, and click Reorder."
+        answer: "Create a free Dynamic Manufacturing Solutions account and you can easily reorder instant-quoted parts anytime. Just log into your account, navigate to the Orders tab, find the order, and click Reorder."
     },
     {
         id: 108,
         category: "orders",
         question: "How do I find order invoices and packing slips?",
-        answer: "You can find the invoice for any order by logging into your DMS Engineering account and navigating to the Orders tab. Then find your order and click Invoice to view it or print a PDF if needed."
+        answer: "You can find the invoice for any order by logging into your Dynamic Manufacturing Solutions account and navigating to the Orders tab. Then find your order and click Invoice to view it or print a PDF if needed."
     },
     {
         id: 109,
@@ -663,7 +663,7 @@ export const faqData = [
         id: 111,
         category: "powder-coating",
         question: "What metal colors do you offer?",
-        answer: "At DMS Engineering we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
+        answer: "At Dynamic Manufacturing Solutions we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
     },
     {
         id: 112,
@@ -676,12 +676,6 @@ export const faqData = [
         category: "powder-coating",
         question: "Will other services be performed before or after finishing?",
         answer: "Bending, countersinking, and tapping services are performed before finishing services. Hardware is installed after anodizing and plating, but before powder coating. Parts with both hardware and powder coating services will have the hardware capped/plugged before being powder coated."
-    },
-    {
-        id: 114,
-        category: "powder-coating",
-        question: "Can you apply finishing services to specific areas of my part?",
-        answer: "If you choose to add a finishing service (anodizing, plating, or powder coating) to parts, we will apply the finish to the entire part. We’re unable to provide masking or finish specific areas or portions of parts, and not other areas."
     },
     {
         id: 115,
@@ -729,25 +723,25 @@ export const faqData = [
         id: 122,
         category: "pricing-billing",
         question: "How do I fund orders with credit terms?",
-        answer: "We offer Net 30 terms at DMS Engineering! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
+        answer: "We offer Net 30 terms at Dynamic Manufacturing Solutions! To fund orders with terms and attach purchase orders, read the full FAQ for step-by-step instructions!"
     },
     {
         id: 123,
         category: "pricing-billing",
         question: "How to set up a business account for my company?",
-        answer: "We refer to our business accounts as ‘Organizations’, which enable employees to benefit from their company’s tax exempt status, credit terms, and more. To set one up for your company, email support@DMS Engineering.com and request to set up an Organization."
+        answer: "We refer to our business accounts as ‘Organizations’, which enable employees to benefit from their company’s tax exempt status, credit terms, and more. To set one up for your company, email support@Dynamic Manufacturing Solutions.com and request to set up an Organization."
     },
     {
         id: 124,
         category: "pricing-billing",
         question: "How to join my company’s Organization?",
-        answer: "To join your company’s Organization, you can either choose to join as soon as you set up a DMS Engineering account using your work email address, accept an invitation from a coworker who is already part of your company’s Organization, or contact our Support team and request to be added."
+        answer: "To join your company’s Organization, you can either choose to join as soon as you set up a Dynamic Manufacturing Solutions account using your work email address, accept an invitation from a coworker who is already part of your company’s Organization, or contact our Support team and request to be added."
     },
     {
         id: 125,
         category: "pricing-billing",
         question: "Can Formal Quotes be tax exempt?",
-        answer: "Formal quotes can be tax exempt! Just make sure the person creating the formal quote has tax exempt status set up for their DMS Engineering account before they create the quote. Then when creating the formal quote, check the tax exempt box at the Address & Billing step."
+        answer: "Formal quotes can be tax exempt! Just make sure the person creating the formal quote has tax exempt status set up for their Dynamic Manufacturing Solutions account before they create the quote. Then when creating the formal quote, check the tax exempt box at the Address & Billing step."
     },
     {
         id: 126,
@@ -764,8 +758,8 @@ export const faqData = [
     {
         id: 128,
         category: "pricing-billing",
-        question: "How to get a discount on your DMS Engineering order?",
-        answer: "DMS Engineering offers automatic quantity discounts when you instantly price most parts, plus occasional promo codes through our mailing list. You’ll save more by ordering multiple identical parts, and you can apply discount codes at checkout if you have one."
+        question: "How to get a discount on your Dynamic Manufacturing Solutions order?",
+        answer: "Dynamic Manufacturing Solutions offers automatic quantity discounts when you instantly price most parts, plus occasional promo codes through our mailing list. You’ll save more by ordering multiple identical parts, and you can apply discount codes at checkout if you have one."
     },
     {
         id: 129,
@@ -782,14 +776,14 @@ export const faqData = [
     {
         id: 131,
         category: "pricing-billing",
-        question: "How do I get a Formal Quote from DMS Engineering?",
+        question: "How do I get a Formal Quote from Dynamic Manufacturing Solutions?",
         answer: "Formal Quotes make it easy to send a link to your accounts payable department so they can process payment for orders online, while the order itself remains associated with your account. This allows you to remain the point of contact if there are any questions during production. Read the complete FAQ for detailed info!"
     },
     {
         id: 132,
         category: "pricing-billing",
         question: "Can my orders be tax exempt?",
-        answer: "If your organization is tax exempt, send your valid tax exemption certificate to DMS Engineering’s support team. We’ll review your certificate and then respond with an update! Please be sure to set up an account before requesting exemption."
+        answer: "If your organization is tax exempt, send your valid tax exemption certificate to Dynamic Manufacturing Solutions’ support team. We’ll review your certificate and then respond with an update! Please be sure to set up an account before requesting exemption."
     },
     {
         id: 133,
@@ -830,8 +824,8 @@ export const faqData = [
     {
         id: 139,
         category: "production-times",
-        question: "What is my DMS Engineering order status?",
-        answer: "You can check the status of any order by logging into your DMS Engineering account, navigating to the Orders page, and clicking the Track Order link on the order."
+        question: "What is my Dynamic Manufacturing Solutions order status?",
+        answer: "You can check the status of any order by logging into your Dynamic Manufacturing Solutions account, navigating to the Orders page, and clicking the Track Order link on the order."
     },
     {
         id: 140,
@@ -921,7 +915,7 @@ export const faqData = [
         id: 154,
         category: "surface-finishes",
         question: "What metal colors do you offer?",
-        answer: "At DMS Engineering we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
+        answer: "At Dynamic Manufacturing Solutions we stock over 15 different sheet metal types in a wide range of natural unfinished hues. Additionally, we offer anodizing, plating, and powder coating services that can provide red, yellow, gold, green, blue, white, and black surface finishes."
     },
     {
         id: 155,
@@ -940,12 +934,6 @@ export const faqData = [
         category: "surface-finishes",
         question: "Will other services be performed before or after finishing?",
         answer: "Bending, countersinking, and tapping services are performed before finishing services. Hardware is installed after anodizing and plating, but before powder coating. Parts with both hardware and powder coating services will have the hardware capped/plugged before being powder coated."
-    },
-    {
-        id: 158,
-        category: "surface-finishes",
-        question: "Can you apply finishing services to specific areas of my part?",
-        answer: "If you choose to add a finishing service (anodizing, plating, or powder coating) to parts, we will apply the finish to the entire part. We’re unable to provide masking or finish specific areas or portions of parts, and not other areas."
     },
     {
         id: 159,
@@ -993,7 +981,7 @@ export const faqData = [
         id: 166,
         category: "shipping",
         question: "Do you offer white label packaging or drop shipping?",
-        answer: "We do not offer white label packaging or drop shipping at this time. Currently all parts ship in DMS Engineering branded packaging."
+        answer: "We do not offer white label packaging or drop shipping at this time. Currently all parts ship in Dynamic Manufacturing Solutions branded packaging."
     },
     {
         id: 167,
@@ -1004,14 +992,14 @@ export const faqData = [
     {
         id: 168,
         category: "shipping",
-        question: "What is my DMS Engineering order status?",
-        answer: "You can check the status of any order by logging into your DMS Engineering account, navigating to the Orders page, and clicking the Track Order link on the order."
+        question: "What is my Dynamic Manufacturing Solutions order status?",
+        answer: "You can check the status of any order by logging into your Dynamic Manufacturing Solutions account, navigating to the Orders page, and clicking the Track Order link on the order."
     },
     {
         id: 169,
         category: "shipping",
         question: "Can you cut material I ship to you?",
-        answer: "Due to safety and procedural risks, DMS Engineering does not cut or process raw material that is shipped to us from customers. Additionally, we cannot accept raw material or components from vendors such as McMaster-Carr per request for specific customers or projects."
+        answer: "Due to safety and procedural risks, Dynamic Manufacturing Solutions does not cut or process raw material that is shipped to us from customers. Additionally, we cannot accept raw material or components from vendors such as McMaster-Carr per request for specific customers or projects."
     },
     {
         id: 170,
@@ -1023,7 +1011,7 @@ export const faqData = [
         id: 171,
         category: "shipping",
         question: "How can I track my package?",
-        answer: "Package tracking is automatic with DMS Engineering! Once your order has been placed and processed, you will receive tracking information via email or mobile device when a tracking number has been created."
+        answer: "Package tracking is automatic with Dynamic Manufacturing Solutions! Once your order has been placed and processed, you will receive tracking information via email or mobile device when a tracking number has been created."
     },
     {
         id: 172,
@@ -1034,7 +1022,7 @@ export const faqData = [
     {
         id: 173,
         category: "shipping",
-        question: "What are DMS Engineering’s shipping pickup times, deadlines, and guidelines on address changes?",
+        question: "What are Dynamic Manufacturing Solutions’ shipping pickup times, deadlines, and guidelines on address changes?",
         answer: "Our carriers pick up orders multiple times a day on weekdays. Although we package parts and create labels 7 days a week, shipments aren’t picked up on Sundays or after 4pm local time Mondays-Saturdays. Once a label is created, we cannot make address changes or convert the order to local pickup."
     },
     {
@@ -1071,7 +1059,7 @@ export const faqData = [
         id: 179,
         category: "shipping",
         question: "Do you offer local pickup?",
-        answer: "Local pickup is available to qualifying orders that exceed 20 lbs. Contact our Support team to confirm if your parts are eligible for pickup at the DMS Engineering manufacturing facility closest to you."
+        answer: "Local pickup is available to qualifying orders that exceed 20 lbs. Contact our Support team to confirm if your parts are eligible for pickup at the Dynamic Manufacturing Solutions manufacturing facility closest to you."
     },
     {
         id: 180,
@@ -1082,13 +1070,13 @@ export const faqData = [
     {
         id: 181,
         category: "tapping",
-        question: "Can DMS Engineering provide partial depth cuts?",
+        question: "Can Dynamic Manufacturing Solutions provide partial depth cuts?",
         answer: "We provide partial depth cuts in CNC machined metal billet. For sheet and plate stock, we only provide 2D perpendicular full depth cutting."
     },
     {
         id: 182,
         category: "tapping",
-        question: "Can DMS Engineering drill holes into the side of my parts?",
+        question: "Can Dynamic Manufacturing Solutions drill holes into the side of my parts?",
         answer: "Our tapping, countersinking, and hardware insertion services can be added to the top or bottom face of sheet and plate material. We don’t offer drilling into the cut edge of sheet stock. With billet, we can CNC machine holes into any side of a part."
     },
     {
@@ -1107,7 +1095,7 @@ export const faqData = [
         id: 185,
         category: "tapping",
         question: "Do you offer counterboring?",
-        answer: "DMS Engineering does not offer counterboring at this time. We do provide countersinking, PEM hardware insertion, and tapping for eligible sheet metals."
+        answer: "Dynamic Manufacturing Solutions does not offer counterboring at this time. We do provide countersinking, PEM hardware insertion, and tapping for eligible sheet metals."
     },
     {
         id: 186,
@@ -1130,7 +1118,7 @@ export const faqData = [
     {
         id: 189,
         category: "tapping",
-        question: "What materials are available for tapping at DMS Engineering?",
+        question: "What materials are available for tapping at Dynamic Manufacturing Solutions?",
         answer: "We currently have a variety of sheet metal materials available for tapping. You can quickly confirm which materials are available for tapping at our Processing Maximums and Minimums page."
     },
     {
@@ -1142,7 +1130,7 @@ export const faqData = [
     {
         id: 191,
         category: "tapping",
-        question: "How do I set up my file for tapping with DMS Engineering?",
+        question: "How do I set up my file for tapping with Dynamic Manufacturing Solutions?",
         answer: "Setup for tapping depends on whether you plan to order sheet parts or machined billet parts. For sheet and plate parts, we accept both vector and 3D file formats and we’ll resize holes up to 4.00″ to fit the tap size you choose. For machined billet parts, we accept STEP/STP files. Don’t model threads in your file – design them as simple holes."
     },
     {
@@ -1166,8 +1154,8 @@ export const faqData = [
     {
         id: 195,
         category: "tolerances-standards",
-        question: "Can DMS Engineering bend parts with a custom bend radius?",
-        answer: "DMS Engineering does not provide a custom bend radius for any bent parts since it is set for each material and thickness. Take a look at the material page for your chosen material to find the bend radius by thickness, or check out the bending specifications table at the bottom of our Bending Calculator page."
+        question: "Can Dynamic Manufacturing Solutions bend parts with a custom bend radius?",
+        answer: "Dynamic Manufacturing Solutions does not provide a custom bend radius for any bent parts since it is set for each material and thickness. Take a look at the material page for your chosen material to find the bend radius by thickness, or check out the bending specifications table at the bottom of our Bending Calculator page."
     },
     {
         id: 196,
@@ -1208,14 +1196,14 @@ export const faqData = [
     {
         id: 202,
         category: "tolerances-standards",
-        question: "Will my parts from DMS Engineering be food safe?",
-        answer: "DMS Engineering does not offer a food safe production process for any service."
+        question: "Will my parts from Dynamic Manufacturing Solutions be food safe?",
+        answer: "Dynamic Manufacturing Solutions does not offer a food safe production process for any service."
     },
     {
         id: 203,
         category: "tolerances-standards",
         question: "Will my parts be tapered?",
-        answer: "Yes, it is possible your parts thicker than 0.250” will have a slight taper from top to bottom. The thicker the material, the more it will be tapered. DMS Engineering’s state of the art laser cutting and waterjet cutting technology is able to reduce the amount of taper during the process, but it cannot be completely eliminated."
+        answer: "Yes, it is possible your parts thicker than 0.250” will have a slight taper from top to bottom. The thicker the material, the more it will be tapered. Dynamic Manufacturing Solutions’ state of the art laser cutting and waterjet cutting technology is able to reduce the amount of taper during the process, but it cannot be completely eliminated."
     },
     {
         id: 204,
@@ -1250,7 +1238,7 @@ export const faqData = [
     {
         id: 210,
         category: "using-parts",
-        question: "Can DMS Engineering drill holes into the side of my parts?",
+        question: "Can Dynamic Manufacturing Solutions drill holes into the side of my parts?",
         answer: "Our tapping, countersinking, and hardware insertion services can be added to the top or bottom face of sheet and plate material. We don’t offer drilling into the cut edge of sheet stock. With billet, we can CNC machine holes into any side of a part."
     },
     {
@@ -1269,7 +1257,7 @@ export const faqData = [
         id: 213,
         category: "using-parts",
         question: "Do you offer welding?",
-        answer: "At this time we do not offer welding at DMS Engineering. However, we do offer tapping, countersinking, and hardware installation to help bring your parts together! We also have guidance on designing for tab and slots along with other methods of joining parts."
+        answer: "At this time we do not offer welding at Dynamic Manufacturing Solutions. However, we do offer tapping, countersinking, and hardware installation to help bring your parts together! We also have guidance on designing for tab and slots along with other methods of joining parts."
     },
     {
         id: 214,
@@ -1292,8 +1280,8 @@ export const faqData = [
     {
         id: 217,
         category: "using-parts",
-        question: "Will my parts from DMS Engineering be food safe?",
-        answer: "DMS Engineering does not offer a food safe production process for any service."
+        question: "Will my parts from Dynamic Manufacturing Solutions be food safe?",
+        answer: "Dynamic Manufacturing Solutions does not offer a food safe production process for any service."
     },
     {
         id: 218,

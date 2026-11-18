@@ -513,7 +513,7 @@
   --cx-accent-hover: #c8141b;
   --cx-good: #34d399;
   --cx-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
-  --cx-heading: "Montserrat", "Roboto", system-ui, sans-serif;
+  --cx-heading: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 .checkoutx button:focus-visible,
 .checkoutx a:focus-visible,

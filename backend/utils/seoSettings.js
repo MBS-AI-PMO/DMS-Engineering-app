@@ -3,6 +3,7 @@
  * site_settings (see routes/settings.js PUT /:key):
  *
  *   seo_meta        { defaults: {...}, pages: { '/path': { title, description, ogImage } } }
+ *                   defaults also hold the browser icons: favicon, appleTouchIcon, themeColor
  *   tracking_pixels { ga4: { enabled, id }, facebook: { enabled, id }, tiktok: { enabled, id } }
  *
  * Both are public by nature (they end up in page source). Pixel IDs are
@@ -16,7 +17,7 @@
 // SEO_PAGES in client/src/utils/seo.js.
 const SEO_PAGE_PATHS = [
     '/', '/get-instant-pricing', '/metals', '/services', '/guidelines',
-    '/faq', '/contact', '/about', '/quote', '/privacy-policy', '/terms-of-service',
+    '/faq', '/contact', '/about', '/quote', '/privacy-policy', '/terms-of-service', '/blog', '/track-order',
 ];
 
 const PIXEL_RULES = {
@@ -119,6 +120,13 @@ const validateSeoMeta = (input) => {
             fail('Google Search Console code must be the content value only (letters, numbers, - and _).');
         }
         defaults.googleVerification = verification;
+
+        // Browser icons and colour (empty favicon = the built-in /favicon.ico).
+        defaults.favicon = cleanImageUrl(d.favicon, 'Favicon');
+        defaults.appleTouchIcon = cleanImageUrl(d.appleTouchIcon, 'Home screen icon');
+        const themeColor = cleanText(d.themeColor, 'Theme colour', 7).toLowerCase();
+        if (themeColor && !/^#[0-9a-f]{6}$/.test(themeColor)) fail('Theme colour must be a hex colour such as #e31b23.');
+        defaults.themeColor = themeColor;
 
         const p = asObject(raw.pages, 'Page overrides');
         const pages = {};

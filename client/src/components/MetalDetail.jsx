@@ -4,11 +4,13 @@ import { motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line
 import { ArrowRight, Check, Plus } from 'lucide-react';
 import { metalsData } from '../data/metalsData';
 import { servicesData } from '../data/servicesData';
-import metalHeroBg from '../assets/metals/metal-hero-bg.webp';
+import usePageHero from '../hooks/usePageHero';
 import { fetchMetalBySlug, fetchMetalServices } from '../utils/api';
 import { displayMetalName } from '../utils/metalDisplay';
 import ThumbImage from './ThumbImage';
 import Dropdown from './Dropdown';
+import { mergeFaqs, usePlacedFaqs } from './pageFaqs/usePlacedFaqs';
+import { useFaqJsonLd } from './pageFaqs/useFaqJsonLd';
 import '../styles/Shimmer.css';
 import '../styles/MetalDetailPage.css';
 
@@ -128,6 +130,7 @@ const CustomFields = ({ fields }) => (fields.length > 0 ? (
 ) : null);
 
 const MetalDetail = () => {
+    const hero = usePageHero('metal');
     const { slug, id } = useParams();
     const reduceMotion = useReducedMotion();
     const [metal, setMetal] = useState(null);
@@ -259,7 +262,11 @@ const MetalDetail = () => {
 
     const about = metal?.aboutSection || null;
     const features = Array.isArray(about?.featureChart) ? about.featureChart : [];
-    const faqs = Array.isArray(metal?.faqs) ? metal.faqs.filter(f => f && f.question) : [];
+    // The metal's own questions, then FAQs admin placed on this metal's page
+    // and on every metal page (Admin > FAQs), in one list.
+    const placedFaqs = usePlacedFaqs(metal?.slug ? `/metal/${metal.slug}` : null);
+    const faqs = mergeFaqs(Array.isArray(metal?.faqs) ? metal.faqs.filter(f => f && f.question) : [], placedFaqs);
+    useFaqJsonLd(faqs.map(f => ({ question: clean(f.question), answer: clean(f.answer) })));
 
     const sections = [
         { id: 'overview', label: 'Overview', show: true },
@@ -326,7 +333,7 @@ const MetalDetail = () => {
         return (
             <div className="md">
                 <section className="md-hero">
-                    <img className="md-hero-img" src={metalHeroBg} alt="" aria-hidden="true" />
+                    {hero.src && <img className="md-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" />}
                     <div className="md-hero-shade" aria-hidden="true" />
                     <div className="md-inner md-hero-content">
                         <nav className="md-crumbs" aria-label="Breadcrumb">
@@ -347,7 +354,7 @@ const MetalDetail = () => {
         <div className="md">
             {/* ── Heading band ── */}
             <section className="md-hero" aria-labelledby="md-title">
-                <img className="md-hero-img" src={metalHeroBg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                {hero.src && <img className="md-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />}
                 <div className="md-hero-shade" aria-hidden="true" />
                 <div className="md-inner md-hero-content">
                     <nav className="md-crumbs" aria-label="Breadcrumb">

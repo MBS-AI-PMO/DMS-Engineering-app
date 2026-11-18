@@ -1,6 +1,6 @@
 import {
     LayoutDashboard, ShoppingBag, MessageSquareQuote, Users, AtSign, Box, Tag, Wrench, Images, Calculator,
-    BadgePercent, HelpCircle, FolderOpen, FileText, Scale, Contact, Globe, ShieldCheck, Mail, CreditCard,
+    BadgePercent, HelpCircle, FolderOpen, FileText, Scale, Contact, Globe, ShieldCheck, Mail, CreditCard, Newspaper,
 } from 'lucide-react';
 
 /*
@@ -63,6 +63,7 @@ export const NAV_SECTIONS = [
         key: 'content',
         label: 'Content',
         items: [
+            { to: '/admin/blog', label: 'Blog', icon: Newspaper, detail: editOrNew('post') },
             { to: '/admin/faqs', label: 'FAQs', icon: HelpCircle },
             { to: '/admin/faq-categories', label: 'FAQ categories', icon: FolderOpen },
             { to: '/admin/guidelines', label: 'Guidelines', icon: FileText, detail: editOrNew('guideline') },

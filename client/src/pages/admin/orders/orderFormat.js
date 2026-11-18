@@ -179,3 +179,74 @@ export function emailToast(toast, email, done = 'Saved') {
     if (email.status === 'sending') { toast(`${done}. The email is still sending; check the activity log.`, 'info'); return; }
     toast(`${done}, but the email was not sent: ${email.error || 'unknown error'}`, 'warning');
 }
+
+/* ── Cost and profit ──────────────────────────────────────────────────── */
+
+export const BUCKET_LABEL = { material: 'Material', inside: 'Shop labour', outside: 'Outside services', purchased: 'Bought-in parts' };
+const BUCKETS = Object.keys(BUCKET_LABEL);
+
+/* What the customer paid for a line (the server price saved at checkout). */
+export const linePaid = (item) => (item.line_total !== null && item.line_total !== undefined
+    ? Number(item.line_total)
+    : Number(item.unit_price) * (Number(item.quantity) || 1));
+
+/* A part's cost and profit from item.costing (see backend itemCosting):
+ * every operation with its cost, its share of the markups and its price;
+ * markups on a cost group (material, labour…) are shared over that group's
+ * operations, overhead and general markups over all of them, by cost. */
+export function costView(item) {
+    const c = item.costing || {};
+    const paid = linePaid(item);
+    if (!c.totals) return { known: false, source: c.source || 'none', paid, reasons: c.reasons || [] };
+    const ops = (c.operations || []).map(o => ({ name: o.name, bucket: o.bucket, details: o.details, cost: Number(o.totalCost) || 0, markup: 0 }));
+    for (const m of c.markups || []) {
+        const amount = Number(m.totalCost) || 0;
+        if (!amount) continue;
+        const targets = BUCKETS.includes(m.base) ? ops.filter(o => o.bucket === m.base) : ops;
+        const base = targets.reduce((s, o) => s + o.cost, 0);
+        if (base > 0) targets.forEach(o => { o.markup += amount * (o.cost / base); });
+    }
+    ops.forEach(o => { o.price = o.cost + o.markup; });
+    const t = c.totals;
+    const cost = Number(t.totalEstimatedCost) || ops.reduce((s, o) => s + o.cost, 0);
+    const byBucket = Object.fromEntries(BUCKETS.map(b => [b, ops.filter(o => o.bucket === b).reduce((s, o) => s + o.cost, 0)]));
+    return {
+        known: true,
+        source: c.source,
+        pricedAt: c.pricedAt,
+        ops,
+        markups: (c.markups || []).filter(m => Number(m.totalCost) !== 0),
+        addOns: Number(t.addOnCost) || 0,
+        discount: Number(t.discountAmount) || 0,
+        rulePrice: Number(t.finalTotal ?? t.subtotal) || 0,
+        cost,
+        byBucket,
+        paid,
+        profit: paid - cost,
+        margin: paid > 0 ? (paid - cost) / paid : 0,
+    };
+}
+
+/* The whole order: sums of the parts whose cost is known. */
+export function orderCost(items) {
+    const views = items.map(costView);
+    const known = views.filter(v => v.known);
+    const sum = (f) => known.reduce((s, v) => s + f(v), 0);
+    const paid = sum(v => v.paid);
+    const cost = sum(v => v.cost);
+    return {
+        views,
+        knownCount: known.length,
+        unknownCount: views.length - known.length,
+        estimated: known.some(v => v.source === 'estimate'),
+        paid,
+        cost,
+        profit: paid - cost,
+        margin: paid > 0 ? (paid - cost) / paid : 0,
+        byBucket: Object.fromEntries(BUCKETS.map(b => [b, sum(v => v.byBucket[b] || 0)])),
+        markups: sum(v => v.ops.reduce((s, o) => s + o.markup, 0)),
+        unknownPaid: views.filter(v => !v.known).reduce((s, v) => s + v.paid, 0),
+    };
+}
+
+export const percent = (ratio) => `${(ratio * 100).toFixed(1)}%`;

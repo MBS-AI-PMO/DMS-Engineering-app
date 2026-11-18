@@ -33,7 +33,7 @@ export default function EmailChecksCard({ config, status, dirty, onProblem, onPa
         }
     };
 
-    const failing = status?.lastFailed && (!status.lastSent || new Date(status.lastFailed.at) > new Date(status.lastSent.at));
+    const failing = Boolean(status?.failing);
 
     return (
         <Card title="Check it" icon={MailCheck} subtitle="Uses the saved account.">

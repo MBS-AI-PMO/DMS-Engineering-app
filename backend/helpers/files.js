@@ -13,6 +13,10 @@ const multer = require('multer');
 const sharp = require('sharp');
 const { badRequest } = require('./http');
 
+// sharp's file cache keeps images it has read open; on Windows that stops a
+// just-saved upload from being deleted (removeUpload) or replaced.
+sharp.cache(false);
+
 const BACKEND_DIR = path.join(__dirname, '..');
 const UPLOADS_DIR = path.join(BACKEND_DIR, 'uploads');
 

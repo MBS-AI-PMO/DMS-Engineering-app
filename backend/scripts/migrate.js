@@ -125,7 +125,7 @@ console.log('  ✓ hero_sections table');
                 email VARCHAR(255) NOT NULL,
                 password_encrypted TEXT NOT NULL,
                 encryption_type VARCHAR(10) DEFAULT 'TLS' CHECK (encryption_type IN ('TLS', 'SSL', 'NONE')),
-                sender_name VARCHAR(255) DEFAULT 'DMS Engineering',
+                sender_name VARCHAR(255) DEFAULT 'Dynamic Manufacturing Solutions',
                 is_active BOOLEAN DEFAULT true,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()

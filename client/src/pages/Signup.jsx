@@ -88,7 +88,7 @@ export default function Signup() {
 
                 <div className="auth-header">
                     <h1>Create Account</h1>
-                    <p>Join DMS Engineering to manage your orders and pricing</p>
+                    <p>Join Dynamic Manufacturing Solutions to manage your orders and pricing</p>
                 </div>
 
                 <form className="auth-form" onSubmit={handleSubmit}>

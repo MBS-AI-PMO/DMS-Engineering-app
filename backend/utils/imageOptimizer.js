@@ -114,4 +114,28 @@ const optimizeHeroImage = async (filePath) => {
     }
 };
 
-module.exports = { optimizeImage, optimizeHeroImage };
+/* A link-preview (Open Graph) image: the upload fitted whole onto a 1200x630
+ * card (the 1.91:1 shape Facebook, LinkedIn and WhatsApp show) with even
+ * margins, so no app crops it. JPEG, because not every preview service
+ * reads WebP. Returns the new file name (same folder); removes the upload. */
+const SHARE_W = 1200;
+const SHARE_H = 630;
+const makeShareCard = async (filePath, { background = '#ffffff', margin = 0.08 } = {}) => {
+    const dirname = path.dirname(filePath);
+    const basename = path.basename(filePath, path.extname(filePath));
+    const outName = `${basename}_share.jpg`;
+    const innerW = Math.round(SHARE_W * (1 - margin * 2));
+    const innerH = Math.round(SHARE_H * (1 - margin * 2));
+    const fitted = await sharp(filePath).rotate()
+        .resize(innerW, innerH, { fit: 'inside', withoutEnlargement: false })
+        .flatten({ background })
+        .toBuffer({ resolveWithObject: true });
+    await sharp({ create: { width: SHARE_W, height: SHARE_H, channels: 3, background } })
+        .composite([{ input: fitted.data, left: Math.round((SHARE_W - fitted.info.width) / 2), top: Math.round((SHARE_H - fitted.info.height) / 2) }])
+        .jpeg({ quality: 86, mozjpeg: true })
+        .toFile(path.join(dirname, outName));
+    try { fs.unlinkSync(filePath); } catch { /* the upload may already be gone */ }
+    return outName;
+};
+
+module.exports = { optimizeImage, optimizeHeroImage, makeShareCard };

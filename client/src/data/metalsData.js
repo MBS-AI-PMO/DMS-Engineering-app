@@ -934,12 +934,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 5052 H32 Aluminum in?",
-                answer: "DMS Engineering offers 5052 H32 Aluminum in ten thickness options: .040'' (1.02mm), .063'' (1.60mm), .080'' (2.03mm), .090'' (2.29mm), .100'' (2.54mm), .125'' (3.18mm), .187'' (4.75mm), .250'' (6.35mm), .375''(9.5mm), .500'' (12.7mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 5052 H32 Aluminum in?",
+                answer: "Dynamic Manufacturing Solutions offers 5052 H32 Aluminum in ten thickness options: .040'' (1.02mm), .063'' (1.60mm), .080'' (2.03mm), .090'' (2.29mm), .100'' (2.54mm), .125'' (3.18mm), .187'' (4.75mm), .250'' (6.35mm), .375''(9.5mm), .500'' (12.7mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 5052 H32 Aluminum?",
-                answer: "5052 H32 Aluminum is available at DMS Engineering with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25'' x .375'' and 13'' x 44'', while custom quoting extends the maximum size to 13'' x 56''."
+                answer: "5052 H32 Aluminum is available at Dynamic Manufacturing Solutions with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25'' x .375'' and 13'' x 44'', while custom quoting extends the maximum size to 13'' x 56''."
             },
             {
                 question: "What additional services are available for 5052 H32 Aluminum?",
@@ -1994,12 +1994,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 6061 T6 Aluminum in?",
-                answer: "DMS Engineering offers 6061 T6 Aluminum in 12 thickness options: .040'' (1.02mm), .063'' (1.60mm), .080 (2.03mm), .100''(2.54mm), .125'' (3.18mm), .187'' (4.75mm), .250'' (6.35mm), .313(8.0mm), .375''(9.5mm), .500'' (12.7mm), .625 (15.88), and .750 (19.05)"
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 6061 T6 Aluminum in?",
+                answer: "Dynamic Manufacturing Solutions offers 6061 T6 Aluminum in 12 thickness options: .040'' (1.02mm), .063'' (1.60mm), .080 (2.03mm), .100''(2.54mm), .125'' (3.18mm), .187'' (4.75mm), .250'' (6.35mm), .313(8.0mm), .375''(9.5mm), .500'' (12.7mm), .625 (15.88), and .750 (19.05)"
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 6061 T6 Aluminum?",
-                answer: "When ordering 6061 T6 Aluminum through DMS Engineering, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
+                answer: "When ordering 6061 T6 Aluminum through Dynamic Manufacturing Solutions, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for 6061 T6 Aluminum?",
@@ -2287,12 +2287,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 7075 T6 Aluminum in?",
-                answer: "DMS Engineering offers 7075 T6 Aluminum in three thickness options: .125\" (3.18mm), .190\" (4.83mm), and .250\" (6.35mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 7075 T6 Aluminum in?",
+                answer: "Dynamic Manufacturing Solutions offers 7075 T6 Aluminum in three thickness options: .125\" (3.18mm), .190\" (4.83mm), and .250\" (6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 7075 T6 Aluminum?",
-                answer: "With DMS Engineering’s 7075 T6 Aluminum offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". Custom quotes are available for sizes up to 30\" x 47\"."
+                answer: "With Dynamic Manufacturing Solutions’ 7075 T6 Aluminum offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". Custom quotes are available for sizes up to 30\" x 47\"."
             },
             {
                 question: "What additional services are available for 7075 T6 Aluminum?",
@@ -2435,12 +2435,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer AR400 in?",
-                answer: "DMS Engineering offers AR 400 in one thickness option: .250\" (6.35mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer AR400 in?",
+                answer: "Dynamic Manufacturing Solutions offers AR 400 in one thickness option: .250\" (6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting AR400?",
-                answer: "When ordering AR 400 through DMS Engineering, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
+                answer: "When ordering AR 400 through Dynamic Manufacturing Solutions, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for AR400?",
@@ -2542,12 +2542,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer AR500 in?",
-                answer: "DMS Engineering offers AR 500 in five thickness options: .119\" (3.02mm), .187\" (4.75mm), .250\" (6.35mm), .375\"(9.5mm), .500\" (12.7mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer AR500 in?",
+                answer: "Dynamic Manufacturing Solutions offers AR 500 in five thickness options: .119\" (3.02mm), .187\" (4.75mm), .250\" (6.35mm), .375\"(9.5mm), .500\" (12.7mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting AR500?",
-                answer: "AR 500 is available at DMS Engineering with a range of thicknesses and part sizes. Instant quoting is possible for dimensions between .25\" x .375\" and 13\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
+                answer: "AR 500 is available at Dynamic Manufacturing Solutions with a range of thicknesses and part sizes. Instant quoting is possible for dimensions between .25\" x .375\" and 13\" x 44\". For larger projects, custom quotes are available for sizes up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for AR500?",
@@ -2809,16 +2809,16 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 1075 Spring Steel in?",
-                answer: "DMS Engineering offers Blue Temper Steel in one thickness option: .015\" (.381mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 1075 Spring Steel in?",
+                answer: "Dynamic Manufacturing Solutions offers Blue Temper Steel in one thickness option: .015\" (.381mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 1075 Spring Steel?",
-                answer: "When working with Blue Temper Steel at DMS Engineering, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 13\" x 44\". For larger projects, custom quotes are available for sizes up to 13\" x 56\"."
+                answer: "When working with Blue Temper Steel at Dynamic Manufacturing Solutions, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 13\" x 44\". For larger projects, custom quotes are available for sizes up to 13\" x 56\"."
             },
             {
                 question: "What additional services are available for 1075 Spring Steel?",
-                answer: "DMS Engineering's 1075 Blue Temper Steel is not eligible for any secondary services."
+                answer: "Dynamic Manufacturing Solutions' 1075 Blue Temper Steel is not eligible for any secondary services."
             }
         ],
     },
@@ -3163,18 +3163,18 @@ export const metalsData = [
             ],
             capabilities: {
                 title: "What can you make with Brass parts?",
-                text: "Additionally, unlike steel and iron, brass will not rust when used in external applications, and that makes it great for signage and decorative displays. However, if you intend to use it this way, it's important to note that it will corrode with moisture, specifically in the form of tarnish. Brass is a combination of copper and zinc (with a few other trace elements), and the tarnishing effect is similar to copper. DMS Engineering's brass cutting service will provide beautiful parts made to your specifications.",
+                text: "Additionally, unlike steel and iron, brass will not rust when used in external applications, and that makes it great for signage and decorative displays. However, if you intend to use it this way, it's important to note that it will corrode with moisture, specifically in the form of tarnish. Brass is a combination of copper and zinc (with a few other trace elements), and the tarnishing effect is similar to copper. Dynamic Manufacturing Solutions' brass cutting service will provide beautiful parts made to your specifications.",
                 items: ["Locks", "Hinges", "Gears", "Bearings", "Valves", "Electrical sockets", "Hose couplings", "Ammunition casings", "And so much more!"]
             }
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer Brass in?",
-                answer: "DMS Engineering offers Brass in five thickness options: .040\" (1.02mm), .063\" (1.60mm), .125\" (3.18mm), .187\" (4.75mm), .250\" (6.35mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer Brass in?",
+                answer: "Dynamic Manufacturing Solutions offers Brass in five thickness options: .040\" (1.02mm), .063\" (1.60mm), .125\" (3.18mm), .187\" (4.75mm), .250\" (6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting Brass?",
-                answer: "When ordering Brass through DMS Engineering, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\"."
+                answer: "When ordering Brass through Dynamic Manufacturing Solutions, there are specific size and thickness parameters to keep in mind. For instant quoting, the smallest part size available is .25\" x .375\", while the largest part supported is 30\" x 44\"."
             },
             {
                 question: "What additional services are available for Brass?",
@@ -3520,12 +3520,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 4130 Chromoly in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 4130 Chromoly in?",
                 answer: "This material comes in five available thicknesses: .050\"(1.27mm), .063\"(1.60mm), .125\"(3.18mm), .190\"(4.83mm), and .250\"(6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 4130 Chromoly?",
-                answer: "DMS Engineering offers 4130 Chromoly with clearly defined size and thickness options. Instant quoting is available for parts measuring between .25\" x .375\" and 30\" x 44\", while custom quotes can accommodate larger dimensions up to 30\" x 56\"."
+                answer: "Dynamic Manufacturing Solutions offers 4130 Chromoly with clearly defined size and thickness options. Instant quoting is available for parts measuring between .25\" x .375\" and 30\" x 44\", while custom quotes can accommodate larger dimensions up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for 4130 Chromoly?",
@@ -3898,13 +3898,13 @@ export const metalsData = [
         faqs: [
             {
                 id: 1001,
-                question: "What thicknesses does DMS Engineering offer Copper in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer Copper in?",
                 answer: "Choose from five thicknesses including .040\u0022(1.02mm), .063\u0022(1.60mm), .125\u0022(3.18mm), .187\u0022(4.75mm), and .250\u0022(6.35mm)."
             },
             {
                 id: 1002,
                 question: "What are the minimum and maximum sizes for cutting Copper?",
-                answer: "Copper is available at DMS Engineering with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25\u0022 x .375\u0022 and 30\u0022 x 44\u0022."
+                answer: "Copper is available at Dynamic Manufacturing Solutions with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25\u0022 x .375\u0022 and 30\u0022 x 44\u0022."
             },
             {
                 id: 1003,
@@ -4005,16 +4005,16 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer CPM MagnaCut in?",
-                answer: "DMS Engineering offers CPM MagnaCut Stainless Steel in 0.155\" thickness."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer CPM MagnaCut in?",
+                answer: "Dynamic Manufacturing Solutions offers CPM MagnaCut Stainless Steel in 0.155\" thickness."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting CPM MagnaCut?",
-                answer: "At DMS Engineering, there are specific size and thickness parameters to keep in mind for CPM MagnaCut. For instant quoting, the smallest part size available is 23\"x23\", while the largest part supported via a custom quote is 23\"x34\"."
+                answer: "At Dynamic Manufacturing Solutions, there are specific size and thickness parameters to keep in mind for CPM MagnaCut. For instant quoting, the smallest part size available is 23\"x23\", while the largest part supported via a custom quote is 23\"x34\"."
             },
             {
                 question: "What additional services are available for CPM MagnaCut?",
-                answer: "No secondary services are currently available on DMS Engineering's laser cut CPM MagnaCut Steel."
+                answer: "No secondary services are currently available on Dynamic Manufacturing Solutions' laser cut CPM MagnaCut Steel."
             }
         ]
     },
@@ -4394,12 +4394,12 @@ export const metalsData = [
         services: [3, 5, 6, 7],
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer G90 Galvanized Steel in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer G90 Galvanized Steel in?",
                 answer: "This material is available in five thickness options: .030\" (0.76mm), .036\" (0.91mm), .048\" (1.22mm), .059\" (1.50mm) and .074\" (1.88mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting G90 Galvanized Steel?",
-                answer: "DMS Engineering cuts G90 Galvanized Steel in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+                answer: "Dynamic Manufacturing Solutions cuts G90 Galvanized Steel in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
             },
             {
                 question: "What additional services are available for G90 Galvanized Steel?",
@@ -4506,18 +4506,18 @@ export const metalsData = [
             text: "1095 is a cold rolled, annealed high carbon spring steel that balances machinability and strength. When heat-treated, it achieves high hardness and excellent wear resistance. Due to 1095's high carbon content, it's not suited for welding or corrosive environments without further treatment.",
             capabilities: {
                 title: "What can you make with High Carbon 1095 Steel parts?",
-                text: "DMS Engineering's 1095 carbon steel is ideal for parts that need lasting durability through repeated stress and wear.",
+                text: "Dynamic Manufacturing Solutions' 1095 carbon steel is ideal for parts that need lasting durability through repeated stress and wear.",
                 items: ["Knives & cutting tools", "Leaf springs", "Flat springs", "Punch & die components", "Industrial scrapers", "Forming dies", "Tension washers", "Hard-wearing machine parts", "And so much more!"]
             }
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer High Carbon 1095 Steel in?",
-                answer: "DMS Engineering offers 1095 high carbon steel in two thickness options: .125\" (3.18mm), or .187\" (4.75mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer High Carbon 1095 Steel in?",
+                answer: "Dynamic Manufacturing Solutions offers 1095 high carbon steel in two thickness options: .125\" (3.18mm), or .187\" (4.75mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting High Carbon 1095 Steel?",
-                answer: "1095 Cold Rolled Annealed Spring Steel is available at DMS Engineering with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .5\" x .5\" and 24\" x 44\", while custom quoting extends the maximum size to 24\" x 56\"."
+                answer: "1095 Cold Rolled Annealed Spring Steel is available at Dynamic Manufacturing Solutions with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .5\" x .5\" and 24\" x 44\", while custom quoting extends the maximum size to 24\" x 56\"."
             },
             {
                 question: "What additional services are available for High Carbon 1095 Steel?",
@@ -5180,12 +5180,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 1008 Cold Rolled Carbon Steel in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 1008 Cold Rolled Carbon Steel in?",
                 answer: "Choose from seven thicknesses including .030\"(0.76mm), .048\"(1.22mm), .59\"(1.50mm), .074\"(1.88mm), .104\"(2.64mm), .119\"(3.02mm), and .135\"(3.43mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 1008 Cold Rolled Carbon Steel?",
-                answer: "1008 Cold Rolled Carbon Steel is available at DMS Engineering with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25\" x .375\" and 30\" x 44\", while custom quoting extends the maximum size to 30\" x 56\"."
+                answer: "1008 Cold Rolled Carbon Steel is available at Dynamic Manufacturing Solutions with a range of thicknesses and part sizes. Instant quotes are possible for dimensions between .25\" x .375\" and 30\" x 44\", while custom quoting extends the maximum size to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for 1008 Cold Rolled Carbon Steel?",
@@ -5408,12 +5408,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer HRP&O Carbon Steel in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer HRP&O Carbon Steel in?",
                 answer: "Thicknesses offered include two variations including .187\"(4.75mm) and .250\"(6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting HRP&O Carbon Steel?",
-                answer: "At DMS Engineering, HRP&O Carbon Steel is supported with both instant and custom quoting depending on part size. The smallest part allowed is .25\" x .375\", while instant quotes go up to 30\" x 44\". For dimensions up to 30\" x 56\", a custom quote is needed."
+                answer: "At Dynamic Manufacturing Solutions, HRP&O Carbon Steel is supported with both instant and custom quoting depending on part size. The smallest part allowed is .25\" x .375\", while instant quotes go up to 30\" x 44\". For dimensions up to 30\" x 56\", a custom quote is needed."
             },
             {
                 question: "What additional services are available for HRP&O Carbon Steel?",
@@ -5649,12 +5649,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer Hot Rolled Carbon Steel in?",
-                answer: "DMS Engineering offers Hot Rolled Carbon Steel in 3 thicknesses: .313\" (8.0mm), .375\" (9.53mm) & .500\" (12.7mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer Hot Rolled Carbon Steel in?",
+                answer: "Dynamic Manufacturing Solutions offers Hot Rolled Carbon Steel in 3 thicknesses: .313\" (8.0mm), .375\" (9.53mm) & .500\" (12.7mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting Hot Rolled Carbon Steel?",
-                answer: "With DMS Engineering's Hot Rolled Carbon Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". Custom quotes are available for sizes up to 30\" x 56\"."
+                answer: "With Dynamic Manufacturing Solutions' Hot Rolled Carbon Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". Custom quotes are available for sizes up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for Hot Rolled Carbon Steel?",
@@ -6420,7 +6420,7 @@ export const metalsData = [
             ],
             capabilities: {
                 title: "What can you make with 304 Stainless Steel parts?",
-                text: "Fusion welding performance for 304 stainless steel is excellent both with and without fillers so it's a strong choice across projects that require welding. Heavily welded sections sometimes require additional treatments, such as annealing, but generally the material is simple to weld.\n\nUltimately, you can count on DMS Engineering's 304 stainless steel laser cutting services to meet your project's needs and provide solid parts made to your specifications.",
+                text: "Fusion welding performance for 304 stainless steel is excellent both with and without fillers so it's a strong choice across projects that require welding. Heavily welded sections sometimes require additional treatments, such as annealing, but generally the material is simple to weld.\n\nUltimately, you can count on Dynamic Manufacturing Solutions' 304 stainless steel laser cutting services to meet your project's needs and provide solid parts made to your specifications.",
                 items: [
                     "Appliances",
                     "Kitchen equipment",
@@ -6436,12 +6436,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 304 Stainless Steel in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 304 Stainless Steel in?",
                 answer: "This material is available in ten thickness options: .030\" (0.76mm), .048\" (1.22mm), .060\" (1.52mm), .074\" (1.88mm), .100\" (2.54mm), .125\" (3.18mm), .187\" (4.75mm), .250\" (6.35mm), .375\" (9.53mm), .500\" (12.7mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 304 Stainless Steel?",
-                answer: "DMS Engineering cuts 304 Stainless Steel in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+                answer: "Dynamic Manufacturing Solutions cuts 304 Stainless Steel in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
             },
             {
                 question: "What additional services are available for 304 Stainless Steel?",
@@ -6814,7 +6814,7 @@ export const metalsData = [
             ],
             capabilities: {
                 title: "What can you make with 316 Stainless Steel parts?",
-                text: "Our 316 stainless steel is very similar to 304 in application, but this material differs in one major area: corrosion resistance. By alloying molybdenum into its composition, 316 circumvents 304's common pitfalls when it comes to rusting. Specifically, 316 is adept at resisting corrosion caused by chloride exposure. This means that it's great for holding tanks that could come into contact with corrosive liquids, such as sea water, or chlorine.\n\nDMS Engineering's laser cut 316 stainless steel will live up to your highest expectations regarding strength and corrosion resistance. While it's not as easy to machine as 304 stainless steel, it makes up for that in the durability it will bring to your next project. And machining is our wheelhouse, so you just sit back while we laser cut all your 316 stainless steel parts.",
+                text: "Our 316 stainless steel is very similar to 304 in application, but this material differs in one major area: corrosion resistance. By alloying molybdenum into its composition, 316 circumvents 304's common pitfalls when it comes to rusting. Specifically, 316 is adept at resisting corrosion caused by chloride exposure. This means that it's great for holding tanks that could come into contact with corrosive liquids, such as sea water, or chlorine.\n\nDynamic Manufacturing Solutions' laser cut 316 stainless steel will live up to your highest expectations regarding strength and corrosion resistance. While it's not as easy to machine as 304 stainless steel, it makes up for that in the durability it will bring to your next project. And machining is our wheelhouse, so you just sit back while we laser cut all your 316 stainless steel parts.",
                 items: [
                     "Appliances",
                     "Screws",
@@ -6830,12 +6830,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer 316 Stainless Steel in?",
-                answer: "DMS Engineering offers 316 Stainless Steel in four thickness options: .060\"(1.52), .125\"(3.18mm), .187\"(4.75mm), and .250(6.35mm)."
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer 316 Stainless Steel in?",
+                answer: "Dynamic Manufacturing Solutions offers 316 Stainless Steel in four thickness options: .060\"(1.52), .125\"(3.18mm), .187\"(4.75mm), and .250(6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting 316 Stainless Steel?",
-                answer: "With DMS Engineering's 316 Stainless Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". For larger parts, custom quotes are available for sizes up to 30\" x 56\"."
+                answer: "With Dynamic Manufacturing Solutions' 316 Stainless Steel offering, you can get parts instantly quoted if they fall between .25\" x .375\" and 30\" x 44\". For larger parts, custom quotes are available for sizes up to 30\" x 56\"."
             },
             {
                 question: "What additional services are available for 316 Stainless Steel?",
@@ -6866,7 +6866,7 @@ export const metalsData = [
             ],
             capabilities: {
                 title: "What can you make with Grade 5 Titanium parts?",
-                text: "The strength of titanium is twice that of low-carbon \"mild\" steel, and about 3x the strength of aluminum (assuming similar thicknesses). That's why it's our strongest metal in-house and why our aerospace engineers turn to it for their more advanced projects. Couple that with DMS Engineering's proprietary fabrication methods and you've got one of the strongest metals in the known universe in your corner, for less.",
+                text: "The strength of titanium is twice that of low-carbon \"mild\" steel, and about 3x the strength of aluminum (assuming similar thicknesses). That's why it's our strongest metal in-house and why our aerospace engineers turn to it for their more advanced projects. Couple that with Dynamic Manufacturing Solutions' proprietary fabrication methods and you've got one of the strongest metals in the known universe in your corner, for less.",
                 items: [
                     "Aircraft structure",
                     "Aerospace components",
@@ -7076,12 +7076,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer Grade 5 Titanium in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer Grade 5 Titanium in?",
                 answer: "This material is available in five thickness option: .040\" (1.02mm), .063\" (1.60mm), .125\" (3.18mm), .187\" (4.75mm), and .250\" (6.35mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting Grade 5 Titanium?",
-                answer: "DMS Engineering cuts Grade 5 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+                answer: "Dynamic Manufacturing Solutions cuts Grade 5 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
             },
             {
                 question: "What additional services are available for Grade 5 Titanium?",
@@ -7221,12 +7221,12 @@ export const metalsData = [
         },
         faqs: [
             {
-                question: "What thicknesses does DMS Engineering offer Grade 2 Titanium in?",
+                question: "What thicknesses does Dynamic Manufacturing Solutions offer Grade 2 Titanium in?",
                 answer: "This material is available in one thickness option: .040\" (1.02mm)."
             },
             {
                 question: "What are the minimum and maximum sizes for cutting Grade 2 Titanium?",
-                answer: "DMS Engineering cuts Grade 2 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
+                answer: "Dynamic Manufacturing Solutions cuts Grade 2 Titanium in a broad range of sizes and thicknesses. Instant quoting is available for parts as small as .25\" x .375\" and as large as 30\" x 44\". Larger parts, up to 30\" x 56\", can be ordered through a custom quote."
             },
             {
                 question: "What additional services are available for Grade 2 Titanium?",

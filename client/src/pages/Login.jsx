@@ -64,7 +64,7 @@ export default function Login() {
 
                 <div className="auth-header">
                     <h1>Welcome Back</h1>
-                    <p>Sign in to your DMS Engineering account</p>
+                    <p>Sign in to your Dynamic Manufacturing Solutions account</p>
                 </div>
 
                 <form className="auth-form" onSubmit={handleSubmit}>

@@ -148,7 +148,7 @@ function viewCubeFaceTexture(label) {
   ctx.closePath();
   ctx.stroke();
   ctx.fillStyle = '#334155';
-  ctx.font = '600 54px "Inter", "Segoe UI", system-ui, sans-serif';
+  ctx.font = '600 54px "Urbanist", "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, size / 2, size / 2 + 3);

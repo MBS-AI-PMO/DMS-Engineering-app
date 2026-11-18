@@ -3,6 +3,7 @@ const { sendEmail } = require('../utils/email');
 const { getBrand, EMAIL_RE } = require('./brand');
 const { renderLayout, htmlToText } = require('./layout');
 const { TEMPLATES, toEmailOrder } = require('./templates');
+const { trackLinkPath } = require('../orders/trackLink');
 
 /*
  * Rendering and sending the site's emails (templates.js) through the SMTP
@@ -68,7 +69,9 @@ async function loadOrder(orderId) {
     );
     const shipmentsRes = await db.query('SELECT * FROM order_shipments WHERE order_id = $1 ORDER BY shipped_at NULLS LAST, id', [orderId])
         .catch(() => ({ rows: [] }));
-    return toEmailOrder(orderRes.rows[0], itemsRes.rows, shipmentsRes.rows);
+    const row = orderRes.rows[0];
+    // A signed link to the order's tracking page, so the customer types nothing.
+    return { ...toEmailOrder(row, itemsRes.rows, shipmentsRes.rows), trackPath: trackLinkPath(row.id, row.email) };
 }
 
 /* An email about an order, sent now; for the admin order page, which logs

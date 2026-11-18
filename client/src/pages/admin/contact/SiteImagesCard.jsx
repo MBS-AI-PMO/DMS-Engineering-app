@@ -48,17 +48,16 @@ const IMAGES = [
     { key: 'navbar_logo', label: 'Header logo', hint: 'Top of every page, 64 px tall. PNG, SVG or WebP.', aspect: '3 / 1' },
     { key: 'footer_logo', label: 'Footer logo', hint: 'On the dark footer, 70 px tall. A light logo works best.', aspect: '3 / 1', dark: true },
     { key: 'site_logo', label: 'Site icon', hint: 'Square icon for the browser tab and shortcuts.', aspect: '2 / 1' },
-    { key: 'hero_image', label: 'Home page hero image', hint: 'Large photo at the top of the home page. Saved as AVIF, WebP and JPG.', aspect: '16 / 9', cover: true },
 ];
 
 /**
- * Logos and the home hero image. Each one saves as soon as it is uploaded
+ * Logos (the home hero picture is in Admin > Hero sections). Each one saves as soon as it is uploaded
  * or removed (no Save needed). values: { key: stored value }.
  * onUpload(key, file), onRemove(key); busy: the key being changed.
  */
 export default function SiteImagesCard({ values, onUpload, onRemove, busy, loading }) {
     return (
-        <Card title="Logos and images" icon={ImageIcon} subtitle="These save as soon as you upload or remove them.">
+        <Card title="Logos" icon={ImageIcon} subtitle="These save as soon as you upload or remove them. Page hero pictures are in Hero sections.">
             <div className="ac-ct-images">
                 {IMAGES.map(img => (loading ? (
                     <div key={img.key} className="ac-ct-image">

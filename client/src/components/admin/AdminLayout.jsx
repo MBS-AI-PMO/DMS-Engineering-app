@@ -10,6 +10,7 @@ import Sidebar from './layout/Sidebar';
 import Topbar from './layout/Topbar';
 import { breadcrumbsFor } from './layout/navigation';
 import { useMediaQuery, useStoredFlag } from './layout/useShell';
+import usePageTransition from '../../hooks/usePageTransition';
 
 const NARROW = '(max-width: 1024px)';
 
@@ -25,6 +26,7 @@ export default function AdminLayout({ children }) {
     const navigate = useNavigate();
     const navigationType = useNavigationType();
     const { pathname } = useLocation();
+    const pageRef = usePageTransition({ distance: 6, duration: 280 });
     const drawer = useMediaQuery(NARROW);
     const [collapsed, setCollapsed] = useStoredFlag('dms_admin_menu_collapsed');
     // The drawer stays open only on the page it was opened on, so picking a page closes it.
@@ -96,7 +98,7 @@ export default function AdminLayout({ children }) {
                     loggingOut={loggingOut}
                 />
                 <main ref={contentRef} id="admin-content" className="admin-content" tabIndex={-1}>
-                    <div className="admin-content-inner">{children}</div>
+                    <div ref={pageRef} className="admin-content-inner">{children}</div>
                 </main>
             </div>
         </div>

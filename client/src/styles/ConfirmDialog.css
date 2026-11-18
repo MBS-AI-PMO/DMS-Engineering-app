@@ -23,12 +23,12 @@
   background: #ffffff;
   box-shadow: 0 24px 60px rgba(11, 12, 15, 0.28);
   color: #0b0c0f;
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 .cf-dialog .cf-title {
   margin: 0;
   color: #0b0c0f;
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.3;

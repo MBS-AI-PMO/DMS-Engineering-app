@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // es
 import { ArrowRight, Plus, Search, X } from 'lucide-react';
 import { faqData as staticFaqData, faqCategories as staticFaqCategories } from '../data/faqData';
 import { fetchFaqs, fetchFaqCategories } from '../utils/api';
-import faqHeroImg from '../assets/faq-hero-parts.jpg';
+import usePageHero from '../hooks/usePageHero';
 import '../styles/Shimmer.css';
 import '../styles/FaqPage.css';
 
@@ -76,6 +76,7 @@ const QuestionList = ({ items, query, topicOf }) => {
 };
 
 const FAQPage = () => {
+    const hero = usePageHero('faq');
     const [searchParams, setSearchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState('');
     const [faqData, setFaqData] = useState([]);
@@ -165,7 +166,7 @@ const FAQPage = () => {
         <div className="fp">
             {/* ── Heading band ── */}
             <section className="fp-hero" aria-labelledby="fp-title">
-                <img className="fp-hero-img" src={faqHeroImg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                {hero.src && <img className="fp-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />}
                 <div className="fp-hero-shade" aria-hidden="true" />
                 <div className="fp-inner fp-hero-content">
                     <nav className="fp-crumbs" aria-label="Breadcrumb">

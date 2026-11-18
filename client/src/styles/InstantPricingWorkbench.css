@@ -21,7 +21,7 @@
   --ipw-rule-strong: #dcdde3;
   --ipw-tint: #f6f6f8;
   --ipw-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
-  --ipw-heading: "Montserrat", "Roboto", system-ui, sans-serif;
+  --ipw-heading: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 .ip-panel-layout.ipw-layout {
@@ -629,14 +629,14 @@
 .ipw-geo-row dd i {
   margin-left: 5px;
   color: var(--ipw-faint);
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 12px;
   font-style: normal;
 }
 /* A figure still on its way from the 2D flat pattern. */
 .ipw-geo-pending {
   color: var(--ipw-muted);
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 12px;
   font-weight: 500;
 }
@@ -894,7 +894,7 @@
 .ipw-q-figures dd i {
   margin-left: 4px;
   color: var(--ipw-faint);
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 11.5px;
   font-style: normal;
 }

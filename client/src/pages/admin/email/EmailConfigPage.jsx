@@ -79,7 +79,8 @@ export default function EmailConfigPage() {
     useEffect(() => { if (problem) topRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, [problem]);
     const clearProblem = useCallback(() => { setProblem(null); setCheckPassed(true); }, []);
 
-    const failing = status?.lastFailed && (!status.lastSent || new Date(status.lastFailed.at) > new Date(status.lastSent.at));
+    // The server only reports failing when the account still fails now (it logs in to check).
+    const failing = Boolean(status?.failing);
     const header = (
         <PageHeader
             icon={Mail}
@@ -124,7 +125,7 @@ export default function EmailConfigPage() {
         const count = status.failedSinceSent;
         top = (
             <EmailProblem
-                message={status.lastFailed.error || 'Unknown error'}
+                message={status.accountError || status.lastFailed.error || 'Unknown error'}
                 context={`Order emails are not going out: ${count} ${count === 1 ? 'has' : 'have'} failed${status.lastSent ? ` since ${when(status.lastSent.at)}` : ''}, the latest on ${when(status.lastFailed.at)}${status.lastFailed.to ? ` to ${status.lastFailed.to}` : ''}.`}
                 config={config}
                 onFix={focusPassword}

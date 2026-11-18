@@ -634,7 +634,7 @@ export const guidelinesData = [
       'Available in Matte Black, Gloss Black, White, Red, and more.',
       'Adds roughly 0.003" to 0.010" to overall dimensions.',
       'Masking can be used for critical areas (e.g., threads).',
-      'Adds 5-10 business days to production time.'
+      'Adds 3-5 business days to production time.'
     ],
     tables: [
       {

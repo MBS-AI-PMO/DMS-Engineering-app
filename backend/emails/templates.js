@@ -3,6 +3,7 @@ const {
     heading, subheading, paragraph, button, link, details, quote, itemsTable, progress, columns, block,
 } = require('./layout');
 const { carrierLabel, carrierByKey, trackingUrlFor, dayString } = require('../orders/carriers');
+const { parseConfig, partSpecs } = require('../orders/parts');
 
 /*
  * Every email the site sends. Each template takes its data and the brand
@@ -24,20 +25,14 @@ const siteLabel = (brand) => brand.siteUrl.replace(/^https?:\/\//, '');
 
 // What a part is made of and how, from the configuration saved with it.
 function itemSpecs(cfg = {}) {
-    const specs = [];
-    if (cfg.metal?.name) specs.push(cfg.metal.name);
-    const thickness = cfg.selectedThickness || cfg.selectedThicknessDisplay;
-    if (thickness) specs.push(`${thickness} thick`);
-    if (cfg.productionService?.title) specs.push(cfg.productionService.title);
-    for (const service of cfg.additionalServices || []) {
-        if (!service?.title) continue;
-        const color = cfg.selectedFinishColors?.[service.id]?.name;
-        specs.push(color ? `${service.title} (${color})` : service.title);
-    }
-    const bends = Number(cfg.bendCount);
-    if (bends > 0) specs.push(plural(bends, 'bend'));
-    return specs;
+    const { material, thickness, services } = partSpecs(cfg);
+    return [material, thickness ? `${thickness} thick` : null, ...services].filter(Boolean);
 }
+
+/* The order's tracking page. Real orders carry a signed link (index.js
+ * loadOrder) that opens it without typing anything; previews and samples
+ * fall back to the page itself, which asks for the order's email. */
+const trackHref = (order, brand) => `${brand.siteUrl}${order.trackPath || `/track-order/${encodeURIComponent(order.id)}`}`;
 
 /* An order and its items (and shipments, if any) from the database, in the
  * shape the templates use. */
@@ -64,9 +59,7 @@ function toEmailOrder(order, items = [], shipments = []) {
         paymentId: order.payment_id || '',
         status: order.status,
         items: items.map(item => {
-            const cfg = typeof item.configuration_json === 'string'
-                ? (() => { try { return JSON.parse(item.configuration_json); } catch { return {}; } })()
-                : (item.configuration_json || {});
+            const cfg = parseConfig(item.configuration_json);
             return {
                 name: item.file_name || 'Part',
                 specs: itemSpecs(cfg),
@@ -115,7 +108,7 @@ function orderConfirmation({ order }, brand) {
             heading(first ? `Thanks, ${first}. We've got your order.` : "Thanks, we've got your order."),
             paragraph(`Order <strong>#${esc(order.id)}</strong> was placed on ${esc(longDate(order.createdAt))}. Our team will review your files and start production, and we'll email you as it moves along.`),
             progress(0),
-            button('View your order', `${brand.siteUrl}/orders`),
+            button('Track your order', trackHref(order, brand)),
             subheading('Order summary'),
             itemsTable(order.items, order.total),
             '<div style="height:28px;line-height:28px;font-size:0;">&nbsp;</div>',
@@ -162,14 +155,14 @@ const STATUS_COPY = {
         subject: (o) => `Order #${o.id} is in production`,
         title: () => 'Your parts are in production',
         text: (o) => `We've reviewed your files and order <strong>#${esc(o.id)}</strong> is now being made. We'll let you know as soon as it ships.`,
-        cta: ['View your order', '/orders'],
+        cta: ['Track your order', 'track'],
     },
     shipping: {
         step: 2,
         subject: (o) => `Order #${o.id} has shipped`,
         title: () => 'Your order is on its way',
         text: (o) => `Order <strong>#${esc(o.id)}</strong> has left our shop${o.city ? ` and is headed to ${esc(o.city)}` : ''}.`,
-        cta: ['View your order', '/orders'],
+        cta: ['Track your order', 'track'],
     },
     completed: {
         step: 3,
@@ -183,9 +176,12 @@ const STATUS_COPY = {
         subject: (o) => `An update on your order #${o.id}`,
         title: (o) => `We can't make order #${o.id} as submitted`,
         text: () => "After reviewing your files, we aren't able to produce this order as it stands. Someone from our team will be in touch with the details, or reply to this email and we'll help you find a way forward.",
-        cta: ['View your order', '/orders'],
+        cta: ['View your order', 'track'],
     },
 };
+
+// A cta path of 'track' is the order's tracking page; anything else a page of the site.
+const ctaHref = (path, order, brand) => (path === 'track' ? trackHref(order, brand) : `${brand.siteUrl}${path}`);
 
 const shortDate = (value) => {
     const d = value ? new Date(value) : null;
@@ -212,7 +208,11 @@ const orderStatus = (status) => ({ order, note }, brand) => {
     const tracked = shipments.find(s => s.trackingUrl);
     const cta = tracked
         ? button(shipments.length > 1 ? 'Track your first package' : 'Track your package', tracked.trackingUrl)
-        : button(copy.cta[0], `${brand.siteUrl}${copy.cta[1]}`);
+        : button(copy.cta[0], ctaHref(copy.cta[1], order, brand));
+    // When the button leads elsewhere (the carrier, a new quote), the order page is a link under it.
+    const orderLink = tracked || copy.cta[1] !== 'track'
+        ? paragraph(`See the status, tracking and our messages for this order on ${link('your order page', trackHref(order, brand))}.`, { muted: true, small: true })
+        : '';
     return {
         subject: copy.subject(order),
         preheader: `Order #${order.id}: ${copy.title(order).toLowerCase()}.`,
@@ -224,6 +224,7 @@ const orderStatus = (status) => ({ order, note }, brand) => {
             shipments.length ? subheading(shipments.length > 1 ? 'Packages' : 'Shipment') + shipmentDetails(shipments) : '',
             shopNote(note, brand),
             cta,
+            orderLink,
             subheading('Order summary'),
             itemsTable(order.items, order.total),
             '<div style="height:24px;line-height:24px;font-size:0;">&nbsp;</div>',
@@ -260,7 +261,7 @@ function orderMessage({ order, subject, message, photos = [] }, brand) {
             heading(first ? `Hi ${first},` : 'Hello,'),
             ...paragraphs,
             photos.length ? subheading(photos.length > 1 ? 'Photos' : 'Photo') + photoGrid(photos) : '',
-            button('View your order', `${brand.siteUrl}/orders`),
+            button('View your order', trackHref(order, brand)),
             subheading('Order summary'),
             itemsTable(order.items, order.total),
             '<div style="height:24px;line-height:24px;font-size:0;">&nbsp;</div>',

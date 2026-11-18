@@ -40,8 +40,8 @@
   --ak-focus: 0 0 0 3px rgba(227, 27, 35, 0.18);
   --ak-radius: 14px;
   --ak-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-  --ak-display: 'Montserrat', 'Outfit', system-ui, sans-serif;
-  --ak-font: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --ak-display: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ak-font: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --ak-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -405,6 +405,173 @@ textarea.ak-input { min-height: 96px; resize: vertical; }
 .ak-tab.is-active { border-color: var(--ak-ink); background: var(--ak-ink); color: #fff; }
 .ak-tab-count { color: var(--ak-faint); font-variant-numeric: tabular-nums; }
 .ak-tab.is-active .ak-tab-count { color: rgba(255, 255, 255, 0.7); }
+/* Option cards (OptionCards): a radio group drawn as cards. Tone colours the chosen one. */
+.ak-choices {
+  display: grid;
+  grid-template-columns: repeat(var(--ak-choice-cols, 2), minmax(0, 1fr));
+  gap: 10px;
+}
+.ak-choice {
+  --tone: var(--ak-accent);
+  --tone-soft: var(--ak-accent-soft);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1.5px solid var(--ak-rule);
+  border-radius: 12px;
+  background: var(--ak-card);
+  color: var(--ak-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.ak-choice.is-green { --tone: #16a34a; --tone-soft: #dcfce7; }
+.ak-choice.is-amber { --tone: #d97706; --tone-soft: #fef3c7; }
+.ak-choice.is-blue  { --tone: #2563eb; --tone-soft: #dbeafe; }
+.ak-choice.is-gray  { --tone: #475569; --tone-soft: #f1f5f9; }
+.ak-choice:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(--ak-rule)); }
+.ak-choice:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.ak-choice:disabled { opacity: .55; cursor: not-allowed; }
+.ak-choice-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--ak-ground);
+  color: var(--ak-muted);
+  transition: background .15s ease, color .15s ease;
+}
+.ak-choice-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.ak-choice-label { color: var(--ak-ink); font-size: 14.5px; font-weight: 700; }
+.ak-choice-desc { color: var(--ak-muted); font-size: 12.5px; line-height: 1.4; }
+.ak-choice-radio {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ak-rule);
+  border-radius: 50%;
+  background: var(--ak-card);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ak-choice.is-on {
+  border-color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 45%, var(--ak-card));
+}
+.ak-choice.is-on .ak-choice-icon { background: var(--tone-soft); color: var(--tone); }
+.ak-choice.is-on .ak-choice-radio { border-color: var(--tone); box-shadow: inset 0 0 0 3px var(--ak-card), inset 0 0 0 9px var(--tone); }
+@media (max-width: 560px) {
+  .ak-choices { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Section tabs (PageTabs): white bar, icon + label, red line under the open one. */
+.ak-pagetabs {
+  position: relative;
+  border: 1px solid var(--ak-rule);
+  border-radius: var(--ak-radius);
+  background: var(--ak-card);
+  box-shadow: var(--ak-shadow);
+}
+.ak-pagetabs-list {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-padding-inline: 24px;
+}
+.ak-pagetabs-list::-webkit-scrollbar { display: none; }
+.ak-pagetab {
+  position: relative;
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 13px 12px 14px;
+  border: 0;
+  background: none;
+  color: var(--ak-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.ak-pagetab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--ak-accent);
+  transform: scaleX(0);
+  transition: transform .2s ease;
+}
+.ak-pagetab-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--ak-ground);
+  color: var(--ak-muted);
+  transition: background .15s ease, color .15s ease;
+}
+.ak-pagetab-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ak-ground);
+  color: var(--ak-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.ak-pagetab-alert {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.ak-pagetab:hover { color: var(--ak-ink); }
+.ak-pagetab:hover .ak-pagetab-icon { color: var(--ak-ink); }
+.ak-pagetab.is-active { color: var(--ak-ink); }
+.ak-pagetab.is-active::after { transform: scaleX(1); }
+.ak-pagetab.is-active .ak-pagetab-icon { background: var(--ak-accent-soft); color: var(--ak-accent); }
+.ak-pagetab.is-active .ak-pagetab-count { background: var(--ak-accent-soft); color: var(--ak-accent-ink); }
+.ak-pagetab:focus-visible { outline: 0; box-shadow: inset var(--ak-focus); border-radius: 10px; }
+/* Medium screens: plain icons, no counts (the warning badge stays). */
+@media (max-width: 1600px) {
+  .ak-pagetab { gap: 7px; padding: 13px 10px 14px; }
+  .ak-pagetab-icon { width: auto; height: auto; background: none !important; }
+  .ak-pagetab-count { display: none; }
+}
+@media (max-width: 1400px) {
+  /* Fade at the edges says there is more to scroll. */
+  .ak-pagetabs-list {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%);
+  }
+}
+@media (max-width: 860px) {
+  .ak-pagetab { flex: 0 0 auto; padding: 11px 10px 12px; font-size: 13px; }
+  .ak-pagetabs-list {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent 100%);
+  }
+}
 .ak-seg { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--ak-rule); border-radius: 12px; background: var(--ak-card); }
 .ak-seg button,
 .ak-seg a {

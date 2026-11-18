@@ -4,7 +4,7 @@ import { Button, Card, Field, FieldRow, FormActions, Input, Select } from '../..
 import SecretInput from '../payments/SecretInput';
 import { isGmail } from './emailProblems';
 
-const EMPTY_SMTP = { smtp_host: '', smtp_port: 587, email: '', password: '', encryption_type: 'TLS', sender_name: 'DMS Engineering' };
+const EMPTY_SMTP = { smtp_host: '', smtp_port: 587, email: '', password: '', encryption_type: 'TLS', sender_name: 'Dynamic Manufacturing Solutions' };
 
 const ENCRYPTION = [
     { value: 'TLS', label: 'TLS (port 587)' },
@@ -18,7 +18,7 @@ const formOf = (config) => (config ? {
     email: config.email || '',
     password: '',
     encryption_type: config.encryption_type || 'TLS',
-    sender_name: config.sender_name || 'DMS Engineering',
+    sender_name: config.sender_name || 'Dynamic Manufacturing Solutions',
 } : EMPTY_SMTP);
 
 const sameForm = (a, b) => Object.keys(EMPTY_SMTP).every(k => String(a[k] ?? '') === String(b[k] ?? ''));
@@ -123,7 +123,7 @@ export default function SmtpSettingsCard({ config, onSave, onRemove, onDirtyChan
                         <Select value={form.encryption_type} options={ENCRYPTION} onChange={set('encryption_type')} />
                     </Field>
                     <Field label="Sender name" hint="What customers see as the sender.">
-                        <Input value={form.sender_name} onChange={set('sender_name')} placeholder="DMS Engineering" />
+                        <Input value={form.sender_name} onChange={set('sender_name')} placeholder="Dynamic Manufacturing Solutions" />
                     </Field>
                 </FieldRow>
 

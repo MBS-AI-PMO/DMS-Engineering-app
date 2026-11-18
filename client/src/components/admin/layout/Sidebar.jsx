@@ -30,7 +30,6 @@ export default function Sidebar({ drawer = false, open = false, collapsed = fals
         >
             <div className="admin-sidebar-head">
                 <Link to="/admin" className="admin-brand" aria-label="DMS Admin, dashboard" onClick={drawer ? onClose : undefined}>
-                    <span className="admin-brand-mark" aria-hidden="true">D</span>
                     <span className="admin-brand-text" aria-hidden="true">DMS <span>Admin</span></span>
                 </Link>
                 {drawer && (

@@ -1,14 +1,17 @@
 /**
  * seo.js - Client-side head manager for the admin-managed `seo_meta` setting.
  *
- * Applies site-wide defaults plus the current route's override on every route
- * change: document.title, <meta name|property> tags and <link rel=canonical>.
+ * The server puts each page's tags into its HTML (client/vite/headTags.js,
+ * built by backend/seo/head.js). On every route change SeoTrackingManager
+ * asks for the new page's list (services/pageHead.js) and applyHeadTags()
+ * swaps the tags marked data-head="dms". applySeo()/resolveSeo() below are
+ * the fallback when that request fails, and drive the admin previews.
  * Values are only ever written with textContent / setAttribute (never as HTML).
  *
  * Setting shape (validated by backend/utils/seoSettings.js):
  *   { defaults: { siteName, title, titleTemplate, description, keywords, siteUrl,
  *                 robots, googleVerification, ogTitle, ogDescription, ogImage,
- *                 twitterCard, twitterSite },
+ *                 twitterCard, twitterSite, favicon, appleTouchIcon, themeColor },
  *     pages: { '/metals': { title, description, ogImage }, ... } }
  */
 
@@ -26,11 +29,15 @@ export const SEO_PAGES = [
     { path: '/quote', label: 'Quote' },
     { path: '/privacy-policy', label: 'Privacy Policy' },
     { path: '/terms-of-service', label: 'Terms of Service' },
+    { path: '/blog', label: 'Blog' },
+    { path: '/track-order', label: 'Track order' },
 ];
 const SEO_PAGE_SET = new Set(SEO_PAGES.map(p => p.path));
 
 // Private/utility routes are always noindex regardless of the site setting.
 const NOINDEX_PREFIXES = ['/admin', '/cart', '/checkout', '/orders', '/settings', '/login', '/signup'];
+// One customer's order (/track-order/1042); the Track order page itself is indexed.
+const NOINDEX_PATTERNS = [/^\/track-order\/./];
 
 export const isAdminPath = (pathname = '') => /^\/admin(\/|$)/.test(pathname);
 
@@ -71,6 +78,9 @@ export function normalizeSeoMeta(raw) {
         ogImage: imageUrl(d.ogImage),
         twitterCard: d.twitterCard === 'summary' ? 'summary' : 'summary_large_image',
         twitterSite: /^@[A-Za-z0-9_]{1,15}$/.test(d.twitterSite || '') ? d.twitterSite : '',
+        favicon: imageUrl(d.favicon),
+        appleTouchIcon: imageUrl(d.appleTouchIcon),
+        themeColor: /^#[0-9a-f]{6}$/i.test(d.themeColor || '') ? d.themeColor.toLowerCase() : '',
     };
     const pages = {};
     const p = src.pages && typeof src.pages === 'object' ? src.pages : {};
@@ -87,6 +97,24 @@ export function normalizeSeoMeta(raw) {
 
 const normalizePath = (pathname = '/') => (pathname.length > 1 ? pathname.replace(/\/+$/, '') : '/') || '/';
 
+// Tags a page sets from its own data (a blog post: its title, description,
+// picture). They count for that one path only and win over the admin's
+// page override. SeoTrackingManager re-applies the head when they change.
+export const SEO_ROUTE_EVENT = 'dms:seo-route';
+let routeSeo = null;
+
+/**
+ * seo: { title, description, image, type ('article'), publishedTime, modifiedTime }
+ * or null to drop what this path set.
+ */
+export function setRouteSeo(pathname, seo) {
+    const path = normalizePath(pathname);
+    if (seo) routeSeo = { ...seo, path };
+    else if (routeSeo && routeSeo.path === path) routeSeo = null;
+    else return;
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(SEO_ROUTE_EVENT));
+}
+
 const absoluteUrl = (value, base) => {
     if (!value) return '';
     if (/^https?:\/\//i.test(value)) return value;
@@ -100,7 +128,10 @@ const absoluteUrl = (value, base) => {
 export function resolveSeo(meta, pathname, fallback = {}, origin = '') {
     const { defaults: d, pages } = normalizeSeoMeta(meta);
     const path = normalizePath(pathname);
-    const page = pages[path] || {};
+    const own = routeSeo && routeSeo.path === path ? routeSeo : null;
+    const page = own
+        ? { title: text(own.title, 150), description: text(own.description), ogImage: imageUrl(own.image) }
+        : pages[path] || {};
     const base = d.siteUrl || origin;
 
     // Like react-helmet: the template wraps page titles; the default title is used as is.
@@ -111,7 +142,8 @@ export function resolveSeo(meta, pathname, fallback = {}, origin = '') {
     const ogTitle = page.title ? title : (d.ogTitle || title);
     const ogDescription = page.description || d.ogDescription || description;
     const image = absoluteUrl(page.ogImage || d.ogImage, base);
-    const noindex = d.robots === 'noindex' || NOINDEX_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
+    const noindex = d.robots === 'noindex' || NOINDEX_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+        || NOINDEX_PATTERNS.some(re => re.test(path));
     const canonical = base ? `${base}${path === '/' ? '/' : path}` : '';
 
     return {
@@ -121,8 +153,12 @@ export function resolveSeo(meta, pathname, fallback = {}, origin = '') {
         robots: noindex ? 'noindex, nofollow' : 'index, follow',
         canonical,
         googleVerification: d.googleVerification,
+        article: own?.type === 'article' ? {
+            published_time: text(own.publishedTime, 40),
+            modified_time: text(own.modifiedTime, 40),
+        } : {},
         og: {
-            type: 'website',
+            type: own?.type === 'article' ? 'article' : 'website',
             site_name: d.siteName || fallback.siteName || '',
             title: ogTitle,
             description: ogDescription,
@@ -195,7 +231,89 @@ export function applySeo(meta, pathname) {
     upsertMeta('name', 'robots', tags.robots);
     upsertMeta('name', 'google-site-verification', tags.googleVerification);
     Object.entries(tags.og).forEach(([key, value]) => upsertMeta('property', `og:${key}`, value));
+    ['published_time', 'modified_time'].forEach(key => upsertMeta('property', `article:${key}`, tags.article[key]));
     Object.entries(tags.twitter).forEach(([key, value]) => upsertMeta('name', `twitter:${key}`, value));
     upsertCanonical(tags.canonical);
     return tags;
+}
+
+/**
+ * Structured data (JSON-LD) for the current page, e.g. a blog post's
+ * BlogPosting. Written as the text of a <script type="application/ld+json">
+ * in <head> (never parsed as HTML); null removes it.
+ */
+export function setJsonLd(id, data) {
+    if (typeof document === 'undefined') return;
+    const elId = `ld-${id}`;
+    let el = document.getElementById(elId);
+    if (!data) {
+        if (el) el.remove();
+        return;
+    }
+    if (!el) {
+        el = document.createElement('script');
+        el.type = 'application/ld+json';
+        el.id = elId;
+        document.head.appendChild(el);
+    }
+    el.textContent = JSON.stringify(data).replace(/</g, '\\u003c');
+}
+
+// ── The server's tag list (GET /api/seo/head) ───────────────────────────────
+
+const HEAD_MARK = 'data-head';
+const HEAD_ELEMENTS = new Set(['meta', 'link', 'script', 'noscript']);
+const ATTR_NAME_RE = /^[a-z][a-z0-9:._-]*$/i;
+
+/* One string per tag: name, attributes (sorted, without the mark) and text.
+ * The HTML parser turns \r\n into \n, so text is compared the same way. */
+const headKey = (tag, attrs, content) => [
+    tag,
+    ...Object.keys(attrs).filter(name => name !== HEAD_MARK).sort().map(name => `${name}=${attrs[name]}`),
+    tag === 'script' || tag === 'noscript' ? String(content || '').replace(/\r\n?/g, '\n') : '',
+].join('\u0001');
+
+const elementKey = (el) => {
+    const attrs = {};
+    for (const a of el.attributes) attrs[a.name] = a.value;
+    return headKey(el.tagName.toLowerCase(), attrs, el.textContent);
+};
+
+/**
+ * Make <head> match a page's list from the server: { title, tags: [{ tag,
+ * attrs, content? }] }. Only elements marked data-head="dms" are touched:
+ * those on both pages stay as they are (a script never runs twice), the
+ * previous page's others go, the new page's are added in list order.
+ */
+export function applyHeadTags(head) {
+    if (typeof document === 'undefined' || !head) return;
+    if (typeof head.title === 'string' && head.title && document.title !== head.title) document.title = head.title;
+
+    const present = new Map(); // key -> [element]
+    document.head.querySelectorAll(`[${HEAD_MARK}="dms"]`).forEach((el) => {
+        const key = elementKey(el);
+        if (!present.has(key)) present.set(key, []);
+        present.get(key).push(el);
+    });
+
+    let previous = null;
+    for (const t of Array.isArray(head.tags) ? head.tags : []) {
+        if (!t || !HEAD_ELEMENTS.has(t.tag)) continue; // <title> is set above
+        const attrs = t.attrs && typeof t.attrs === 'object' ? t.attrs : {};
+        const kept = present.get(headKey(t.tag, attrs, t.content))?.shift();
+        if (kept) {
+            previous = kept;
+            continue;
+        }
+        const el = document.createElement(t.tag);
+        Object.entries(attrs).forEach(([name, value]) => {
+            if (ATTR_NAME_RE.test(name) && name !== HEAD_MARK) el.setAttribute(name, String(value));
+        });
+        el.setAttribute(HEAD_MARK, 'dms');
+        if (t.tag === 'script' || t.tag === 'noscript') el.textContent = t.content || '';
+        if (previous && previous.parentNode === document.head) previous.after(el);
+        else document.head.appendChild(el);
+        previous = el;
+    }
+    present.forEach(list => list.forEach(el => el.remove()));
 }

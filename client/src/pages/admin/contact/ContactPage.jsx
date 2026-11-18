@@ -15,7 +15,7 @@ import './contact.css';
 /**
  * Admin > Contact: contact details, where contact-form messages go, social
  * links, footer metals and the quote display switch (saved together with
- * the sticky bar), plus logos and the home hero image (saved on upload).
+ * the sticky bar), plus the logos (saved on upload). Hero pictures: Admin > Hero sections.
  */
 export default function ContactPage() {
     const toast = useToast();

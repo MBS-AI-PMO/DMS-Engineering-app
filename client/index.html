@@ -3,35 +3,24 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Single combined request for all fonts used across the app -->
+  <!-- The site font: Urbanist (every weight, one request) -->
   <link rel="preload" as="style"
-    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Roboto:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,300..900;1,400..700&display=swap"
     onload="this.onload=null;this.rel='stylesheet'">
   <noscript>
     <link rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Roboto:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap">
+      href="https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,300..900;1,400..700&display=swap">
   </noscript>
   <!-- Prevent background flash before CSS loads -->
   <style>
     html, body { margin: 0; padding: 0; background-color: #ffffff; }
   </style>
-  <title>Dynamic Manufacturing Solutions</title>
-  <!-- Static SEO defaults. Crawlers that don't run JS (Facebook, LinkedIn, WhatsApp)
-       only see these; SeoTrackingManager replaces them per route with the values
-       managed in Admin > SEO & Tracking. -->
-  <meta name="description" content="Custom laser-cut, bent and CNC-machined metal parts from Dallas, Texas. Upload a STEP or DXF file and get an instant price." />
-  <meta name="robots" content="index, follow" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Dynamic Manufacturing Solutions" />
-  <meta property="og:title" content="Dynamic Manufacturing Solutions" />
-  <meta property="og:description" content="Custom laser-cut, bent and CNC-machined metal parts from Dallas, Texas. Upload a STEP or DXF file and get an instant price." />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Dynamic Manufacturing Solutions" />
-  <meta name="twitter:description" content="Custom laser-cut, bent and CNC-machined metal parts from Dallas, Texas. Upload a STEP or DXF file and get an instant price." />
+  <!-- Title, description, social cards, canonical, icons and the admin's own
+       head tags are added per page by the server (vite/headTags.js), from
+       Admin > SEO & tracking, and swapped by the app on each page change. -->
 </head>
 
 <body>

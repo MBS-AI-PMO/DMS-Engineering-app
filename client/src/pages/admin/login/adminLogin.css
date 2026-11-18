@@ -1,81 +1,113 @@
 /*
- * Admin sign-in (/admin/login). It sits outside the admin shell, so the kit
- * tokens are declared here too (same values as styles/adminKit.css).
+ * Admin sign-in (/admin/login): dark split screen. Left, the home page photo
+ * with the company name; right, the form on a plain dark panel. On phones the
+ * photo becomes a short banner above the form.
+ *
+ * It sits outside the admin shell, so the kit tokens are declared here with
+ * dark values: every kit control on the page picks them up.
  */
 .al-page {
-  --ak-ink: #0f172a;
-  --ak-text: #334155;
-  --ak-muted: #64748b;
-  --ak-faint: #94a3b8;
-  --ak-rule: #e5e7eb;
-  --ak-rule-soft: #f1f5f9;
-  --ak-ground: #f8fafc;
-  --ak-card: #ffffff;
+  --ak-ink: #fafafa;
+  --ak-text: #e4e4e7;
+  --ak-muted: #a1a1aa;
+  --ak-faint: #71717a;
+  --ak-rule: rgba(255, 255, 255, 0.12);
+  --ak-rule-soft: rgba(255, 255, 255, 0.06);
+  --ak-ground: #0a0b0e;
+  --ak-card: #121318;
   --ak-accent: #e31b23;
-  --ak-accent-ink: #b91c1c;
-  --ak-accent-soft: #fef2f2;
-  --ak-focus: 0 0 0 3px rgba(227, 27, 35, 0.18);
+  --ak-accent-ink: #f87171;
+  --ak-accent-soft: rgba(227, 27, 35, 0.14);
+  --ak-focus: 0 0 0 3px rgba(227, 27, 35, 0.35);
   --ak-radius: 14px;
-  --ak-display: 'Montserrat', 'Outfit', system-ui, sans-serif;
-  --ak-font: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
+  --ak-display: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ak-font: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(440px, 1fr);
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 32px 16px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(227, 27, 35, 0.06), transparent 55%),
-    var(--ak-ground);
+  background: var(--ak-ground);
   color: var(--ak-text);
   font-family: var(--ak-font);
+  color-scheme: dark;
 }
 .al-page * { box-sizing: border-box; }
 
-.al-card {
+/* ── Left: photo ── */
+.al-visual {
+  position: relative;
+  overflow: hidden;
+  background: #050506;
+}
+.al-visual-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-width: 420px;
-  padding: 32px 32px 28px;
-  border: 1px solid var(--ak-rule);
-  border-radius: 18px;
-  background: var(--ak-card);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px rgba(15, 23, 42, 0.06);
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
-
-.al-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; color: var(--ak-ink); }
-.al-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #e31b23, #c91520);
-  color: #fff;
+.al-visual-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 11, 14, 0.15) 0%, rgba(10, 11, 14, 0.35) 45%, rgba(10, 11, 14, 0.9) 100%),
+    linear-gradient(90deg, transparent 75%, var(--ak-ground) 100%);
+}
+.al-visual-text {
+  position: absolute;
+  left: 56px;
+  right: 56px;
+  bottom: 56px;
+  max-width: 520px;
+}
+.al-visual-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #f4f4f5;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.al-visual-kicker::before {
+  content: '';
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ak-accent);
+}
+.al-visual-title {
+  margin: 14px 0 0;
+  color: #ffffff;
   font-family: var(--ak-display);
-  font-size: 18px;
+  font-size: clamp(30px, 3vw, 42px);
   font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
-.al-brand-text { font-family: var(--ak-display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
-.al-brand-text span { color: var(--ak-muted); font-weight: 700; }
-
-.al-title {
-  margin: 0;
-  color: var(--ak-ink);
-  font-family: var(--ak-display);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+.al-visual-sub {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  line-height: 1.5;
 }
-.al-sub { margin: 6px 0 22px; color: var(--ak-muted); font-size: 14px; line-height: 1.5; }
 
-.al-form { display: flex; flex-direction: column; }
-.al-form .ak-banner { margin-bottom: 14px; }
-.al-form .ak-check { margin: 2px 0 20px; }
-
+/* ── Right: form panel ── */
+.al-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 88px 56px 56px;
+  background: var(--ak-ground);
+}
 .al-back {
+  position: absolute;
+  top: 28px;
+  right: 32px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -84,11 +116,96 @@
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
+  transition: color .15s ease;
 }
-.al-back:hover { color: var(--ak-ink); }
+.al-back:hover { color: #ffffff; }
 .al-back:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
 
-@media (max-width: 480px) {
-  .al-page { justify-content: flex-start; padding-top: 40px; }
-  .al-card { padding: 24px 20px 22px; }
+.al-form-wrap { width: 100%; max-width: 380px; }
+.al-title {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--ak-display);
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.al-sub { margin: 8px 0 30px; color: var(--ak-muted); font-size: 15px; line-height: 1.5; }
+
+.al-form { display: flex; flex-direction: column; }
+.al-form .ak-field { margin-bottom: 18px; }
+.al-form .ak-label { color: #e4e4e7; font-size: 13.5px; }
+.al-form .ak-check { margin: 0 0 24px; color: #e4e4e7; }
+
+.al-form .ak-input {
+  min-height: 48px;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: #121318;
+  color: #ffffff;
+  font-size: 15px;
+}
+.al-form .ak-input::placeholder { color: #5b5b63; }
+.al-form .ak-input:hover { border-color: rgba(255, 255, 255, 0.2); }
+.al-form .ak-input:focus { border-color: var(--ak-accent); box-shadow: var(--ak-focus); }
+.al-form .ak-input.is-invalid { border-color: rgba(248, 113, 113, 0.7); }
+/* Browser autofill keeps the dark field */
+.al-form .ak-input:-webkit-autofill,
+.al-form .ak-input:-webkit-autofill:hover,
+.al-form .ak-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
+  -webkit-box-shadow: 0 0 0 1000px #121318 inset;
+  transition: background-color 9999s ease-out 0s;
+}
+.al-form .pp-password .ak-icon-btn {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ak-muted);
+}
+.al-form .pp-password .ak-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+
+.al-form .ak-btn.is-primary {
+  min-height: 50px;
+  border-radius: 12px;
+  font-size: 15.5px;
+}
+.al-form .ak-btn.is-primary:hover:not(:disabled) { border-color: #c81920; background: #c81920; }
+
+.al-form .ak-banner { margin-bottom: 16px; }
+.al-form .ak-banner.is-error {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+/* "Admins only" note: white, lined up with the form's left edge. */
+.al-secure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+.al-secure svg { flex: 0 0 auto; color: #ffffff; }
+
+/* ── Phones and narrow windows: photo banner on top ── */
+@media (max-width: 900px) {
+  .al-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .al-visual { min-height: 210px; }
+  .al-visual-shade {
+    background: linear-gradient(180deg, rgba(10, 11, 14, 0.2) 0%, rgba(10, 11, 14, 0.6) 60%, var(--ak-ground) 100%);
+  }
+  .al-visual-text { left: 20px; right: 20px; bottom: 18px; }
+  .al-visual-title { margin-top: 8px; font-size: 26px; }
+  .al-visual-sub { display: none; }
+  .al-panel { align-items: flex-start; padding: 28px 20px 40px; }
+  .al-back { position: static; margin-bottom: 0; }
+  .al-panel { flex-direction: column; justify-content: flex-start; gap: 24px; }
+  .al-form-wrap { max-width: none; }
+  .al-title { font-size: 28px; }
 }

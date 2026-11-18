@@ -3,3 +3,173 @@
 .ac-faq-count:hover { text-decoration: underline; }
 .ac-faq-count.is-zero { color: var(--ak-muted); }
 .ac-faq-slug { color: var(--ak-muted); }
+
+/* View switch under the header ("All FAQs" / "On pages"); scrolls sideways on phones. */
+.ac-faq-views { margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+.ac-faq-views::-webkit-scrollbar { display: none; }
+
+/* "Also on" column of the list */
+.ac-faq-pages-cell { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.ac-faq-none { color: var(--ak-faint); font-size: 13px; }
+
+/* ── "Show on pages" picker (PagePicker.jsx) ── */
+.ac-faq-picker { display: flex; flex-direction: column; gap: 10px; }
+.ac-faq-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
+.ac-faq-chips-empty { color: var(--ak-muted); font-size: 13.5px; }
+.ac-faq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: var(--ak-accent-soft);
+  color: var(--ak-accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ac-faq-chip.is-missing { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+.ac-faq-chip button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.ac-faq-chip button:hover { background: rgba(185, 28, 28, 0.12); }
+.ac-faq-chip button:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+
+.ac-faq-picker-box { border: 1px solid var(--ak-rule); border-radius: 12px; background: var(--ak-card); overflow: hidden; }
+.ac-faq-picker-box .ac-faq-picker-search { width: 100%; border: 0; border-bottom: 1px solid var(--ak-rule); border-radius: 0; }
+.ac-faq-picker-box .ac-faq-picker-search:focus-within { box-shadow: inset 0 0 0 2px rgba(227, 27, 35, 0.18); }
+.ac-faq-picker-list { max-height: 260px; padding: 4px 12px 10px; overflow-y: auto; overscroll-behavior: contain; }
+.ac-faq-picker-sk { display: flex; flex-direction: column; gap: 14px; padding: 12px 0; }
+.ac-faq-picker-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+.ac-faq-picker-group legend {
+  padding: 12px 0 4px;
+  color: var(--ak-faint);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ac-faq-picker-group .ak-check { display: flex; align-items: flex-start; padding: 6px 0; }
+.ac-faq-picker-group .ak-check input { flex: none; margin-top: 2px; }
+.ac-faq-picker-group .ak-check.is-all { font-weight: 600; color: var(--ak-ink); }
+.ac-faq-picker-label { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ac-faq-picker-label > span { overflow-wrap: anywhere; }
+.ac-faq-picker-label em { color: var(--ak-faint); font-style: normal; font-weight: 400; }
+.ac-faq-picker-label small { color: var(--ak-faint); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.ac-faq-picker-empty { margin: 12px 0 4px; color: var(--ak-muted); font-size: 13.5px; }
+
+/* ── "On pages" view (FaqPagesView.jsx) ── */
+.ac-faq-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); align-items: start; gap: 20px; }
+
+/* Page list down the side (PageList.jsx) */
+.ac-faq-nav.ak-card { position: sticky; top: 16px; padding: 12px; }
+.ac-faq-nav-search { width: 100%; }
+.ac-faq-nav-list { display: flex; flex-direction: column; gap: 2px; max-height: max(360px, calc(100vh - 220px)); margin-top: 8px; overflow-y: auto; overscroll-behavior: contain; }
+.ac-faq-nav-list > .ak-sk { margin: 10px 8px; }
+.ac-faq-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.ac-faq-nav-heading {
+  margin: 0;
+  padding: 12px 10px 4px;
+  color: var(--ak-faint);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ac-faq-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ak-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.ac-faq-nav-item:hover { background: var(--ak-ground); color: var(--ak-ink); }
+.ac-faq-nav-item:focus-visible { outline: 0; box-shadow: var(--ak-focus); }
+.ac-faq-nav-item.is-active { background: var(--ak-accent-soft); color: var(--ak-accent-ink); font-weight: 600; }
+.ac-faq-nav-item.is-all { font-weight: 600; }
+.ac-faq-nav-item.is-missing { color: #b45309; }
+.ac-faq-nav-item svg { flex: none; color: var(--ak-accent); }
+.ac-faq-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-faq-nav-count {
+  flex: none;
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ak-rule-soft);
+  color: var(--ak-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ac-faq-nav-count.is-zero { background: transparent; color: var(--ak-faint); font-weight: 500; }
+.ac-faq-nav-item.is-active .ac-faq-nav-count { background: #fee2e2; color: var(--ak-accent-ink); }
+
+/* The picked page: its address, where its FAQs show */
+.ac-faq-key { font-family: var(--ak-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.ac-faq-note { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ac-faq-note p { margin: 0; color: var(--ak-muted); font-size: 13.5px; line-height: 1.5; }
+.ac-faq-linkbtn { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.ac-faq-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--ak-rule-soft);
+  color: var(--ak-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Add FAQs to …" dialog (AddFaqsDialog.jsx) */
+.ac-faq-add-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.ac-faq-add-search { flex: 1 1 260px; width: auto; }
+.ac-faq-add-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(52vh, 460px);
+  padding: 4px 14px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ac-faq-add-list .ak-check { display: flex; align-items: flex-start; padding: 10px 0; }
+.ac-faq-add-list .ak-check + .ak-check { border-top: 1px solid var(--ak-rule-soft); }
+.ac-faq-add-list .ak-check input { flex: none; margin-top: 2px; }
+.ac-faq-add-item .ac-faq-picker-label > span { color: var(--ak-ink); font-weight: 600; }
+.ac-faq-add-count { margin-right: auto; color: var(--ak-muted); font-size: 13.5px; font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .ac-faq-layout { grid-template-columns: 250px minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .ac-faq-layout { grid-template-columns: minmax(0, 1fr); }
+  .ac-faq-nav.ak-card { position: static; }
+  .ac-faq-nav-list { max-height: 260px; }
+}
+
+/* Six stat cards on one row at desktop width */
+.ac-faq-stats .ak-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.ac-faq-switch { margin: 2px 0 16px; }

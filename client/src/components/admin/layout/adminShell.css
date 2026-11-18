@@ -97,7 +97,9 @@
 }
 .admin-brand-text span { color: var(--ak-muted); font-weight: 700; }
 .admin-shell.is-collapsed .admin-sidebar-head { justify-content: center; padding: 0; }
-.admin-shell.is-collapsed .admin-brand-text { display: none; }
+/* Collapsed rail: just "DMS". */
+.admin-shell.is-collapsed .admin-brand-text { font-size: 15px; }
+.admin-shell.is-collapsed .admin-brand-text span { display: none; }
 
 .admin-sidebar-btn,
 .admin-topbar-btn {

@@ -6,7 +6,7 @@ import { displayMetalName, thicknessBounds } from '../utils/metalDisplay';
 import { servicesData as staticServicesData } from '../data/servicesData';
 import { metalsData as staticMetalsData } from '../data/metalsData';
 import ThumbImage from '../components/ThumbImage';
-import aboutHeroImg from '../assets/faq-hero.jpg';
+import usePageHero from '../hooks/usePageHero';
 import '../styles/Shimmer.css';
 import '../styles/AboutPage.css';
 
@@ -65,6 +65,7 @@ const toService = (svc) => {
 };
 
 const AboutPage = () => {
+    const hero = usePageHero('about');
     const [services, setServices] = useState([]);
     const [metals, setMetals] = useState([]);
     const [familyOrder, setFamilyOrder] = useState([]);
@@ -152,7 +153,7 @@ const AboutPage = () => {
         <div className="ab">
             {/* ── Heading band ── */}
             <section className="ab-hero" aria-labelledby="ab-title">
-                <img className="ab-hero-img" src={aboutHeroImg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                {hero.src && <img className="ab-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />}
                 <div className="ab-hero-shade" aria-hidden="true" />
                 <div className="ab-inner ab-hero-content">
                     <nav className="ab-crumbs" aria-label="Breadcrumb">

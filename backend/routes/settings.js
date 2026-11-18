@@ -17,14 +17,15 @@ const fs = require('fs');
 const db = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { route, ok, badRequest, HttpError, validate: v } = require('../helpers');
-const { optimizeImage, optimizeHeroImage } = require('../utils/imageOptimizer');
+const { optimizeImage, optimizeHeroImage, makeShareCard } = require('../utils/imageOptimizer');
 const { validateSeoMeta, validateTrackingPixels } = require('../utils/seoSettings');
+const { validateHeadTags } = require('../seo/headTags');
 
 const router = express.Router();
 const admin = [authenticate, requireAdmin];
 
-// Structured settings (SEO meta tags, tracking pixel IDs) validated on PUT.
-const STRUCTURED_VALIDATORS = { seo_meta: validateSeoMeta, tracking_pixels: validateTrackingPixels };
+// Structured settings (SEO meta tags, tracking pixel IDs, custom <head> tags) validated on PUT.
+const STRUCTURED_VALIDATORS = { seo_meta: validateSeoMeta, tracking_pixels: validateTrackingPixels, head_tags: validateHeadTags };
 
 // Settings only admins may read: left out of the public GETs below and
 // served by GET /admin/private. contact_form_recipients is where website
@@ -145,6 +146,9 @@ router.post('/upload-logo', admin, uploadLogo, route('upload the image', async (
         } else {
             valueToSave = heroFiles?.src ? `/uploads/logos/${heroFiles.src}` : `/uploads/logos/${path.basename(req.file.path)}`;
         }
+    } else if (key === 'seo_og_image') {
+        // Link-preview image: fitted whole onto a 1200x630 card so no app crops it.
+        valueToSave = `/uploads/logos/${await makeShareCard(req.file.path)}`;
     } else {
         // Logos: WebP, resized, metadata stripped.
         valueToSave = `/uploads/logos/${await optimizeImage(req.file.path)}`;

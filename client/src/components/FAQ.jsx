@@ -1,13 +1,17 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Plus } from 'lucide-react';
+import { usePlacedFaqs } from './pageFaqs/usePlacedFaqs';
+import { useFaqJsonLd } from './pageFaqs/useFaqJsonLd';
 import '../styles/HomeFaq.css';
 
 /**
  * Home page FAQ: the heading and the way to the full list on the left,
  * the questions on the right, one open at a time, a hairline above each.
+ * The questions are the FAQs admin placed on the home page (Admin > FAQs >
+ * On pages); the built-in ones below show only while none are placed.
  */
 
 const FAQData = [
@@ -16,7 +20,7 @@ const FAQData = [
         answer: "Your estimated ship date is calculated in real-time in your shopping cart as you add parts and services. Production times for standard orders without additional services like bending or finishing are typically 2-4 business days before shipping."
     },
     {
-        question: "How do I get a Formal Quote from DMS Engineering?",
+        question: "How do I get a Formal Quote from Dynamic Manufacturing Solutions?",
         answer: "Formal Quotes make it easy to send a link to your accounts payable department so they can process payment for orders online, while the order itself remains associated with your account. This allows you to remain the point of contact if there are any questions during production. Read the complete FAQ for detailed info!"
     },
     {
@@ -29,7 +33,7 @@ const FAQData = [
     },
     {
         question: "Why won't my part file upload?",
-        answer: "There are a few reasons why your part file may not be uploading successfully to DMS Engineering's website. We'll cover these scenarios and give you tips in our full FAQ."
+        answer: "There are a few reasons why your part file may not be uploading successfully to Dynamic Manufacturing Solutions' website. We'll cover these scenarios and give you tips in our full FAQ."
     }
 ];
 
@@ -37,6 +41,10 @@ const FAQ = () => {
     const [activeIndex, setActiveIndex] = useState(null);
     const reduceMotion = useReducedMotion();
     const baseId = useId();
+    const sectionRef = useRef(null);
+    const placed = usePlacedFaqs('/', sectionRef);
+    const items = placed.length ? placed : FAQData;
+    useFaqJsonLd(items);
 
     const toggleAccordion = (index) => {
         setActiveIndex((current) => (current === index ? null : index));
@@ -50,7 +58,7 @@ const FAQ = () => {
     });
 
     return (
-        <section id="faq" className="hf" aria-labelledby="hf-title">
+        <section id="faq" className="hf" aria-labelledby="hf-title" ref={sectionRef}>
             <div className="hf-inner">
                 <motion.div className="hf-head" {...reveal()}>
                     <h2 id="hf-title" className="hf-title">Frequently Asked Questions</h2>
@@ -65,7 +73,7 @@ const FAQ = () => {
                 </motion.div>
 
                 <ul className="hf-list">
-                    {FAQData.map((item, index) => {
+                    {items.map((item, index) => {
                         const isOpen = activeIndex === index;
                         const buttonId = `${baseId}-q${index}`;
                         const panelId = `${baseId}-a${index}`;

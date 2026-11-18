@@ -7,6 +7,8 @@ import Services from './components/Services';
 import Metals from './components/Metals';
 const MetalDetail = lazy(() => import('./components/MetalDetail'));
 import Footer from './components/Footer';
+import PageFaqsSlot from './components/pageFaqs/PageFaqsSlot';
+import usePageTransition from './hooks/usePageTransition';
 const InstantPricing = lazy(() => import('./pages/InstantPricing'));
 const Quote = lazy(() => import('./pages/Quote'));
 const Contact = lazy(() => import('./pages/Contact'));
@@ -57,19 +59,29 @@ import { CartProvider } from './context/CartProvider';
 const Cart = lazy(() => import('./pages/Cart'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const Orders = lazy(() => import('./pages/Orders'));
+const TrackOrder = lazy(() => import('./pages/TrackOrder'));
 const OrdersList = lazy(() => import('./pages/admin/orders/OrdersList'));
 const OrderDetail = lazy(() => import('./pages/admin/orders/OrderDetail'));
 const QuotesList = lazy(() => import('./pages/admin/quotes/QuotesList'));
 const QuoteDetail = lazy(() => import('./pages/admin/quotes/QuoteDetail'));
+const BlogIndexPage = lazy(() => import('./pages/blog/BlogIndexPage'));
+const BlogPostPage = lazy(() => import('./pages/blog/BlogPostPage'));
+const BlogListPage = lazy(() => import('./pages/admin/blog/BlogListPage'));
+const BlogEditPage = lazy(() => import('./pages/admin/blog/BlogEditPage'));
 const PaymentMethods = lazy(() => import('./pages/admin/PaymentMethods'));
 
-const PublicShell = ({ children }) => (
-  <div className="app-container" style={{ backgroundColor: '#ffffff' }}>
-    <Navbar />
-    <main className="main-content"><Suspense fallback={<div style={{ minHeight: '100vh' }} />}>{children}</Suspense></main>
-    <Footer />
-  </div>
-);
+// The page (and the FAQs and footer after it) fades in on each navigation.
+const PublicShell = ({ children }) => {
+  const pageRef = usePageTransition({ following: true });
+  return (
+    <div className="app-container" style={{ backgroundColor: '#ffffff' }}>
+      <Navbar />
+      <main ref={pageRef} className="main-content"><Suspense fallback={<div style={{ minHeight: '100vh' }} />}>{children}</Suspense></main>
+      <PageFaqsSlot />
+      <Footer />
+    </div>
+  );
+};
 
 function App() {
   return (
@@ -105,6 +117,8 @@ function App() {
                 <Route path="/services" element={<PublicShell><ServicesPage /></PublicShell>} />
                 <Route path="/privacy-policy" element={<PublicShell><PrivacyPolicy /></PublicShell>} />
                 <Route path="/terms-of-service" element={<PublicShell><TermsOfService /></PublicShell>} />
+                <Route path="/blog" element={<PublicShell><BlogIndexPage /></PublicShell>} />
+                <Route path="/blog/:slug" element={<PublicShell><BlogPostPage /></PublicShell>} />
 
                 {/* Auth */}
                 <Route path="/login" element={<Login />} />
@@ -113,6 +127,7 @@ function App() {
                 <Route path="/cart" element={<PublicShell><Cart /></PublicShell>} />
                 <Route path="/checkout" element={<PublicShell><Checkout /></PublicShell>} />
                 <Route path="/orders" element={<PublicShell><Orders /></PublicShell>} />
+                <Route path="/track-order/:orderNumber?" element={<PublicShell><TrackOrder /></PublicShell>} />
 
                 {/* Admin */}
                 <Route path="/admin/login" element={<AdminLogin />} />
@@ -209,6 +224,15 @@ function App() {
                 } />
                 <Route path="/admin/quotes/:id" element={
                   <ProtectedRoute><AdminLayout><div className="px-desktop"><QuoteDetail /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/blog" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><BlogListPage /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/blog/new" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><BlogEditPage /></div></AdminLayout></ProtectedRoute>
+                } />
+                <Route path="/admin/blog/:id" element={
+                  <ProtectedRoute><AdminLayout><div className="px-desktop"><BlogEditPage /></div></AdminLayout></ProtectedRoute>
                 } />
 
               </Routes>

@@ -71,11 +71,19 @@ async function send(url, options) {
     }
 
     const response = await fetch(`${API_BASE}${url}`, config);
-    const data = await response.json();
+    // An empty or non-JSON reply (server restarting, proxy error) is not a crash for the visitor.
+    const text = await response.text();
+    let data;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = {};
+    }
 
     if (!response.ok) {
-        throw new Error(data.error || `API   error: ${response.status}`);
+        throw new Error(data.error || (response.status >= 500 ? 'The server did not answer. Please try again in a moment.' : `Request failed (${response.status}).`));
     }
+    if (!text) throw new Error('The server did not answer. Please try again in a moment.');
     return data;
 }
 
@@ -505,10 +513,17 @@ export async function deleteSubscriber(id) {
 
 // ── Site Settings ───────────────────────────────────────
 
+let lastSettings = null;
+
 export async function fetchSettings() {
     const { data } = await cachedGet('/settings');
+    lastSettings = data;
     return data;
 }
+
+/** The settings from the last fetchSettings() (null before the first), read-only.
+ *  Lets a page that opens after another draw its hero picture straight away. */
+export const peekSettings = () => lastSettings;
 
 export async function fetchPrivateSettings() {
     const { data } = await request('/settings/admin/private');

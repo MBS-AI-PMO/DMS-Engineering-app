@@ -10,8 +10,9 @@
  *             StatCards with a plain red icon and uppercase label, a full-width SearchInput (block), table
  *             headers with small icons (column.icon), Avatar initials. Header = PageHeader panel with icon.
  * Actions     Button, IconButton, Actions
- * Forms       Field, FieldRow, Input, Textarea, Select (kit dropdown, native-like API), NativeSelect, Checkbox, Switch, FormActions
- * Navigation  Tabs, Segmented, SearchInput, Toolbar
+ * Forms       Field, FieldRow, Input, Textarea, Select (kit dropdown, native-like API), NativeSelect, Checkbox, Switch, FormActions,
+ *             OptionCards (radio group as cards with icon + explanation)
+ * Navigation  Tabs, Segmented, PageTabs (section tabs with icons, counts, red underline), SearchInput, Toolbar
  * Data        DataTable, CellText, RowActions, StatGrid, StatCard
  * Feedback    Pill, Avatar, EmptyState, Banner, Skeleton, SkeletonRows, Spinner
  * Dialogs     Modal, ConfirmDialog, useConfirm, Popover (menus anchored to a button; never clipped by tables/cards)
@@ -20,8 +21,8 @@
  */
 export { Page, PageHeader, Card, SideLayout, Grid, Stack, KeyValue } from './Layout';
 export { Button, IconButton, Actions } from './Button';
-export { Field, FieldRow, Input, Textarea, Select, NativeSelect, Checkbox, Switch, FormActions } from './Form';
-export { Tabs, Segmented, SearchInput, Toolbar } from './Navigation';
+export { Field, FieldRow, Input, Textarea, Select, NativeSelect, Checkbox, Switch, FormActions, OptionCards } from './Form';
+export { Tabs, Segmented, PageTabs, SearchInput, Toolbar } from './Navigation';
 export { default as DataTable, CellText, RowActions } from './DataTable';
 export { StatGrid, StatCard } from './Stats';
 export { Pill, Avatar, EmptyState, Banner, Skeleton, SkeletonRows, Spinner } from './Feedback';

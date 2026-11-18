@@ -2,7 +2,7 @@
  * Admin > Costing: only what the admin kit (styles/adminKit.css) lacks.
  * Prefix: ck-.
  *
- * Section tabs  .ck-tabs (the Segmented bar scrolls sideways on phones)
+ * Section tabs  .ck-tabs (wraps the kit PageTabs bar)
  * Intro         .ck-intro (tab title + explanation + tools)
  * Edit table    .ck-edit-card / .ck-edit-table (inputs in cells, dirty / warn rows, sticky actions column)
  * Chips         .ck-chips > .ck-chip[.is-on | .is-muted] (multi-select toggles)
@@ -11,14 +11,7 @@
  */
 
 /* ── Section tabs ── */
-.ck-tabs {
-  margin-bottom: 20px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.ck-tabs::-webkit-scrollbar { display: none; }
-.ck-tabs .ak-seg { display: flex; width: max-content; min-width: 100%; }
-.ck-tabs .ak-seg button { flex: 1 0 auto; justify-content: center; white-space: nowrap; }
+.ck-tabs { margin-bottom: 20px; }
 
 /* ── Tab intro ── */
 .ck-intro {
@@ -145,3 +138,24 @@
   .ck-edit-table.is-sticky-first td:first-child { position: static; box-shadow: none; background: transparent; }
   .ck-edit-table.is-sticky-first tbody tr.is-warn td:first-child { box-shadow: none; }
 }
+
+/* ── Calculator: price from a file ── */
+.ck-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  background: var(--ak-ground);
+}
+.ck-file.is-error { border-color: #fecaca; background: var(--ak-accent-soft); }
+.ck-file-icon { display: grid; flex: none; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--ak-card); color: #15803d; }
+.ck-file.is-error .ck-file-icon { color: var(--ak-accent-ink); }
+.ck-file-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ck-progress { display: inline-flex; align-items: center; gap: 10px; }
+.ck-progress svg { flex: none; }
+.ck-card-actions-seg .ak-seg { flex-wrap: wrap; }
+.ck-measured { max-width: 640px; margin-bottom: 18px; }
+.ck-measured .ak-banner { margin-top: 10px; }
+.ck-breakdown > .ak-table-card { margin-top: 4px; }

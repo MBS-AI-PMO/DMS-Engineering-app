@@ -44,8 +44,9 @@ export default function SeoPreviewCard({ form, path, onPath }) {
                 <Banner tone="warn"><span className="ac-seo-inline"><AlertTriangle size={15} aria-hidden="true" /> Search engines are asked not to index this page.</span></Banner>
             )}
             <p className="ak-hint ac-seo-note">
-                Google and Bing run the site's scripts, so they see these tags on every page. Facebook, LinkedIn and WhatsApp
-                previews don't run scripts yet, so for now they show the fixed title and description built into the site.
+                These tags are in each page's HTML as the server sends it, so Google, Facebook, LinkedIn, WhatsApp and X all
+                see them. Saved changes show in the page source within a minute. Metal, service and blog pages use their own
+                name, description and picture.
             </p>
         </Card>
     );

@@ -15,7 +15,7 @@ const router = express.Router();
 router.use(authenticate, requireAdmin);
 
 const ENCRYPTION_TYPES = ['TLS', 'SSL', 'NONE'];
-const DEFAULT_SENDER = 'DMS Engineering';
+const DEFAULT_SENDER = 'Dynamic Manufacturing Solutions';
 const NOT_CONFIGURED = 'Email not configured. Set up SMTP first.';
 
 /* Gmail shows app passwords as "abcd efgh ijkl mnop"; the spaces are not part of it. */
@@ -135,12 +135,49 @@ router.get('/status', route('load the email status', async (req, res) => {
     }
     const view = (row) => (row ? { orderId: row.order_id, at: row.created_at, to: row.email_to, subject: row.email_subject, error: row.email_error || null } : null);
     const lastSent = view(sent.rows[0]);
+    const lastFailed = view(failed.rows[0]);
     const since = await db.query(
         `SELECT count(*)::int AS n FROM order_events WHERE kind = 'email' AND email_status = 'failed' AND created_at > COALESCE($1, '-infinity'::timestamp)`,
         [sent.rows[0]?.created_at || null]
     );
-    ok(res, { lastSent, lastFailed: view(failed.rows[0]), failedSinceSent: since.rows[0].n });
+    // Failures newer than the last sent email only matter if the account still
+    // fails now (they stay in the log after the password is fixed): ask the
+    // mail server. accountWorks: true | false | null (no account / no answer).
+    let failing = Boolean(lastFailed && (!lastSent || new Date(lastFailed.at) > new Date(lastSent.at)));
+    let accountWorks = null;
+    let accountError = null;
+    if (failing) {
+        const check = await checkAccount();
+        accountWorks = check.ok;
+        accountError = check.error;
+        if (accountWorks) failing = false;
+    }
+    ok(res, { lastSent, lastFailed, failedSinceSent: since.rows[0].n, failing, accountWorks, accountError });
 }));
+
+/* Logs in to the mail server (sends nothing). Remembered for 5 minutes per saved account. */
+let lastCheck = { key: null, at: 0, ok: null, error: null };
+async function checkAccount() {
+    const row = (await db.query('SELECT updated_at FROM email_config ORDER BY id DESC LIMIT 1')).rows[0];
+    if (!row) return { ok: null, error: null };
+    const key = new Date(row.updated_at).toISOString();
+    if (lastCheck.key === key && Date.now() - lastCheck.at < 5 * 60 * 1000) return lastCheck;
+    let timer;
+    try {
+        await Promise.race([
+            testConnection(),
+            new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 12000); }),
+        ]);
+        lastCheck = { key, at: Date.now(), ok: true, error: null };
+    } catch (err) {
+        // No answer in time says nothing about the password: don't remember it.
+        if (err.message === 'timeout') return { ok: null, error: null };
+        lastCheck = { key, at: Date.now(), ok: false, error: err.message };
+    } finally {
+        clearTimeout(timer);
+    }
+    return lastCheck;
+}
 
 // ── Templates: what the site sends, previewed with sample data ──
 

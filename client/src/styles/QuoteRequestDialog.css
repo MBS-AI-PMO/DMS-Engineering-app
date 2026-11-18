@@ -38,7 +38,7 @@
   background: #ffffff;
   box-shadow: 0 24px 60px rgba(11, 12, 15, 0.28);
   color: var(--qr-ink);
-  font-family: "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   overflow: hidden;
 }
 .qr-dialog button:focus-visible,
@@ -70,7 +70,7 @@
 .qr-dialog .qr-title {
   margin: 4px 0 0;
   color: var(--qr-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.25;
@@ -304,7 +304,7 @@
 }
 .qr-dialog .qr-done-title {
   margin: 14px 0 0;
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.125rem;
   font-weight: 700;
   color: var(--qr-ink);

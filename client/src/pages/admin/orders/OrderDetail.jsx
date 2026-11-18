@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowUpRight, Copy, CreditCard, Download, FileText, Mail, MapPin, Phone, RotateCcw, ShoppingBag, Trash2, User } from 'lucide-react';
+import { ArrowUpRight, Copy, CreditCard, Download, FileText, Mail, MapPin, Phone, RotateCcw, ShoppingBag, Trash2, TrendingUp, User } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import {
     Banner, Button, Card, Checkbox, Field, IconButton, KeyValue, Page, PageHeader, SideLayout, Skeleton, Textarea, useConfirm,
@@ -8,11 +8,10 @@ import {
 import { ordersApi } from './ordersApi';
 import { StatusPill } from './StatusMenu';
 import OrderParts from './OrderParts';
-import OrderPhotos from './OrderPhotos';
 import OrderShipping from './OrderShipping';
 import OrderActivity from './OrderActivity';
 import EmailDialog from './EmailDialog';
-import { ANNOUNCED, STATUSES, ago, dateText, emailToast, money, paymentLabel, statusMeta, statusTone } from './orderFormat';
+import { ANNOUNCED, BUCKET_LABEL, STATUSES, ago, dateText, emailToast, money, orderCost, paymentLabel, percent, statusMeta, statusTone } from './orderFormat';
 import './adminOrders.css';
 
 /**
@@ -105,6 +104,41 @@ function StatusCard({ order, onSaved }) {
                     {changed ? `Change to ${statusMeta(status).label}` : note.trim() ? (notify && canEmail ? 'Send update' : 'Save message') : 'Choose a new status'}
                 </Button>
             </form>
+        </Card>
+    );
+}
+
+/* What the order cost the shop and what it earned, by cost group. */
+function ProfitCard({ items }) {
+    const o = orderCost(items);
+    if (!o.knownCount) {
+        return (
+            <Card id="ao-profit" title="Cost & profit" icon={TrendingUp}>
+                <p className="ak-hint">No cost could be worked out for this order. Each part says why.</p>
+            </Card>
+        );
+    }
+    const loss = o.profit < 0;
+    return (
+        <Card id="ao-profit" title="Cost & profit" icon={TrendingUp}>
+            <div className={`ao-profit-hero ${loss ? 'is-loss' : 'is-gain'}`}>
+                <span className="ao-profit-label">{loss ? 'Loss' : 'Profit'}</span>
+                <strong>{money(o.profit)}</strong>
+                <span className="ao-profit-margin">{percent(o.margin)} margin</span>
+            </div>
+            <KeyValue items={[
+                ['Customer paid', money(o.paid)],
+                ...Object.entries(BUCKET_LABEL).map(([key, label]) => [label, o.byBucket[key] ? money(o.byBucket[key]) : null]),
+                ['Total cost', <strong key="c">{money(o.cost)}</strong>],
+                ['Markups earned', o.estimated ? null : money(o.markups)],
+            ]} />
+            {(o.estimated || o.unknownCount > 0) && (
+                <p className="ak-hint ao-pay-note">
+                    {o.estimated ? "Some costs are estimates with today's rules (the order was placed before costs were saved). " : ''}
+                    {o.unknownCount > 0 ? `${o.unknownCount} ${o.unknownCount === 1 ? 'part' : 'parts'} (${money(o.unknownPaid)}) left out: no cost could be worked out.` : ''}
+                </p>
+            )}
+            <p className="ak-hint ao-pay-note">Shipping and payment fees are not included.</p>
         </Card>
     );
 }
@@ -276,13 +310,13 @@ export default function OrderDetail() {
                 main={(
                     <>
                         <OrderParts items={items} />
-                        <OrderPhotos orderId={order.id} photos={photos} items={items} onChanged={load} />
                         <OrderActivity orderId={order.id} order={order} events={events} onChanged={load} />
                     </>
                 )}
                 side={(
                     <>
                         <StatusCard key={order.status} order={order} onSaved={load} />
+                        <ProfitCard items={items} />
                         <OrderShipping orderId={order.id} status={order.status} shipments={shipments} carriers={carriers} onChanged={load} />
                         <CustomerCard order={order} account={account} />
                         <PaymentCard order={order} items={items} />

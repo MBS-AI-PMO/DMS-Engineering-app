@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, LogIn } from 'lucide-react';
+import { ArrowLeft, LogIn, ShieldCheck } from 'lucide-react';
 import { useAdminAuth } from '../../../context/AdminAuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { Banner, Button, Checkbox, Field, Input } from '../../../components/admin/ui';
 import { PasswordInput } from '../people/PasswordInput';
+import usePageHero from '../../../hooks/usePageHero';
 // Sign-in is outside AdminLayout (which loads the kit styles), so it loads them itself.
 import '../../../styles/adminKit.css';
 import './adminLogin.css';
@@ -23,9 +24,10 @@ const getCookie = (name) => document.cookie.split('; ').reduce((found, pair) => 
 }, '');
 
 /**
- * Admin sign-in (/admin/login). Email + password through AdminAuthContext,
- * then on to the dashboard. "Remember my email" keeps the address in a
- * cookie for 30 days.
+ * Admin sign-in (/admin/login), dark split screen: the home page photo on
+ * the left, the form on the right. Email + password through
+ * AdminAuthContext, then on to the dashboard. "Remember my email" keeps the
+ * address in a cookie for 30 days.
  */
 export default function AdminLoginPage() {
     const { login } = useAdminAuth();
@@ -37,6 +39,7 @@ export default function AdminLoginPage() {
     const [rememberMe, setRememberMe] = useState(Boolean(remembered));
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const hero = usePageHero('home');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -61,47 +64,58 @@ export default function AdminLoginPage() {
 
     return (
         <div className="al-page">
-            <main className="al-card" aria-labelledby="al-title">
-                <div className="al-brand" aria-hidden="true">
-                    <span className="al-brand-mark">D</span>
-                    <span className="al-brand-text">DMS <span>Admin</span></span>
+            {/* Left: the home page photo with the company name (a short banner on phones). */}
+            <aside className="al-visual" aria-hidden="true">
+                {hero.src && <img className="al-visual-img" src={hero.src} srcSet={hero.srcSet} sizes="(max-width: 900px) 100vw, 55vw" alt="" decoding="async" />}
+                <div className="al-visual-shade" />
+                <div className="al-visual-text">
+                    <span className="al-visual-kicker">Admin console</span>
+                    <p className="al-visual-title">Dynamic Manufacturing Solutions</p>
+                    <p className="al-visual-sub">Orders, quotes, pricing and the website, in one place.</p>
                 </div>
-                <h1 id="al-title" className="al-title">Sign in</h1>
-                <p className="al-sub">Use the email and password of your admin account.</p>
+            </aside>
 
-                <form className="al-form" onSubmit={handleSubmit}>
-                    {error && <Banner tone="error">{error}</Banner>}
-                    <Field label="Email">
-                        <Input
-                            type="email"
-                            name="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            autoComplete="username"
-                            autoFocus={!remembered}
-                            placeholder="you@example.com"
-                            invalid={Boolean(error)}
-                        />
-                    </Field>
-                    <Field label="Password">
-                        <PasswordInput
-                            name="password"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                            autoComplete="current-password"
-                            autoFocus={Boolean(remembered)}
-                            invalid={Boolean(error)}
-                        />
-                    </Field>
-                    <Checkbox label="Remember my email" checked={rememberMe} onChange={setRememberMe} />
-                    <Button type="submit" variant="primary" block icon={LogIn} loading={loading}>
-                        {loading ? 'Signing in…' : 'Sign in'}
-                    </Button>
-                </form>
+            {/* Right: the form on a plain dark panel. */}
+            <main className="al-panel" aria-labelledby="al-title">
+                <a className="al-back" href="/"><ArrowLeft size={15} aria-hidden="true" /> Back to the website</a>
+                <div className="al-form-wrap">
+                    <h1 id="al-title" className="al-title">Welcome back</h1>
+                    <p className="al-sub">Sign in with the email and password of your admin account.</p>
+
+                    <form className="al-form" onSubmit={handleSubmit}>
+                        {error && <Banner tone="error">{error}</Banner>}
+                        <Field label="Email">
+                            <Input
+                                type="email"
+                                name="email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                required
+                                autoComplete="username"
+                                autoFocus={!remembered}
+                                placeholder="you@example.com"
+                                invalid={Boolean(error)}
+                            />
+                        </Field>
+                        <Field label="Password">
+                            <PasswordInput
+                                name="password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                required
+                                autoComplete="current-password"
+                                autoFocus={Boolean(remembered)}
+                                invalid={Boolean(error)}
+                            />
+                        </Field>
+                        <Checkbox label="Remember my email" checked={rememberMe} onChange={setRememberMe} />
+                        <Button type="submit" variant="primary" block icon={LogIn} loading={loading}>
+                            {loading ? 'Signing in…' : 'Sign in'}
+                        </Button>
+                    </form>
+                    <p className="al-secure"><ShieldCheck size={15} aria-hidden="true" /> Admins only. Every sign-in is checked by the server.</p>
+                </div>
             </main>
-            <a className="al-back" href="/"><ArrowLeft size={15} aria-hidden="true" /> Back to the website</a>
         </div>
     );
 }

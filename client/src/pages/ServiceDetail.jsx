@@ -16,7 +16,8 @@ import { metalsData } from '../data/metalsData';
 import { servicesData } from '../data/servicesData';
 import { displayMetalName, displayThickness } from '../utils/metalDisplay';
 import ThumbImage from '../components/ThumbImage';
-import serviceHeroBg from '../assets/services/service-hero-bg.webp';
+import usePageHero from '../hooks/usePageHero';
+import { imageSrcSet } from '../utils/imageUrl';
 // Not used by this page any more, but other pages lean on its global rules
 // (.detail-breadcrumb on metal pages, .stat-label in admin, .large on
 // Orders), so it stays loaded exactly as before.
@@ -120,6 +121,8 @@ const staticMetalImage = (metal) => {
 
 const ServiceDetail = () => {
     const { slug } = useParams();
+    // A service without its own picture shows the Services page picture.
+    const servicesHero = usePageHero('services');
     const reduceMotion = useReducedMotion();
     const [service, setService] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -228,7 +231,8 @@ const ServiceDetail = () => {
         const maxW = size(service.max_width, unit);
         const minH = size(service.min_height, unit);
         const maxH = size(service.max_height, unit);
-        if (maxL && maxW) list.push({ label: 'Largest part', value: `${maxL} × ${maxW}` });
+        // The largest any metal allows; each metal's page lists its own limit.
+        if (maxL && maxW) list.push({ label: 'Largest part', prefix: 'up to', value: `${maxL} × ${maxW}`, title: 'The largest size this service takes. Each metal page lists the limit for that metal.' });
         if (minL && minW) list.push({ label: 'Smallest part', value: `${minL} × ${minW}` });
         if (minH && maxH) list.push({ label: unit === 'mm' ? 'Stock height' : 'Thickness', value: `${minH} – ${maxH}` });
         return list;
@@ -274,16 +278,18 @@ const ServiceDetail = () => {
                 <picture className="sd-hero-pic" aria-hidden="true">
                     {hero?.avif && <source srcSet={hero.avif} type="image/avif" />}
                     {hero?.webp && <source srcSet={hero.webp} type="image/webp" />}
-                    <img
+                    {!loading && (hero || servicesHero.src) && <img
                         key={hero ? hero.jpg : 'default'}
                         className="sd-hero-img"
-                        src={hero ? hero.jpg : serviceHeroBg}
+                        src={hero ? hero.jpg : servicesHero.src}
+                        srcSet={hero ? imageSrcSet(hero.jpg, 1920) : servicesHero.srcSet}
+                        sizes="100vw"
                         alt=""
                         loading="eager"
                         fetchPriority="high"
                         decoding="async"
                         onError={() => { if (hero) setHeroFailed(true); }}
-                    />
+                    />}
                 </picture>
                 <div className="sd-hero-shade" aria-hidden="true" />
                 <div className="sd-inner sd-hero-content">
@@ -320,9 +326,9 @@ const ServiceDetail = () => {
                     ) : (facts.length > 0 || optionCount > 0 || (metals && metals.length > 0)) && (
                         <dl className="sd-facts">
                             {facts.map(f => (
-                                <div key={f.label} className="sd-fact">
+                                <div key={f.label} className="sd-fact" title={f.title}>
                                     <dt>{f.label}</dt>
-                                    <dd>{f.value}</dd>
+                                    <dd>{f.prefix && <span className="sd-fact-pre">{f.prefix}</span>}{f.value}</dd>
                                 </div>
                             ))}
                             {metals && metals.length > 0 && (

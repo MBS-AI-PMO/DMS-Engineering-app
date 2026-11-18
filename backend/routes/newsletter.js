@@ -25,11 +25,15 @@ router.post('/subscribe', async (req, res) => {
             [email]
         );
 
-        res.json({ success: true, message: 'Successfully subscribed!' });
-
         // A welcome for new (or returning) subscribers only, so the form
         // cannot be used to send the same address email after email.
-        if (result.rows[0]?.previous_status !== 'active') notifyNewsletterWelcome(email);
+        const already = result.rows[0]?.previous_status === 'active';
+        res.json({
+            success: true,
+            already,
+            message: already ? "You're already on the list." : 'Subscribed! Check your inbox for a welcome email.',
+        });
+        if (!already) notifyNewsletterWelcome(email);
     } catch (err) {
         console.error('Error subscribing:', err);
         res.status(500).json({ success: false, error: 'Failed to subscribe' });

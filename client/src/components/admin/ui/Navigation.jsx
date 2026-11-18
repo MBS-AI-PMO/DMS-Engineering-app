@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 
 const cx = (...parts) => parts.filter(Boolean).join(' ');
@@ -65,5 +66,51 @@ export function Toolbar({ left, right, children }) {
             {right !== undefined ? <div className="ak-toolbar-group">{right}</div> : null}
             {children}
         </div>
+    );
+}
+
+/**
+ * Section tabs across the top of a page with several sections (Costing):
+ * icon + label, a red line under the open one, optional count and a warning
+ * badge. Scrolls sideways on narrow screens, keeping the open tab in view.
+ * items: [{ value, label, icon?, count?, alert? (short text, shown amber) }]. onChange(value).
+ */
+export function PageTabs({ items, value, onChange, label = 'Sections' }) {
+    const listRef = useRef(null);
+    useEffect(() => {
+        const list = listRef.current;
+        const tab = list?.querySelector('[aria-selected="true"]');
+        if (!list || !tab) return;
+        const left = tab.offsetLeft - list.offsetLeft;
+        if (left < list.scrollLeft || left + tab.offsetWidth > list.scrollLeft + list.clientWidth) {
+            list.scrollTo({ left: Math.max(0, left - 24), behavior: 'smooth' });
+        }
+    }, [value]);
+    return (
+        <nav className="ak-pagetabs" aria-label={label}>
+            <div className="ak-pagetabs-list" role="tablist" aria-label={label} ref={listRef}>
+                {items.map(item => {
+                    const Icon = item.icon;
+                    const active = item.value === value;
+                    return (
+                        <button
+                            key={item.value}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            className={cx('ak-pagetab', active && 'is-active')}
+                            onClick={() => onChange(item.value)}
+                            title={item.alert || undefined}
+                        >
+                            {Icon && <span className="ak-pagetab-icon"><Icon size={15} aria-hidden="true" /></span>}
+                            <span className="ak-pagetab-label">{item.label}</span>
+                            {item.alert
+                                ? <span className="ak-pagetab-alert">{item.alert}</span>
+                                : item.count !== undefined && item.count !== null && <span className="ak-pagetab-count">{item.count}</span>}
+                        </button>
+                    );
+                })}
+            </div>
+        </nav>
     );
 }

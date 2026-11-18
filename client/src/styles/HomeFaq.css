@@ -34,7 +34,7 @@
   max-width: 12ch;
   margin: 0;
   color: var(--hf-ink);
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: clamp(2rem, 3.4vw, 3rem);
   font-weight: 700;
   line-height: 1.06;
@@ -123,7 +123,7 @@
 }
 .hf-q-text {
   padding-top: 4px;
-  font-family: "Montserrat", "Roboto", system-ui, sans-serif;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 1.125rem;
   font-weight: 600;
   line-height: 1.4;
@@ -181,6 +181,7 @@
   color: var(--hf-text);
   font-size: 1rem;
   line-height: 1.65;
+  white-space: pre-line; /* answers typed in admin keep their paragraphs and list lines */
 }
 .hf-a-link {
   margin: 14px 0 26px;

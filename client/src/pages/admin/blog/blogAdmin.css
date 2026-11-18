@@ -1,0 +1,428 @@
+/* ══ Admin > Blog (list and editor page) ══════════════════════════════════
+   Built on the admin kit (adminKit.css); only what the kit lacks: the row
+   menu, status and address cells, the publish card, the address field,
+   tags, the Google preview, the editor card (title, footer, focus mode)
+   and the preview dialog. The editor's own styles: editor/editor.css.
+   Own class names (be-). */
+
+/* ── List ── */
+.be-status-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.be-title-cell {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.be-title-cell em {
+  color: var(--ak-muted);
+  font-weight: 500;
+}
+.be-slug-cell {
+  font-family: var(--ak-mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+/* Menus (row "more" menu, block type, alignment) */
+.be-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.be-menu-item {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--ak-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.be-menu-item:hover,
+.be-menu-item:focus-visible {
+  background: var(--ak-ground);
+  color: var(--ak-ink);
+  outline: none;
+}
+.be-menu-item.is-current {
+  background: var(--ak-accent-soft);
+  color: var(--ak-accent-ink);
+  font-weight: 600;
+}
+.be-menu-item.is-danger {
+  color: var(--ak-accent-ink);
+}
+.be-menu-item.is-danger:hover {
+  background: var(--ak-accent-soft);
+}
+.be-menu-item svg {
+  flex: none;
+  color: var(--ak-muted);
+}
+.be-menu-item.is-danger svg,
+.be-menu-item.is-current svg {
+  color: inherit;
+}
+.be-menu-rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--ak-rule-soft);
+}
+.be-block-h2 { font-family: var(--ak-display); font-size: 17px; font-weight: 700; }
+.be-block-h3 { font-family: var(--ak-display); font-size: 15px; font-weight: 700; }
+.be-block-h4 { font-family: var(--ak-display); font-size: 14px; font-weight: 600; }
+
+/* ── Save state ── */
+.be-save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ak-muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.be-save-state.is-warn {
+  color: #b45309;
+}
+.be-save-state.is-error {
+  color: var(--ak-accent-ink);
+}
+.be-save-state svg {
+  flex: none;
+}
+
+/* ── Publish card ── */
+.be-pub-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ak-hint.be-pub-note {
+  margin: 10px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.be-pub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.be-pub-actions > .ak-btn {
+  flex: 1 1 auto;
+}
+/* Unpublish / View on site sit under Update post: keep the rows apart. */
+.be-pub-actions + .be-pub-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ak-rule-soft);
+}
+.be-pub-plan {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  background: var(--ak-ground);
+}
+.be-pub-plan .ak-field {
+  margin-bottom: 12px;
+}
+.be-pub-plan .ak-error-text {
+  margin: 8px 0 0;
+}
+.be-publish .ak-kv {
+  margin-bottom: 10px;
+}
+.be-link-btn {
+  margin-top: 12px;
+  padding: 2px 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  color: var(--ak-accent-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.be-link-btn:hover {
+  color: var(--ak-accent);
+  text-decoration: underline;
+}
+.be-link-btn:disabled {
+  color: var(--ak-faint);
+  cursor: default;
+  text-decoration: none;
+}
+.be-link-btn.is-danger {
+  color: var(--ak-muted);
+}
+.be-link-btn.is-danger:hover {
+  color: var(--ak-accent-ink);
+}
+
+/* ── Address field ── */
+.be-slug {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.be-slug-prefix {
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--ak-rule);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  display: inline-flex;
+  align-items: center;
+  background: var(--ak-ground);
+  color: var(--ak-muted);
+  font-family: var(--ak-mono);
+  font-size: 12.5px;
+}
+.be-slug .ak-input {
+  flex: 1;
+  border-radius: 0 10px 10px 0;
+  padding-right: 34px;
+  font-family: var(--ak-mono);
+  font-size: 13px;
+}
+.be-slug-ok {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  color: #15803d;
+  transform: translateY(-50%);
+}
+.be-old-slugs {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.be-old-slugs svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ── Tags ── */
+.be-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.be-tag-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+}
+.be-tag {
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ak-ground);
+  color: var(--ak-ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+.be-tag button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ak-muted);
+  cursor: pointer;
+}
+.be-tag button:hover {
+  background: var(--ak-accent-soft);
+  color: var(--ak-accent-ink);
+}
+
+/* ── Google preview ── */
+.be-serp {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--ak-rule);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #ffffff;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.be-serp-url {
+  color: #4d5156;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.be-serp-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #1a0dab;
+  font-size: 18px;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.be-serp-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #4d5156;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* ── The editor card ── */
+.be-editor-card {
+  border: 1px solid var(--ak-rule);
+  border-radius: var(--ak-radius);
+  background: var(--ak-card);
+  box-shadow: var(--ak-shadow);
+}
+.be-editor-inner {
+  padding: 0 28px 28px;
+}
+.be-title-input {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  margin: 26px 0 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0b0c0f;
+  font-family: 'Urbanist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: clamp(1.75rem, 2.6vw, 2.375rem);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}
+.be-title-input::placeholder {
+  color: #c4c8cf;
+}
+.be-title-input:focus {
+  outline: none;
+}
+.be-editor-foot {
+  padding: 12px 28px;
+  border-top: 1px solid var(--ak-rule-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--ak-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.be-editor-loading .be-toolbar.is-placeholder {
+  height: 46px;
+  display: flex;
+  align-items: center;
+}
+.be-editor-sk {
+  padding: 24px 0;
+  display: grid;
+  gap: 14px;
+}
+
+/* Focus mode: the card fills the window, a calm column in the middle. */
+.be-editor-card.is-focus {
+  position: fixed;
+  z-index: 2000;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  overflow-y: auto;
+  box-shadow: none;
+}
+.be-editor-card.is-focus .be-editor-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 24px 160px;
+}
+.be-focus-bar {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 14px 24px 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.be-focus-count {
+  color: var(--ak-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.be-focus-bar .ak-btn {
+  margin-left: auto;
+}
+
+/* ── Preview ── */
+.ak-modal.be-preview-modal .ak-modal-body {
+  padding: 0;
+}
+.be-preview {
+  min-height: 100%;
+}
+.be-preview .bl-hero-content {
+  padding-top: 36px;
+}
+.be-preview .bl-body.is-post {
+  padding-bottom: 48px;
+}
+
+@media (max-width: 640px) {
+  .be-editor-inner {
+    padding: 0 16px 20px;
+  }
+  .be-editor-foot {
+    padding: 12px 16px;
+  }
+  .be-title-input {
+    margin-top: 18px;
+  }
+  .be-editor-card.is-focus .be-editor-inner {
+    padding: 0 16px 120px;
+  }
+  .be-focus-bar {
+    padding: 12px 16px 4px;
+  }
+}

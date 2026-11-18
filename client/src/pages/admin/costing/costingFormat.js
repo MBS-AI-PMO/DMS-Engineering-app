@@ -1,6 +1,6 @@
 /* Labels and small formatters shared by the Costing screens. */
 
-export const money = (v) => `$${(Number(v) || 0).toFixed(2)}`;
+export const money = (v) => `$${(Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /* A stored decimal ("0.063000") shown without trailing zeros. */
 export const trimNumber = (v) => (v === null || v === undefined || v === '' ? '' : String(Number(v)));

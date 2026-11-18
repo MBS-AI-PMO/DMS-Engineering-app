@@ -2,7 +2,8 @@ import { SEO_PAGES, isSafeImageUrl, normalizeSeoMeta } from '../../../utils/seo'
 import { PIXEL_ID_RULES } from '../../../utils/tracking';
 
 /*
- * Admin > SEO & tracking: the two settings it edits, as form state.
+ * Admin > SEO & tracking: two of the settings it edits, as form state
+ * (the third, head_tags, is in headTagsForm.js).
  *
  *   seo_meta         { defaults: {...}, pages: { '/path': { title, description, ogImage } } }
  *   tracking_pixels  { ga4: { enabled, id }, facebook: {...}, tiktok: {...} }
@@ -28,7 +29,7 @@ export const PIXELS = [
     },
 ];
 
-// The static defaults in client/index.html, used when a field is empty.
+// What pages show when a field is empty (backend/seo/head.js FALLBACK).
 export const STATIC_FALLBACK = {
     title: 'Dynamic Manufacturing Solutions',
     description: 'Custom laser-cut, bent and CNC-machined metal parts from Dallas, Texas. Upload a STEP or DXF file and get an instant price.',
@@ -84,6 +85,13 @@ export function buildPixelPayload(pixels) {
     return out;
 }
 
+/* The tab (SeoPage TABS) an error key belongs to. */
+const SOCIAL_FIELDS = ['ogTitle', 'ogDescription', 'ogImage', 'twitterCard', 'twitterSite'];
+export const tabOfError = (key) => (key.startsWith('page:') ? 'pages'
+    : key.startsWith('pixel:') ? 'pixels'
+        : key.startsWith('head:') ? 'head'
+            : SOCIAL_FIELDS.includes(key) ? 'social' : 'search');
+
 /* { field: message }. Keys: defaults field names, `page:<path>`, `pixel:<key>`. */
 export function validate(seo, pixels) {
     const errors = {};
@@ -93,6 +101,9 @@ export function validate(seo, pixels) {
     if (d.ogImage && !isSafeImageUrl(d.ogImage)) errors.ogImage = 'Use an https:// URL or a /uploads/… path.';
     if (d.twitterSite && !/^@?[A-Za-z0-9_]{1,15}$/.test(d.twitterSite)) errors.twitterSite = 'Up to 15 letters, numbers or underscores.';
     if (d.googleVerification && !/^[A-Za-z0-9_-]{10,100}$/.test(d.googleVerification)) errors.googleVerification = 'Paste the content value (or the whole meta tag).';
+    if (d.favicon && !isSafeImageUrl(d.favicon)) errors.favicon = 'Use an https:// URL or a path starting with /.';
+    if (d.appleTouchIcon && !isSafeImageUrl(d.appleTouchIcon)) errors.appleTouchIcon = 'Use an https:// URL or a path starting with /.';
+    if (d.themeColor && !/^#[0-9a-f]{6}$/i.test(d.themeColor)) errors.themeColor = 'Use a hex colour such as #e31b23.';
     Object.entries(seo.pages).forEach(([path, page]) => {
         if (page.ogImage && !isSafeImageUrl(page.ogImage)) errors[`page:${path}`] = 'Use an https:// URL or a /uploads/… path.';
     });

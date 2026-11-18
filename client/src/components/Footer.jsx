@@ -16,17 +16,22 @@ import '../styles/SiteFooter.css';
  */
 
 // Pages where "Get instant pricing" is the page itself or the order flow.
-const NO_CTA_PATHS = ['/get-instant-pricing', '/quote', '/cart', '/checkout', '/orders', '/settings'];
+const NO_CTA_PATHS = ['/get-instant-pricing', '/quote', '/cart', '/checkout', '/orders', '/settings', '/track-order'];
 
+// Two link columns: what you can order, and the company / help pages.
 const PAGE_LINKS = [
     { name: 'Home', path: '/' },
     { name: 'Metals', path: '/metals' },
     { name: 'Services', path: '/services' },
     { name: 'Instant pricing', path: '/get-instant-pricing' },
     { name: 'Guidelines', path: '/guidelines' },
-    { name: 'FAQ', path: '/faq' },
+];
+const COMPANY_LINKS = [
     { name: 'About us', path: '/about' },
+    { name: 'Blog', path: '/blog' },
+    { name: 'FAQ', path: '/faq' },
     { name: 'Contact us', path: '/contact' },
+    { name: 'Track order', path: '/track-order' },
 ];
 
 // Shown only when admin has not picked any top metals.
@@ -84,8 +89,8 @@ const Footer = () => {
         setNlLoading(true);
         setNlStatus(null);
         try {
-            await subscribeNewsletter(nlEmail);
-            setNlStatus({ type: 'success', msg: 'Subscribed successfully!' });
+            const res = await subscribeNewsletter(nlEmail);
+            setNlStatus({ type: 'success', msg: res?.message || 'Subscribed successfully!' });
             setNlEmail('');
             setTimeout(() => setNlStatus(null), 5000);
         } catch (err) {
@@ -171,7 +176,7 @@ const Footer = () => {
                         </form>
                     </div>
 
-                    <nav className="sf-col" aria-labelledby="sf-pages">
+                    <nav className="sf-col is-links" aria-labelledby="sf-pages">
                         <h2 id="sf-pages" className="sf-col-title">Pages</h2>
                         <ul className="sf-list">
                             {PAGE_LINKS.map(link => (
@@ -180,7 +185,16 @@ const Footer = () => {
                         </ul>
                     </nav>
 
-                    <nav className="sf-col" aria-labelledby="sf-metals">
+                    <nav className="sf-col is-links" aria-labelledby="sf-company">
+                        <h2 id="sf-company" className="sf-col-title">Company</h2>
+                        <ul className="sf-list">
+                            {COMPANY_LINKS.map(link => (
+                                <li key={link.path}><Link to={link.path} className="sf-link">{link.name}</Link></li>
+                            ))}
+                        </ul>
+                    </nav>
+
+                    <nav className="sf-col is-links" aria-labelledby="sf-metals">
                         <h2 id="sf-metals" className="sf-col-title">Top metals</h2>
                         {loaded ? (
                             <ul className="sf-list">

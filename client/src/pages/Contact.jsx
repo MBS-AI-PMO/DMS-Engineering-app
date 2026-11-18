@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'; // es
 import { ArrowRight, CheckCircle2, Linkedin, Facebook, Instagram, Loader2, Mail, MapPin, Phone } from 'lucide-react';
 import { fetchSettings, sendContactMessage } from '../utils/api';
 import Dropdown from '../components/Dropdown';
-import contactHeroImg from '../assets/contact-hero.webp';
+import usePageHero from '../hooks/usePageHero';
 import '../styles/Shimmer.css';
 import '../styles/ContactPage.css';
 
@@ -33,6 +33,7 @@ const SHORTCUTS = [
 const EMPTY_FORM = { name: '', email: '', company: '', subject: TOPICS[0], message: '', website: '' };
 
 const Contact = () => {
+    const hero = usePageHero('contact');
     // "Request a quote" on the pricing page links here with ?topic=&message=
     // describing the part, so the form opens filled in.
     const [searchParams] = useSearchParams();
@@ -100,7 +101,7 @@ const Contact = () => {
         <div className="ct">
             {/* ── Heading band ── */}
             <section className="ct-hero" aria-labelledby="ct-title">
-                <img className="ct-hero-img" src={contactHeroImg} alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />
+                {hero.src && <img className="ct-hero-img" src={hero.src} srcSet={hero.srcSet} sizes="100vw" alt="" aria-hidden="true" loading="eager" fetchPriority="high" decoding="async" />}
                 <div className="ct-hero-shade" aria-hidden="true" />
                 <div className="ct-inner ct-hero-content">
                     <nav className="ct-crumbs" aria-label="Breadcrumb">

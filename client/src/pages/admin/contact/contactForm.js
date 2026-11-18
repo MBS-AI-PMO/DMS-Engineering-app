@@ -7,12 +7,12 @@
  *   top_metals              [{ name, slug }]                     footer "Top metals" column
  *   show_service_breakdown  boolean                              per-service prices on quotes
  *
- * Images (navbar_logo, footer_logo, site_logo, hero_image) are uploaded and
+ * Images (navbar_logo, footer_logo, site_logo) are uploaded and
  * saved one by one, outside this form.
  */
 
 export const FORM_KEYS = ['footer_contact', 'contact_form_recipients', 'social_links', 'top_metals', 'show_service_breakdown'];
-export const IMAGE_KEYS = ['navbar_logo', 'footer_logo', 'site_logo', 'hero_image'];
+export const IMAGE_KEYS = ['navbar_logo', 'footer_logo', 'site_logo'];
 
 // The platforms the footer can show, in footer order.
 export const PLATFORMS = [

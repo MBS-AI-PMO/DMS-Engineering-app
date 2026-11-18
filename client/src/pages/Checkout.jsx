@@ -200,8 +200,8 @@ const Checkout = () => {
                         <p className="checkoutx-order-id">Order <strong>#{orderId}</strong></p>
                         <p>Your manufacturing request has been received and is being processed by our engineering team.</p>
                         <div className="checkoutx-actions">
-                            <Link to="/orders" className="cartx-btn-primary">View my orders</Link>
-                            <Link to="/" className="cartx-btn-secondary">Return home</Link>
+                            <Link to={`/track-order/${orderId}`} className="cartx-btn-primary">Track this order</Link>
+                            <Link to="/orders" className="cartx-btn-secondary">View my orders</Link>
                         </div>
                     </motion.div>
                 </div>
