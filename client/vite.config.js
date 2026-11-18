@@ -47,6 +47,8 @@ function cacheHashedAssets() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.VITE_API_URL || 'http://localhost:5000'
+  // Extra domains `vite preview` may answer for (comma-separated), e.g. a Coolify test domain.
+  const extraHosts = String(env.PREVIEW_ALLOWED_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean)
 
   return {
     plugins: [
@@ -136,6 +138,7 @@ export default defineConfig(({ mode }) => {
         'dmscuts.com',
         'www.dmscuts.com',
         'htnxpk7uxwuu2rr97t3dma4z.2.25.152.142.sslip.io',
+        ...extraHosts,
       ],
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
