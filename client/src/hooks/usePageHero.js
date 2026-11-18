@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchSettings, peekSettings } from '../utils/api';
 import { imageSrcSet } from '../utils/imageUrl';
-import { PAGE_HERO_DEFAULTS, customPageHero } from '../utils/pageHeroes';
+import { PAGE_HERO_DEFAULTS, bootHero, customPageHero } from '../utils/pageHeroes';
 
 const pick = (settings, key) => customPageHero(settings, key) || PAGE_HERO_DEFAULTS[key] || '';
 
@@ -18,7 +18,11 @@ const pick = (settings, key) => customPageHero(settings, key) || PAGE_HERO_DEFAU
 export default function usePageHero(key) {
     const [src, setSrc] = useState(() => {
         const known = peekSettings();
-        return known ? pick(known, key) : '';
+        if (known) return pick(known, key);
+        // First page of a visit: the server already said which picture this page has.
+        const boot = typeof window !== 'undefined' ? bootHero(window.location.pathname) : null;
+        if (boot && boot.key === key) return boot.src || PAGE_HERO_DEFAULTS[key] || '';
+        return '';
     });
 
     useEffect(() => {

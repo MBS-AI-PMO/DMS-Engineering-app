@@ -46,6 +46,18 @@
 .ac-seo-social-img { position: relative; display: grid; place-items: center; aspect-ratio: 1.91 / 1; overflow: hidden; background: var(--ak-rule-soft); color: var(--ak-faint); font-size: 13px; }
 /* Pinned to the 1.91:1 box, the shape Facebook/LinkedIn show, so nothing is cut off. */
 .ac-seo-social-img img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.ac-seo-social-empty { display: grid; justify-items: center; gap: 6px; padding: 0 16px 36px; text-align: center; }
+/* Upload / Change image: always shown when there is no picture, on hover when there is one. */
+.ac-seo-social-img .ac-seo-social-upload {
+  position: absolute; right: 10px; bottom: 10px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+  opacity: 0; transition: opacity .15s ease;
+}
+.ac-seo-social-img .ac-seo-social-upload.is-shown,
+.ac-seo-social-img:hover .ac-seo-social-upload,
+.ac-seo-social-img .ac-seo-social-upload:focus-visible { opacity: 1; }
+.ac-seo-social-img.is-empty .ac-seo-social-upload { right: 50%; transform: translateX(50%); }
+@media (hover: none) { .ac-seo-social-img .ac-seo-social-upload { opacity: 1; } }
 .ac-seo-social-body { padding: 10px 12px; border-top: 1px solid var(--ak-rule); background: #f2f3f5; }
 .ac-seo-social-host { color: #606770; font-size: 11.5px; text-transform: uppercase; }
 .ac-seo-social-title { margin-top: 3px; color: #1d2129; font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }

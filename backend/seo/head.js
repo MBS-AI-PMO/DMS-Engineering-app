@@ -24,6 +24,7 @@
 const db = require('../db');
 const { validateSeoMeta } = require('../utils/seoSettings');
 const { validateHeadTags, appliesTo } = require('./headTags');
+const { heroFor, heroHtml } = require('./hero');
 const { PUBLIC_WHERE } = require('../blog/service');
 
 // What the site showed before anything was set in admin.
@@ -334,7 +335,7 @@ async function buildHead(rawPath, { origin, seoMeta, headTags, withFallback = fa
     // Both settings in one query, alongside the page's own data.
     const [stored, page] = await Promise.all([
         seoMeta !== undefined && headTags !== undefined ? {}
-            : client.query(`SELECT key, value FROM site_settings WHERE key = ANY($1::text[])`, [['seo_meta', 'head_tags', 'footer_contact', 'navbar_logo', 'social_links']])
+            : client.query(`SELECT key, value FROM site_settings WHERE key = ANY($1::text[])`, [['seo_meta', 'head_tags', 'footer_contact', 'navbar_logo', 'social_links', 'hero_image', 'page_heroes']])
                 .then(r => Object.fromEntries(r.rows.map(row => [row.key, parseValue(row.value)]))),
         loadPage(path, client).catch((err) => {
             console.warn('[seo head] could not read the page data for', path, err.message);
@@ -365,6 +366,17 @@ async function buildHead(rawPath, { origin, seoMeta, headTags, withFallback = fa
         tags.splice(at === -1 ? tags.length : at, 0, businessTag(meta, stored, base));
     }
     const result = { path, title: tags[0].content, tags, html: toHtml(tags) };
+    // The page's hero picture: preloaded with the page, and handed to the app (seo/hero.js).
+    // Only in the HTML the server sends; the app does not re-apply it when it changes page.
+    if (!annotate && seoMeta === undefined) {
+        const hero = await heroFor(path, stored, client).catch((err) => {
+            console.warn('[seo head] could not read the hero picture for', path, err.message);
+            return null;
+        });
+        const extra = heroHtml(path, hero);
+        if (extra) result.html = `${result.html}
+  ${extra}`;
+    }
     if (annotate) result.replaced = dropped;
     if (withFallback) result.fallback = toHtml(assemble(null, null));
     return result;

@@ -2,7 +2,8 @@ node_modules
 npm-debug.log*
 .env
 .env.*
-uploads
+# uploads/ is copied in as the seed for the uploads volume (see Dockerfile); its resize cache is not.
+uploads/.variants
 temp_uploads
 *.log
 *.tar

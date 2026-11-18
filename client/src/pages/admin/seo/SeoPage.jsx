@@ -166,7 +166,11 @@ export default function SeoPage() {
         }));
     }, [errors, customPages, headTags.length, pixelsOn, loading]);
 
-    const preview = <div className="ac-seo-side"><SeoPreviewCard form={form} path={pagePath} onPath={setPagePath} /></div>;
+    const preview = (
+        <div className="ac-seo-side">
+            <SeoPreviewCard form={form} path={pagePath} onPath={setPagePath} onUpload={startUpload} uploading={uploading} />
+        </div>
+    );
     const sections = {
         search: <SideLayout main={<><SearchDefaultsCard d={form.defaults} set={setDefault} errors={errors} /><BrowserIconsCard d={form.defaults} set={setDefault} errors={errors} /></>} side={preview} />,
         social: (

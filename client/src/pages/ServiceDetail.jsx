@@ -18,6 +18,7 @@ import { displayMetalName, displayThickness } from '../utils/metalDisplay';
 import ThumbImage from '../components/ThumbImage';
 import usePageHero from '../hooks/usePageHero';
 import { imageSrcSet } from '../utils/imageUrl';
+import { bootHero } from '../utils/pageHeroes';
 // Not used by this page any more, but other pages lean on its global rules
 // (.detail-breadcrumb on metal pages, .stat-label in admin, .large on
 // Orders), so it stays loaded exactly as before.
@@ -123,6 +124,9 @@ const ServiceDetail = () => {
     const { slug } = useParams();
     // A service without its own picture shows the Services page picture.
     const servicesHero = usePageHero('services');
+    // First page of a visit: the server already said which picture this service has (seo/hero.js),
+    // so it shows while the service itself loads.
+    const boot = useMemo(() => bootHero(`/service/${slug}`), [slug]);
     const reduceMotion = useReducedMotion();
     const [service, setService] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -250,6 +254,9 @@ const ServiceDetail = () => {
     });
 
     const hero = heroFailed ? null : heroSourcesOf(service?.hero_image);
+    const loadingSrc = boot?.key === 'service' ? boot.src : boot?.key === 'services' ? servicesHero.src : '';
+    const heroSrc = hero ? hero.jpg : loading ? loadingSrc : servicesHero.src;
+    const heroSet = hero ? imageSrcSet(hero.jpg, 1920) : heroSrc === servicesHero.src ? servicesHero.srcSet : imageSrcSet(heroSrc, 1920);
 
     if (notFound) {
         return (
@@ -278,11 +285,11 @@ const ServiceDetail = () => {
                 <picture className="sd-hero-pic" aria-hidden="true">
                     {hero?.avif && <source srcSet={hero.avif} type="image/avif" />}
                     {hero?.webp && <source srcSet={hero.webp} type="image/webp" />}
-                    {!loading && (hero || servicesHero.src) && <img
-                        key={hero ? hero.jpg : 'default'}
+                    {heroSrc && <img
+                        key={heroSrc}
                         className="sd-hero-img"
-                        src={hero ? hero.jpg : servicesHero.src}
-                        srcSet={hero ? imageSrcSet(hero.jpg, 1920) : servicesHero.srcSet}
+                        src={heroSrc}
+                        srcSet={heroSet}
                         sizes="100vw"
                         alt=""
                         loading="eager"

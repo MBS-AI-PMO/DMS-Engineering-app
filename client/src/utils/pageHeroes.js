@@ -34,3 +34,20 @@ export const pictureOf = (value) => {
 
 /** The replacement picture saved for a page, or '' when it uses its built-in one. */
 export const customPageHero = (settings, key) => pictureOf(key === 'home' ? settings?.hero_image : settings?.page_heroes?.[key]);
+
+/*
+ * The hero the server put in the first page's HTML (backend/seo/hero.js):
+ * window.__DMS_HERO__ = { path, key, src } (src '' = built-in picture). Lets that
+ * first page draw its hero at once instead of waiting for the settings. Only
+ * valid for the address it was sent with.
+ */
+const cleanPath = (p) => {
+    const s = String(p || '/').split(/[?#]/)[0].toLowerCase().replace(/\/{2,}/g, '/');
+    return s.length > 1 ? s.replace(/\/+$/, '') : '/';
+};
+export function bootHero(pathname) {
+    if (typeof window === 'undefined') return null;
+    const note = window.__DMS_HERO__;
+    if (!note || typeof note !== 'object' || cleanPath(note.path) !== cleanPath(pathname)) return null;
+    return { key: String(note.key || ''), src: typeof note.src === 'string' ? note.src : '' };
+}

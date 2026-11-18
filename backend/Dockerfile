@@ -36,10 +36,13 @@ ENV FREECAD_PATH=/usr/bin/freecadcmd
 ENV PYTHON_PATH=/opt/cadquery-env/bin/python
 ENV UNFOLD_LIB_PATH=/app/unfold_lib.py
 
-RUN mkdir -p /app/uploads /app/temp_uploads
+# Files kept in git under uploads/ (product, hero and blog pictures, logos) are the
+# seed for the uploads volume: at start, any that the volume is missing are copied
+# in (cp -n never overwrites what is already there, e.g. files uploaded in admin).
+RUN rm -rf /app/uploads-seed && mv /app/uploads /app/uploads-seed 2>/dev/null || mkdir -p /app/uploads-seed;     mkdir -p /app/uploads /app/temp_uploads
 VOLUME ["/app/uploads", "/app/temp_uploads"]
 
 EXPOSE 5000
 EXPOSE 8000
 
-CMD ["npm", "run", "start:prod"]
+CMD ["sh", "-c", "cp -rn /app/uploads-seed/. /app/uploads/ 2>/dev/null || true; exec npm run start:prod"]
