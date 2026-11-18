@@ -19,8 +19,7 @@
  * lookups after 7.
  */
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../middleware/auth');
+const { optionalUser: authOptionalUser } = require('../middleware/auth');
 const { route, ok, HttpError, badRequest, validate } = require('../helpers');
 const { createRateLimit } = require('../quotes/rateLimit');
 const { signTrackToken, readTrackToken, tokenFits } = require('../orders/trackLink');
@@ -60,11 +59,7 @@ function clientAddress(req) {
 }
 
 /* A signed-in customer, if the request carries a valid token. */
-function optionalUser(req) {
-    const token = req.cookies?.token || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token) return null;
-    try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
-}
+const optionalUser = (req) => authOptionalUser(req);
 
 // ── The cookie that remembers opened orders ─────────────────────────────
 

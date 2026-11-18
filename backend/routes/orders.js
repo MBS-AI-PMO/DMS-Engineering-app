@@ -356,16 +356,8 @@ async function processCAD(itemId, inputPath, configuration, pythonPath) {
  */
 router.post('/', async (req, res) => {
     // Optional Authentication
-    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
-    let userId = null;
-    if (token) {
-        try {
-            const jwt = require('jsonwebtoken');
-            const { JWT_SECRET } = require('../middleware/auth');
-            const decoded = jwt.verify(token, JWT_SECRET);
-            userId = decoded.id;
-        } catch (e) { /* ignore invalid token for checkout */ }
-    }
+    const { optionalUser } = require('../middleware/auth');
+    const userId = optionalUser(req)?.id || null; // an invalid sign-in just means a guest checkout
 
     const {
         email, fullName, phone, address, city, zipCode,

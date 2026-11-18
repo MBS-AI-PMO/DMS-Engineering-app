@@ -53,15 +53,14 @@ router.post('/logout', (req, res) => {
 
 // GET /api/auth/me — Get current user info
 router.get('/me', async (req, res) => {
-    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
+    if (!req.cookies?.token && !req.headers.authorization) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
 
     try {
-        const jwt = require('jsonwebtoken');
-        const { JWT_SECRET } = require('../middleware/auth');
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const { optionalUser } = require('../middleware/auth');
+        const decoded = optionalUser(req);
+        if (!decoded) throw new Error('invalid');
 
         const result = await db.query('SELECT id, email, name, role FROM users WHERE id = $1', [decoded.id]);
         if (result.rows.length === 0) {

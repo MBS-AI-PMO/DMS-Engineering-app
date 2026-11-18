@@ -12,9 +12,8 @@
  * sender per 15 minutes and 60 per hour across the site.
  */
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const db = require('../db');
-const { authenticate, JWT_SECRET } = require('../middleware/auth');
+const { authenticate, optionalUser: authOptionalUser } = require('../middleware/auth');
 const { route, ok, created, HttpError, withTransaction, validate } = require('../helpers');
 const {
     SOURCES, reference, cleanConfiguration, cleanReasons, cleanPricingInput, sourceFile, displayName,
@@ -29,11 +28,7 @@ const limit = createRateLimit({ perSender: 5, windowMs: 15 * 60 * 1000, siteMax:
 const TOO_MANY = 'You have sent several quote requests in a short time. Please wait a few minutes and try again, or contact us directly.';
 
 // A signed-in customer, if the request carries a valid token.
-function optionalUser(req) {
-    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
-    if (!token) return null;
-    try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
-}
+const optionalUser = (req) => authOptionalUser(req);
 
 const singleLine = (value, label, opts) => {
     const s = validate.text(value, label, opts);
