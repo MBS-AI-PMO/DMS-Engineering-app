@@ -28,14 +28,21 @@ function decrypt(text) {
     return decrypted;
 }
 
+// The saved password was encrypted with a different EMAIL_ENCRYPTION_KEY (the key changed).
+const PASSWORD_UNREADABLE = "The saved email password can't be read any more: this server's EMAIL_ENCRYPTION_KEY is not the one it was saved with. Enter the email password again in Admin > Email and save.";
+
+/* The saved settings. password_unreadable: the password could not be decrypted (key changed). */
 async function getEmailConfig() {
     const result = await db.query('SELECT * FROM email_config ORDER BY id LIMIT 1');
     if (result.rows.length === 0) return null;
     const config = result.rows[0];
-    return {
-        ...config,
-        password_decrypted: decrypt(config.password_encrypted),
-    };
+    let password_decrypted = null;
+    try {
+        password_decrypted = decrypt(config.password_encrypted);
+    } catch {
+        console.error('[Email] The saved password cannot be decrypted with this EMAIL_ENCRYPTION_KEY; enter it again in Admin > Email.');
+    }
+    return { ...config, password_decrypted, password_unreadable: password_decrypted === null };
 }
 
 function classifyEmailError(err) {
@@ -56,6 +63,7 @@ function classifyEmailError(err) {
 }
 
 function createTransporter(config) {
+    if (config.password_unreadable) throw new Error(PASSWORD_UNREADABLE);
     const secure = config.encryption_type === 'SSL';
     return nodemailer.createTransport({
         host: config.smtp_host,
@@ -63,7 +71,7 @@ function createTransporter(config) {
         secure,
         auth: {
             user: config.email,
-            pass: config.password_decrypted || decrypt(config.password_encrypted),
+            pass: config.password_decrypted,
         },
         connectionTimeout: 10000,
         greetingTimeout: 10000,
@@ -115,4 +123,4 @@ async function testConnection() {
     }
 }
 
-module.exports = { encrypt, decrypt, getEmailConfig, createTransporter, sendEmail, testConnection };
+module.exports = { encrypt, decrypt, getEmailConfig, createTransporter, sendEmail, testConnection, PASSWORD_UNREADABLE };

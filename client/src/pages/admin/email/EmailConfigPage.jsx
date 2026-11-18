@@ -119,7 +119,15 @@ export default function EmailConfigPage() {
 
     // The problem to explain first: a failed check, else order emails that keep failing.
     let top = null;
-    if (problem) {
+    if (config?.password_unreadable) {
+        // Saved with another EMAIL_ENCRYPTION_KEY: nothing can be sent until the password is entered again.
+        top = (
+            <Banner tone="error" action={<Button size="sm" onClick={focusPassword}>Enter the password</Button>}>
+                The saved email password can&apos;t be read any more, because this server&apos;s encryption key changed. No emails can be sent until
+                you enter the password again below (for Gmail, the 16-letter app password) and press Save.
+            </Banner>
+        );
+    } else if (problem) {
         top = <EmailProblem message={problem.message} context={problem.context} config={config} onFix={focusPassword} />;
     } else if (failing && !checkPassed) {
         const count = status.failedSinceSent;

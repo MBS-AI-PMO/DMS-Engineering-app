@@ -45,7 +45,8 @@ router.get('/config', route('load the email settings', async (req, res) => {
     const safe = { ...config };
     delete safe.password_encrypted;
     delete safe.password_decrypted;
-    ok(res, { ...safe, password_masked: '••••••••' });
+    // password_unreadable: the page asks for the password again instead of failing to load.
+    ok(res, { ...safe, password_masked: config.password_unreadable ? '' : '••••••••' });
 }));
 
 // POST /api/email/config — save it (a blank password keeps the saved one)
@@ -62,6 +63,10 @@ router.post('/config', route('save the email settings', async (req, res) => {
     const existing = await db.query('SELECT id FROM email_config ORDER BY id LIMIT 1');
     if (existing.rows.length) {
         const id = existing.rows[0].id;
+        // A blank password keeps the saved one, unless that one can no longer be read.
+        if (!password && (await getEmailConfig())?.password_unreadable) {
+            throw badRequest("Enter the email password again: the saved one can't be read with this server's encryption key.");
+        }
         if (password) {
             await db.query(
                 'UPDATE email_config SET smtp_host=$1, smtp_port=$2, email=$3, password_encrypted=$4, encryption_type=$5, sender_name=$6, updated_at=NOW() WHERE id=$7',
